@@ -6,6 +6,7 @@
         "DalaranDice"
       ],
       "author": "WrathUnleashed",
+      "category": "sandbox",
       "description": "Type .dice in Dalaran to roll dice; everyone within 30 yards sees the result. The addon keeps the last five rolls on screen.",
       "id": "dalaran-dice",
       "kind": "both",
@@ -23,8 +24,8 @@
       "screenshots": [
         "assets/preview.png"
       ],
-      "sha256": "84996c94cf1c1dc347362c97c7309e8b1046ec9edfc87f2cae3892ee42a8a113",
-      "size": 23606,
+      "sha256": "6f3a4984e66d2d77daf5bcd7233da58c2675ca8ece9fec86b9acbd60d3d1dae4",
+      "size": 25187,
       "version": "0.1.0",
       "wu": "1.0",
       "zip": "dalaran-dice-0.1.0.zip"
@@ -34,6 +35,7 @@
         "WUEmoteWheel"
       ],
       "author": "WrathUnleashed",
+      "category": "addons",
       "description": "Type /wheel (or set a key) for a ring of eight emotes at your cursor: wave, cheer, dance, laugh and more in one click. /wheel set 3 kiss puts your favourite in any slot.",
       "id": "emote-wheel",
       "kind": "ui",
@@ -45,8 +47,8 @@
       "screenshots": [
         "assets/preview.png"
       ],
-      "sha256": "d71438a755eceb24fb2b8b48861e3dcecdc818d0eb2f0c77b81b8b1cf955091b",
-      "size": 17238,
+      "sha256": "e439305e5ca434698ea63a5e2948d273c9e595c784d57d187a6d175f0326b1c8",
+      "size": 18814,
       "version": "0.1.0",
       "wu": "1.0",
       "zip": "emote-wheel-0.1.0.zip"
@@ -56,6 +58,7 @@
         "WUPings"
       ],
       "author": "WrathUnleashed",
+      "category": "addons",
       "description": "Alt-click the world map, Alt-click in the world, or type /ping: everyone in your group sees a marker on their map, an on-screen call (Attack, Danger, Help here, On my way) and hears a ping.",
       "id": "pings",
       "kind": "both",
@@ -72,8 +75,8 @@
       "screenshots": [
         "assets/preview.png"
       ],
-      "sha256": "49b3885ef133431e099cdc1b296a36200d21eb1b43b16466c362b9c646b20b17",
-      "size": 25648,
+      "sha256": "bf8dee80021fe2b7bd1e5ea8774775e4f0148257610cdd6cd8ca378aead26467",
+      "size": 27232,
       "version": "0.1.0",
       "wu": "1.0",
       "zip": "pings-0.1.0.zip"

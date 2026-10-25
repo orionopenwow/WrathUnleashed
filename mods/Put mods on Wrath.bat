@@ -7,7 +7,7 @@ rem   - the realm halves into the realm's lua_scripts\mods\<id>\ with a live "re
 rem     a refused reload or a Lua error puts the previous scripts back),
 rem   - the addon halves into the streamed browser client (like Forever UI), with the in-game mod list
 rem     (Esc ^> Mods ^& Workshop ^> Workshop),
-rem   - catalog.json, the zips and screenshots onto the site: play.openvanilla.app/wrath/mods
+rem   - catalog.json, categories.json, the zips and screenshots onto the site: play.openvanilla.app/wrath/mods
 rem Backs up first. ONE SSH connection (the server pauses SSH after many logins).
 cd /d "%~dp0"
 set "KEY=%USERPROFILE%\.ssh\openwow"
@@ -15,6 +15,7 @@ set "HOST=root@play.openvanilla.app"
 set "KIT=%~dp0..\stream\server"
 if not exist "%~dp0catalog" (echo The catalog folder is missing next to this file. & goto fail)
 if not exist "%~dp0wu-mod.py" (echo wu-mod.py is missing next to this file. & goto fail)
+if not exist "%~dp0categories.json" (echo categories.json is missing next to this file. & goto fail)
 for %%f in (mods-install.sh mods-overlay.py) do if not exist "%KIT%\%%f" (echo ..\stream\server\%%f is missing. & goto fail)
 if not exist "%KEY%" (echo SSH key %KEY% not found. & goto fail)
 
@@ -32,6 +33,7 @@ set "STG=%TEMP%\wu-mods-up"
 if exist "%STG%" rmdir /s /q "%STG%"
 mkdir "%STG%\kit" "%STG%\catalog"
 copy /y "%~dp0wu-mod.py" "%STG%\kit\" >nul || goto fail
+copy /y "%~dp0categories.json" "%STG%\kit\" >nul || goto fail
 copy /y "%KIT%\mods-install.sh" "%STG%\kit\" >nul || goto fail
 copy /y "%KIT%\mods-overlay.py" "%STG%\kit\" >nul || goto fail
 xcopy /e /i /y /q "%~dp0catalog" "%STG%\catalog\" >nul || goto fail

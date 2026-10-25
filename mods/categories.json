@@ -1,0 +1,30 @@
+{
+ "format": 1,
+ "kind_defaults": {"ui": "addons", "realm": "realm-scripts", "both": "addons"},
+ "categories": [
+  {"id": "addons", "name": "Addons and UI", "icon": "interface",
+   "line": "Interfaces, unit frames, nameplates, meters, quest helpers, bag and chat mods, UI skins."},
+  {"id": "graphics", "name": "Shaders and graphics", "icon": "sun",
+   "line": "Lighting, sky, water, post effects, colour grades, graphics presets for our engines."},
+  {"id": "sandbox", "name": "Sandbox and game modes", "icon": "dice",
+   "line": "Garry's Mod-style kits such as Prop Hunt, hide and seek, races, murder mystery, tower defense, jump maps."},
+  {"id": "maps", "name": "Custom maps", "icon": "map",
+   "line": "New zones, arenas, dungeons and housing plots."},
+  {"id": "builds", "name": "Builds", "icon": "blocks",
+   "line": "Saved Builder creations shared as codes."},
+  {"id": "encounters", "name": "Boss fights and encounters", "icon": "skull",
+   "line": "Community bosses, encounter scripts, raid replays."},
+  {"id": "models", "name": "Models and props", "icon": "cube",
+   "line": "Original creatures, mounts, props and buildings."},
+  {"id": "realm-scripts", "name": "Realm scripts", "icon": "server",
+   "line": "Server-side features such as QoL, events, economies, professions and companions."},
+  {"id": "presets", "name": "Server presets", "icon": "sliders",
+   "line": "Ready realm recipes such as a Dalaran hangout, duels-only, raid night, RP and hardcore."},
+  {"id": "audio", "name": "Sounds and music", "icon": "music",
+   "line": "Original ambience, music packs and UI sounds."},
+  {"id": "tools", "name": "Tools", "icon": "wrench",
+   "line": "Developer HUD plugins, map viewers, log analysers and OBS overlays."},
+  {"id": "conversions", "name": "Total conversions", "icon": "globe",
+   "line": "Whole new games built from the categories above."}
+ ]
+}

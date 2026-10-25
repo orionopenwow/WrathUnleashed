@@ -44,7 +44,7 @@ def upload(edit=None):
     """The tar the .bat sends: kit/ + catalog/ (a fresh copy, optionally edited)."""
     u = tempfile.mkdtemp(prefix="up-", dir=T)
     os.makedirs(os.path.join(u, "kit"))
-    for src in (os.path.join(MODS, "wu-mod.py"), os.path.join(STREAM, "server", "mods-install.sh"),
+    for src in (os.path.join(MODS, "wu-mod.py"), os.path.join(MODS, "categories.json"), os.path.join(STREAM, "server", "mods-install.sh"),
                 os.path.join(STREAM, "server", "mods-overlay.py")):
         shutil.copy(src, os.path.join(u, "kit"))
     shutil.copytree(os.path.join(MODS, "catalog"), os.path.join(u, "catalog"))
@@ -188,6 +188,67 @@ check("junk filters ignored", cards(page("/wrath/mods", {"kind": ["<x>"], "perm"
 f = page("/wrath/mods", {"kind": ["ui"]})[1]
 check("filter chips are links that keep the other filter", 'href="/wrath/mods?kind=ui&amp;perm=db"' in f and 'class="wk-chip on"' in f)
 
+# categories: one list (mods/categories.json), published beside catalog.json
+CATS = json.load(open(os.path.join(MODS, "categories.json")))
+CAT_IDS = [c["id"] for c in CATS["categories"]]
+check("categories.json: the twelve, in order", CAT_IDS == ["addons", "graphics", "sandbox", "maps", "builds", "encounters",
+      "models", "realm-scripts", "presets", "audio", "tools", "conversions"], CAT_IDS)
+check("categories.json published beside catalog.json", json.loads(read(PUB, "categories.json") or "{}") == CATS)
+check("catalog.json carries each mod's category", {m["id"]: m["category"] for m in cat["mods"]}
+      == {"dalaran-dice": "sandbox", "emote-wheel": "addons", "pings": "addons"})
+def tiles(html_):
+    return re.findall(r'<a class="wk-cat[^"]*" href="/wrath/mods/c/([a-z-]+)"[^>]*>.*?<span class="n"[^>]*>(\d+)</span></a>', html_)
+t = tiles(lp)
+check("category grid on /wrath/mods: every category in order", [i for i, _ in t] == CAT_IDS, t)
+check("category counts", dict(t) == dict({i: "0" for i in CAT_IDS}, addons="2", sandbox="1"), t)
+check("each tile has its icon and name", lp.count('<span class="wk-ico" aria-hidden="true"><svg') == 12
+      and ">Sandbox and game modes</span>" in lp)
+check("cards show the category", '<span class="wk-tag cat">Sandbox and game modes</span>' in lp)
+st, cp, _, _ = page("/wrath/mods/c/addons")
+check("GET /wrath/mods/c/addons", st == 200 and cards(cp) == ["emote-wheel", "pings"] and "<h1 class=\"wk-h1\">Addons and UI</h1>" in cp)
+check("category page: its line and the Leyline look", "Interfaces, unit frames, nameplates" in cp and "ly-panel" in cp
+      and 'aria-current="page"' in cp and "2 mods here" in cp)
+check("category page: card link meta", 'content="https://play.example/wrath/mods/c/addons"' in cp)
+check("GET /wrath/mods/c/sandbox", cards(page("/wrath/mods/c/sandbox")[1]) == ["dalaran-dice"])
+check("category + kind filter", cards(page("/wrath/mods/c/addons", {"kind": ["ui"]})[1]) == ["emote-wheel"])
+check("category + permission filter", cards(page("/wrath/mods/c/addons", {"perm": ["timers"]})[1]) == ["pings"])
+check("category + filter with no match", "No mods match" in page("/wrath/mods/c/addons", {"kind": ["realm"]})[1]
+      and "Publish the first one" not in page("/wrath/mods/c/addons", {"kind": ["realm"]})[1])
+check("category chips stay in the category", 'href="/wrath/mods/c/addons?kind=ui"' in cp)
+st, ep, _, _ = page("/wrath/mods/c/maps")
+check("empty category: 200, its line, no cards", st == 200 and cards(ep) == [] and "New zones, arenas, dungeons and housing plots." in ep)
+check("empty category: Publish the first one, linking the modder guide", "Publish the first one" in ep
+      and 'href="https://github.com/orionopenwow/WrathUnleashed/blob/main/mods/README-modders.md"' in ep)
+check("empty category: no fake entries", "class=\"wk-card\"" not in ep and "0 mods here" in ep)
+empties = [i for i in CAT_IDS if i not in ("addons", "sandbox")]
+check("every empty category says so", all("Publish the first one" in page("/wrath/mods/c/" + i)[1] for i in empties))
+for bad in ("/wrath/mods/c/nope", "/wrath/mods/c/ADDONS", "/wrath/mods/c/", "/wrath/mods/c", "/wrath/mods/c/addons/x",
+            "/wrath/mods/c/..", "/wrath/mods/c/%3Cx%3E", "/wrath/mods/c/" + "a" * 50):
+    check(f"404 for {bad}", page(bad)[0] == 404)
+check("unknown category: says category", "Category not found" in page("/wrath/mods/c/nope")[1])
+check("detail page links its category", '<dt>Category</dt><dd><a href="/wrath/mods/c/sandbox">Sandbox and game modes</a></dd>'
+      in page("/wrath/mods/dalaran-dice")[1])
+check("catalog.json for tools: categories and each mod's", [c["id"] for c in json.loads(page("/wrath/mods/catalog.json")[1])["categories"]] == CAT_IDS
+      and json.loads(page("/wrath/mods/catalog.json")[1])["mods"][0]["category"] == "sandbox")
+
+# search: name, description, category
+def q(text, path="/wrath/mods", **kw):
+    return cards(page(path, dict({"q": [text]}, **kw))[1])
+check("search box on the page", '<input type="search" name="q"' in lp and 'action="/wrath/mods"' in lp)
+check("search by name", q("emote") == ["emote-wheel"])
+check("search by description", q("world map") == ["pings"] and q("ROLL DICE") == ["dalaran-dice"])
+check("search by category name", q("game modes") == ["dalaran-dice"] and q("Addons and UI") == ["emote-wheel", "pings"])
+check("search by category id", q("sandbox") == ["dalaran-dice"])
+check("search: no match", q("zzzz") == [] and "No mods match" in page("/wrath/mods", {"q": ["zzzz"]})[1])
+check("search + kind filter", q("ping", kind=["both"]) == ["pings"] and q("emote", kind=["both"]) == [])
+check("search inside a category", q("wheel", "/wrath/mods/c/addons") == ["emote-wheel"] and q("dice", "/wrath/mods/c/addons") == [])
+sq = page("/wrath/mods", {"q": ["ping"], "kind": ["both"]})[1]
+check("chips keep the search", 'href="/wrath/mods?kind=both&amp;perm=db&amp;q=ping"' in sq)
+check("search form keeps the filters", '<input type="hidden" name="kind" value="both">' in sq and 'value="ping"' in sq)
+xq = page("/wrath/mods", {"q": ['"><script>alert(1)</script>']})[1]
+check("search: escaped", "<script>alert" not in xq and "&lt;script&gt;" in xq)
+check("search: capped", len(re.search(r'name="q" value="([^"]*)"', page("/wrath/mods", {"q": ["x" * 500]})[1]).group(1)) == 60)
+
 st, dp, _, _ = page("/wrath/mods/pings")
 check("detail page", st == 200 and "<h2 id=\"wk-name\">Pings</h2>" in dp)
 check("permissions in plain words", "Sends messages: to players near you" in dp and "Runs things on a timer." in dp)
@@ -241,6 +302,36 @@ W4 = wp.workshop_mod.Workshop(P4, wp.leyline_css, wp.card_meta, wp.REALM_NAME)
 check("broken catalog: an empty Workshop, no error", W4.serve("/wrath/mods", {})[0] == 200 and "empty right now" in W4.serve("/wrath/mods", {})[1].decode())
 W5 = wp.workshop_mod.Workshop(os.path.join(T, "missing"), wp.leyline_css, wp.card_meta, wp.REALM_NAME)
 check("no catalog at all: empty, and mod() is None", W5.mod("pings") is None and W5.serve("/wrath/mods", {})[0] == 200)
+check("no catalog: empty categories still list, each says Publish the first one",
+      len(tiles(W5.serve("/wrath/mods", {})[1].decode())) == 12 and "Publish the first one" in W5.serve("/wrath/mods/c/addons", {})[1].decode())
+
+# hostile categories.json: escaped, bad entries dropped; a mod's unknown category falls back to its kind's default
+P6 = os.path.join(T, "pub6"); os.makedirs(P6)
+json.dump({"format": 1, "mods": [
+    {"id": "odd-cat", "name": "Odd", "version": "1.0.0", "kind": "realm", "category": "<nope>"},
+    {"id": "gfx-mod", "name": "Gfx", "version": "1.0.0", "kind": "ui", "category": "graphics"}]}, open(os.path.join(P6, "catalog.json"), "w"))
+json.dump({"categories": [
+    {"id": "graphics", "name": "<script>x</script>", "line": "\"><img src=y>", "icon": "javascript:alert(1)"},
+    {"id": "realm-scripts", "name": "Realm scripts", "line": "Server side.", "icon": "server"},
+    {"id": "../etc", "name": "bad"}, {"id": "graphics", "name": "dupe"}, "junk", {"name": "no id"}],
+    "kind_defaults": {"realm": "realm-scripts", "ui": "<x>"}}, open(os.path.join(P6, "categories.json"), "w"))
+W6 = wp.workshop_mod.Workshop(P6, wp.leyline_css, wp.card_meta, wp.REALM_NAME)
+l6 = W6.serve("/wrath/mods", {})[1].decode(); c6 = W6.serve("/wrath/mods/c/graphics", {})[1].decode()
+check("hostile categories: only valid ids, once", [i for i, _ in tiles(l6)] == ["graphics", "realm-scripts"], tiles(l6))
+check("hostile categories: escaped", "<script>x" not in l6 + c6 and "&lt;script&gt;x" in c6 and "<img src=y>" not in l6 + c6
+      and "javascript:" not in l6 + c6)
+check("hostile categories: unknown icon shows the initial", '<span class="wk-ico" aria-hidden="true">&lt;</span>' in l6)
+check("a mod's unknown category: its kind's default", W6.mod("odd-cat")["category"] == "realm-scripts"
+      and cards(W6.serve("/wrath/mods/c/realm-scripts", {})[1].decode()) == ["odd-cat"])
+check("a bad kind default is ignored", W6.mod("gfx-mod")["category"] == "graphics" and W6.serve("/wrath/mods/c/addons", {})[0] == 404)
+P7 = os.path.join(T, "pub7"); shutil.copytree(P6, P7); os.remove(os.path.join(P7, "categories.json"))
+saved = wp.workshop_mod.CATEGORIES_FALLBACK
+wp.workshop_mod.CATEGORIES_FALLBACK = os.path.join(T, "missing", "categories.json")
+W7 = wp.workshop_mod.Workshop(P7, wp.leyline_css, wp.card_meta, wp.REALM_NAME)
+l7 = W7.serve("/wrath/mods", {})[1].decode()
+check("no categories.json anywhere: mods still list, no category bar, category pages 404",
+      cards(l7) == ["gfx-mod", "odd-cat"] and "class=\"wk-cat" not in l7 and W7.serve("/wrath/mods/c/graphics", {})[0] == 404)
+wp.workshop_mod.CATEGORIES_FALLBACK = saved
 
 # share links use the real name
 L = wp.links
@@ -277,7 +368,8 @@ srv.shutdown()
 
 def visible(p):
     return re.sub(r"<[^>]+>", " ", re.sub(r"<style.*?</style>", " ", p, flags=re.S))
-allp = lp + dp + page("/wrath/mods/emote-wheel")[1] + page("/wrath/mods/dalaran-dice")[1] + page("/wrath/mods/nope")[1] + sp
+allp = lp + dp + page("/wrath/mods/emote-wheel")[1] + page("/wrath/mods/dalaran-dice")[1] + page("/wrath/mods/nope")[1] + sp \
+    + "".join(page("/wrath/mods/c/" + i)[1] for i in CAT_IDS) + page("/wrath/mods/c/nope")[1]
 texts = visible(allp) + " ".join(re.findall(r'content="([^"]*)"', allp)) + json.dumps(cat)
 brand = re.findall(r"(?i)world of warcraft|\bwow\b|warcraft|lich king|blizzard", texts)
 check("no game-brand names", not brand, brand)

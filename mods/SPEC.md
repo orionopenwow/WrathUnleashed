@@ -24,9 +24,33 @@ dalaran-dice/
 | `kind` | yes | `ui`, `realm` or `both`; must match the folders present |
 | `wu` | yes | lowest WU version the mod works with: `"1.0"` |
 | `description` | yes | up to 300 chars |
+| `category` | no | the Workshop shelf, one id from `categories.json` (below). Default from `kind`: `ui` and `both` give `addons`, `realm` gives `realm-scripts`. Anything else is an error |
 | `permissions` | no | list from the fixed vocabulary below |
 | `screenshots` | no | `.png/.jpg/.webp` paths inside the package |
 | `links` | no | `https://` URLs, or `{ "label": "…", "url": "https://…" }` |
+
+## Categories
+
+The one list is `mods/categories.json` (id, name, one line, icon name, in this order, plus `kind_defaults`).
+`wu-mod.py` checks `category` against it, and `stream/workshop.py` reads the same file to draw the Workshop's
+category grid and the pages `/wrath/mods/c/<id>`. To add or rename a category, change that file only.
+The `mods` step sends it in the kit beside wu-mod.py and publishes it next to catalog.json in `$WU/portal/mods`
+(the portal's `/app/mods`); in a checkout workshop.py falls back to `../mods/categories.json`.
+
+| Id | Name | What goes there |
+|---|---|---|
+| `addons` | Addons and UI | interfaces, unit frames, nameplates, meters, quest helpers, bag and chat mods, UI skins |
+| `graphics` | Shaders and graphics | lighting, sky, water, post effects, colour grades, graphics presets for our engines |
+| `sandbox` | Sandbox and game modes | Garry's Mod-style kits such as Prop Hunt, hide and seek, races, murder mystery, tower defense, jump maps |
+| `maps` | Custom maps | new zones, arenas, dungeons and housing plots |
+| `builds` | Builds | saved Builder creations shared as codes |
+| `encounters` | Boss fights and encounters | community bosses, encounter scripts, raid replays |
+| `models` | Models and props | original creatures, mounts, props and buildings |
+| `realm-scripts` | Realm scripts | server-side features such as QoL, events, economies, professions and companions |
+| `presets` | Server presets | ready realm recipes such as a Dalaran hangout, duels-only, raid night, RP and hardcore |
+| `audio` | Sounds and music | original ambience, music packs and UI sounds |
+| `tools` | Tools | developer HUD plugins, map viewers, log analysers and OBS overlays |
+| `conversions` | Total conversions | whole new games built from the categories above |
 
 ## Permissions (realm only)
 
@@ -69,7 +93,7 @@ Only files you made or may redistribute. Every file in `assets/` is listed in `a
 
 Approved mods live in `mods/catalog/<id>/` (the folder name is the mod id). `wu-mod.py catalog` checks every one
 (one failure and nothing is written), packs each into `dist/`, and writes `mods/catalog.json`: per mod its id, name,
-version, author, licence, kind, wu, description, permissions, screenshots, links, `addons` (the `ui/` folder names),
+version, author, licence, kind, category (always set, the default filled in), wu, description, permissions, screenshots, links, `addons` (the `ui/` folder names),
 `realm_files`, `zip`, `sha256` and `size`. The same files always give the same JSON. Addon folder names must be unique
 across the catalog and may not be `ForeverUI`, `WrathUnleashedUI` or `WUModCatalog`. `--lua <dir>` also writes the
 `WUModCatalog` addon (`WU_MOD_CATALOG = { ... }`), which the in-game Workshop tab reads.
@@ -77,7 +101,7 @@ across the catalog and may not be `ForeverUI`, `WrathUnleashedUI` or `WUModCatal
 The `mods` step (`mods/Put mods on Wrath.bat`, Autopilot step `mods`) puts the whole catalog live in one SSH
 connection (`stream/server/mods-install.sh`): realm halves into `lua_scripts/mods/<id>/` with a live `reload ale`
 (rolled back on a refused reload or a Lua error from `mods/`), addon halves into the streamed client
-(`stream/server/mods-overlay.py`, beside Forever UI's overlay), and catalog.json, zips and screenshots to the site,
+(`stream/server/mods-overlay.py`, beside Forever UI's overlay), and catalog.json, categories.json (from the kit), zips and screenshots to the site,
 where players browse them at `/wrath/mods`.
 
 ## How this fits the larger plans

@@ -33,8 +33,21 @@ MAX_FILE_BYTES = 10 * 1024 * 1024
 MAX_FILES = 2000
 
 REQUIRED_FIELDS = ["id", "name", "version", "author", "licence", "kind", "wu", "description"]
-OPTIONAL_FIELDS = ["permissions", "screenshots", "links"]
+OPTIONAL_FIELDS = ["category", "permissions", "screenshots", "links"]
 KINDS = ("ui", "realm", "both")
+CATEGORIES_JSON = os.path.join(HERE, "categories.json")   # the one list of Workshop categories (workshop.py reads it too)
+KIND_DEFAULT_CATEGORY = {"ui": "addons", "realm": "realm-scripts", "both": "addons"}
+
+
+def load_categories(path=None):
+    """(ordered list of category ids, {kind: default id}) from categories.json, or (None, defaults) if unreadable."""
+    try:
+        with open(path or CATEGORIES_JSON, "r", encoding="utf-8") as f:
+            doc = json.load(f)
+        ids = [c["id"] for c in doc["categories"]]
+        return ids, dict(KIND_DEFAULT_CATEGORY, **doc.get("kind_defaults", {}))
+    except (OSError, ValueError, KeyError, TypeError):
+        return None, dict(KIND_DEFAULT_CATEGORY)
 PERMISSIONS = ("commands", "gossip", "spawns", "events", "chat", "db", "timers")
 TOP_LEVEL_OK = {"mod.json", "ui", "realm", "assets", "tests", "README.md", "README.txt",
                 "LICENSE", "LICENSE.txt", "LICENSE.md", "CHANGELOG.md", ".gitignore"}
@@ -814,6 +827,18 @@ def load_manifest(root, report):
     if "kind" in data and k not in KINDS:
         report.error("manifest-kind", "mod.json", "\"kind\" must be \"ui\", \"realm\" or \"both\" (got %r)" % (k,))
 
+    cat_ids, cat_defaults = load_categories()
+    if "category" in data:
+        c = data["category"]
+        if cat_ids is None:
+            report.error("manifest-category", "mod.json", "categories.json is missing beside wu-mod.py, so "
+                         "\"category\" cannot be checked", "get the whole mods/ folder, not wu-mod.py alone")
+        elif not isinstance(c, str) or c not in cat_ids:
+            report.error("manifest-category", "mod.json", "unknown category %r" % (c,),
+                         "use one of: " + ", ".join(cat_ids) + " (or leave it out to use the default for the kind)")
+    else:
+        data["category"] = cat_defaults.get(k) if k in KINDS else None
+
     perms = data.get("permissions", [])
     if not isinstance(perms, list) or not all(isinstance(p, str) for p in perms):
         report.error("manifest-permissions", "mod.json", "\"permissions\" must be a list of strings")
@@ -1226,6 +1251,7 @@ def catalog_entry(files, m, zname, digest, size):
     return {
         "id": m["id"], "name": m["name"], "version": m["version"], "author": m["author"],
         "licence": m["licence"], "kind": m["kind"], "wu": m["wu"], "description": m["description"],
+        "category": m["category"],
         "permissions": list(m.get("permissions", [])),
         "screenshots": list(m.get("screenshots", [])),
         "links": list(m.get("links", [])),

@@ -91,3 +91,6 @@
 1027y leyline  Update the public orionopenwow/Leyline repo
 1027z client  One-tab guard: "Play here" takes over a frozen or crashed tab after 6 seconds instead of waiting forever
 1028a ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1028b mods  Workshop: the twelve categories (addons, shaders, sandbox, custom maps, builds, encounters, models, realm scripts, presets, sounds, tools, total conversions)
+1028c signin  /wrath/mods shows the category grid, category pages and search
+1028d ship  Save to GitHub (orionopenwow/WrathUnleashed)

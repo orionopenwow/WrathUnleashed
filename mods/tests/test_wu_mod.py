@@ -174,6 +174,41 @@ class ManifestRules(Base):
         self.manifest(kind="server")
         self.assertFails("manifest-kind")
 
+    def test_category_defaults_from_kind(self):
+        self.manifest(category=None)
+        self.assertEqual(self.assertPasses().manifest["category"], "addons")       # template is kind "both"
+        shutil.rmtree(self.path("realm"))
+        self.manifest(kind="ui", permissions=None, category=None)
+        self.assertEqual(self.assertPasses().manifest["category"], "addons")
+        self.setUp()
+        shutil.rmtree(self.path("ui"))
+        self.manifest(kind="realm", category=None)
+        self.assertEqual(self.assertPasses().manifest["category"], "realm-scripts")
+
+    def test_every_listed_category_passes(self):
+        ids = [c["id"] for c in json.load(open(os.path.join(ROOT, "categories.json")))["categories"]]
+        self.assertEqual(len(ids), 12)
+        for c in ids:
+            self.manifest(category=c)
+            r = self.assertPasses()
+            self.assertEqual(r.manifest["category"], c)
+            self.assertNotIn("manifest-field", r.codes("WARN"))
+
+    def test_unknown_category(self):
+        self.manifest(category="weapons")
+        r = self.assertFails("manifest-category")
+        self.assertIn("addons", self.dump(r) + run("check", self.mod).stdout)
+
+    def test_category_must_be_a_string(self):
+        self.manifest(category=["addons"])
+        self.assertFails("manifest-category")
+
+    def test_category_list_is_one_file(self):
+        ids, defaults = wu.load_categories()
+        self.assertEqual(ids[0], "addons")
+        self.assertEqual(defaults, {"ui": "addons", "realm": "realm-scripts", "both": "addons"})
+        self.assertEqual(wu.load_categories(os.path.join(self.tmp, "none.json"))[0], None)
+
     def test_bad_wu(self):
         self.manifest(wu="latest")
         self.assertFails("manifest-wu")
@@ -588,7 +623,7 @@ class CatalogCommand(unittest.TestCase):
         self.assertEqual(doc["format"], 1)
         mods = {m["id"]: m for m in doc["mods"]}
         self.assertEqual(sorted(mods), ["dalaran-dice", "emote-wheel", "pings"])
-        for k in ("id", "name", "version", "author", "licence", "kind", "description", "permissions",
+        for k in ("id", "name", "version", "author", "licence", "kind", "category", "description", "permissions",
                   "screenshots", "sha256", "zip", "addons"):
             self.assertIn(k, mods["pings"], k)
         for m in mods.values():

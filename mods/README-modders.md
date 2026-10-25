@@ -20,6 +20,7 @@ This copies the example mod, Dalaran Dice, into `my-mod/` with your id filled in
   "author": "Your Name",
   "licence": "MIT",
   "kind": "both",
+  "category": "sandbox",
   "wu": "1.0",
   "description": "One or two sentences on what it does.",
   "permissions": ["commands", "chat", "db"]
@@ -27,6 +28,25 @@ This copies the example mod, Dalaran Dice, into `my-mod/` with your id filled in
 ```
 
 `kind` is `ui`, `realm` or `both`. `permissions` lists what your realm code does: `commands`, `gossip`, `spawns`, `events`, `chat`, `db`, `timers`. Players see this list, so keep it short. [SPEC.md](SPEC.md) says which functions need which permission.
+
+`category` (optional) is the shelf your mod sits on in the Workshop at `/wrath/mods`. Leave it out and it follows the kind: `ui` and `both` go under `addons`, `realm` under `realm-scripts`. Pick one of:
+
+| `category` | Shelf | What goes there |
+|---|---|---|
+| `addons` | Addons and UI | Interfaces, unit frames, nameplates, meters, quest helpers, bag and chat mods, UI skins. |
+| `graphics` | Shaders and graphics | Lighting, sky, water, post effects, colour grades, graphics presets for our engines. |
+| `sandbox` | Sandbox and game modes | Garry's Mod-style kits such as Prop Hunt, hide and seek, races, murder mystery, tower defense, jump maps. |
+| `maps` | Custom maps | New zones, arenas, dungeons and housing plots. |
+| `builds` | Builds | Saved Builder creations shared as codes. |
+| `encounters` | Boss fights and encounters | Community bosses, encounter scripts, raid replays. |
+| `models` | Models and props | Original creatures, mounts, props and buildings. |
+| `realm-scripts` | Realm scripts | Server-side features such as QoL, events, economies, professions and companions. |
+| `presets` | Server presets | Ready realm recipes such as a Dalaran hangout, duels-only, raid night, RP and hardcore. |
+| `audio` | Sounds and music | Original ambience, music packs and UI sounds. |
+| `tools` | Tools | Developer HUD plugins, map viewers, log analysers and OBS overlays. |
+| `conversions` | Total conversions | Whole new games built from the categories above. |
+
+The list lives in [categories.json](categories.json); `wu-mod.py check` rejects anything else. An empty shelf on the site says "Publish the first one" and links here, so yours can be the first.
 
 ## 3. Write the realm part (mod-ale Lua)
 

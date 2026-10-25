@@ -5,6 +5,7 @@
   "author": "WrathUnleashed",
   "licence": "MIT",
   "kind": "both",
+  "category": "sandbox",
   "wu": "1.0",
   "description": "Type .dice in Dalaran to roll dice; everyone within 30 yards sees the result. The addon keeps the last five rolls on screen.",
   "permissions": [

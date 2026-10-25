@@ -15,7 +15,7 @@
 #      client's boot list by mods-overlay.py (the sibling of fui-overlay.py), wu-play restarted only when the
 #      addons changed. A failure here puts the previous addons back, and the previous realm scripts too.
 #      No streaming kit on the server: skipped (said so).
-#   4. site: catalog.json, installed.json, the zips and screenshots into $WU/portal/mods, which wu-portal
+#   4. site: catalog.json, categories.json, installed.json, the zips and screenshots into $WU/portal/mods, which wu-portal
 #      serves at /wrath/mods (stream/workshop.py). Swapped in whole.
 # Ends with "MODS OK". Backups in /root/mods-backups/<time>.
 set -euo pipefail
@@ -191,6 +191,8 @@ PY
     log "4. the site (/wrath/mods)"
     P="$PUB.new"; rm -rf "$P"; mkdir -p "$P/files" "$P/shots"
     cp -p "$O/catalog.json" "$P/catalog.json"
+    # the Workshop category list (mods/categories.json, sent in the kit): stream/workshop.py reads it from here
+    if [ -f "$U/kit/categories.json" ]; then cp -p "$U/kit/categories.json" "$P/categories.json"; fi
     cp -p "$O"/files/*.zip "$O"/files/*.zip.sha256 "$P/files/"
     python3 -I - "$O/catalog.json" "$U/catalog" "$P" <<'PY'
 import json, os, shutil, sys, time

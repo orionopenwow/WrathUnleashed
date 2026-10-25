@@ -5,6 +5,7 @@
   "author": "WrathUnleashed",
   "licence": "MIT",
   "kind": "both",
+  "category": "addons",
   "wu": "1.0",
   "description": "Alt-click the world map, Alt-click in the world, or type /ping: everyone in your group sees a marker on their map, an on-screen call (Attack, Danger, Help here, On my way) and hears a ping.",
   "permissions": [
