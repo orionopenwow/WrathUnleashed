@@ -1,0 +1,35 @@
+<!doctype html>
+<!-- The link-preview card (og:image / twitter:image) for play.openvanilla.app/wrath: 1200 x 630, our own art only
+     (no game screenshots). Rendered by make-card.js into stream/www-files/art/wu-card.webp. -->
+<html lang="en"><head><meta charset="utf-8"><title>WrathUnleashed card</title>
+<style>
+@font-face { font-family: "WU Cinzel"; src: url("../../stream/www-files/art/Cinzel-SemiBold.woff2") format("woff2"); }
+html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; background: #05040c; }
+.card { position: relative; width: 1200px; height: 630px; box-sizing: border-box;
+  background: radial-gradient(70% 70% at 50% 55%, rgba(5,4,12,.05), rgba(5,4,12,.65) 100%),
+    url("../../stream/www-files/art/wu-load-orion.webp") center 30% / cover no-repeat; }
+.frame { position: absolute; inset: 22px; border: 2px solid #8a6a2c; border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(255,215,130,.18), inset 0 0 60px rgba(0,0,0,.55); }
+.frame::before { content: ""; position: absolute; inset: 4px;
+  background: url("../../stream/www-files/art/wu-corner-tl.webp") top left / 92px 80px no-repeat,
+    url("../../stream/www-files/art/wu-corner-tr.webp") top right / 92px 80px no-repeat,
+    url("../../stream/www-files/art/wu-corner-bl.webp") bottom left / 92px 80px no-repeat,
+    url("../../stream/www-files/art/wu-corner-br.webp") bottom right / 92px 80px no-repeat; }
+.plate { position: absolute; left: 50%; top: 340px; transform: translate(-50%, -50%); width: 1120px; text-align: center;
+  padding: 40px 0 46px; background: radial-gradient(closest-side, rgba(5,4,12,.85) 55%, rgba(5,4,12,0)); }
+.brand { display: flex; align-items: center; justify-content: center; gap: 22px; }
+.brand::before, .brand::after { content: ""; flex: none; width: 104px; height: 90px; filter: drop-shadow(0 4px 8px #000);
+  background: url("../../stream/www-files/art/wu-dragon-l.webp") center / contain no-repeat; }
+.brand::after { background-image: url("../../stream/www-files/art/wu-dragon-r.webp"); }
+h1 { margin: 0; font: 600 74px/1 "WU Cinzel", Georgia, serif; letter-spacing: .04em;
+  background: linear-gradient(180deg, #fff3c4, #f0c058 55%, #b07a22); -webkit-background-clip: text; background-clip: text;
+  color: transparent; filter: drop-shadow(0 3px 4px rgba(0,0,0,.95)); }
+.rule { height: 26px; margin: 16px auto 14px; width: 520px;
+  background: url("../../stream/www-files/art/wu-divider.webp") center / contain no-repeat; }
+p { margin: 0; font: 600 30px/1.3 "WU Cinzel", Georgia, serif; letter-spacing: .05em; color: #f0d389; text-shadow: 0 2px 4px #000; }
+p.small { margin-top: 12px; font: 500 24px/1.3 system-ui, sans-serif; letter-spacing: .01em; color: #e6dcc4; }
+</style></head>
+<body><div class="card"><div class="frame"></div>
+<div class="plate"><div class="brand"><h1>WrathUnleashed</h1></div><div class="rule"></div>
+<p>Wrath of the Lich King 3.3.5a</p><p class="small">Play in your browser · Dalaran hangout · Host your own realm</p></div>
+</div></body></html>

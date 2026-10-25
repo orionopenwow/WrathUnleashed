@@ -50,6 +50,28 @@ REALM_DIR = E("GM_REALM_DIR", "/opt/wenilla-realm")
 CADDYFILE = E("GM_CADDYFILE", "/opt/openvanilla-classicplus/Caddyfile")
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(APP_DIR, "static")
+# The shared WrathUnleashed look (a copy of stream/www-files/art: wu-theme.css, the starfield, corners, dragons,
+# divider, Cinzel), served at /static/art/<name> from this list only, without the login (it is our own art).
+ART_DIR = E("GM_ART_DIR", os.path.join(STATIC_DIR, "art"))
+ART_TYPES = {
+    "wu-theme.css": "text/css; charset=utf-8",
+    "wu-load-orion.webp": "image/webp", "wu-load-bg.webp": "image/webp", "wu-card.webp": "image/webp",
+    "wu-corner-tl.webp": "image/webp", "wu-corner-tr.webp": "image/webp",
+    "wu-corner-bl.webp": "image/webp", "wu-corner-br.webp": "image/webp",
+    "wu-divider.webp": "image/webp", "wu-dragon-l.webp": "image/webp", "wu-dragon-r.webp": "image/webp",
+    "Cinzel-SemiBold.woff2": "font/woff2", "Cinzel-OFL.txt": "text/plain; charset=utf-8",
+}
+
+
+def art_bytes(name):
+    """One file from the allow-list, or None. The name is only ever a key of ART_TYPES, never a path."""
+    if name not in ART_TYPES:
+        return None
+    try:
+        with open(os.path.join(ART_DIR, name), "rb") as f:
+            return f.read(4_000_000)
+    except OSError:
+        return None
 TOKEN_FILE = E("GM_TOKEN_FILE", WU + "/gmconsole.env")
 AUDIT_FILE = E("GM_AUDIT_FILE", WU + "/gmconsole-audit.log")
 SPEED_FILE = E("GM_SPEED_FILE", WU + "/gmconsole-speed.json")
@@ -1820,15 +1842,17 @@ TRAIN = [
 SESSIONS = {}
 _sess_lock = threading.Lock()
 _fails = []
-CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; "
+CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; "
        "form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
 SHELL = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="csrf" content="%s"><title>WrathUnleashed GM</title><link rel="stylesheet" href="/static/app.css">
-<link rel="icon" href="data:,"></head><body><div id="app"></div><script src="/static/app.js"></script></body></html>"""
-NOAUTH = b"""<!doctype html><html><head><meta charset="utf-8"><title>GM console</title></head>
-<body style="background:#0e1116;color:#c9d1d9;font:15px system-ui;padding:40px">
-<h1 style="font-size:18px">Not signed in</h1><p>Open the console with <b>Open GM Console.bat</b> on your PC.</p></body></html>"""
+<meta name="csrf" content="%s"><title>WrathUnleashed GM</title><link rel="stylesheet" href="/static/art/wu-theme.css">
+<link rel="stylesheet" href="/static/app.css">
+<link rel="icon" href="data:,"></head><body class="wu"><div id="app"></div><script src="/static/app.js"></script></body></html>"""
+NOAUTH = b"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GM console</title><link rel="stylesheet" href="/static/art/wu-theme.css"><link rel="stylesheet" href="/static/app.css"></head>
+<body class="wu"><main class="signed-out wu-panel"><div class="wu-brand"><h1>GM console</h1></div><hr class="wu-divider">
+<p>Not signed in. Open the console with <b>Open GM Console.bat</b> on your PC.</p></main></body></html>"""
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1883,11 +1907,32 @@ class Handler(BaseHTTPRequestHandler):
     def do_HEAD(self):
         self.do_GET()
 
+    def art(self, name):
+        """GET /static/art/<name>: the shared look, from the allow-list, cached (the theme for an hour, the art
+        for a week). No login needed: it is our own art, nothing private."""
+        body = art_bytes(name)
+        if body is None:
+            return self.send(404, {"error": "not found"})
+        self.send_response(200)
+        self.send_header("Content-Type", ART_TYPES[name])
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "private, max-age=%d" % (3600 if name.endswith(".css") else 604800))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+
     def do_GET(self):
         if not self.host_ok():
             return self.send(403, {"error": "bad host"})
         u = urllib.parse.urlsplit(self.path)
         q = {k: v[0] for k, v in urllib.parse.parse_qs(u.query).items()}
+        if u.path.startswith("/static/art/"):
+            return self.art(urllib.parse.unquote(u.path[len("/static/art/"):]))
+        if u.path == "/static/app.css":     # styles only, so the signed-out page has the look too
+            with open(os.path.join(STATIC_DIR, "app.css"), "rb") as f:
+                return self.send(200, f.read(), "text/css; charset=utf-8")
         if u.path == "/healthz":
             return self.send(200, b"ok\n", "text/plain")
         if u.path == "/login":

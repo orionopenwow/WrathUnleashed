@@ -1,0 +1,162 @@
+/* wu-theme.css: the one WrathUnleashed look for every page outside the game.
+   Used by the play/sign-in pages (wrath_portal.py, /wrath/art/), the owner's control window
+   (tools/control/control.py, /art/) and the GM console (gmconsole, /static/art/). In-game it is Forever UI:
+   dark panels with gold filigree corners, gold Cinzel headings, red buttons with gold text; the loading
+   screens (wu-loading.css) use the same art. Every url() here is relative, so this file works next to
+   the art wherever a server puts it. Each page keeps a small inline fallback, so it still reads well
+   if this file or the art is missing.
+
+   The vocabulary (keep it small; add to it here, not per page):
+     body.wu              the Orion starfield backdrop and the body type
+     .wu-title, h1.wu-title  Cinzel heading in gold
+     .wu-brand            a heading with the dragons either side
+     .wu-panel, .card     dark panel, 1px gold rim, inner shadow, the four corner ornaments
+     .wu-divider          the gold divider art (an <hr> or an empty <div>)
+     .btn, .wu button     red button with gold Cinzel text
+       .primary / .gold   the gold one (one per screen: the main action)
+       .ghost             quiet (copy, show, small helpers)
+       .danger            destructive: darker, with a red rim
+       .off               a disabled-looking link
+     .pill (.ok .bad .job)  status pill
+   Keep it light: no animation except a short hover, and none at all with prefers-reduced-motion. */
+
+@font-face { font-family: "WU Cinzel"; src: url("Cinzel-SemiBold.woff2") format("woff2"); font-display: swap; font-weight: 400 700; }
+
+:root {
+  --wu-cinzel: "WU Cinzel", "Cinzel", "Trajan Pro", Georgia, serif;
+  --wu-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --wu-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --wu-night: #05040c;
+  --wu-panel: rgba(12, 10, 24, .92);
+  --wu-panel-2: rgba(20, 16, 36, .92);
+  --wu-text: #ece6d6;
+  --wu-dim: #b4ab96;
+  --wu-faint: #8d8574;
+  --wu-gold: #d8b25a;
+  --wu-gold-2: #f0d389;
+  --wu-rim: #8a6a2c;
+  --wu-rim-soft: #4a3b1c;
+  --wu-red-1: #a8231a;
+  --wu-red-2: #6e130d;
+  --wu-red-3: #400905;
+  --wu-ok: #6fd88a;
+  --wu-bad: #ff8f80;
+  --wu-warn: #f5c35a;
+  color-scheme: dark;
+}
+
+/* -- the backdrop ---------------------------------------------------------------------------- */
+/* the starfield sits on a fixed layer behind the page, so long pages scroll over it (no background-attachment
+   fixed: phones ignore it) */
+html:has(> body.wu) { background: var(--wu-night); }
+body.wu { background: transparent; color: var(--wu-text); font-family: var(--wu-sans); }
+body.wu::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(120% 90% at 50% 30%, rgba(5, 4, 12, .15) 30%, rgba(5, 4, 12, .8) 100%),
+    url("wu-load-orion.webp") center top / cover no-repeat,
+    var(--wu-night);
+}
+
+/* -- headings --------------------------------------------------------------------------------- */
+.wu-title, .wu h1 {
+  font-family: var(--wu-cinzel); font-weight: 600; letter-spacing: .05em; line-height: 1.2;
+  color: var(--wu-gold-2);
+  background: linear-gradient(180deg, #fff3c4, #f0c058 55%, #c08a2e);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .85));
+}
+.wu h2, .wu-h2 { font-family: var(--wu-cinzel); font-weight: 600; letter-spacing: .04em; color: var(--wu-gold-2); }
+
+/* the dragons either side of a heading */
+.wu-brand { display: flex; align-items: center; justify-content: center; gap: 10px; min-width: 0; }
+.wu-brand::before, .wu-brand::after {
+  content: ""; flex: none; width: 54px; height: 46px; filter: drop-shadow(0 3px 5px rgba(0, 0, 0, .8));
+  background: url("wu-dragon-l.webp") center / contain no-repeat;
+}
+.wu-brand::after { background-image: url("wu-dragon-r.webp"); }
+
+.wu-divider {
+  display: block; border: 0; height: 14px; margin: 14px auto; width: min(320px, 80%);
+  background: url("wu-divider.webp") center / contain no-repeat;
+}
+
+/* -- panels ----------------------------------------------------------------------------------- */
+.wu-panel, .wu .card {
+  position: relative; isolation: isolate;
+  background: radial-gradient(120% 120% at 50% 0%, rgba(40, 28, 78, .82), var(--wu-panel) 62%);
+  border: 1px solid var(--wu-rim);
+  box-shadow: inset 0 0 0 1px rgba(255, 215, 130, .10), inset 0 0 30px rgba(70, 50, 160, .22), 0 12px 36px rgba(0, 0, 0, .6);
+}
+.wu-panel::before, .wu .card::before {
+  content: ""; position: absolute; inset: 2px; z-index: -1; pointer-events: none;
+  background:
+    url("wu-corner-tl.webp") top left / 40px 34px no-repeat,
+    url("wu-corner-tr.webp") top right / 40px 34px no-repeat,
+    url("wu-corner-bl.webp") bottom left / 40px 34px no-repeat,
+    url("wu-corner-br.webp") bottom right / 40px 34px no-repeat;
+}
+
+/* -- buttons ---------------------------------------------------------------------------------- */
+.btn, .wu button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font: 600 15px/1.2 var(--wu-cinzel); letter-spacing: .02em; text-decoration: none; white-space: nowrap;
+  color: var(--wu-gold-2); text-shadow: 0 1px 2px #000;
+  background: linear-gradient(180deg, var(--wu-red-1) 0%, var(--wu-red-2) 48%, var(--wu-red-3) 52%, var(--wu-red-2) 100%);
+  border: 1px solid var(--wu-gold); border-radius: 4px; padding: 9px 18px; cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 210, 150, .35), inset 0 0 0 1px rgba(0, 0, 0, .55), inset 0 -3px 6px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .5);
+  transition: filter .12s ease, box-shadow .12s ease;
+}
+.btn:hover, .wu button:hover { filter: brightness(1.15); color: #fff1c8; }
+.btn:active, .wu button:active { filter: brightness(.95); box-shadow: inset 0 2px 6px rgba(0, 0, 0, .6), inset 0 0 0 1px rgba(0, 0, 0, .55); }
+.btn:focus-visible, .wu button:focus-visible, .wu a:focus-visible, .wu summary:focus-visible,
+.wu input:focus-visible, .wu select:focus-visible, .wu textarea:focus-visible { outline: 2px solid var(--wu-gold-2); outline-offset: 2px; }
+.btn:disabled, .wu button:disabled { filter: grayscale(.7) brightness(.7); cursor: not-allowed; }
+
+/* the gold one: the main action on a screen */
+.btn.primary, .btn.gold, .wu button.primary, .wu button.gold {
+  color: #2a1a06; text-shadow: 0 1px 0 rgba(255, 240, 200, .5);
+  background: linear-gradient(180deg, #fbe7a6 0%, #e7c063 48%, #c9962f 52%, #e0b452 100%);
+  border-color: #fff0bf;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6), inset 0 0 0 1px rgba(90, 60, 10, .45), inset 0 -3px 6px rgba(120, 70, 0, .35), 0 2px 8px rgba(0, 0, 0, .55), 0 0 14px rgba(240, 200, 100, .18);
+}
+.btn.primary:hover, .btn.gold:hover, .wu button.primary:hover, .wu button.gold:hover { color: #1a1003; filter: brightness(1.06); }
+
+.btn.ghost, .wu button.ghost {
+  color: var(--wu-gold-2); background: rgba(10, 8, 18, .6); border-color: var(--wu-rim);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .5); font-size: 13px; padding: 6px 12px;
+}
+.btn.danger, .wu button.danger {
+  color: #ffd2c8; background: linear-gradient(180deg, #3a0907, #1d0403); border-color: #e0483a;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .6), 0 0 10px rgba(224, 72, 58, .18);
+}
+.btn.small, .wu button.small { font-size: 12.5px; padding: 4px 10px; }
+.btn.off { color: var(--wu-faint); background: #1a1722; border-color: var(--wu-rim-soft); box-shadow: none; cursor: default; filter: none; }
+
+/* -- pills ------------------------------------------------------------------------------------ */
+.wu .pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border-radius: 999px; white-space: nowrap;
+  font: 12.5px/1.4 var(--wu-sans); color: var(--wu-dim);
+  background: rgba(8, 6, 16, .8); border: 1px solid var(--wu-rim-soft);
+}
+.wu .pill.ok { color: var(--wu-ok); border-color: #2f6b3e; background: rgba(12, 40, 22, .75); }
+.wu .pill.bad { color: var(--wu-bad); border-color: #7a2c24; background: rgba(48, 12, 10, .75); }
+.wu .pill.job { color: var(--wu-warn); border-color: #6b5214; background: rgba(40, 30, 6, .75); }
+
+/* -- form fields and links ---------------------------------------------------------------------- */
+.wu input, .wu select, .wu textarea {
+  font: inherit; color: var(--wu-text); background: rgba(5, 4, 12, .85);
+  border: 1px solid var(--wu-rim-soft); border-radius: 4px; padding: 8px 10px;
+}
+.wu input::placeholder, .wu textarea::placeholder { color: var(--wu-faint); }
+a:where(:not(.btn)):where(.wu *) { color: var(--wu-gold-2); text-underline-offset: 2px; }
+a:where(:not(.btn)):where(.wu *):hover { color: #fff1c8; }
+
+@media (max-width: 520px) {
+  .btn, .wu button { white-space: normal; text-align: center; }
+  .wu-brand::before, .wu-brand::after { width: 40px; height: 34px; }
+  .wu-panel::before, .wu .card::before { background-size: 30px 26px, 30px 26px, 30px 26px, 30px 26px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn, .wu button { transition: none; }
+}

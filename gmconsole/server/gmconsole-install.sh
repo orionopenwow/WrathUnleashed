@@ -51,6 +51,15 @@ fi
 install -d -m 755 "$APP" "$APP/static"
 install -m 644 "$SRC/gmconsole.py" "$APP/gmconsole.py"
 install -m 644 "$SRC/static/app.js" "$SRC/static/app.css" "$APP/static/"
+# the shared look (a copy of stream/www-files/art); without it the console keeps its plain styles
+rm -rf "$APP/static/art"
+if [ -f "$SRC/static/art/wu-theme.css" ]; then
+  install -d -m 755 "$APP/static/art"
+  install -m 644 "$SRC"/static/art/* "$APP/static/art/"
+  echo "  art: $(ls "$APP/static/art" | wc -l) files"
+else
+  echo "  WARNING: the kit has no static/art: the console shows its plain look"
+fi
 install -m 755 "$SRC/gmconsole-install.sh" "$SRC/gmconsole-uninstall.sh" "$APP/"
 install -m 644 "$SRC/Dockerfile" "$APP/Dockerfile"
 

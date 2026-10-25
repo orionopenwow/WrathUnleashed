@@ -41,3 +41,7 @@
 1026a relay  Beacons relay at relay.openvanilla.app (backup, health check, rollback)
 1026b relay  Beacons relay (picks a free web port; 8099 is taken on the server)
 1026c ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1026d client  Client 20261025b: modern UI size everywhere (UI 768 units tall, like retail), character select sized and framed right, nameplate keys V / Shift-V / Ctrl-V
+1026e signin  New look for the play page and realm list (Orion art, gold frames, Cinzel), link-preview cards for X / Discord / Reddit
+1026f gm  GM console in the same look
+1026g ship  Save to GitHub (orionopenwow/WrathUnleashed)

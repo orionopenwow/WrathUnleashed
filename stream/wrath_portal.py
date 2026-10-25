@@ -77,6 +77,9 @@ Settings (environment, /srv/wrath/portal.env):
                          https://relay.openvanilla.app/api/listing/realms.json
   WU_JOIN_BASE           where a community realm's Join link goes (default https://relay.openvanilla.app,
                          which serves /join/<realm id> itself)
+  WU_ART_DIR             the site art and theme (default /app/art = /srv/wrath/portal/art on the host,
+                         installed from stream/www-files/art by fastloop.sh), served at /wrath/art/<name>
+                         from a fixed list. Missing: the pages fall back to plain CSS.
 
 Passwords are never logged.
 """
@@ -121,6 +124,7 @@ BRIDGE_HOST = os.environ.get("BRIDGE_HOST", "ovlive-realm")
 STREAM_HOST = os.environ.get("STREAM_HOST", "wrath.openvanilla.app")
 STREAM_SLICES = {x.strip() for x in os.environ.get("STREAM_SLICES", "mini").split(",") if x.strip()}
 SLICE_DIR = os.environ.get("WU_SLICE_DIR", "/app/slices")
+ART_DIR = os.environ.get("WU_ART_DIR", "/app/art")
 # Forever UI in the browser client (only where it is installed: fui-install.sh lays it over the slice).
 # "1" turns it on; WU_FOREVERUI=0 in portal.env gives everyone the stock look. ?foreverui=0 on the page wins.
 FOREVERUI = "0" if os.environ.get("WU_FOREVERUI", "1").strip() == "0" else "1"
@@ -410,53 +414,146 @@ def env_js(sess: dict) -> bytes:
 # Page
 # ----------------------------------------------------------------------------------------------
 
+# The look: the shared theme (stream/www-files/art/wu-theme.css, also used by the control window and the GM
+# console) and its art, served from ART_DIR at /wrath/art/<name> (the stream site is behind the sign-in gate
+# and fonts need CORS, so the art can't come from there). STYLE is this page's layout plus a plain fallback
+# that reads well on its own when the art is missing; its colour rules sit in :where() (no specificity) so
+# the theme, linked after it, always wins.
+ART_TYPES = {
+    "wu-theme.css": "text/css; charset=utf-8",
+    "wu-load-orion.webp": "image/webp", "wu-load-bg.webp": "image/webp",
+    "wu-corner-tl.webp": "image/webp", "wu-corner-tr.webp": "image/webp",
+    "wu-corner-bl.webp": "image/webp", "wu-corner-br.webp": "image/webp",
+    "wu-divider.webp": "image/webp", "wu-dragon-l.webp": "image/webp", "wu-dragon-r.webp": "image/webp",
+    "Cinzel-SemiBold.woff2": "font/woff2", "Cinzel-OFL.txt": "text/plain; charset=utf-8",
+    "wu-card.webp": "image/webp",   # the link-preview card (tools/art/wu-card.html, 1200 x 630)
+}
+ART_MAX_AGE = 7 * 86400
+_theme_ver = {"key": None, "v": ""}
+
+
+def art_bytes(name: str) -> bytes | None:
+    """One file from the allow-list in ART_DIR, or None (not listed, or missing). Never a path from the URL."""
+    if name not in ART_TYPES:
+        return None
+    try:
+        with open(os.path.join(ART_DIR, name), "rb") as f:
+            return f.read(4_000_000)
+    except OSError:
+        return None
+
+
+def theme_version() -> str:
+    """A short hash of wu-theme.css for its link (?v=), so a new theme shows at once; "" when it is missing."""
+    p = os.path.join(ART_DIR, "wu-theme.css")
+    try:
+        st = os.stat(p)
+    except OSError:
+        return ""
+    key = (st.st_mtime_ns, st.st_size)
+    if _theme_ver["key"] != key:
+        b = art_bytes("wu-theme.css")
+        _theme_ver.update(key=key, v=hashlib.sha256(b).hexdigest()[:10] if b else "")
+    return _theme_ver["v"]
+
+
 STYLE = """
-body{margin:0;min-height:100vh;background:#0d0f16;color:#e9e4d4;font:16px/1.5 system-ui,sans-serif;display:flex;align-items:center;justify-content:center}
-main{width:min(30rem,100% - 32px);background:#161a26;border:1px solid #3a3322;border-radius:10px;padding:24px;box-sizing:border-box}
-h1{margin:0 0 4px;font-size:1.6rem;color:#f2c96b}.sub{margin:0 0 20px;color:#a59f8f}
-a.btn,button{display:inline-block;background:#f2c96b;color:#1a1408;border:0;border-radius:6px;padding:10px 16px;font:600 1rem system-ui,sans-serif;text-decoration:none;cursor:pointer}
-button.ghost{background:#2a2f3e;color:#e9e4d4;padding:6px 10px;font-size:.9rem}
-.row{display:flex;gap:8px;align-items:center;margin:6px 0 14px}
-.field{flex:1;background:#0d0f16;border:1px solid #3a3322;border-radius:6px;padding:8px 10px;font:600 1.05rem ui-monospace,monospace;letter-spacing:.04em;min-width:0;overflow-wrap:anywhere}
-label{color:#a59f8f;font-size:.85rem}ol{padding-left:1.2rem}li{margin:4px 0}.fine{color:#8a8473;font-size:.85rem}.err{color:#ff8f8f}
-a{color:#f2c96b;text-underline-offset:2px}a:visited{color:#d9b25c}a:hover{color:#ffe0a0}
-.fine a{color:#b8a57a}.fine a:hover{color:#f2c96b}
-a.btn:hover,button:hover{filter:brightness(1.08)}a.btn:focus-visible,button:focus-visible,a:focus-visible,summary:focus-visible{outline:2px solid #f2c96b;outline-offset:2px}
-code{background:#0d0f16;border:1px solid #2a2f3e;border-radius:4px;padding:1px 5px;font-size:.9em}
-@media (max-width:480px){body{align-items:flex-start;padding:16px 0}main{padding:18px}}
+:where(body){margin:0;min-height:100vh;background:#07060f;color:#ece6d6;font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 16px;box-sizing:border-box;overflow-x:hidden}
+main{width:min(31rem,100%);border-radius:6px;padding:28px 28px 24px;box-sizing:border-box}
+:where(main){background:#12101e;border:1px solid #8a6a2c}
+main.wide{width:min(36rem,100%)}
+.crest{display:flex;justify-content:center;margin:0 0 2px}
+h1{margin:0;font-size:1.75rem;text-align:center}
+:where(h1){color:#f0d389;font-family:Georgia,serif;font-weight:600}
+h2{margin:0;font-size:1.2rem}
+:where(h2){color:#f0d389;font-family:Georgia,serif;font-weight:600}
+.sub{margin:6px 0 18px;text-align:center;color:#b4ab96}
+.rule{display:block;height:14px;margin:12px auto 16px;width:min(300px,80%);border:0}
+:where(.rule){border-top:1px solid #4a3b1c;height:0}
+p{margin:12px 0}.center{text-align:center}
+:where(a.btn,button){display:inline-block;background:#8f1d14;color:#f0d389;border:1px solid #d8b25a;border-radius:4px;padding:9px 18px;font:600 1rem Georgia,serif;text-decoration:none;cursor:pointer}
+:where(button.ghost){background:#1a1722;padding:6px 12px;font-size:.85rem}
+:where(.btn.off){background:#1a1722;color:#8d8574;border-color:#4a3b1c;cursor:default}
+.row{display:flex;gap:8px;align-items:center;margin:6px 0 14px;flex-wrap:wrap}
+.field{flex:1 1 9rem;background:#05040c;border:1px solid #4a3b1c;border-radius:4px;padding:8px 10px;font:600 1.05rem ui-monospace,monospace;letter-spacing:.04em;min-width:0;overflow-wrap:anywhere;color:#ece6d6}
+label{color:#b4ab96;font-size:.9rem}ol{padding-left:1.3rem}li{margin:5px 0}
+.fine{color:#a59d8a;font-size:.9rem}.err{color:#ff9a8a;text-align:center}
+:where(a){color:#f0d389;text-underline-offset:2px}
+.fine a{color:#d8c08a}
+:where(a,button,summary):focus-visible{outline:2px solid #f0d389;outline-offset:2px}
+code{background:#05040c;border:1px solid #4a3b1c;border-radius:4px;padding:1px 5px;font-size:.9em;overflow-wrap:anywhere}
+@media (max-width:480px){body{justify-content:flex-start;padding:16px}main{padding:22px 18px 18px}h1{font-size:1.45rem}}
 """
 
 
-def render(body: str, nonce: str = "", script: str = "") -> bytes:
+def art_url(name: str) -> str:
+    return "/wrath/art/" + name
+
+
+CARD_DESCRIPTION = ("Play Wrath of the Lich King 3.3.5a in your browser. "
+                    "Dalaran hangout, Dungeon Finder, host your own realm.")
+
+
+def card_meta(path: str, title: str = "") -> str:
+    """Link-preview tags (Open Graph and X) for a public page, so a pasted link shows a proper card."""
+    e = html.escape
+    title = title or REALM_NAME
+    url = f"https://{PUBLIC_HOST}{path}"
+    img = f"https://{PUBLIC_HOST}{art_url('wu-card.webp')}"
+    tags = [("property", "og:type", "website"), ("property", "og:site_name", REALM_NAME),
+            ("property", "og:title", title), ("property", "og:description", CARD_DESCRIPTION),
+            ("property", "og:url", url), ("property", "og:image", img),
+            ("property", "og:image:type", "image/webp"), ("property", "og:image:width", "1200"),
+            ("property", "og:image:height", "630"), ("property", "og:image:alt", f"{REALM_NAME}: Wrath of the Lich King 3.3.5a"),
+            ("name", "twitter:card", "summary_large_image"), ("name", "twitter:title", title),
+            ("name", "twitter:description", CARD_DESCRIPTION), ("name", "twitter:image", img)]
+    return (f'<meta name="description" content="{e(CARD_DESCRIPTION)}"><link rel="canonical" href="{e(url)}">'
+            + "".join(f'<meta {k}="{n}" content="{e(v)}">' for k, n, v in tags))
+
+
+def render(body: str, nonce: str = "", script: str = "", wide: bool = False, meta: str = "") -> bytes:
     s = f'<script nonce="{nonce}">{script}</script>' if script else ""
+    v = theme_version()
+    theme = f'<link rel="stylesheet" href="{art_url("wu-theme.css")}?v={v}">' if v else ""
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width,initial-scale=1">'
-            f'<title>{html.escape(REALM_NAME)}</title><style>{STYLE}</style></head>'
-            f'<body><main>{body}</main>{s}</body></html>').encode("utf-8")
+            f'<meta name="color-scheme" content="dark">'
+            f'<title>{html.escape(REALM_NAME)}</title>{meta}<style>{STYLE}</style>{theme}</head>'
+            f'<body class="wu"><main class="wu-panel{" wide" if wide else ""}">{body}</main>{s}</body></html>').encode("utf-8")
+
+
+def crest(title: str) -> str:
+    """The page heading: the title between the two dragons, with the gold divider under it."""
+    return f'<div class="crest wu-brand"><h1>{html.escape(title)}</h1></div>'
+
+
+RULE = '<hr class="rule wu-divider">'
 
 
 def signed_out_page() -> bytes:
     return render(
-        f'<h1>{html.escape(REALM_NAME)}</h1><p class="sub">Wrath of the Lich King 3.3.5a</p>'
-        '<p><a class="btn" href="/login?next=%2Fwrath">Sign in with Google or your Hero Key</a></p>'
-        '<p class="fine">Already played on Open Vanilla? Use the same sign-in. Your Wrath login appears here.</p>'
-        '<p class="fine"><a href="/wrath/realms">All realms</a>, including community realms hosted by players</p>')
+        f'{crest(REALM_NAME)}<p class="sub">Wrath of the Lich King 3.3.5a</p>{RULE}'
+        '<p class="center"><a class="btn primary" href="/login?next=%2Fwrath">Sign in with Google or your Hero Key</a></p>'
+        '<p class="fine center">Played on Open Vanilla before? Use the same sign-in. Your Wrath login appears here.</p>'
+        '<p class="fine center"><a href="/wrath/realms">All realms</a>, including community realms hosted by players</p>',
+        meta=card_meta("/wrath"))
 
 
 def stream_off_page() -> bytes:
     return render(
-        f'<h1>{html.escape(REALM_NAME)}</h1>'
-        '<p>Streaming is off right now — play with your own game files.</p>'
-        '<p><a class="btn" href="/wrath">Get your game login</a></p>'
+        f'{crest(REALM_NAME)}{RULE}'
+        '<p class="center">Streaming is off right now — play with your own game files.</p>'
+        '<p class="center"><a class="btn primary" href="/wrath">Get your game login</a></p>'
         f'<p class="fine">{html.escape(DISCORD_HELP.split(DISCORD_URL)[0])}'
         f'<a href="{DISCORD_URL}">{DISCORD_URL}</a></p>')
 
 
 def stream_ended_page() -> bytes:
     return render(
-        f'<h1>{html.escape(REALM_NAME)}</h1>'
-        '<p>Your browser pass has ended. Your account can go anywhere again with your own game files.</p>'
-        '<p><a class="btn" href="/wrath/account">Back</a></p>'
+        f'{crest(REALM_NAME)}{RULE}'
+        '<p class="center">Your browser pass has ended. Your account can go anywhere again with your own game files.</p>'
+        '<p class="center"><a class="btn" href="/wrath/account">Back</a></p>'
         f'<p class="fine">{html.escape(DISCORD_HELP.split(DISCORD_URL)[0])}'
         f'<a href="{DISCORD_URL}">{DISCORD_URL}</a></p>')
 
@@ -464,15 +561,16 @@ def stream_ended_page() -> bytes:
 def busy_page(wait: int = 15) -> bytes:
     """A 429: the page tries again by itself (a meta refresh, no script) instead of leaving a dead end.
     Limits are per address, and a household or a cafe shares one, so the page stays calm about it."""
-    body = (f'<h1>{html.escape(REALM_NAME)}</h1><p class="sub">Lots of sign-ins from your network right now.</p>'
-            f'<p>Trying again in {int(wait)} seconds...</p><p><a class="btn" href="/wrath">Try now</a></p>')
+    body = (f'{crest(REALM_NAME)}<p class="sub">Lots of sign-ins from your network right now.</p>{RULE}'
+            f'<p class="center">Trying again in {int(wait)} seconds…</p>'
+            '<p class="center"><a class="btn" href="/wrath">Try now</a></p>')
     page = render(body).decode("utf-8")
     return page.replace("<head>", f'<head><meta http-equiv="refresh" content="{int(wait)};url=/wrath">', 1).encode("utf-8")
 
 
 def error_page(msg: str) -> bytes:
-    return render(f'<h1>{html.escape(REALM_NAME)}</h1><p class="err">{html.escape(msg)}</p>'
-                  '<p><a class="btn" href="/wrath">Try again</a></p>')
+    return render(f'{crest(REALM_NAME)}{RULE}<p class="err">{html.escape(msg)}</p>'
+                  '<p class="center"><a class="btn" href="/wrath">Try again</a></p>')
 
 
 COPY_JS = """
@@ -511,23 +609,25 @@ document.body.appendChild(f);f.submit()},function(){if(!done){done=true;clearTim
 
 def auto_signin_page(nonce: str) -> bytes:
     return render(
-        f'<h1>{html.escape(REALM_NAME)}</h1><p class="sub">Signing you in…</p>'
-        f'<p class="fine"><a href="{SIGN_IN_URL}">Sign in another way</a></p>',
-        nonce, AUTO_SIGNIN_JS)
+        f'{crest(REALM_NAME)}<p class="sub">Signing you in…</p>{RULE}'
+        f'<p class="fine center"><a href="{SIGN_IN_URL}">Sign in another way</a></p>',
+        nonce, AUTO_SIGNIN_JS, meta=card_meta("/wrath"))
 
 REALM_CSS = """
-.realm{border:1px solid #3a3322;border-radius:8px;padding:14px 16px;margin:12px 0;background:#121520}
-.realm h2{margin:0;font-size:1.25rem;color:#f2c96b}.tags{margin:4px 0 8px;font-size:.8rem;color:#a59f8f}
-.tag{display:inline-block;border:1px solid #3a3322;border-radius:10px;padding:1px 8px;margin-right:4px}
-.live{color:#7fd67f}.btn.off{background:#2a2f3e;color:#8a8473;cursor:default}
-details{margin-top:8px}summary{cursor:pointer;color:#a59f8f;font-size:.9rem}summary:hover{color:#e9e4d4}
+.realm{position:relative;border:1px solid #4a3b1c;border-radius:4px;padding:16px 18px;margin:14px 0;background:rgba(5,4,12,.55);box-shadow:inset 0 0 0 1px rgba(0,0,0,.4)}
+.realm h2{margin:0}.tags{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 10px;font-size:.85rem;color:#b4ab96}
+.tag{display:inline-block;border:1px solid #4a3b1c;border-radius:999px;padding:1px 9px;background:rgba(12,10,24,.7)}
+.live{color:#6fd88a}
+details{margin-top:10px}summary{cursor:pointer;color:#b4ab96;font-size:.92rem}summary:hover{color:#ece6d6}
 details[open] summary{margin-bottom:10px}
-.top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
-.eyebrow{font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;color:#a59f8f}
-.keylink{font-size:.85rem}
-.realm p{margin:8px 0}.realm .btn{margin-top:2px}
-.realm:first-of-type{border-color:#5a4a26;box-shadow:0 0 0 1px rgba(242,201,107,.08),0 8px 24px rgba(0,0,0,.25)}
-.end{margin:10px 0 0}.foot{margin:18px 0 0;padding-top:14px;border-top:1px solid #23283a}
+.top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:8px}
+.eyebrow{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:#b4ab96;font-family:inherit;font-weight:600}
+h2.eyebrow{margin:24px 0 4px;text-align:center}
+.keylink{font-size:.9rem}
+.realm p{margin:10px 0}.realm .btn{margin-top:2px}
+.realm:first-of-type{border-color:#8a6a2c;box-shadow:inset 0 0 0 1px rgba(255,215,130,.08),inset 0 0 24px rgba(216,178,90,.07),0 8px 24px rgba(0,0,0,.35)}
+.end{margin:12px 0 0}.foot{margin:20px 0 0;padding-top:14px;border-top:1px solid #2e2716}
+@media (max-width:480px){.realm{padding:14px}.realm .btn{display:flex;width:100%;box-sizing:border-box;white-space:normal;text-align:center}}
 """
 
 
@@ -546,7 +646,7 @@ def account_page(display: str, user: str, password: str, nonce: str) -> bytes:
     live = ('<span class="live">● online</span>' + (f" · {int(players)} playing" if isinstance(players, int) else "")
             if online else "status unavailable")
     streamed = stream_on() and slice_info("mini")
-    dalaran_btn = ('<a class="btn" href="/wrath/play?mini=mini">Play now</a>' if streamed
+    dalaran_btn = ('<a class="btn primary" href="/wrath/play?mini=mini">Play now</a>' if streamed
                    else '<span class="btn off">Opening soon</span>')
     pkg = (f'<li><a href="{html.escape(PACKAGE_URL)}">Download the player package</a> and unzip it.</li>'
            if PACKAGE_URL else '<li>Unzip the player package you were sent.</li>')
@@ -555,7 +655,7 @@ def account_page(display: str, user: str, password: str, nonce: str) -> bytes:
         f'<style>{REALM_CSS}</style>'
         f'<div class="top"><span class="eyebrow">{html.escape(REALM_NAME)}</span>'
         '<a class="keylink" href="/account/key">Your Hero Key</a></div>'
-        f'<h1>Choose a realm</h1><p class="sub">Signed in as {html.escape(display)}</p>'
+        f'{crest("Choose a realm")}<p class="sub">Signed in as {html.escape(display)}</p>{RULE}'
         # 1. Dalaran: the streamed mini version
         '<div class="realm"><h2>Dalaran</h2>'
         f'<div class="tags"><span class="tag">In your browser</span><span class="tag">No download</span>{live}</div>'
@@ -591,7 +691,7 @@ def account_page(display: str, user: str, password: str, nonce: str) -> bytes:
         f'<p class="fine foot">No game files? Dalaran needs none. For the whole world: '
         f'{html.escape(DISCORD_HELP.split(DISCORD_URL)[0])}<a href="{DISCORD_URL}">{html.escape(DISCORD_URL.split("//")[-1])}</a></p>'
         '<p class="fine"><a href="/wrath/realms">Community realms</a>: Dalaran hangouts and realms hosted by players</p>')
-    return render(body, nonce, COPY_JS)
+    return render(body, nonce, COPY_JS, wide=True)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -731,7 +831,7 @@ def realms_page() -> bytes:
         '<div class="tags"><span class="tag">Official</span><span class="tag">Level 1 or boost to 80</span>'
         f'{_players_text(_nonneg(st.get("players")), _nonneg(st.get("bots")), bool(st.get("online")))}</div>'
         '<p>The WrathUnleashed realm: Dalaran in your browser, or the whole world with your own game files.</p>'
-        '<p><a class="btn" href="/wrath">Play</a></p></div>')
+        '<p><a class="btn primary" href="/wrath">Play</a></p></div>')
     realms, ok = community_realms()
     rows = []
     for r in realms:
@@ -759,13 +859,13 @@ def realms_page() -> bytes:
     body = (f'<style>{REALM_CSS}</style>'
             f'<div class="top"><span class="eyebrow">{html.escape(REALM_NAME)}</span>'
             '<a class="keylink" href="/wrath">Back</a></div>'
-            '<h1>Realms</h1><p class="sub">Wrath of the Lich King 3.3.5a</p>'
+            f'{crest("Realms")}<p class="sub">Wrath of the Lich King 3.3.5a</p>{RULE}'
             + official +
-            '<h2 class="eyebrow" style="margin-top:20px">Community realms</h2>'
+            '<h2 class="eyebrow">Community realms</h2>'
             + community +
             '<p class="fine foot">Community realms are run by players on their own PCs, through the relay '
             '(nobody sees anyone\'s home address). Each host sets their own house rules and is the GM there.</p>')
-    return render(body)
+    return render(body, wide=True, meta=card_meta("/wrath/realms", f"Realms · {REALM_NAME}"))
 
 
 class _Window:
@@ -931,10 +1031,29 @@ class PageHandler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         script = f"'nonce-{nonce}'" if nonce else "'none'"
         self.send_header("Content-Security-Policy",
-                         f"default-src 'none'; style-src 'unsafe-inline'; script-src {script}; "
+                         f"default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'; "
+                         f"script-src {script}; "
                          f"frame-src https://{STREAM_HOST}; "
                          + ("connect-src 'self'; " if connect else "") +
                          "form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+
+    def art(self, name: str) -> None:
+        """GET /wrath/art/<name>: the site art and theme, from the allow-list only, cached for a week.
+        Readable from any site (fonts need CORS; it is our own art, nothing private)."""
+        body = art_bytes(name)
+        if body is None:
+            self.send(404, b"not found\n", "text/plain")
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", ART_TYPES[name])
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", f"public, max-age={ART_MAX_AGE}")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Cross-Origin-Resource-Policy", "cross-origin")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(body)
@@ -1151,6 +1270,9 @@ class PageHandler(BaseHTTPRequestHandler):
         if path == "/wrath/healthz":
             ok, kind = health()
             self.send(200 if ok else 503, b"ok\n" if ok else f"soap {kind}\n".encode(), "text/plain")
+            return
+        if path.startswith("/wrath/art/"):
+            self.art(urllib.parse.unquote(path[len("/wrath/art/"):]))
             return
         if path == "/wrath/realms":
             if not page_limit.hit(self.ip(), 120):

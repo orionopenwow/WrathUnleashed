@@ -17,6 +17,7 @@ Serves a page on http://127.0.0.1:8097 (this PC only) and opens it. The page sho
 Only this PC can open it: it listens on 127.0.0.1, and every action needs the session token in the page.
 Standard library only.
 """
+import hashlib
 import html
 import http.server
 import json
@@ -27,6 +28,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
 import urllib.request
 import webbrowser
 from pathlib import Path
@@ -41,6 +43,32 @@ AUTO = ROOT / "control" / "autopilot.json"
 LAST = ROOT / "control" / "last-run.json"
 QUIET = "--quiet" in sys.argv                         # started at Windows sign-in: no browser tab
 TOKEN_FILE = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "WrathUnleashed" / "control-token"
+# The shared look (stream/www-files/art: wu-theme.css, the starfield, corners, dragons, divider, Cinzel), the same
+# files the play pages and the GM console use. Served at /art/<name>, from this list only.
+ART_DIR = Path(os.environ.get("WU_ART_DIR") or ROOT / "stream" / "www-files" / "art")
+ART_TYPES = {
+    "wu-theme.css": "text/css; charset=utf-8",
+    "wu-load-orion.webp": "image/webp", "wu-load-bg.webp": "image/webp", "wu-card.webp": "image/webp",
+    "wu-corner-tl.webp": "image/webp", "wu-corner-tr.webp": "image/webp",
+    "wu-corner-bl.webp": "image/webp", "wu-corner-br.webp": "image/webp",
+    "wu-divider.webp": "image/webp", "wu-dragon-l.webp": "image/webp", "wu-dragon-r.webp": "image/webp",
+    "Cinzel-SemiBold.woff2": "font/woff2", "Cinzel-OFL.txt": "text/plain; charset=utf-8",
+}
+
+
+def art_bytes(name: str):
+    """One file from the allow-list, or None. The name is only ever a key of ART_TYPES, never a path."""
+    if name not in ART_TYPES:
+        return None
+    try:
+        return (ART_DIR / name).read_bytes()
+    except OSError:
+        return None
+
+
+def theme_version() -> str:
+    b = art_bytes("wu-theme.css")
+    return hashlib.sha256(b).hexdigest()[:10] if b else "none"
 
 
 def _token() -> str:
@@ -329,13 +357,31 @@ class H(http.server.BaseHTTPRequestHandler):
             return False
         return self.headers.get("X-Token") == TOKEN or f"t={TOKEN}" in self.path
 
+    def _art(self, name: str):
+        if self.headers.get("Host", "") not in (f"127.0.0.1:{PORT}", f"localhost:{PORT}"):
+            return self._send(403, '{"error":"forbidden"}')
+        name = urllib.parse.unquote(name)
+        b = art_bytes(name)
+        if b is None:
+            return self._send(404, "not found", "text/plain")
+        self.send_response(200)
+        self.send_header("Content-Type", ART_TYPES[name])
+        self.send_header("Content-Length", str(len(b)))
+        self.send_header("Cache-Control", "public, max-age=604800")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(b)
+
     def do_GET(self):
         path = self.path.split("?")[0]
+        if path.startswith("/art/"):
+            return self._art(path[len("/art/"):])
         if path == "/":
             if f"t={TOKEN}" not in self.path:
                 return self._send(403, "This link is old. Close this tab and double-click 'WrathUnleashed Control.bat'.",
                                   "text/plain")
-            return self._send(200, PAGE.replace("__TOKEN__", TOKEN), "text/html; charset=utf-8")
+            return self._send(200, PAGE.replace("__TOKEN__", TOKEN).replace("__THEMEV__", theme_version()),
+                              "text/html; charset=utf-8")
         if not self._authed():
             return self._send(403, '{"error":"forbidden"}')
         if path == "/api/state":
@@ -418,53 +464,65 @@ PAGE = r"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>WrathUnleashed Control</title>
 <style>
-:root{--bg:#0b0d12;--panel:#12151d;--line:#232837;--text:#e7e9ee;--dim:#8b93a7;--gold:#d8b25a;--gold2:#f0d389;
---ok:#4fd18b;--bad:#ff6b6b;--warn:#f5b84a;--blue:#7aa7ff;--mono:ui-monospace,SFMono-Regular,Consolas,monospace}
+/* The fallback look, readable on its own; the shared theme (/art/wu-theme.css, linked after this) adds the
+   starfield, the corner ornaments, the dragons, Cinzel and the red and gold buttons. */
+:root{--bg:#07060f;--panel:#12101e;--line:#3a2f18;--line2:#4a3b1c;--text:#ece6d6;--dim:#b4ab96;--gold:#d8b25a;--gold2:#f0d389;
+--ok:#6fd88a;--bad:#ff8f80;--warn:#f5c35a;--blue:#9cc2ff;--mono:ui-monospace,SFMono-Regular,Consolas,monospace}
 *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);
-font:14px/1.45 Inter,Segoe UI,system-ui,sans-serif}
-header{display:flex;align-items:center;gap:16px;padding:18px 28px;border-bottom:1px solid var(--line);
-background:linear-gradient(180deg,#141824,#0b0d12)}
-h1{margin:0;font-size:18px;letter-spacing:.04em;font-weight:650}
-h1 span{color:var(--gold)}
+font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+body{min-height:100vh;overflow-x:hidden}
+header{display:flex;align-items:center;gap:10px 14px;padding:14px 28px;flex-wrap:wrap;border-bottom:1px solid var(--line2);
+background:linear-gradient(180deg,rgba(18,14,32,.92),rgba(7,6,15,.78))}
+.brand{gap:10px}
+h1{margin:0;font-size:22px;letter-spacing:.05em;font-weight:600;color:var(--gold2);font-family:Georgia,serif;white-space:nowrap}
 .health{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
-.pill{display:flex;align-items:center;gap:7px;padding:5px 11px;border:1px solid var(--line);border-radius:99px;
-font-size:12px;color:var(--dim);background:var(--panel)}
+.pill{display:flex;align-items:center;gap:7px;padding:4px 11px;border:1px solid var(--line2);border-radius:99px;
+font-size:12.5px;color:var(--dim);background:var(--panel)}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
 .dot.ok{background:var(--ok);box-shadow:0 0 8px var(--ok)}.dot.bad{background:var(--bad);box-shadow:0 0 8px var(--bad)}
-main{display:grid;grid-template-columns:minmax(320px,1fr) minmax(380px,1.35fr);gap:20px;padding:22px 28px;
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);gap:20px;padding:24px 28px;
 max-width:1400px;margin:0 auto}
-@media (max-width:900px){main{grid-template-columns:1fr}}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
-.card h2{margin:0 0 12px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:600}
-.stack{display:flex;flex-direction:column;gap:20px}
+@media (max-width:900px){main{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border:1px solid var(--line2);border-radius:4px;padding:20px 22px;min-width:0}
+.card h2{margin:0 0 12px;font-size:15px;letter-spacing:.06em;color:var(--gold2);font-weight:600;font-family:Georgia,serif;
+padding-bottom:10px;border-bottom:1px solid var(--line)}
+.stack{display:flex;flex-direction:column;gap:20px;min-width:0}
 .item{display:flex;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
 .item:first-of-type{border-top:0}
-.tag{flex:none;font-size:11px;padding:2px 8px;border-radius:6px;height:fit-content;border:1px solid var(--line);
-color:var(--gold2);background:#1a1d27;font-family:var(--mono)}
-.sub{color:var(--dim);font-size:12.5px}
+.item>div{min-width:0;overflow-wrap:anywhere}
+.tag{flex:none;font-size:11.5px;padding:2px 8px;border-radius:4px;height:fit-content;border:1px solid var(--line2);
+color:var(--gold2);background:rgba(5,4,12,.7);font-family:var(--mono)}
+.sub{color:var(--dim);font-size:13px}
 .you .tag{color:var(--warn)}.now .tag{color:var(--blue)}.fin .tag{color:var(--ok)}
 .launch{display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap}
-button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:#1a1e2a;color:var(--text);
-padding:9px 14px}button:hover{border-color:#3a4157}
-button.primary{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1b1406;border:0;font-weight:650;
-padding:11px 20px}button.primary:disabled{opacity:.45;cursor:not-allowed}
-input{font:inherit;flex:1;min-width:180px;background:#0e1118;border:1px solid var(--line);border-radius:10px;
+button{font:600 14px Georgia,serif;cursor:pointer;border-radius:4px;border:1px solid var(--gold);background:#7a1810;color:var(--gold2);
+padding:8px 14px}
+button.primary{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#2a1a06;border-color:#fff0bf;padding:9px 20px}
+button.primary:disabled,button:disabled{opacity:.5;cursor:not-allowed}
+#go{padding:10px 22px}
+input{font:inherit;flex:1;min-width:180px;background:rgba(5,4,12,.85);border:1px solid var(--line2);border-radius:4px;
 color:var(--text);padding:9px 12px}
-.console{font-family:var(--mono);font-size:12.5px;background:#07090d;border:1px solid var(--line);border-radius:10px;
-height:420px;overflow:auto;padding:12px 14px;white-space:pre-wrap;word-break:break-word;color:#c9cfdb}
+.console{font-family:var(--mono);font-size:12.5px;background:rgba(3,2,8,.92);border:1px solid var(--line2);border-radius:4px;
+height:420px;overflow:auto;padding:12px 14px;white-space:pre-wrap;word-break:break-word;color:#d6d0c2;
+box-shadow:inset 0 2px 8px rgba(0,0,0,.6)}
 .console .err{color:var(--bad)}.console .hdr{color:var(--gold2)}.console .ok{color:var(--ok)}
 .status{display:flex;align-items:center;gap:10px;margin-bottom:10px;font-weight:600}
-.spinner{width:14px;height:14px;border:2px solid #39405a;border-top-color:var(--gold);border-radius:50%;
+.spinner{width:14px;height:14px;border:2px solid #3a2f18;border-top-color:var(--gold2);border-radius:50%;
 animation:s 0.8s linear infinite}@keyframes s{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spinner{animation:none;border-color:var(--gold2)}}
 .empty{color:var(--dim);font-style:italic}
-a{color:var(--blue)}.hist a{font-family:var(--mono);font-size:12px}
-.updated{font-size:11.5px;color:var(--dim);margin-top:8px}
-</style></head><body>
-<header><h1>WrathUnleashed <span>Control</span></h1>
+a{color:var(--gold2)}.hist a{font-family:var(--mono);font-size:12px}
+.updated{font-size:12px;color:var(--dim);margin-top:8px}
+@media (max-width:640px){header{padding:12px 16px}.health{margin-left:0;width:100%}
+.brand{width:100%;justify-content:center}.actions{width:100%}.actions button{flex:1 1 calc(50% - 8px)}
+main{padding:16px;gap:16px}.stack{gap:16px}.card{padding:16px}h1{font-size:16px;white-space:normal;text-align:center;min-width:0}.console{height:340px}}
+</style><link rel="stylesheet" href="/art/wu-theme.css?v=__THEMEV__"></head><body class="wu">
+<header><div class="brand wu-brand"><h1>WrathUnleashed Control</h1></div>
 <div class="health" id="health"></div>
-<button id="auto" title="While this window is open, Claude's updates run on their own">Autopilot: …</button>
+<div class="actions"><button id="auto" title="While this window is open, Claude's updates run on their own">Autopilot: …</button>
 <button id="gmc" title="Opens the GM console (bug reports, players, health, logs) in your browser">GM console</button>
-<button id="check">Check server</button><button id="game">Open the game</button></header>
+<button id="check">Check server</button><button id="game">Open the game</button></div></header>
 <main>
 <div class="stack">
   <section class="card"><h2>Waiting on you</h2><div id="you"></div></section>

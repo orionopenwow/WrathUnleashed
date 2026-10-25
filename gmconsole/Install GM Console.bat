@@ -8,7 +8,7 @@ rem Then use "Open GM Console.bat". Undo: "Uninstall GM Console.bat".
 cd /d "%~dp0"
 set "KEY=%USERPROFILE%\.ssh\openwow"
 if not exist "%KEY%" (echo SSH key %KEY% not found. & pause & exit /b 1)
-for %%f in (gmconsole.py gmconsole-install.sh gmconsole-uninstall.sh Dockerfile static\app.js static\app.css) do if not exist "server\%%f" (echo server\%%f is missing next to this file. & pause & exit /b 1)
+for %%f in (gmconsole.py gmconsole-install.sh gmconsole-uninstall.sh Dockerfile static\app.js static\app.css static\art\wu-theme.css) do if not exist "server\%%f" (echo server\%%f is missing next to this file. & pause & exit /b 1)
 set "T=%TEMP%\wu-gmconsole.tar"
 if exist "%T%" del /q "%T%"
 tar -cf "%T%" -C server gmconsole.py gmconsole-install.sh gmconsole-uninstall.sh Dockerfile static || (echo Packing failed. & pause & exit /b 1)
