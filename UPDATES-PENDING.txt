@@ -34,3 +34,5 @@
 1025t ship  Save to GitHub (orionopenwow/WrathUnleashed)
 1025u foreverui  Bars: the two extra bottom bars stacked straight above the main bar (lined up), right bars off the screen edge, no stray totem "Fire" button before level 30
 1025v ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1025w scripts  Every new race/class combo starts with its full class kit (weapon, armour, ammo, Hearthstone, food); live reload
+1025x ship  Save to GitHub (orionopenwow/WrathUnleashed)

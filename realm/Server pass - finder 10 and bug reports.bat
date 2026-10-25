@@ -17,6 +17,8 @@ if exist "%T%" rmdir /s /q "%T%"
 mkdir "%T%"
 copy /y "custom\lua_scripts\ov_reports.lua" "%T%\" >nul
 copy /y "..\stream\lua\ov_slices.lua" "%T%\" >nul
+rem The boost and start-kit script rides along (same backup and live reload).
+if exist "custom\lua_scripts\ov_main.lua" copy /y "custom\lua_scripts\ov_main.lua" "%T%\" >nul
 copy /y serverpass.sh "%T%\serverpass.sh.txt" >nul
 tar -cf "%TEMP%\wu-serverpass.tar" -C "%T%" . || (echo Packing failed. & pause & exit /b 1)
 ssh -i "%KEY%" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 root@play.openvanilla.app "T=$(mktemp -d) && tar -x -C $T -f - && sed 's/\r$//' $T/serverpass.sh.txt > $T/sp.sh && rm -f $T/serverpass.sh.txt && (cd $T && tar -cf - *.lua) | SERVERPASS_WARN_MIN=%WARN% bash $T/sp.sh 2>&1 | tee /tmp/wu-serverpass.log; rm -rf $T; grep -q '^SERVERPASS OK' /tmp/wu-serverpass.log" < "%TEMP%\wu-serverpass.tar"

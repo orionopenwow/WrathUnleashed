@@ -1,7 +1,8 @@
 -- WrathUnleashed MAIN realm (mod-ale): every new character chooses, once, between
 --   "Begin your adventure at level 1"  the normal game (normal economy, trainers, starting zone), and
 --   "Boost to level 80"                level 80 with a spec kit (custom/lua_scripts/ov_kits.lua).
--- Only runs when the realm profile sets OV_MAIN=1 (profiles/main.env). Brawl, progression and casual ignore it.
+-- Only runs when the realm profile sets OV_MAIN=1 (profiles/main.env). Brawl, progression and casual ignore it,
+-- except the starting-kit fill on a level-1 first login (see "starting kit"; every realm, OV_START_KIT=0 = off).
 --
 -- How it works
 --   * First login of a character (level 1, or a level-55 Death Knight): a gossip menu from the player himself
@@ -1244,8 +1245,180 @@ local function giveStartMount(player)
     end, 6000, 1)
 end
 
+------------------------------------------------------------------------------------------------ starting kit
+-- New race/class pairs (mod-arac, realm/charfix_world.sql) can start without their weapon, ammo or armour: their
+-- CharStartOutfit row may be missing on the server, or the weapon lands in the bags because the race had no skill
+-- for it. On the first login at level 1 (not Death Knights) this fills in the class's stock kit: each piece only
+-- when its slot is empty, from the bags when the character already has it (never a second copy), the weapon skill
+-- first when the character lacks it (the class has that skill at level 1 for some race; mod-arac's
+-- SkillRaceClassInfo gives it to every race). Hearthstone, food / water and a hunter's ammo only when missing
+-- (amounts as Player::Create: food 4, drink 2, ammo its BuyCount 200).
+-- Items: the 3.3.5a CharStartOutfit.dbc rows of the stock races (mod-arac 3f605e0's DBFilesContent copy, sex 0;
+-- Human 1, Orc 2, Dwarf 3, Night Elf 4, Tauren 6 per class), every id checked in AzerothCore's
+-- data/sql/base/db_world/item_template.sql (entry, name, InventoryType, AllowableRace/Class all races / classes).
+-- 3.3.5a's warriors start with a two-hander (Worn Greatsword), not sword and shield; shamans have the shield.
+-- Stock 3.3.5a outfits carry no food: the classic starters (Tough Jerky, Refreshing Spring Water) are added.
+-- Weapon skills: playercreateinfo_skills (Daggers 173 has raceMask 735, so a Tauren / Draenei rogue lacks it;
+-- Guns 46 only Dwarf / Tauren, Bows 45 Orc / NE / Troll / BE, Crossbows 226 Draenei hunters), taught by the
+-- weapon spells of WEAPON_SPELLS. OV_START_KIT=0 turns it off; it runs on every realm (level 1 only).
+-- Slots: 3 shirt, 4 chest / robe, 6 legs, 7 feet, 15 main hand, 16 off hand, 17 ranged / thrown, 19-22 bags.
+local FOOD, WATER, FOOD_COUNT, WATER_COUNT, AMMO_COUNT = 117, 159, 4, 2, 200   -- Tough Jerky, Refreshing Spring Water
+local HEARTHSTONE = 6948
+local W_2H_SWORD = { skill = 55, spell = 202 }
+local W_2H_AXE   = { skill = 172, spell = 197 }
+local W_MACE     = { skill = 54, spell = 198 }
+local W_STAFF    = { skill = 136, spell = 227 }
+local W_DAGGER   = { skill = 173, spell = 1180 }
+local W_THROWN   = { skill = 176, spell = 2567 }
+local START_KITS = {
+    [1] = { food = FOOD, gear = {                                   -- Warrior (Human / Orc / Dwarf / NE)
+        { 38, 3 }, { 39, 6 }, { 40, 7 },                            -- Recruit's Shirt, Pants, Boots
+        { 49778, 15, W_2H_SWORD } } },                              -- Worn Greatsword
+    [2] = { food = WATER, gear = {                                  -- Paladin (Human / Dwarf; BE weapon)
+        { 45, 3 }, { 44, 6 }, { 43, 7 },                            -- Squire's Shirt, Pants, Boots
+        { 23346, 15, W_2H_SWORD } } },                              -- Battleworn Claymore (2H Swords: every paladin)
+    [3] = { food = FOOD, gear = {                                   -- Hunter (Dwarf / Orc / Tauren / Draenei)
+        { 148, 3 }, { 147, 6 }, { 129, 7 },                         -- Rugged Trapper's Shirt, Pants, Boots
+        { 12282, 15, W_2H_AXE } },                                  -- Worn Battleaxe
+      ranged = {                                                    -- the first whose skill the hunter has
+        { sub = 2, weapon = 2504, ammo = 2512, bag = 2101, skill = 45, spell = 264 },    -- Worn Shortbow, Rough Arrow, Light Quiver
+        { sub = 18, weapon = 23347, ammo = 2512, bag = 2101, skill = 226, spell = 5011 }, -- Weathered Crossbow
+        { sub = 3, weapon = 2508, ammo = 2516, bag = 2102, skill = 46, spell = 266 },    -- Old Blunderbuss, Light Shot, Small Ammo Pouch
+      } },
+    [4] = { food = FOOD, gear = {                                   -- Rogue (Human / NE / Dwarf)
+        { 49, 3 }, { 48, 6 }, { 47, 7 },                            -- Footpad's Shirt, Pants, Shoes
+        { 2092, 15, W_DAGGER }, { 50055, 16, W_DAGGER },            -- Worn Dagger, Worn Dirk (Dual Wield at 1)
+        { 28979, 17, W_THROWN } } },                                -- Light Throwing Knife
+    [5] = { food = WATER, gear = {                                  -- Priest (Human / Dwarf)
+        { 53, 3 }, { 6098, 4 }, { 52, 6 }, { 51, 7 },               -- Neophyte's Shirt, Robe, Pants, Boots
+        { 35, 15, W_STAFF } } },                                    -- Bent Staff
+    [7] = { food = WATER, gear = {                                  -- Shaman (Orc / Tauren)
+        { 154, 3 }, { 153, 6 },                                     -- Primitive Mantle, Primitive Kilt
+        { 36, 15, W_MACE }, { 2362, 16 } } },                       -- Worn Mace, Worn Wooden Shield
+    [8] = { food = WATER, gear = {                                  -- Mage (Human / Dwarf)
+        { 6096, 3 }, { 56, 4 }, { 1395, 6 }, { 55, 7 },             -- Apprentice's Shirt, Robe, Pants, Boots
+        { 35, 15, W_STAFF } } },                                    -- Bent Staff
+    [9] = { food = WATER, gear = {                                  -- Warlock (Human / Dwarf)
+        { 6097, 3 }, { 57, 4 }, { 1396, 6 }, { 59, 7 },             -- Acolyte's Shirt, Robe, Pants, Shoes
+        { 35, 15, W_STAFF } } },                                    -- Bent Staff
+    [11] = { food = WATER, gear = {                                 -- Druid (Night Elf / Tauren)
+        { 6123, 4 }, { 6124, 6 },                                   -- Novice's Robe, Novice's Pants
+        { 35, 15, W_STAFF } } },                                    -- Bent Staff (Tauren; NE: Handcrafted Staff)
+}
+local OFF_HAND, MAIN_HAND, RANGED, INVTYPE_2HWEAPON = 16, 15, 17, 17
+
+-- Drops every kit item the world database doesn't have (a bad id can never reach AddItem / EquipItem).
+local function checkKits()
+    local ids, seen = {}, {}
+    local function want(id) if id and not seen[id] then seen[id] = true; ids[#ids + 1] = id end end
+    want(HEARTHSTONE); want(FOOD); want(WATER)
+    for _, k in pairs(START_KITS) do
+        for _, g in ipairs(k.gear) do want(g[1]) end
+        for _, r in ipairs(k.ranged or {}) do want(r.weapon); want(r.ammo); want(r.bag) end
+    end
+    local found = {}
+    local ok, q = pcall(WorldDBQuery, "SELECT entry FROM item_template WHERE entry IN (" .. table.concat(ids, ",") .. ")")
+    if ok and q then
+        repeat found[q:GetUInt32(0)] = true until not q:NextRow()
+    end
+    local dropped = {}
+    for _, id in ipairs(ids) do if not found[id] then dropped[#dropped + 1] = id end end
+    if #dropped > 0 then print("[ov_main] start kit: no item_template row for " .. table.concat(dropped, ", ") .. " (left out)") end
+    local function keep(id) return id and found[id] and id or nil end
+    HEARTHSTONE, FOOD, WATER = keep(HEARTHSTONE), keep(FOOD), keep(WATER)
+    for _, k in pairs(START_KITS) do
+        local gear = {}
+        for _, g in ipairs(k.gear) do if found[g[1]] then gear[#gear + 1] = g end end
+        k.gear, k.food = gear, keep(k.food)
+        local ranged = {}
+        for _, r in ipairs(k.ranged or {}) do
+            if found[r.weapon] and found[r.ammo] then r.bag = keep(r.bag); ranged[#ranged + 1] = r end
+        end
+        if k.ranged then k.ranged = ranged end
+    end
+end
+
+local function learnWeapon(player, w)
+    if w and not try(player, "HasSkill", w.skill) and not try(player, "HasSpell", w.spell) then
+        try(player, "LearnSpell", w.spell)
+    end
+end
+
+-- Puts `id` in the empty `slot`: the copy in the bags if there is one, else a new one (in the bags if it can't be
+-- worn). Nothing when the slot is taken or the character already has the item and it can't be worn.
+local function fillSlot(player, id, slot, w)
+    if try(player, "GetEquippedItemBySlot", slot) then return false end
+    learnWeapon(player, w)
+    if try(player, "HasItem", id) then
+        local it = try(player, "GetItemByEntry", id)
+        return it ~= nil and type(try(player, "EquipItem", it, slot)) == "userdata"
+    end
+    if type(try(player, "EquipItem", id, slot)) == "userdata" then return true end
+    try(player, "AddItem", id, 1)
+    return false
+end
+
+local function addIfMissing(player, id, count)
+    if id and not try(player, "HasItem", id) then try(player, "AddItem", id, count) end
+end
+
+local function rangedFor(player, kit)
+    local worn = try(player, "GetEquippedItemBySlot", RANGED)
+    if worn then
+        local sub = try(worn, "GetSubClass")
+        for _, r in ipairs(kit.ranged) do if r.sub == sub then return r, true end end
+        return nil, true
+    end
+    for _, r in ipairs(kit.ranged) do if try(player, "HasSkill", r.skill) then return r, false end end
+    return kit.ranged[#kit.ranged], false   -- no ranged skill at all: a gun, as the gnomes' neighbours the dwarves
+end
+
+local function fillStartKit(player)
+    if os.getenv("OV_START_KIT") == "0" or player:GetClass() == CLASS_DK or player:GetLevel() ~= 1 then return end
+    local kit = START_KITS[player:GetClass()]
+    if not kit then return end
+    local filled = 0
+    for _, g in ipairs(kit.gear) do
+        local id, slot, w = g[1], g[2], g[3]
+        local blocked = false
+        if slot == OFF_HAND then   -- nothing in the off hand beside a two-hander
+            local mh = try(player, "GetEquippedItemBySlot", MAIN_HAND)
+            local t = mh and try(mh, "GetItemTemplate")
+            blocked = t ~= nil and try(t, "GetInventoryType") == INVTYPE_2HWEAPON
+        end
+        if not blocked and fillSlot(player, id, slot, w) then filled = filled + 1 end
+    end
+    if kit.ranged and #kit.ranged > 0 then
+        local r, worn = rangedFor(player, kit)
+        if r then
+            if not worn and fillSlot(player, r.weapon, RANGED, r) then filled = filled + 1 end
+            addIfMissing(player, r.ammo, AMMO_COUNT)
+            if r.bag and not try(player, "HasItem", r.bag) then
+                local done = false
+                for _, slot in ipairs(BAG_SLOTS) do
+                    if not done and not try(player, "GetEquippedItemBySlot", slot) then
+                        done = type(try(player, "EquipItem", r.bag, slot)) == "userdata"
+                    end
+                end
+                if not done then try(player, "AddItem", r.bag, 1) end
+            end
+            if try(player, "HasItem", r.ammo) then try(player, "SetAmmo", r.ammo) end
+        end
+    end
+    addIfMissing(player, HEARTHSTONE, 1)
+    addIfMissing(player, kit.food, kit.food == WATER and WATER_COUNT or FOOD_COUNT)
+    if filled > 0 then
+        print(string.format("[ov_main] start kit: %d piece(s) filled in for %s (race %d, class %d)",
+            filled, tostring(try(player, "GetName")), player:GetRace(), player:GetClass()))
+    end
+end
+checkKits()
+
 local function onFirstLogin(event, player)
-    if not on() or not player or isBot(player) then return end
+    if not player or isBot(player) then return end
+    local ok, err = pcall(fillStartKit, player)
+    if not ok then print("[ov_main] start kit failed: " .. tostring(err)) end
+    if not on() then return end
     giveStartMount(player)
     if not canBoost(player) then return end
     setChoice(player, "pending", "")
@@ -1346,4 +1519,5 @@ RegisterPlayerGossipEvent(MENU_ID, 2, onSelect)
 -- for tests/test_ov_boost.lua (read only)
 OV_MAIN_TEST = { BARS = BARS, RACIALS = RACIALS, INV_SLOTS = INV_SLOTS, resolveLayout = resolveLayout,
     buildButtonsPacket = buildButtonsPacket, layoutRows = layoutRows, equipSet = equipSet, barState = barState,
-    SMSG_ACTION_BUTTONS = SMSG_ACTION_BUTTONS, MAX_ACTION_BUTTONS = MAX_ACTION_BUTTONS }
+    SMSG_ACTION_BUTTONS = SMSG_ACTION_BUTTONS, MAX_ACTION_BUTTONS = MAX_ACTION_BUTTONS,
+    START_KITS = START_KITS, fillStartKit = fillStartKit }
