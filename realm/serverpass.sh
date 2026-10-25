@@ -8,6 +8,7 @@
 #   3. Profile: DungeonAccessRequirements.LFGLevelDBCOverride = 1 (the finder uses that table's levels
 #      instead of LFGDungeons.dbc's 15), AllowTwoSide.Interaction.Group = 1 (friends on either side can group).
 #      OV_AUTOLEARN = 1: ov_qol.lua's instant spell learn on level up (the profile had it at 0).
+#      AC_PLAYERBOTS_MAX_ADDED_BOTS = 4: the bot module's per-player cap, same as ov_companions.lua's.
 #   4. Announces a restart (SERVERPASS_WARN_MIN, default 5) and recreates the world server; if only the Lua
 #      changed, a live "reload ale" instead.
 # Never prints a password: MySQL runs in its container with the container's own root password.
@@ -34,6 +35,20 @@ for f in "$T"/*.lua; do
   install -m 644 "$f" "$DST/$b"; echo "  $b installed"; n=$((n+1))
 done
 [ "$n" -gt 0 ] || die "no .lua files in the upload"
+# The Leyline realm list for the in-game window: leyline-fetch.py rides along in the upload; it goes to
+# /srv/wrath, runs every 5 minutes from cron, and once now (a failed fetch keeps the old list).
+if [ -f "$T/leyline-fetch.py" ]; then
+  sed -i 's/\r$//' "$T/leyline-fetch.py"
+  if python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' "$T/leyline-fetch.py"; then
+    install -m 755 "$T/leyline-fetch.py" /srv/wrath/leyline-fetch.py
+    printf '*/5 * * * * root python3 -I /srv/wrath/leyline-fetch.py >/dev/null 2>&1\n' > /etc/cron.d/leyline-realms
+    chmod 644 /etc/cron.d/leyline-realms
+    python3 -I /srv/wrath/leyline-fetch.py >/dev/null 2>&1 && echo "  Leyline realm list fetched (cron every 5 min)" \
+      || echo "  NOTE: the first Leyline realm list fetch failed; cron tries again in 5 minutes"
+  else
+    echo "  NOTE: leyline-fetch.py doesn't parse; skipped"
+  fi
+fi
 
 echo "== 2. dungeon levels (world database)"
 docker exec ov-ac-database sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump -uroot --single-transaction --skip-lock-tables acore_world dungeon_access_template' \
@@ -49,7 +64,7 @@ missing=$(sqlq "SELECT COUNT(*) FROM (SELECT 389 m UNION SELECT 43 UNION SELECT 
 echo "== 3. profile"
 sed -i 's/\r$//' "$PF"
 need=0
-for kv in AC_DUNGEON_ACCESS_REQUIREMENTS_LFGLEVEL_DBCOVERRIDE=1 AC_ALLOW_TWO_SIDE_INTERACTION_GROUP=1 OV_AUTOLEARN=1; do
+for kv in AC_DUNGEON_ACCESS_REQUIREMENTS_LFGLEVEL_DBCOVERRIDE=1 AC_ALLOW_TWO_SIDE_INTERACTION_GROUP=1 OV_AUTOLEARN=1 AC_PLAYERBOTS_MAX_ADDED_BOTS=4; do
   k=${kv%%=*}; v=${kv#*=}
   if grep -qE "^$k=" "$PF"; then sed -i "s#^$k=.*#$k=$v#" "$PF"; else printf '%s=%s\n' "$k" "$v" >> "$PF"; fi
   [ "$(docker exec ov-ac-worldserver printenv "$k" 2>/dev/null || true)" = "$v" ] || need=1
@@ -68,7 +83,7 @@ else
   MIN=${SERVERPASS_WARN_MIN:-5}
   if [ "$MIN" -gt 0 ]; then
     echo "== 4. announcing a restart in $MIN minute(s)"
-    bash soap-cmd.sh "announce Server restart in $MIN minutes: Dungeon Finder from level 10, bug reports (.bug). Back in a few minutes." >/dev/null 2>&1 || true
+    bash soap-cmd.sh "announce Server restart in $MIN minutes for an update (new: .companions). Back in a few minutes." >/dev/null 2>&1 || true
     sleep $(( MIN * 60 - 60 )) || true
     bash soap-cmd.sh "announce Server restart in 1 minute." >/dev/null 2>&1 || true
     sleep 60

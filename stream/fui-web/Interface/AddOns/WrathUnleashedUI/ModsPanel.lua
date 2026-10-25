@@ -175,6 +175,9 @@ local function build()
     local close = CreateFrame("Button", nil, panel, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", -6, -6)
     button(panel, "Done", 90, function() panel:Hide() end, "BOTTOMRIGHT", -16, 14)
+    if W.ToggleLeyline then   -- Leyline.lua: the realms of the Leyline network
+        button(panel, "Leyline realms", 130, function() panel:Hide(); W.ToggleLeyline() end, "BOTTOMLEFT", 16, 14)
+    end
     tinsert(UISpecialFrames, "WrathUnleashedModsFrame")   -- Esc closes it
 
     panel.pages, panel.tabs = {}, {}

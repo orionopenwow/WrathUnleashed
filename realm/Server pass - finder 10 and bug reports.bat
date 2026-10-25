@@ -21,9 +21,14 @@ rem The boost and start-kit script rides along (same backup and live reload).
 if exist "custom\lua_scripts\ov_main.lua" copy /y "custom\lua_scripts\ov_main.lua" "%T%\" >nul
 rem Quality of life (instant spell learn on level up, .learnall, .respec, .xp, .hearth, .summon) rides along too.
 if exist "custom\lua_scripts\ov_qol.lua" copy /y "custom\lua_scripts\ov_qol.lua" "%T%\" >nul
+rem The Leyline realm list for the in-game Leyline window (WULY addon messages) rides along too.
+if exist "custom\lua_scripts\ov_leyline.lua" copy /y "custom\lua_scripts\ov_leyline.lua" "%T%\" >nul
+rem Companions (.recruit, .buddy, .dismiss) ride along too.
+if exist "custom\lua_scripts\ov_companions.lua" copy /y "custom\lua_scripts\ov_companions.lua" "%T%\" >nul
+if exist "custom\leyline-fetch.py" copy /y "custom\leyline-fetch.py" "%T%\" >nul
 copy /y serverpass.sh "%T%\serverpass.sh.txt" >nul
 tar -cf "%TEMP%\wu-serverpass.tar" -C "%T%" . || (echo Packing failed. & pause & exit /b 1)
-ssh -i "%KEY%" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 root@play.openvanilla.app "T=$(mktemp -d) && tar -x -C $T -f - && sed 's/\r$//' $T/serverpass.sh.txt > $T/sp.sh && rm -f $T/serverpass.sh.txt && (cd $T && tar -cf - *.lua) | SERVERPASS_WARN_MIN=%WARN% bash $T/sp.sh 2>&1 | tee /tmp/wu-serverpass.log; rm -rf $T; grep -q '^SERVERPASS OK' /tmp/wu-serverpass.log" < "%TEMP%\wu-serverpass.tar"
+ssh -i "%KEY%" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 root@play.openvanilla.app "T=$(mktemp -d) && tar -x -C $T -f - && sed 's/\r$//' $T/serverpass.sh.txt > $T/sp.sh && rm -f $T/serverpass.sh.txt && (cd $T && tar -cf - *.lua $(ls leyline-fetch.py 2>/dev/null)) | SERVERPASS_WARN_MIN=%WARN% bash $T/sp.sh 2>&1 | tee /tmp/wu-serverpass.log; rm -rf $T; grep -q '^SERVERPASS OK' /tmp/wu-serverpass.log" < "%TEMP%\wu-serverpass.tar"
 if errorlevel 1 (echo. & echo It did not report success; see above. & del /q "%TEMP%\wu-serverpass.tar" & rmdir /s /q "%T%" & pause & exit /b 1)
 del /q "%TEMP%\wu-serverpass.tar" & rmdir /s /q "%T%"
 echo.

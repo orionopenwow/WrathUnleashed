@@ -33,6 +33,8 @@ jobs:
           lua5.1 stream/tests/test_ov_slices.lua stream/lua/ov_slices.lua /tmp/tiers.lua realm/custom/lua_scripts/ov_main.lua
       - name: ov_reports (.bug, .stuck, .wu)
         run: lua5.1 stream/tests/test_ov_reports.lua realm/custom/lua_scripts/ov_reports.lua
+      - name: ov_companions (.recruit, .buddy, .dismiss)
+        run: lua5.1 stream/tests/test_ov_companions.lua realm/custom/lua_scripts/ov_companions.lua
       - name: every realm script parses
         run: for f in realm/custom/lua_scripts/*.lua stream/lua/ov_slices.lua; do luac5.1 -p "$f" || exit 1; done
   deploy:

@@ -61,3 +61,7 @@
 1026u ship  Save to GitHub (orionopenwow/WrathUnleashed)
 1026v signin  Share links: play.openvanilla.app/wrath/r|h|q|m|u/<id> with link cards, and the link carried through sign-in
 1026w ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1026x scripts  Companions (.recruit tank/healer/dps, .buddy, .dismiss, .companions) and the Leyline realm list for the in-game window (5-minute restart warning)
+1026y foreverui  In-game Leyline window: Esc > Mods & Workshop > Leyline realms, or /leyline
+1026z client  Client 20261025c: minimal blue (Alliance) / red (Horde) backdrop at character select and create, faster first load behind the loading screen
+1027a ship  Save to GitHub (orionopenwow/WrathUnleashed)
