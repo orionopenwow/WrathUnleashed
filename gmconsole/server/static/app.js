@@ -5,13 +5,13 @@
   const CSRF = document.querySelector('meta[name=csrf]').content;
   const TABS = [
     ['overview', 'Overview'], ['players', 'Players'], ['updates', 'Updates'], ['streaming', 'Streaming'],
-    ['beacons', 'Beacons'], ['speed', 'Speed'], ['logs', 'Logs'],
+    ['beacons', 'Beacons'], ['speed', 'Speed'], ['reports', 'Bug reports'], ['health', 'Health'], ['logs', 'Logs'],
   ];
   const app = document.getElementById('app');
   let tab = 'overview';
   let timer = null;
   let jobTimer = null;
-  const ui = { logs: { c: 'worldserver', n: 300, q: '', auto: true }, acctQ: '' };
+  const ui = { logs: { c: 'worldserver', n: 300, q: '', auto: true }, acctQ: '', reports: { status: 'new', q: '', tickets: true } };
 
   // ---- tiny DOM helpers -------------------------------------------------------------------
   function h(tag, attrs, ...kids) {
@@ -440,6 +440,103 @@
     return [h('div', { class: 'grid g2' }, checks, enc), timing, plan];
   }
 
+  // ---- Bug reports --------------------------------------------------------------------------
+  async function copy(text, what) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (_) {
+      const ta = h('textarea', { class: 'offscreen', readonly: true });
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (__) { /* shown below */ }
+      ta.remove();
+    }
+    toast((what || 'text') + ' copied', 'ok');
+  }
+  const mdEsc = (s) => String(s ?? '').replace(/([\\`*_[\]<>#|~])/g, '\\$1');
+  const place = (r) => [r.map, r.zone && r.zone !== r.map ? r.zone : null, r.area && r.area !== r.zone ? r.area : null].filter(Boolean).join(' · ');
+  const ids = (r) => r.kind === 'ticket' ? `map ${num(r.map_id)}` : `map ${num(r.map_id)}, zone ${num(r.zone_id)}, area ${num(r.area_id)}`;
+  const pos = (r) => (r.x === null || r.x === undefined ? '?' : `${r.x.toFixed(2)}, ${r.y.toFixed(2)}, ${r.z.toFixed(2)}`);
+  function stamp_(t) { return t ? new Date(t * 1000).toISOString().slice(0, 16).replace('T', ' ') + 'Z' : '?'; }
+  function reportMd(r) {
+    const head = r.kind === 'ticket' ? `### GM ticket #${r.id} (${r.ticket_state})` : `### Bug report #${r.id} (${r.status})`;
+    return [head, '',
+      `- **Character:** ${mdEsc(r.char_name)}, level ${num(r.level)} ${mdEsc(r.class)}`,
+      `- **Where:** ${mdEsc(place(r))} (${ids(r)})`,
+      `- **Position:** ${pos(r)}` + (r.tele ? ` · \`${r.tele}\`` : ''),
+      `- **Time:** ${stamp_(r.created)}`, '',
+      String(r.text || '').split('\n').map((l) => '> ' + mdEsc(l)).join('\n'), ''].join('\n');
+  }
+  function reportItem(r, states) {
+    const st = r.kind === 'report'
+      ? (() => {
+        const sel = h('select', { class: 'st-' + r.status, 'aria-label': `status of report ${r.id}` }, states.map((x) => h('option', { value: x, text: x })));
+        sel.value = r.status;
+        sel.addEventListener('change', () => run('report_status', { id: r.id, status: sel.value }));
+        return sel;
+      })()
+      : badge(r.ticket_state, r.ticket_state === 'open' ? 'warn' : 'off');
+    return h('li', { class: 'rep' + (r.status === 'new' ? ' new' : '') },
+      h('div', { class: 'rep-h' },
+        badge(r.kind === 'ticket' ? 'GM ticket' : 'bug', r.kind === 'ticket' ? 'p2' : ''),
+        h('span', { class: 'mono muted', text: '#' + r.id }),
+        h('b', { text: r.char_name || '?' }),
+        h('span', { class: 'muted', text: `${num(r.level)} ${r.class || ''}` }),
+        h('span', { text: place(r) || '?' }),
+        h('span', { class: 'grow' }),
+        h('span', { class: 'muted small', text: when(r.created) })),
+      h('div', { class: 'rep-t', text: r.text || '' }),
+      r.response ? h('div', { class: 'muted small', text: 'GM response: ' + r.response }) : null,
+      h('div', { class: 'rep-f' },
+        h('span', { class: 'mono muted small', title: ids(r), text: pos(r) + ' · ' + ids(r) }),
+        h('span', { class: 'grow' }),
+        r.tele ? h('code', { class: 'mono small tele', text: r.tele }) : null,
+        r.tele ? btn('Copy teleport', () => copy(r.tele, 'teleport command'), 'small') : null,
+        btn('Copy markdown', () => copy(reportMd(r), 'markdown'), 'small ghost'),
+        st));
+  }
+  function reports(d) {
+    const R = ui.reports;
+    const c = d.counts || {};
+    const seg = h('div', { class: 'seg' }, ['all'].concat(d.states).map((s) => h('button', { type: 'button', class: s === R.status ? 'on' : '',
+      text: s + (s !== 'all' && c[s] !== undefined ? ` (${c[s]})` : ''), onclick: () => { R.status = s; load(true); } })));
+    const q = h('input', { type: 'search', placeholder: 'Search text or character', value: R.q, maxlength: 100, class: 'grow' });
+    const go = () => { R.q = q.value.trim(); load(true); };
+    q.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') go(); });
+    const tk = h('input', { type: 'checkbox', checked: R.tickets || null });
+    tk.addEventListener('change', () => { R.tickets = tk.checked; load(true); });
+    const bar = h('div', { class: 'row wrap' }, seg, q, btn('Search', go, 'primary'), h('label', { class: 'chk' }, tk, ' GM tickets'));
+    const errs = [d.error, d.ticket_error].filter(Boolean).map((e) => h('p', { class: 'err', text: e }));
+    const list = d.items.length ? h('ul', { class: 'reps' }, d.items.map((r) => reportItem(r, d.states)))
+      : h('p', { class: 'muted', text: 'No reports match.' });
+    const nRep = d.items.filter((r) => r.kind === 'report').length;
+    return [card(`Bug reports (${nRep}${R.tickets ? ` + ${d.items.length - nRep} GM tickets` : ''})`,
+      h('span', { class: 'muted small', text: 'players file them in game with .bug · newest first' }), bar, errs, list)];
+  }
+
+  // ---- Health -------------------------------------------------------------------------------
+  function health(d) {
+    const r = d.realm || {}, w = d.world || {}, db = d.database || {};
+    const pct = (v) => (v === null || v === undefined ? '?' : v.toFixed(1) + '%');
+    const memSub = (x) => (x.mem_limit ? `of ${bytes(x.mem_limit)}` + (x.mem_pct !== undefined && x.mem_pct !== null ? ` · ${pct(x.mem_pct)}` : '') : (x.mem_usage || ''));
+    const cpuState = w.cpu_pct > 90 ? 'bad' : w.cpu_pct > 60 ? 'warn' : '';
+    const upW = r.uptime_s !== null && r.uptime_s !== undefined ? r.uptime_s : (w.started ? Math.round(Date.now() / 1000 - w.started) : null);
+    const tiles = h('div', { class: 'tiles' },
+      tile('Real players', num(d.players_real), 'online, bots excluded', r.online ? 'ok' : 'bad'),
+      tile('Bots', num(d.bots_online), 'online random bots'),
+      tile('World CPU', pct(w.cpu_pct), 'docker stats · 100% = 1 core', cpuState),
+      tile('World memory', bytes(w.mem_used), memSub(w)),
+      tile('DB memory', bytes(db.mem_used), memSub(db)),
+      tile('World uptime', dur(upW), r.online ? 'server info' : 'world server offline', r.online ? '' : 'bad'),
+      tile('DB uptime', dur(db.started ? Math.round(Date.now() / 1000 - db.started) : null), db.health || ''),
+      tile('Update diff', r.diff_ms === null || r.diff_ms === undefined ? '?' : r.diff_ms + ' ms', 'world tick'));
+    const notes = [d.stats_error, d.players_error].filter(Boolean).map((e) => h('p', { class: 'err', text: e }));
+    const errs = card('Last 20 world server error lines', h('a', { href: '#logs', class: 'link', text: 'all logs' }),
+      d.errors.length ? h('pre', { class: 'log tall', text: d.errors.join('\n') }) : h('p', { class: 'muted', text: 'No errors in the recent world server log.' }));
+    return [tiles, notes.length ? card('Could not read everything', null, notes) : null, errs];
+  }
+
   // ---- Logs ---------------------------------------------------------------------------------
   let logData = null;
   function logs(d) {
@@ -474,10 +571,12 @@
     overview: () => '/api/overview', players: () => '/api/players', updates: () => '/api/updates',
     streaming: () => '/api/streaming', beacons: (f) => '/api/beacons' + (f ? '?fresh=1' : ''),
     speed: (f) => '/api/speed' + (f ? '?fresh=1' : ''),
+    reports: () => `/api/reports?status=${encodeURIComponent(ui.reports.status)}&q=${encodeURIComponent(ui.reports.q)}&tickets=${ui.reports.tickets ? 1 : 0}`,
+    health: () => '/api/health',
     logs: () => `/api/logs?c=${encodeURIComponent(ui.logs.c)}&n=${ui.logs.n}`,
   };
-  const RENDER = { overview, players, updates, streaming, beacons, speed, logs };
-  const EVERY = { overview: 10000, players: 10000, updates: 15000, streaming: 15000, logs: 5000 };
+  const RENDER = { overview, players, updates, streaming, beacons, speed, reports, health, logs };
+  const EVERY = { overview: 10000, players: 10000, updates: 15000, streaming: 15000, reports: 30000, health: 10000, logs: 5000 };
   let loading = 0;
   async function load(fresh) {
     const my = ++loading, t = tab;

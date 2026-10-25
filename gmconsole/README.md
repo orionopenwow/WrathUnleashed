@@ -1,7 +1,7 @@
 # WrathUnleashed GM console
 
 One owner-only page to run the live server: realm health, players, rolling updates, streaming,
-the Beacons launch checklist, speed passes and logs. It runs on the server in its own small
+the Beacons launch checklist, speed passes, bug reports, health and logs. It runs on the server in its own small
 container and listens on the server's **127.0.0.1:8099 only**. Nothing public routes to it. You
 reach it through an SSH tunnel from your PC.
 
@@ -52,6 +52,12 @@ The token lives only on the server, in `/srv/wrath/gmconsole.env` (chmod 600). T
   - the `.br`/`.gz` copies in www;
   - timings measured from the server: public through Caddy, and wu-play direct;
   - the speed-pass plan (P0/P1/P2) with a status you set; it is stored on the server in `gmconsole-speed.json`. Client timing reports were left out.
+- **Bug reports**:
+  - the reports players file in game with `.bug` (ov_reports.lua, `acore_characters.ov_bug_reports`) and the native GM tickets (`gm_ticket`, labelled "GM ticket"), newest first;
+  - filter by status (new / seen / fixed / wontfix; for tickets: open-unread / open-read / closed / character deleted) and search the text or character name;
+  - each one shows the character, level, class, map/zone/area (names where known, ids otherwise), position, text and time;
+  - per report: set the status (the only thing the console writes: `ov_bug_reports.status`), copy the `.go xyz x y z map` teleport command, copy as markdown. Tickets are read-only here.
+- **Health** (read-only): real players vs bots, world server CPU and memory and database memory (`docker stats`), world and database uptime, update diff, and the last 20 world-server error lines.
 - **Logs**: worldserver, authserver, wu-portal, wu-play, caddy, database and the console itself, with a filter box and a 5-second auto-refresh.
 
 ## Safety
@@ -67,6 +73,14 @@ The token lives only on the server, in `/srv/wrath/gmconsole.env` (chmod 600). T
   - the SOAP password stays in `soap-cmd.sh`'s own file;
   - MySQL runs inside its container with that container's own password;
   - the console scrubs the token, the SOAP password and the database password from everything it shows or logs.
+
+## Bug-report export (for a scheduled triage task)
+
+`GET http://127.0.0.1:8099/api/export/new-reports[?since=<last id>]` returns the `new` bug reports (and unread open GM tickets) as JSON. It answers only on loopback and only with `Authorization: Bearer <GM_TOKEN>` (the token from `/srv/wrath/gmconsole.env`; a browser cookie or a `?t=` in the URL is refused). It is read-only. On the server:
+
+```
+curl -s -H "Authorization: Bearer $(sed -n 's/^GM_TOKEN=//p' /srv/wrath/gmconsole.env)" http://127.0.0.1:8099/api/export/new-reports
+```
 
 ## How it is built
 
@@ -85,7 +99,7 @@ The installer refuses to finish if anything other than loopback listens on 8099.
 ## Tests
 
 ```
-python3 -m unittest -v tests/test_gmconsole.py   # 30 tests: auth, CSRF, pages, every action's exact command, audit, secrets
+python3 -m unittest -v tests/test_gmconsole.py   # 41 tests: auth, CSRF, pages, every action's exact command, audit, secrets, bug reports, health, export
 bash tests/test_install.sh                       # 22 checks: install twice, token kept, loopback only, uninstall
 python3 tests/fakeenv.py 8099 &                  # the console against the fakes; prints a login link
 node tests/shots.js <login link> screenshots     # every tab at 1280 and 390 wide (screenshots/)

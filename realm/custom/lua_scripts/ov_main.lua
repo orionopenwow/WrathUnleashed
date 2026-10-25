@@ -1153,7 +1153,9 @@ end
 local touched = {}
 
 local function onSelect(event, player, object, sender, intid, code, menuId)
-    if not on() or not player or menuId ~= MENU_ID then return end
+    -- mod-ale calls player-menu selects as (event, player, object, sender, intid, code): no menu id
+    -- (it is the binding's key), so menuId is nil live. Only a present, different id is someone else's.
+    if not on() or not player or (menuId ~= nil and menuId ~= MENU_ID) then return end
     local guid = player:GetGUIDLow()
     touched[guid] = true
     if not canBoost(player) then return player:GossipComplete() end

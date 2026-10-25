@@ -452,6 +452,15 @@ def stream_ended_page() -> bytes:
         f'<a href="{DISCORD_URL}">{DISCORD_URL}</a></p>')
 
 
+def busy_page(wait: int = 15) -> bytes:
+    """A 429: the page tries again by itself (a meta refresh, no script) instead of leaving a dead end.
+    Limits are per address, and a household or a cafe shares one, so the page stays calm about it."""
+    body = (f'<h1>{html.escape(REALM_NAME)}</h1><p class="sub">Lots of sign-ins from your network right now.</p>'
+            f'<p>Trying again in {int(wait)} seconds...</p><p><a class="btn" href="/wrath">Try now</a></p>')
+    page = render(body).decode("utf-8")
+    return page.replace("<head>", f'<head><meta http-equiv="refresh" content="{int(wait)};url=/wrath">', 1).encode("utf-8")
+
+
 def error_page(msg: str) -> bytes:
     return render(f'<h1>{html.escape(REALM_NAME)}</h1><p class="err">{html.escape(msg)}</p>'
                   '<p><a class="btn" href="/wrath">Try again</a></p>')
@@ -782,8 +791,8 @@ class PageHandler(BaseHTTPRequestHandler):
             self.send(404, error_page("Playing with your own game files in the browser isn't set up here yet."))
             return
         ip = self.ip()
-        if not gate_limit.hit("play:" + ip, 10):
-            self.send(429, error_page("Too many requests. Please wait a minute."))
+        if not gate_limit.hit("play:" + ip, 30):
+            self.send(429, busy_page())
             return
         page, user, password, _ = self.signed_in_game_login(ip)
         if page:
@@ -819,8 +828,8 @@ class PageHandler(BaseHTTPRequestHandler):
             self.send(200, stream_off_page())
             return
         ip = self.ip()
-        if not gate_limit.hit("play:" + ip, 10):
-            self.send(429, error_page("Too many requests. Please wait a minute."))
+        if not gate_limit.hit("play:" + ip, 30):
+            self.send(429, busy_page())
             return
         slug = (query.get("mini") or ["mini"])[0]
         info = slice_info(slug)
@@ -845,8 +854,8 @@ class PageHandler(BaseHTTPRequestHandler):
     def stream_end(self) -> None:
         """GET /wrath/play/end: end the player's sessions and clear the realm mark."""
         ip = self.ip()
-        if not gate_limit.hit("end:" + ip, 10):
-            self.send(429, error_page("Too many requests. Please wait a minute."))
+        if not gate_limit.hit("end:" + ip, 30):
+            self.send(429, busy_page())
             return
         page, user, _, _ = self.signed_in_game_login(ip)
         if page:
@@ -863,8 +872,8 @@ class PageHandler(BaseHTTPRequestHandler):
 
     def stream_gate(self, query: dict) -> None:
         """GET /__gate?code= on the stream site."""
-        if not gate_limit.hit("gate:" + self.ip(), 20):
-            self.send(429, error_page("Too many requests. Please wait a minute."))
+        if not gate_limit.hit("gate:" + self.ip(), 60):
+            self.send(429, busy_page())
             return
         code = (query.get("code") or [""])[0][:64]
         sid = sessions.redeem(code) if code else None
@@ -905,7 +914,7 @@ class PageHandler(BaseHTTPRequestHandler):
 
     def stream_env(self) -> None:
         """GET /__env.js on the stream site: the session's game login for the client."""
-        if not gate_limit.hit("env:" + self.ip(), 30):
+        if not gate_limit.hit("env:" + self.ip(), 90):
             self.send(429, b"/* too many requests */\n", "application/javascript")
             return
         sess = self.stream_session()
@@ -966,8 +975,8 @@ class PageHandler(BaseHTTPRequestHandler):
         # /wrath/account is the page with the game login and the other ways to play.
         straight_in = path == "/wrath" and stream_on() and slice_info("mini") and query.get("list") is None
         ip = self.ip()
-        if not page_limit.hit(ip, 30):
-            self.send(429, error_page("Too many requests. Please wait a minute."))
+        if not page_limit.hit(ip, 120):
+            self.send(429, busy_page())
             return
         cookie = self.headers.get("Cookie", "")
         ua = self.headers.get("User-Agent", "")

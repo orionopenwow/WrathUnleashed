@@ -48,11 +48,17 @@ local mails = {}
 function SendMail(...) mails[#mails + 1] = { ... } end
 -- mod-ale keeps every handler registered for an event; a COMMAND returning false = handled.
 function RegisterPlayerEvent(e, f) events[e] = events[e] or {}; table.insert(events[e], f) end
+-- mod-ale's "can" hooks (50 CAN_JOIN_LFG) use CallAllFunctionsBool with its default false: a handler must
+-- return true to allow; nothing (nil) or false refuses. Other events: nil unless a handler returns false.
+local CAN_HOOKS = { [50] = true }
 local function fire(e, ...)
     local result
+    if CAN_HOOKS[e] and events[e] then result = false end
     for _, f in ipairs(events[e] or {}) do
         local r = f(e, ...)
-        if r == false then result = false end
+        if CAN_HOOKS[e] then
+            if r == true then result = true end
+        elseif r == false then result = false end
     end
     return result
 end
@@ -244,9 +250,16 @@ check("an instance in a tier above the mark refused: sent to Dalaran", #p.tp == 
 check("whisper says bring your own client + Discord", p.msgs[#p.msgs]:match("own 3.3.5a game files") and p.msgs[#p.msgs]:match("discord.gg/hVeUxYwbkr"))
 check("centre text too", #p.center == 1 and p.center[1]:match("discord.gg/hVeUxYwbkr"))
 p.map, p.zone = 571, 4395
-fire(27, p, 2817, 2817); runTimers()  -- flew out to Crystalsong Forest
+-- Standing in Dalaran while the core reports Crystalsong Forest (2817): the city floats above it, and the core
+-- has no WMO area for it. Live 2026-10-24: this looped "sent home" every 5 s. Inside the city box it stays.
+fire(27, p, 2817, 2817); p.zone = 2817; runTimers()
+check("in Dalaran reported as Crystalsong Forest: stays (no loop)", #p.tp == 1)
+for _ = 1, 3 do runTimers() end
+check("...and the 5 s watch doesn't send it home either", #p.tp == 1)
+p.x, p.y = 5300, -300                 -- flew out, down to Crystalsong Forest's ground
+fire(27, p, 2817, 2817); runTimers()
 check("Northrend outside Dalaran: sent home", #p.tp == 2)
-check("messages are not spammed within 5 s", #p.center == 1)
+check("messages are not spammed within a minute", #p.center == 1)
 clock = clock + 10
 p.map, p.zone, p.x, p.y, p.dead = 0, 40, -10500, 1000, true
 logout(p); fire(3, p); runTimers()
@@ -298,7 +311,7 @@ clock = clock + 10
 h1.x, h1.y, h1.zone = -10500, 1000, 40; fire(27, h1, 40, 40); runTimers()
 check("level 1 in Westfall: back to Northshire", #h1.tp == 2 and h1.tp[2][1] == 0)
 h1.map, h1.zone = 389, 0; fire(28, h1); runTimers()
-check("level 1 in Ragefire Chasm: back to Northshire (dungeons open at 15)", #h1.tp == 3 and h1.tp[3][1] == 0)
+check("level 1 in Ragefire Chasm: back to Northshire (dungeons open at 10)", #h1.tp == 3 and h1.tp[3][1] == 0)
 h1.map, h1.x, h1.y = 1, 1629, -4373; h1.zone = 1637; fire(28, h1); runTimers()
 check("level 1 Alliance in Orgrimmar: not its capital, back to Northshire", #h1.tp == 4 and h1.tp[4][1] == 0)
 h1.map, h1.x, h1.y, h1.zone = 571, 5807, 588, 4395; fire(28, h1); runTimers()
@@ -347,7 +360,7 @@ fire(28, orc3); runTimers()
 check("only Dalaran streamed: a level 3 orc goes to Dalaran", orc3.tp[1] and orc3.tp[1][1] == 571)
 fire(42, nil, "ovstream mark HORDIE mini " .. ALL .. " 43200", handler)
 
--- level 15: Dungeon Finder and .play open; home is the capital
+-- level 10+: Dungeon Finder and .play open; home is the capital
 local mid = player(51, 389, 0, 0, { level = 16, team = 1 })
 fire(28, mid); runTimers()
 check("level 16 in Ragefire Chasm: allowed", #mid.tp == 0)
@@ -425,12 +438,12 @@ fire(42, mp, "play", nil)
 gossip[61700](2, mp, mp, 0, menuId(mp, "Dungeons: Northrend"), nil, 61700)
 check("menu: every submenu stays under 32 items", #mp.menu <= 32, #mp.menu)
 
--- .play below 15: the starter area and capital, no Dalaran, no dungeons
+-- .play below 10: the starter area and capital, no Dalaran, no dungeons
 local lp = player(50, 0, -8949.95, -132.49, { level = 5, team = 0 })
 fire(42, lp, ".play", nil)
 local lt = menuText(lp)
-check(".play below 15: places only", lt:match("Your capital") and not lt:match("Dungeons") and not lt:match("^Dalaran") and not lt:match("|Dalaran|"), lt)
-check(".play below 15: says what level 15 brings", lt:match("At level 15") ~= nil, lt)
+check(".play below 10: places only", lt:match("Your capital") and not lt:match("Dungeons") and not lt:match("^Dalaran") and not lt:match("|Dalaran|"), lt)
+check(".play below 10: says what level 10 brings", lt:match("At level 10") ~= nil, lt)
 local np = player(7, 0, -10500, 1000)
 fire(42, np, ".play", nil)
 check(".play for an unmarked player: explained, no menu", #np.menu == 0 and np.msgs[1]:match("browser"))
@@ -440,23 +453,31 @@ local lf = player(42, 571, 5807, 588)
 check("LFG without the id table: refused", fire(50, lf, 0, { 241 }, "") == false)
 OV_STREAM_LFG = { [241] = 575, [215] = 608, [4] = 389, [6] = 36, [300] = 4242 }
 OV_STREAM_LFG_LEVEL = { [241] = { 80, 80 }, [215] = { 75, 80 }, [4] = { 15, 21 }, [6] = { 15, 23 } }
-check("LFG: Utgarde Pinnacle allowed at the top tier, level 80", fire(50, lf, 0, { 241, 215 }, "") == nil)
+check("LFG: Utgarde Pinnacle allowed at the top tier, level 80", fire(50, lf, 0, { 241, 215 }, "") == true)
 check("LFG: random (not in the table) refused", fire(50, lf, 0, { 261 }, "") == false)
 check("LFG: a non-streamed dungeon refused", fire(50, lf, 0, { 241, 300 }, "") == false)
-check("LFG: unmarked players untouched", fire(50, player(7, 0, 0, 0), 0, { 300 }, "") == nil)
+check("LFG: allowed means an explicit true (mod-ale reads nothing as no)", fire(50, lf, 0, { 241 }, "") == true)
+check("LFG: a set keyed by id is read too", fire(50, lf, 0, { [241] = true }, "") == true)
+check("LFG: unmarked players untouched", fire(50, player(7, 0, 0, 0), 0, { 300 }, "") == true)
 local l16 = player(50, 0, -8833, 628, { level = 16 })
-check("LFG: level 16, Ragefire Chasm and the Deadmines allowed", fire(50, l16, 0, { 4, 6 }, "") == nil)
+check("LFG: level 16, Ragefire Chasm and the Deadmines allowed", fire(50, l16, 0, { 4, 6 }, "") == true)
 check("LFG: level 16 refused for a level 75 dungeon", fire(50, l16, 0, { 215 }, "") == false and l16.msgs[#l16.msgs]:match("levels 75 to 80"))
-local l10 = player(50, 0, -8949, -132, { level = 10 })
-check("LFG: below 15 refused", fire(50, l10, 0, { 4 }, "") == false and l10.msgs[#l10.msgs]:match("opens at level 15"))
+local l9 = player(50, 0, -8949, -132, { level = 9 })
+check("LFG: below 10 refused", fire(50, l9, 0, { 4 }, "") == false and l9.msgs[#l9.msgs]:match("opens at level 10"))
+local l11 = player(50, 0, -8833, 628, { level = 11 })
+check("LFG: level 11, Ragefire Chasm and the Deadmines allowed (realm minimum 10 under the DBC's 15)",
+    fire(50, l11, 0, { 4, 6 }, "") == true)
+OV_STREAM_LFG[7] = 48; OV_STREAM_LFG_LEVEL[7] = { 20, 30 }
+check("LFG: level 11 still refused for Blackfathom Deeps (20), with the right range",
+    fire(50, l11, 0, { 7 }, "") == false and l11.msgs[#l11.msgs]:match("levels 20 to 30"))
 T.flagged[50].tier = K.deadmines - 1
 check("LFG: a dungeon in a tier above the mark refused", fire(50, l16, 0, { 6 }, "") == false)
 T.flagged[50].tier = ALL
 
--- reaching 15
-local up = player(50, 0, -8949, -132, { level = 14 })
-up:SetLevel(15)
-check("level 15 reached: told the Dungeon Finder is open", up.msgs[#up.msgs]:match("Dungeon Finder") ~= nil)
+-- reaching 10 (the slice's lowLevel)
+local up = player(50, 0, -8949, -132, { level = 9 })
+up:SetLevel(10)
+check("level 10 reached: told the Dungeon Finder is open", up.msgs[#up.msgs]:match("Dungeon Finder") ~= nil)
 
 -- clear
 fire(42, nil, "ovstream clear WR000123", handler)

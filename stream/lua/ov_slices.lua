@@ -122,9 +122,18 @@ local function tierOpen(t, p)
     return true
 end
 
+-- Zones the server can't place by zone id alone: Dalaran floats above Crystalsong Forest, and without the
+-- city's WMO area the core reports Crystalsong (2817) inside Dalaran. There the zone also matches by position
+-- [x min, x max, y min, y max] (the city's spawn box in mini.json).
+local ZONE_BOXES = { [4395] = { 5500, 6150, 250, 1100 } }
+
 local function inEntry(m, map, zone, x, y)
     if m.id ~= map then return false end
-    if m.zone then return zone == m.zone end
+    if m.zone then
+        if zone == m.zone then return true end
+        local b = ZONE_BOXES[m.zone]
+        return b ~= nil and x ~= nil and y ~= nil and x >= b[1] and x <= b[2] and y >= b[3] and y <= b[4]
+    end
     if m.box then
         local b = m.box
         return x ~= nil and y ~= nil and x >= b[1] and x <= b[2] and y >= b[3] and y <= b[4]
@@ -185,7 +194,7 @@ end
 
 local function tell(p, guid, long)
     local t = now()
-    if (lastSent[guid] or 0) + 5 <= t then
+    if (lastSent[guid] or 0) + 60 <= t then
         lastSent[guid] = t
         p:SendBroadcastMessage(TAG .. (long or BYOC))
         p:SendAreaTriggerMessage(BYOC_SHORT)
@@ -210,6 +219,8 @@ local function sendHome(player, why)
         if (p:GetMapId() ~= seenMap or p:GetLevel() ~= seenLevel) and inSlice(f, p, here(p)) then return end
         if p:IsDead() then p:ResurrectPlayer(100, false) end
         local h = homeOf(f, p)
+        -- Already standing on home: the rule disagrees with its own home (a config mistake). Never loop.
+        if p:GetMapId() == h[1] and math.abs(p:GetX() - h[2]) < 40 and math.abs(p:GetY() - h[3]) < 40 then return end
         p:Teleport(h[1], h[2], h[3], h[4], h[5])
         tell(p, guid)
     end, why == "login" and 1500 or 250, 1)
@@ -491,9 +502,31 @@ local function onLevel(event, player, oldLevel)
     end
 end
 
+-- Dungeons whose Dungeon Finder minimum the realm lowers (owner, 2026-10-24: "lower dungeons to level 10"):
+-- Ragefire Chasm, Wailing Caverns, the Deadmines, Shadowfang Keep. A tier's "levels" in mini.json wins.
+local LFG_MIN_OVERRIDE = { [389] = 10, [43] = 10, [36] = 10, [33] = 10 }
+local function lfgFloor(map)
+    local floor = LFG_MIN_OVERRIDE[map]
+    local t = rawget(_G, "OV_STREAM_TIERS")
+    if t then
+        for i = 0, (t.count or 0) - 1 do
+            local tier = t[i]
+            if tier and tier.levels then
+                for _, m in ipairs(tier.maps or {}) do
+                    if m.id == map and (not floor or tier.levels[1] < floor) then floor = tier.levels[1] end
+                end
+            end
+        end
+    end
+    return floor
+end
+
+-- mod-ale's CAN_JOIN_LFG is a "can" hook whose result defaults to false once any handler is registered:
+-- a handler that returns nothing refuses the queue, silently (live 2026-10-24: every queue dropped).
+-- So every path here returns true or false explicitly.
 local function onCanJoinLfg(event, player, roles, dungeons, comment)
     local f = flagOf(player:GetAccountId())
-    if not f then return end
+    if not f then return true end
     if isLow(player) then
         player:SendBroadcastMessage(TAG .. "In the browser the Dungeon Finder opens at level " .. lowLevel() .. ".")
         return false
@@ -502,7 +535,10 @@ local function onCanJoinLfg(event, player, roles, dungeons, comment)
     local levels = rawget(_G, "OV_STREAM_LFG_LEVEL")
     local maps = allowedMaps(f, player)
     local lvl = player:GetLevel()
-    for _, id in ipairs(dungeons or {}) do
+    -- The dungeon set may come as an array of ids or as a set keyed by id: read both.
+    local ids = {}
+    for k, v in pairs(dungeons or {}) do ids[#ids + 1] = (type(v) == "number") and v or k end
+    for _, id in ipairs(ids) do
         local map = lfg and lfg[id]
         if not map or not maps[map] then
             player:SendBroadcastMessage(TAG .. "In the browser the Dungeon Finder only "
@@ -512,11 +548,19 @@ local function onCanJoinLfg(event, player, roles, dungeons, comment)
             return false
         end
         local r = levels and levels[id]
-        if r and (lvl < r[1] or lvl > r[2]) then
-            player:SendBroadcastMessage(TAG .. string.format("That dungeon is for levels %d to %d in the Dungeon Finder.", r[1], r[2]))
+        -- The DBC's minimum (15 for the first four) gives way to the realm's own: the tier's "levels"
+        -- in mini.json, else LFG_MIN_OVERRIDE (the realm sets dungeon_access_template to match).
+        local lo = r and r[1]
+        if lo then
+            local floor = lfgFloor(map)
+            if floor and floor < lo then lo = floor end
+        end
+        if r and (lvl < lo or lvl > r[2]) then
+            player:SendBroadcastMessage(TAG .. string.format("That dungeon is for levels %d to %d in the Dungeon Finder.", lo, r[2]))
             return false
         end
     end
+    return true
 end
 
 AuthDBExecute("CREATE TABLE IF NOT EXISTS ov_stream_accounts ("

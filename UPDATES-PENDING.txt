@@ -1,0 +1,11 @@
+# What Claude has ready. "WrathUnleashed Control.bat" (or UPDATE.bat) runs these in order.
+# <id> <step> <what it brings>
+1024r foreverui  URGENT: undo tonight's character-select script; it sent players back to the login screen (about 1 min, no restart)
+1024v scripts  Dungeon Finder fix: queues were refused silently for everyone (live reload, nobody kicked)
+1024u lean  Lean server: 60 -> 30 roaming bots, idle map areas unload after 1 min, database monitoring off (less memory, steadier Dalaran; 5-min restart)
+1024x client  New browser build: no login screen when signed in, built-in keys, faster loading, mobile touch controls, new loading screens
+1024w foreverui  Character select clean-up: no Lich King logo, even Realms/Menu buttons, list, name and buttons placed properly
+1024y slice   Streamed files: Wrath 5-player dungeons and heroics now fit, dungeons from level 10 (30-60 min)
+1024z ship    Save tonight's work to GitHub
+1024t slice  Streamed files again: all Wrath 5-player dungeons and heroics now fit (budget 6 GB; the 22:37 run used the old order) (30-60 min)
+1024s gm  GM console: Bug Reports tab (every .bug with where it happened; mark seen/fixed), Health tab (game keeps running)

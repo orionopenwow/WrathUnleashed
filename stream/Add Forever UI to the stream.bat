@@ -91,6 +91,10 @@ if "!MODE!"=="repo" (
   copy /y "!SRC!\Interface\GlueXML\ForeverUI*.*" "!F!\GlueXML\" >nul || goto fail
   if defined WU if exist "!WU!\patch\Interface\GlueXML\GlueXML.toc" copy /y "!WU!\patch\Interface\GlueXML\GlueXML.toc" "!F!\GlueXML\" >nul
 )
+rem WrathUnleashed (fui-glue): its own fixes to the login screens (no logo, top bar, character
+rem select layout), from stream\fui-web next to this file. fui-overlay.py lists
+rem ForeverUIGlueWeb.xml in GlueXML.toc right after ForeverUIGlue.xml.
+if exist "%~dp0fui-web\Interface\GlueXML\ForeverUIGlueWeb.xml" copy /y "%~dp0fui-web\Interface\GlueXML\ForeverUIGlueWeb.*" "!F!\GlueXML\" >nul || goto fail
 if not exist "!F!\GlueXML\ForeverUIGlue.xml" (echo Forever UI's login screens ^(ForeverUIGlue.xml^) are missing from !SRC!. & goto fail)
 for /f %%b in ('powershell -NoProfile -Command "(Get-ChildItem -Recurse -File '!STG!' | Measure-Object Length -Sum).Sum"') do set "BYTES=%%b"
 for /f %%n in ('powershell -NoProfile -Command "(Get-ChildItem -Recurse -File '!STG!\foreverui').Count"') do set "NFILES=%%n"

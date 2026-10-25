@@ -5,6 +5,8 @@ rem Saves the whole WrathUnleashed folder (our scripts, realm Lua/SQL, server ki
 rem the client patch, docs) to your PRIVATE GitHub repo. Never: game data, slices, Forever UI art, builds,
 rem secrets (.gitignore). Shows what changes, scans for secrets, asks yes, commits, pushes.
 rem First run: asks for the repo URL (create an EMPTY private repo on GitHub first, e.g. WrathUnleashed).
+rem Hands-free (the control panel): WU_SHIP_AUTO=1 answers yes after the secret scan, WU_SHIP_MSG is the note.
+rem A cancel exits with code 2, so the panel never marks a cancelled save as done.
 cd /d "%~dp0"
 set GIT_TERMINAL_PROMPT=1
 where git >nul 2>&1 || (echo Git is not installed: https://git-scm.com/download/win & pause & exit /b 1)
@@ -45,10 +47,15 @@ for /f "delims=" %%F in ('git diff --cached --name-only --diff-filter=AM') do if
 if "!BAD!"=="1" (git reset -q & echo. & echo Stopped: the files above look like secrets or game data. Nothing was saved. Ask Claude. & pause & exit /b 1)
 echo   clean
 set "OK="
-set /p OK=Type yes to save these changes (anything else cancels): 
-if /i not "!OK!"=="yes" (git reset -q & echo Cancelled. Nothing was saved. & pause & exit /b 0)
-set "MSG="
-set /p MSG=One line describing this change: 
+if "%WU_SHIP_AUTO%"=="1" (
+  set "OK=yes"
+  echo   saving ^(hands-free from the control panel^)
+) else (
+  set /p OK=Type yes to save these changes ^(anything else cancels^): 
+)
+if /i not "!OK!"=="yes" (git reset -q & echo Cancelled. Nothing was saved. & pause & exit /b 2)
+set "MSG=%WU_SHIP_MSG%"
+if not "%WU_SHIP_AUTO%"=="1" set /p MSG=One line describing this change: 
 if not defined MSG set "MSG=WrathUnleashed update"
 git commit -q -m "!MSG!" || (echo Commit failed ^(set git user.name / user.email once^). & pause & exit /b 1)
 :push

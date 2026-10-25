@@ -4,6 +4,12 @@ browser client build in place: copies the six scripts from www-files/ and edits 
 boot.js by anchors (the same edits as www-files/web.patch), so it works on the build you uploaded
 whatever small differences its page has. Safe to run again (already-edited files are left alone).
 
+It also adds the page layer (touch controls, the account dock, the "Signing in" cover, stage
+timings, fetch-ahead, the service worker switch, the busy-realm note: wrath-page.js and the files
+it loads) when www-files/ has it: those files are copied and index.html gets one classic
+<script src="./wrath-early.js"> before its module script. That part never stops the rest: a
+missing file or anchor is a warning, and the page then runs without the page layer.
+
     python3 -I www-patch.py <www folder> <www-files folder>
 """
 import os
@@ -11,6 +17,19 @@ import shutil
 import sys
 
 SCRIPTS = ["ownfiles.js", "ownfiles-worker.js", "mpq.js", "chain.js", "sections.js", "sections-worker.js"]
+
+# The page layer (wrath-page.js): optional, copied when www-files/ has them all.
+PAGE_LAYER = ["wrath-early.js", "wrath-page.js", "stages.js", "input.js", "touch.js", "touch-driver.js",
+              "ahead.js", "sw-register.js", "wrath-sw.js", "wu-diag.js", "wu-loading.js", "wu-loading.css"]
+# the loading screens' art and font (www-files/art/ -> www/art/), the 1.12 boot screen's
+PAGE_ART = ["wu-load-bg.webp", "wu-load-orion.webp", "wu-corner-tl.webp", "wu-corner-tr.webp", "wu-corner-bl.webp",
+            "wu-corner-br.webp", "wu-divider.webp", "wu-dragon-l.webp", "wu-dragon-r.webp",
+            "Cinzel-SemiBold.woff2", "Cinzel-OFL.txt"]
+PAGE_TAG = '<script src="./wrath-early.js"></script>\n'
+# where the tag goes, first anchor found wins: after the sign-in env (so __wenilla_env is set when
+# it runs), else before the page's module script; else at the end of the page
+PAGE_AFTER = '<script src="/__env.js"></script>\n'
+PAGE_BEFORE = '<script type="module">'
 
 IMPORT_ANCHOR = "  import { boot } from './boot.js';\n"
 IMPORTS = ("  import { ensureDataSource } from './ownfiles.js';\n"
@@ -85,6 +104,55 @@ def patch_boot(s: str) -> str:
                              "  await Promise.resolve(opts.dataReady);\n" + anchor, 1)
 
 
+def patch_page_layer(s: str) -> str:
+    """index.html with the page layer's one script tag (idempotent; never raises)."""
+    if "wrath-early.js" in s:
+        return s
+    if PAGE_AFTER in s:
+        return s.replace(PAGE_AFTER, PAGE_AFTER + PAGE_TAG, 1)
+    if PAGE_BEFORE in s:
+        return s.replace(PAGE_BEFORE, PAGE_TAG + PAGE_BEFORE, 1)
+    print("  WARNING: index.html has no /__env.js or module script to attach the page layer to: "
+          "it goes at the end of the page", file=sys.stderr)
+    return s.rstrip("\n") + "\n" + PAGE_TAG
+
+
+def install_page_layer(www: str, files: str) -> None:
+    """Copy the page layer and tag index.html; a problem is a warning, never a failure."""
+    missing = [n for n in PAGE_LAYER if not os.path.isfile(os.path.join(files, n))]
+    if missing:
+        if len(missing) < len(PAGE_LAYER):
+            print(f"  WARNING: page layer not installed, missing in www-files: {', '.join(missing)}", file=sys.stderr)
+        return
+    try:
+        for name in PAGE_LAYER:
+            shutil.copyfile(os.path.join(files, name), os.path.join(www, name))
+            for ext in (".br", ".gz"):
+                if os.path.exists(os.path.join(www, name + ext)):
+                    os.remove(os.path.join(www, name + ext))
+        art = [n for n in PAGE_ART if os.path.isfile(os.path.join(files, "art", n))]
+        if len(art) < len(PAGE_ART):
+            print("  WARNING: www-files/art is incomplete: the loading screens lose some of their art", file=sys.stderr)
+        if art:
+            os.makedirs(os.path.join(www, "art"), exist_ok=True)
+            for name in art:
+                shutil.copyfile(os.path.join(files, "art", name), os.path.join(www, "art", name))
+        p = os.path.join(www, "index.html")
+        with open(p, encoding="utf-8") as f:
+            old = f.read()
+        new = patch_page_layer(old)
+        if new != old:
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(new)
+            print("  index.html: page layer tag added")
+        for ext in (".br", ".gz"):
+            if os.path.exists(p + ext):
+                os.remove(p + ext)
+        print(f"  {len(PAGE_LAYER)} page layer files and {len(art)} art files copied (touch controls, dock, signing in, loading screens)")
+    except OSError as e:
+        print(f"  WARNING: page layer not installed: {e}", file=sys.stderr)
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print(__doc__, file=sys.stderr)
@@ -115,8 +183,10 @@ def main(argv: list[str]) -> int:
                     os.remove(p + ext)
     except (OSError, ValueError) as e:
         print(f"www-patch.py: {e}", file=sys.stderr)
+        install_page_layer(www, files)   # the page layer does not depend on the edits above
         return 1
     print(f"  {len(SCRIPTS)} scripts copied (own game files, download sections)")
+    install_page_layer(www, files)
     return 0
 
 

@@ -1,0 +1,381 @@
+// wrath-page.js — the WrathUnleashed (3.3.5a) browser page's page layer, loaded by wrath-early.js
+// (which www-patch.py puts into the served index.html). A port of what applies to Wrath from Open
+// Vanilla's 1.12 page layer (realm/www/openvanilla.js):
+//
+//   * Account dock: the page's links (full screen, the bell, "download sections", the FPS journal
+//     button) fold into a small handle at the top centre, so nothing sits on the minimap. Click to
+//     open; in the world with touch on it moves to the bottom edge (touch.js).
+//   * Signing in: when the page hands the client its game login (/__env.js), a "Signing in"
+//     cover hides the login screen from the first glue screen until the character list is up, so
+//     the player never sees a login form they don't need. A failed sign-in uncovers it after a
+//     few seconds (the client brings its own form back then: startup_pace.rs).
+//   * Loading screens (wu-loading.css, wu-loading.js): the boot overlay in the 1.12 boot screen's
+//     look (portal art, framed panel, blue bar, one word), and the same screen over the client's
+//     world-loading screens; no numbers, counts or section names on screen.
+//   * Loading: stage timings (stages.js) to the console and window.owdiag (the boot overlay's
+//     percent, MB and file counts are hidden; stages.js and wu-loading.js keep them); fetch-ahead
+//     in the world (ahead.js, needs the bridge); the service worker switch (sw-register.js,
+//     opt-in: ?sw=1 or /sw-config.json); the slim boot list is wrath-early.js's.
+//   * Busy realm: a small, dismissible note when the realm is down or has a queue
+//     (play.openvanilla.app/wrath/status.json, wrath_portal.py).
+//   * Corner logo on the glue screens: off until the owner gives an image (CONFIG.logoUrl).
+//   * Touch controls (touch.js, touch-driver.js) on touch screens or with ?touch=1; the mouse
+//     fixes (input.js) everywhere; a connected controller starts the bridge's gamepad mapper.
+//   * window.owdiag (wu-diag.js): loaded on first use, or at once with ?diag=1.
+//
+// Not ported (1.12 only): the Workshop addons button and ?addon= links, Warfront ?mode=, the Duels
+// ?friend= / ?watch= / ?room= links, the login queue's "While you wait" grid (Wrath's page has no
+// #ovq queue window), the launcher line (no WrathUnleashed desktop launcher to point at), the
+// lite-texture switch and first-visit lite textures (the streamed slice is exported lite already and
+// wenilla-host has no ?lite=1), the memory store for sync reads (syncread.js: the 3.3.5a client has
+// its own, globalThis.__wenilla_prefetch in benilla-formats web.rs), the WMO and warm-up
+// prefetchers, "now playing", and the 1.12 boot screen's video loop (1.3 MB; the poster art is used).
+//
+// Never load-bearing: any failure here leaves the game exactly as it was.
+
+const BASE = new URL('./', import.meta.url).href;
+
+// The owner's choices. Empty = that part stays off.
+export const CONFIG = {
+  // TODO(owner): a WrathUnleashed logo image for the glue screens' top-left corner (a path under
+  // the served www, e.g. 'wu-corner-logo.webp'; about 14% of the screen height). Empty: no logo.
+  logoUrl: '',
+  // TODO(owner): where the busy-realm note links to (e.g. a "play offline" or download page) and
+  // the words on that link. Empty: the note says only what the realm's status is.
+  busyLinkUrl: '',
+  busyLinkText: '',
+  // the loading screens' background (wu-loading.css): '' = the 1.12 boot screen's portal art
+  // (art/wu-load-bg.webp), 'orion' = the Orion constellation art (art/wu-load-orion.webp).
+  // ?loadart=orion on the page address tries it for one visit.
+  loadingArt: '',
+  // the realm's public status (wrath_portal.py GET /wrath/status.json, CORS *)
+  statusUrl: 'https://play.openvanilla.app/wrath/status.json',
+};
+
+const STYLE_ID = 'wu-page-style';
+const status = { dock: false, signin: 'off', busy: null, logo: false, touch: null, sw: null };
+
+function style() {
+  if (document.getElementById(STYLE_ID)) return;
+  const s = document.createElement('style');
+  s.id = STYLE_ID;
+  s.textContent = `
+    #ow-dock { position: fixed; top: 0; left: 50%; transform: translateX(-50%); z-index: 30;
+      display: flex; flex-direction: column; align-items: center; font: 12px system-ui, sans-serif; }
+    #ow-dock-handle { all: unset; cursor: pointer; padding: 1px 14px 3px; color: #e8d7a8;
+      background: rgba(10,8,18,.55); border: 1px solid rgba(201,162,39,.35); border-top: 0;
+      border-radius: 0 0 8px 8px; opacity: .45; transition: opacity .15s; line-height: 12px; font-size: 11px;
+      letter-spacing: .08em; }
+    #ow-dock-handle:hover, #ow-dock.open #ow-dock-handle, #ow-dock-handle:focus-visible { opacity: 1; }
+    #ow-dock-panel { display: none; margin-top: 2px; padding: 6px 10px; gap: 2px 4px; flex-wrap: wrap;
+      justify-content: center; align-items: center; max-width: min(520px, 92vw);
+      background: rgba(10,8,18,.9); border: 1px solid rgba(201,162,39,.5); border-radius: 8px;
+      box-shadow: 0 6px 24px rgba(0,0,0,.6); color: #bbb; }
+    #ow-dock.open #ow-dock-panel { display: flex; }
+    #ow-dock-panel #bar, #ow-dock-panel #fs, #ow-dock-panel #bell, #ow-dock-panel #dl,
+    #ow-dock-panel #wenilla-journal-download {
+      position: static !important; inset: auto !important; transform: none !important;
+      background: none !important; border: 0 !important; border-radius: 0 !important;
+      padding: 2px 4px !important; margin: 0 !important; display: inline-flex; flex-wrap: wrap;
+      align-items: center; gap: 2px 6px; font: 12px system-ui, sans-serif !important; }
+    #ow-dock-panel #dl[hidden] { display: none !important; }
+    #ow-dock-panel a, #ow-dock-panel button { color: #e8e2d0 !important; padding: 3px 6px !important;
+      margin: 0 !important; border-radius: 4px; cursor: pointer; }
+    #ow-dock-panel a:hover, #ow-dock-panel button:hover { background: rgba(201,162,39,.18) !important; }
+
+    /* "Signing in": over the client's login screen while it signs in with the page's login */
+    #ow-signin { position: fixed; inset: 0; z-index: 25; display: grid; place-items: center;
+      background: radial-gradient(120% 90% at 50% 45%, #14223a 0%, #070b14 60%, #020306 100%);
+      transition: opacity .35s; color: #d8e6f5; font: 600 clamp(15px, 2.4vh, 22px) Georgia, serif; letter-spacing: .08em; }
+    #ow-signin.off { opacity: 0; pointer-events: none; }
+    #ow-signin .wu-spin { width: 34px; height: 34px; margin: 0 auto 14px; border-radius: 50%;
+      border: 3px solid rgba(160,200,240,.18); border-top-color: #9cc8f0; animation: wu-spin 1s linear infinite; }
+    @keyframes wu-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { #ow-signin .wu-spin { animation: none; } }
+
+    /* The corner logo on the glue screens, at the 4:3 glue area's top-left. */
+    #ow-glue-logo { position: fixed; z-index: 5; pointer-events: none; user-select: none;
+      top: 1.2vh; left: calc(max(0px, (100vw - 133.333vh) / 2) + 0.6vh); height: 14vh; width: auto;
+      max-width: 40vw; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(0,0,0,.6));
+      opacity: 0; transition: opacity .35s ease; }
+    #ow-glue-logo.on { opacity: 1; }
+  `;
+  document.head.append(s);
+}
+
+// -- Account dock ------------------------------------------------------------------------------
+
+export function dock() {
+  if (document.getElementById('ow-dock')) return null;
+  // The Wrath page: #fs, #bell and #dl (index.html, www-patch.py); a realm-style page: one #bar.
+  const found = ['bar', 'dl', 'bell', 'fs'].map((id) => document.getElementById(id)).filter(Boolean);
+  const parts = found.filter((el) => !found.some((o) => o !== el && o.contains(el)));
+  if (!parts.length) return null;
+  const root = document.createElement('div');
+  root.id = 'ow-dock';
+  const handle = document.createElement('button');
+  handle.id = 'ow-dock-handle';
+  handle.type = 'button';
+  handle.title = 'Full screen, notifications, downloads';
+  handle.setAttribute('aria-expanded', 'false');
+  handle.textContent = '☰ menu';
+  const panel = document.createElement('div');
+  panel.id = 'ow-dock-panel';
+  // A real move, not a copy: every listener (full screen, bell, sections) stays attached.
+  for (const p of parts) panel.append(p);
+  root.append(handle, panel);
+  document.body.append(root);
+  const set = (open) => {
+    root.classList.toggle('open', open);
+    handle.setAttribute('aria-expanded', String(open));
+  };
+  handle.addEventListener('click', (e) => { e.stopPropagation(); set(!root.classList.contains('open')); });
+  // Clicking back into the game closes it, so it never steals the canvas for long.
+  document.addEventListener('pointerdown', (e) => { if (!root.contains(e.target)) set(false); }, true);
+  panel.addEventListener('click', (e) => { if (e.target.closest('a,button') && e.target.id !== 'bell') setTimeout(() => set(false), 0); });
+  // The client's "download FPS journal" button (perf/journal_web.rs) sits bottom-right, under the
+  // touch cluster: into the dock as well when it appears.
+  const takeJournal = () => {
+    const j = document.getElementById('wenilla-journal-download');
+    if (j && !panel.contains(j)) panel.append(j);
+  };
+  takeJournal();
+  try {
+    const mo = new MutationObserver(takeJournal);
+    mo.observe(document.body, { childList: true });
+  } catch { /* fine */ }
+  status.dock = true;
+  return root;
+}
+
+// -- Signing in --------------------------------------------------------------------------------
+
+/** Whether the page signed the player in: /__env.js set an account and a password. Read only. */
+export function pageSignedIn(env = window.__wenilla_env) {
+  return !!(env && typeof env === 'object' && env.user && env.pass);
+}
+
+export function signingIn(wenilla) {
+  if (!pageSignedIn()) return;
+  const GIVE_UP_MS = 12000;     // a failed sign-in: the client's own form comes back
+  const NO_BRIDGE_MS = 5000;    // without bridge states: about a sign-in's length
+  let cover = null, done = false, timer = 0;
+  status.signin = 'waiting';
+  function hide(why) {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    status.signin = 'done: ' + why;
+    if (!cover) return;
+    const c = cover;
+    cover = null;
+    c.classList.add('off');
+    setTimeout(() => c.remove(), 400);
+  }
+  function show() {
+    if (done || cover) return;
+    cover = document.createElement('div');
+    cover.id = 'ow-signin';
+    cover.setAttribute('role', 'status');
+    cover.innerHTML = '<div><div class="wu-spin" aria-hidden="true"></div>Signing in…</div>';
+    document.body.append(cover);
+    status.signin = 'shown';
+    timer = setTimeout(() => hide(wenilla?.ready ? 'gave up' : 'timer'), wenilla?.ready ? GIVE_UP_MS : NO_BRIDGE_MS);
+  }
+  // From the first glue screen (the boot overlay is over everything before it), until the
+  // character list, the realm list or the world.
+  addEventListener('ow:progress', (e) => {
+    if (e.detail === 'ready') show();
+    if (e.detail === 'enter' || e.detail === 'world') hide('world');
+  });
+  wenilla?.on?.('state', (s) => {
+    const name = s?.state;
+    if (name === 'login' && !done) show();
+    if (name === 'charselect' || name === 'charcreate' || name === 'inworld' || /realm/i.test(name || '')) hide(name);
+  });
+}
+
+// -- Corner logo -------------------------------------------------------------------------------
+
+export function glueLogo(wenilla) {
+  if (!CONFIG.logoUrl) return;
+  const img = document.createElement('img');
+  img.id = 'ow-glue-logo';
+  img.alt = '';
+  img.decoding = 'async';
+  img.src = new URL(CONFIG.logoUrl, BASE).href;
+  let glue = false;
+  const GLUE = new Set(['login', 'charselect']);   // not charcreate: it sat on the faction panel (1.12)
+  const sync = () => {
+    if (!img.isConnected) document.body.append(img);
+    img.classList.toggle('on', glue);
+  };
+  addEventListener('ow:progress', (e) => {
+    if (e.detail === 'ready') { glue = true; sync(); }
+    if (e.detail === 'enter' || e.detail === 'world') { glue = false; sync(); }
+  });
+  wenilla?.on?.('state', (s) => { glue = GLUE.has(s?.state); sync(); });
+  status.logo = true;
+}
+
+// -- Diagnostics -------------------------------------------------------------------------------
+
+function diag(wenilla) {
+  let mod = null;
+  const load = () => (mod ??= import(BASE + 'wu-diag.js').then((m) => m.createDiag(wenilla)));
+  window.owdiag = new Proxy({}, {
+    get: (_, name) => (name === 'then' ? undefined : (...args) => load().then((d) => (typeof d[name] === 'function' ? d[name](...args) : d[name]))),
+  });
+  load().then((d) => d.capture()).catch(() => {});
+  if (new URLSearchParams(location.search).get('diag')) load().then((d) => d.autorun()).catch((e) => console.warn('owdiag:', e));
+}
+
+// -- Busy realm --------------------------------------------------------------------------------
+
+/** What the status document says, for the note: { state: 'ok'|'full'|'down'|'unknown', why }. */
+export function classifyStatus(doc, httpStatus = 200) {
+  if (httpStatus >= 500) return { state: 'down', why: 'The realm is down right now.' };
+  if (!doc || typeof doc !== 'object' || httpStatus >= 400) return { state: 'unknown' };
+  if (doc.online === false) return { state: 'down', why: 'The realm is down right now.' };
+  if (typeof doc.queue === 'number' && doc.queue > 0) return { state: 'full', why: `The realm is full: ${doc.queue} in the queue.` };
+  return { state: 'ok' };
+}
+
+async function realmLoad() {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 8000);
+  try {
+    const r = await fetch(CONFIG.statusUrl, { cache: 'no-store', mode: 'cors', credentials: 'omit', signal: ctl.signal });
+    let d = null;
+    try { d = await r.json(); } catch { /* not JSON */ }
+    return classifyStatus(d, r.status);
+  } catch {
+    return { state: 'unknown' };   // the status page itself unreachable: say nothing
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function busyBanner() {
+  try { if (sessionStorage.getItem('ow:busy-off')) return; } catch { /* storage off */ }
+  let shown = null;
+  const show = (why) => {
+    if (shown) { shown.querySelector('span').textContent = why; return; }
+    const css = document.createElement('style');
+    css.textContent = `#ow-busy { position: fixed; left: 10px; bottom: 10px; z-index: 31; display: flex; gap: 8px;
+      align-items: center; max-width: min(460px, calc(100vw - 20px)); padding: 5px 6px 5px 10px; border-radius: 8px;
+      background: rgba(10,8,18,.9); border: 1px solid rgba(201,162,39,.55); color: #e8e2d0;
+      font: 12px system-ui, sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,.5); }
+      #ow-busy a { color: #f3d179; font-weight: 600; white-space: nowrap; text-decoration: none; }
+      #ow-busy a:hover { text-decoration: underline; }
+      #ow-busy button { all: unset; cursor: pointer; color: #9a917f; padding: 0 4px; font-size: 14px; line-height: 1; }
+      #ow-busy button:hover, #ow-busy button:focus-visible { color: #fff; }`;
+    document.head.append(css);
+    shown = document.createElement('div');
+    shown.id = 'ow-busy';
+    shown.setAttribute('role', 'status');
+    const text = document.createElement('span');
+    text.textContent = why;
+    shown.append(text);
+    if (CONFIG.busyLinkUrl && CONFIG.busyLinkText) {
+      const link = document.createElement('a');
+      link.href = CONFIG.busyLinkUrl;
+      link.target = '_blank';   // a new tab: a place in the login queue here is kept
+      link.rel = 'noopener';
+      link.textContent = CONFIG.busyLinkText;
+      shown.append(link);
+    }
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.textContent = '×';
+    close.setAttribute('aria-label', 'Dismiss');
+    close.addEventListener('click', () => {
+      shown.remove();
+      try { sessionStorage.setItem('ow:busy-off', '1'); } catch { /* storage off */ }
+    });
+    shown.append(close);
+    document.body.append(shown);
+  };
+  const look = async () => {
+    if (document.visibilityState === 'hidden' || !document.body) return;
+    const r = await realmLoad();
+    status.busy = r.state;
+    if (r.state === 'down' || r.state === 'full') show(r.why);
+    else if (r.state === 'ok' && shown) { shown.remove(); shown = null; }
+  };
+  // three looks per page load at most (the portal asks the world server at most once per TTL)
+  for (const at of [3000, 90000, 240000]) setTimeout(() => { look().catch(() => {}); }, at);
+}
+
+// -- Loading, input, touch -----------------------------------------------------------------------
+
+function loading(wenilla) {
+  import(BASE + 'ahead.js').then((m) => m.installAhead(wenilla)).catch((e) => console.warn('ahead.js:', e));
+  import(BASE + 'sw-register.js').then((m) => m.installServiceWorker()).then((r) => { status.sw = r?.state || null; })
+    .catch((e) => console.warn('sw-register.js:', e));
+}
+
+export function touchMaybe() {
+  try {
+    const q = new URLSearchParams(location.search).get('touch');
+    if (q === '0' || q === 'off') return false;
+    if (q !== null) return true;
+    if (localStorage.getItem('ow:touch')) return localStorage.getItem('ow:touch') !== 'off' || (navigator.maxTouchPoints || 0) > 0;
+  } catch { /* storage blocked */ }
+  return (navigator.maxTouchPoints || 0) > 0;
+}
+
+// >>> fui-glue (WrathUnleashed glue layout, 2026-10-24) ------------------------------------------
+// On the glue screens the account dock leaves the top centre, where Forever UI's REALMS | MENU bar
+// sits, for the top-left corner (empty since the expansion logo is gone). From the first glue
+// screen ('ready') until the world ('enter' / 'world'). A logout back to character select sends no
+// stage, so the dock stays at the top centre then (the bar is still usable under its 17 px handle).
+(() => {
+  try {
+    const css = document.createElement('style');
+    css.id = 'wu-glue-dock';
+    css.textContent = `html.ow-glue #ow-dock { left: 6px; top: 4px; transform: none; align-items: flex-start; }
+      html.ow-glue #ow-dock-handle { border-top: 1px solid rgba(201,162,39,.35); border-radius: 8px; }`;
+    (document.head || document.documentElement).append(css);
+    addEventListener('ow:progress', (e) => {
+      if (e.detail === 'ready') document.documentElement.classList.add('ow-glue');
+      if (e.detail === 'enter' || e.detail === 'world') document.documentElement.classList.remove('ow-glue');
+    });
+  } catch { /* never load-bearing */ }
+})();
+// <<< fui-glue ------------------------------------------------------------------------------------
+
+let installed = null;
+
+/** The page layer, once. `wenilla` defaults to bridge.js's (the same module the page imports). */
+export async function install(wenilla) {
+  if (installed) return installed;
+  installed = status;
+  window.wuPage = { status, CONFIG };
+  if (!wenilla) {
+    try { wenilla = (await import(BASE + 'bridge.js')).wenilla || window.wenilla; } catch (e) { console.warn('wrath-page.js: bridge.js', e); }
+  }
+  // Stage timings first, so the earliest stages are seen.
+  import(BASE + 'stages.js').then((m) => m.installStages(wenilla)).catch((e) => console.warn('stages.js:', e));
+  import(BASE + 'input.js').then((m) => m.installInput()).catch((e) => console.warn('input.js:', e));
+  const step = (name, fn) => { try { fn(); } catch (e) { console.warn('wrath-page.js ' + name, e); } };
+  step('style', style);
+  // the loading screens (wu-loading.css is linked by wrath-early.js; this adds the world cover)
+  import(BASE + 'wu-loading.js').then((m) => m.installLoading({ art: CONFIG.loadingArt })).catch((e) => console.warn('wu-loading.js:', e));
+  // the page's buttons may not be parsed yet when this runs very early
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => step('dock', dock), { once: true });
+  else step('dock', dock);
+  step('signing in', () => signingIn(wenilla));
+  step('glue logo', () => glueLogo(wenilla));
+  step('diag', () => diag(wenilla));
+  step('loading', () => loading(wenilla));
+  step('busy banner', busyBanner);
+  // Touch controls only where they can be used (a touch screen, ?touch=, a saved choice); elsewhere
+  // a connected controller still starts the bridge's gamepad mapper, which touch.js otherwise does.
+  if (touchMaybe()) {
+    import(BASE + 'touch.js').then((m) => { status.touch = m.installTouch(wenilla); }).catch((e) => console.warn('touch.js:', e));
+  } else {
+    addEventListener('gamepadconnected', () => { try { wenilla?.gamepad?.start?.(); } catch { /* mapper missing */ } });
+  }
+  return status;
+}

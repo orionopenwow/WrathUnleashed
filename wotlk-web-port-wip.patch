@@ -2001,7 +2001,7 @@ index 00000000..24562eb4
 +    }
 +}
 diff --git a/crates/benilla-app/src/cvars/mod.rs b/crates/benilla-app/src/cvars/mod.rs
-index a40584bb..df3aff07 100644
+index a40584bb..bad8f632 100644
 --- a/crates/benilla-app/src/cvars/mod.rs
 +++ b/crates/benilla-app/src/cvars/mod.rs
 @@ -20,13 +20,16 @@
@@ -2022,7 +2022,7 @@ index a40584bb..df3aff07 100644
  mod table;
  #[cfg(test)]
  use table::Reference;
-@@ -636,6 +639,13 @@ fn load_config(world: &mut World) {
+@@ -636,6 +639,21 @@ fn load_config(world: &mut World) {
          // `gxApi` is the render backend, a fact about the machine that `sync_cvars` pushes live, so
          // it is never persisted.
          cvars.own_for_session("gxApi", None);
@@ -2033,10 +2033,52 @@ index a40584bb..df3aff07 100644
 +                browser::apply_override(&mut cvars, row.name, &value);
 +            }
 +        }
++        // A page `?uiscale=` (or `WOW_UI_SCALE`) turns the dial on with it, as the options
++        // checkbox would.
++        if cvars.is_session_owned("uiScale") {
++            cvars.own_for_session("useUiScale", Some("1"));
++        }
++        #[cfg(target_arch = "wasm32")]
++        let saved_scale = matches!(&stored, StoredConfig::Table(t)
++            if t.keys().any(|k| k.eq_ignore_ascii_case("uiScale")));
          match stored {
              StoredConfig::Absent => {} // no file, hermetic capture, or no install
              StoredConfig::Bad(msg) => {
-@@ -669,7 +679,7 @@ fn stored_config() -> StoredConfig {
+@@ -645,6 +663,20 @@ fn load_config(world: &mut World) {
+             }
+             StoredConfig::Table(table) => cvars.load_file(table),
+         }
++        // The browser's first run: a scale that keeps the UI near its 1080p proportions on a big
++        // window, saved as the player's own so the options slider wins afterwards.
++        #[cfg(target_arch = "wasm32")]
++        if !saved_scale && !cvars.is_session_owned("uiScale") {
++            if let Some(h) = web_sys::window()
++                .and_then(|w| w.inner_height().ok())
++                .and_then(|v| v.as_f64())
++                .filter(|h| *h > 0.0)
++            {
++                let scale = first_run_ui_scale(h as f32);
++                cvars.set("useUiScale", "1");
++                cvars.set("uiScale", &format!("{scale:.2}"));
++            }
++        }
+         cvars.take_events()
+     };
+     for event in events {
+@@ -652,6 +684,12 @@ fn load_config(world: &mut World) {
+     }
+ }
+ 
++/// The browser's first-run `uiScale` for a page `css_height` px tall: the 1080p proportions
++/// (0.9 at 1080) on bigger windows, within the options slider's 0.64–1.0.
++pub(crate) fn first_run_ui_scale(css_height: f32) -> f32 {
++    (1080.0 / css_height * 0.9).clamp(0.64, 1.0)
++}
++
+ /// What the one read of `config.toml` found.
+ enum StoredConfig {
+     /// No file, no install, or a hermetic capture: every value is its registered default.
+@@ -669,7 +707,7 @@ fn stored_config() -> StoredConfig {
      let Some(path) = crate::local_state::config_path() else {
          return StoredConfig::Absent; // hermetic capture or no install: session-only state
      };
@@ -2045,7 +2087,7 @@ index a40584bb..df3aff07 100644
          Ok(t) => t,
          Err(e) if e.kind() == std::io::ErrorKind::NotFound => return StoredConfig::Absent,
          Err(e) => return StoredConfig::Bad(format!("config: cannot read {}: {e}", path.display())),
-@@ -884,7 +894,12 @@ fn write_config(cvars: &mut Cvars) {
+@@ -884,7 +922,12 @@ fn write_config(cvars: &mut Cvars) {
  /// Freeze the texture filter policy for the process and log the mode, so a player's log says which
  /// mode the run was in. Its own system after [`load_config`], so it publishes whatever the file
  /// held.
@@ -2059,7 +2101,7 @@ index a40584bb..df3aff07 100644
      benilla_assets::publish_tex_filter(*filter);
      let mode = filter.mode();
      let name = match mode {
-@@ -930,7 +945,12 @@ mod tests {
+@@ -930,7 +973,12 @@ mod tests {
                  _ => ours == theirs,
              }
          }
@@ -2073,7 +2115,7 @@ index a40584bb..df3aff07 100644
              let name = row.name;
              match &row.reference {
                  Reference::Same(value) => assert!(
-@@ -981,6 +1001,7 @@ mod tests {
+@@ -981,6 +1029,7 @@ mod tests {
          assert_eq!(
              names,
              vec![
@@ -2081,7 +2123,7 @@ index a40584bb..df3aff07 100644
                  "frillDensity",
                  "gxApi",
                  "gxColorBits",
-@@ -1880,7 +1901,7 @@ mod tests {
+@@ -1880,7 +1929,7 @@ mod tests {
          };
  
          // ── Launch 1: the roster lands, and the player enters the world as the third row. ────
@@ -2090,7 +2132,7 @@ index a40584bb..df3aff07 100644
          let mut app = cvar_app();
          app.add_plugins(bevy::state::app::StatesPlugin);
          crate::char_select::add_test_systems(&mut app, tx);
-@@ -1904,7 +1925,7 @@ mod tests {
+@@ -1904,7 +1953,7 @@ mod tests {
          );
  
          // ── Launch 2: a fresh client over the same folder, and the roster arrives. ───────────
@@ -2295,7 +2337,7 @@ index d8457edf..075d080c 100644
  use benilla_formats::{load_item_display_catalog, open_chain, CharSections, NpcAppearance};
  use benilla_protocol::ObjectFields;
 diff --git a/crates/benilla-app/src/entities/attach/char_skin.rs b/crates/benilla-app/src/entities/attach/char_skin.rs
-index 1ba4f557..1962c4db 100644
+index 1ba4f557..c01ce5d7 100644
 --- a/crates/benilla-app/src/entities/attach/char_skin.rs
 +++ b/crates/benilla-app/src/entities/attach/char_skin.rs
 @@ -55,8 +55,10 @@ pub(super) fn resolve_char_look(
@@ -2323,6 +2365,65 @@ index 1ba4f557..1962c4db 100644
  /// The `mpq://` URL of a baked NPC atlas under `Textures\BakedNpcTextures\`.
  fn baked_npc_url(bake_name: &str) -> String {
      format!(
+@@ -306,6 +313,37 @@ pub(super) fn body_atlas(
+     }
+ }
+ 
++/// Whether a forced composite of `look` can run without a synchronous read: in the browser every
++/// texture its plan names is fetched first, all at once (`benilla_formats::web::ready_or_prefetch`),
++/// where the forced lane read them one round trip at a time (the character screen's model was a
++/// dozen back-to-back 190 ms reads). Natively, a baked skin, or no plan: ready.
++pub(super) fn forced_atlas_ready(
++    look: &CharLook,
++    key: Option<SkinKey>,
++    displays: Option<&super::super::ItemDisplays>,
++    sections: Option<&SkinSections>,
++) -> bool {
++    #[cfg(target_arch = "wasm32")]
++    {
++        if matches!(look.body, BodySkin::Baked(_)) {
++            return true;
++        }
++        let (Some(key), Some(sections)) = (key, sections) else {
++            return true;
++        };
++        let Some(plan) = composite_plan(&key, sections, displays) else {
++            return true;
++        };
++        let names: Vec<String> = plan.paths().map(|p| p.replace('/', "\\")).collect();
++        benilla_formats::web::ready_or_prefetch(&names)
++    }
++    #[cfg(not(target_arch = "wasm32"))]
++    {
++        let _ = (look, key, displays, sections);
++        true
++    }
++}
++
+ /// [`body_atlas`] composited on this thread on a miss ([`SkinComposites::force`]): the previews, whose
+ /// composite the reference forces, a re-dress of a standing body and a rig-heal rebuild.
+ pub(super) fn forced_body_atlas(
+diff --git a/crates/benilla-app/src/entities/attach/preview.rs b/crates/benilla-app/src/entities/attach/preview.rs
+index 53791836..f4897396 100644
+--- a/crates/benilla-app/src/entities/attach/preview.rs
++++ b/crates/benilla-app/src/entities/attach/preview.rs
+@@ -568,6 +568,16 @@ fn assemble(spec: &PreviewSpec, ctx: &mut PreviewCtx<'_, '_>) -> Option<Assemble
+     let visible = ctx.characters.map(|c| {
+         c.0.visible_geosets(race, sex, char_look.hair_style, char_look.facial_hair, &eg)
+     });
++    // The body's textures arrive together before the forced composite reads them: retry next
++    // frame until then, as for the item models above.
++    if !super::char_skin::forced_atlas_ready(
++        &char_look,
++        super::char_skin::skin_key(&char_look, bodyslots, spec.emblem, false),
++        ctx.displays.as_deref(),
++        ctx.sections,
++    ) {
++        return None;
++    }
+     let body_tex = super::char_skin::forced_body_atlas(
+         &char_look,
+         super::char_skin::skin_key(&char_look, bodyslots, spec.emblem, false),
 diff --git a/crates/benilla-app/src/entities/skin_composite.rs b/crates/benilla-app/src/entities/skin_composite.rs
 index 3c191cc7..afd7035b 100644
 --- a/crates/benilla-app/src/entities/skin_composite.rs
@@ -2918,7 +3019,7 @@ index ca1c54b2..709f2025 100644
      if let Some(extend) = extend {
          extend(&mut app);
 diff --git a/crates/benilla-app/src/loading_screen.rs b/crates/benilla-app/src/loading_screen.rs
-index 9193bf34..6105fb1c 100644
+index 9193bf34..db540a69 100644
 --- a/crates/benilla-app/src/loading_screen.rs
 +++ b/crates/benilla-app/src/loading_screen.rs
 @@ -27,6 +27,8 @@ use benilla_world::world_map::CurrentMap;
@@ -2930,13 +3031,16 @@ index 9193bf34..6105fb1c 100644
  pub(crate) use input::CoverInput;
  
  // The bar, from the `LoadingScreen.cpp` descriptor table at `0x7ffd34` (read by `0x407150`):
-@@ -164,8 +166,25 @@ pub(crate) struct LoadingScreen {
+@@ -164,8 +166,28 @@ pub(crate) struct LoadingScreen {
      last_wait_log: f32,
      /// The avatar's position last frame, to measure a snap (applied in `Input`, a stage earlier).
      last_pos: Option<Vec3>,
 +    /// The load's progress counts as last seen, and when they last moved: the stall rule.
 +    stall_sig: (usize, usize, usize, usize, usize),
 +    stall_since: f32,
++    /// The focus tile a stall lift revealed without its ground: the "focus not resident" backstop
++    /// does not re-raise over it, or a tile that never lands would cover the world again at once.
++    stall_lifted_tile: Option<(i32, i32)>,
  }
  
 +/// No progress for this long, the world at least [`STALL_LIFT_RESIDENT`] resident and everything
@@ -2951,12 +3055,29 @@ index 9193bf34..6105fb1c 100644
 +/// No progress for this long lifts the cover whatever is resident, once the ground under the
 +/// player is ([`STALL_LIFT_BLIND_SECS`] without it too: a tile the host lacks never lands).
 +const STALL_LIFT_ANY_SECS: f32 = 20.0;
-+const STALL_LIFT_BLIND_SECS: f32 = 45.0;
++const STALL_LIFT_BLIND_SECS: f32 = 25.0;
 +
  impl LoadingScreen {
      /// Whether the opaque cover is up; the world camera renders under it, never behind the glue.
      pub(crate) fn covering(&self) -> bool {
-@@ -566,7 +585,62 @@ fn drive_loading_screen(
+@@ -420,7 +442,7 @@ fn drive_loading_screen(
+             Without<LoadingBackdrop>,
+         ),
+     >,
+-    player: Option<Res<crate::player::Player>>,
++    mut player: Option<ResMut<crate::player::Player>>,
+     // Real time: `Time<Virtual>` clamps frames over 250 ms, and a load is made of those.
+     time: Res<Time<Real>>,
+     // The cover holds until the warm pass has compiled its pipelines.
+@@ -520,6 +542,7 @@ fn drive_loading_screen(
+     // cinematic or free-fly residency describes the camera's tile. ---
+     if !screen.active
+         && !progress.focus_resident
++        && progress.focus_tile != screen.stall_lifted_tile
+         && focus.follows_body()
+         && *state.get() == crate::char_select::ClientState::InWorld
+     {
+@@ -566,7 +589,70 @@ fn drive_loading_screen(
              }
          } else {
              screen.ready_frames = 0;
@@ -3004,6 +3125,14 @@ index 9193bf34..6105fb1c 100644
 +                    || stalled >= STALL_LIFT_BLIND_SECS)
 +            {
 +                screen.dismiss();
++                if !progress.focus_resident {
++                    screen.stall_lifted_tile = progress.focus_tile;
++                }
++                // The settle hold ends with the cover: a body frozen under a revealed world reads
++                // as dead keys (WASD moved nothing at a 64 s Northshire entry).
++                if let Some(p) = player.as_deref_mut().filter(|p| p.settling) {
++                    p.end_settle(progress.focus_resident, now);
++                }
 +                warn!(
 +                    "loading screen: lifted after {stalled:.1}s with no progress ({:.1}s up): \
 +                     {}/{} resident, {} placements pending, {} colliders pending, {} merges \
@@ -3020,6 +3149,21 @@ index 9193bf34..6105fb1c 100644
                  && now - screen.last_wait_log >= WAIT_LOG_EVERY
              {
                  screen.last_wait_log = now;
+@@ -612,6 +698,14 @@ fn drive_loading_screen(
+             *vis = content_vis;
+         }
+     }
++    // A dismissed screen keeps no art: the next one resolves its own (`art_resolved` is cleared at
++    // the dismiss), so the backdrop texture is released rather than resident all session.
++    if !screen.active && !screen.art_cache.is_empty() {
++        screen.art_cache.clear();
++        if let Ok((mut img, _)) = backdrop.single_mut() {
++            img.image = Handle::default();
++        }
++    }
+     if !screen.active || screen.blackout {
+         return;
+     }
 diff --git a/crates/benilla-app/src/local_state.rs b/crates/benilla-app/src/local_state.rs
 index 88b1f77a..f8930190 100644
 --- a/crates/benilla-app/src/local_state.rs
@@ -6184,6 +6328,99 @@ index 01ebbe8b..eda167a3 100644
  
      use super::*;
  
+diff --git a/crates/benilla-app/src/player/world_focus.rs b/crates/benilla-app/src/player/world_focus.rs
+index c96fd620..e62d4c5b 100644
+--- a/crates/benilla-app/src/player/world_focus.rs
++++ b/crates/benilla-app/src/player/world_focus.rs
+@@ -97,13 +97,21 @@ pub(super) fn publish_view_focus(
+     };
+ }
+ 
++/// The hold's best progress so far ([`release_post_snap_hold`]).
++#[derive(Clone, Copy)]
++pub(super) struct SettleBest {
++    ready: usize,
++    pending: usize,
++    total: usize,
++}
++
+ /// Ends the post-snap hold when the destination's world has arrived. Runs after the stream stage,
+ /// so `colliders_pending` is this frame's count.
+ pub(super) fn release_post_snap_hold(
+     mut player: ResMut<Player>,
+     progress: Option<Res<WorldLoadProgress>>,
+     time: Res<Time>,
+-    mut last_counters: Local<Option<[usize; 6]>>,
++    mut best: Local<Option<SettleBest>>,
+     net_cmds: Option<Res<crate::net::NetCommands>>,
+ ) {
+     let Some(p) = progress else { return };
+@@ -119,20 +127,31 @@ pub(super) fn release_post_snap_hold(
+     if p.focus_resident && p.total > 0 && focus_matches {
+         player.world_stale = false;
+     }
+-    // Any counter moving is the destination still arriving; tracked every frame, so the first
+-    // settling frame has a baseline.
+-    let counters = [
+-        p.ready,
+-        p.total,
+-        p.colliders_pending,
+-        p.merge_pending,
+-        p.placements_pending,
+-        p.gx_pending,
+-    ];
+-    let progressed = last_counters.replace(counters) != Some(counters);
++    // Progress is a new best: more resident, fewer pending than ever this hold, or a new window.
++    // Any change used to count, and pending counts that bounce (6–12 placements as some land and
++    // others register) pushed the deadline for ever: the body stayed frozen with the world drawn.
++    let pending = p.colliders_pending + p.merge_pending + p.placements_pending + p.gx_pending;
+     if !player.settling {
++        *best = None;
+         return;
+     }
++    let progressed = match best.as_mut() {
++        None => {
++            *best = Some(SettleBest {
++                ready: p.ready,
++                pending,
++                total: p.total,
++            });
++            true
++        }
++        Some(b) => {
++            let moved = p.ready > b.ready || pending < b.pending || p.total != b.total;
++            b.ready = b.ready.max(p.ready);
++            b.pending = b.pending.min(pending);
++            b.total = p.total;
++            moved
++        }
++    };
+     // The release needs scene and colliders, never ground contact. The timeout is a stall budget:
+     // the deadline is pushed while the resident world is still the map we left and while the
+     // stream advances, so only a stream with no progress for the whole budget times out.
+@@ -270,6 +289,22 @@ mod tests {
+         assert!(!p.world_stale);
+     }
+ 
++    /// Pending counts that bounce between the same values are no progress: the hold times out,
++    /// where it used to stay frozen for good (a 64 s Northshire entry, then dead WASD).
++    #[test]
++    fn bouncing_pending_counts_do_not_hold_the_body_for_ever() {
++        let mut app = app();
++        app.world_mut().resource_mut::<Player>().world_stale = false;
++        for i in 0..(3.0 * SETTLE_TIMEOUT) as usize {
++            step(&mut app, 1.0, |p| {
++                p.total = 5125;
++                p.ready = 5119;
++                p.placements_pending = if i % 2 == 0 { 6 } else { 12 };
++            });
++        }
++        assert!(!settling(&mut app), "the hold ended at the stall budget");
++    }
++
+     #[test]
+     fn a_slow_but_advancing_stream_never_times_out() {
+         let mut app = app();
 diff --git a/crates/benilla-app/src/realmlist.rs b/crates/benilla-app/src/realmlist.rs
 index 91f2b624..275ab5d1 100644
 --- a/crates/benilla-app/src/realmlist.rs
@@ -8626,10 +8863,10 @@ index 002c9bff..aadb0e37 100644
                      grounded: true,
 diff --git a/crates/benilla-app/src/startup_pace.rs b/crates/benilla-app/src/startup_pace.rs
 new file mode 100644
-index 00000000..d9ccbe5f
+index 00000000..350d7d05
 --- /dev/null
 +++ b/crates/benilla-app/src/startup_pace.rs
-@@ -0,0 +1,562 @@
+@@ -0,0 +1,587 @@
 +//! Startup pacing: what the browser does before the first glue screen, and when the rest happens.
 +//!
 +//! A browser boot runs the whole `Startup` schedule in the first frame, one main-thread task that
@@ -8993,6 +9230,7 @@ index 00000000..d9ccbe5f
 +/// `AccountLogin_ShowUserAgreements` (from `OnShow`) and `SCANDLL_FINISHED` both show it.
 +const HIDE_ACCOUNT_FORM: &str =
 +    "if AccountLoginUI and AccountLoginUI:IsShown() then AccountLoginUI:Hide() end \
++     if GlueDialog and GlueDialog:IsShown() and GlueDialog.which ~= 'CANCEL' then GlueDialog:Hide() end \
 +     for _, n in ipairs({'AccountLoginAccountEdit', 'AccountLoginPasswordEdit'}) do \
 +       local e = _G[n] if e and e.ClearFocus then e:ClearFocus() end end";
 +
@@ -9015,9 +9253,26 @@ index 00000000..d9ccbe5f
 +) {
 +    if !quiet.0 {
 +        failed.clear();
++        // Back on the login screen with the page's credentials (a lost session): quiet again, the
++        // glue manager reconnects on its own and the page shows its overlay.
++        let on_login = state.as_ref().is_some_and(|s| *s.get() == ClientState::Login);
++        if cfg!(target_arch = "wasm32") && page_signed_in() && on_login {
++            if let Some(s) = script
++                .as_ref()
++                .filter(|s| s.vm_kind() == benilla_ui::script::VmKind::Glue)
++            {
++                if s.glue_screen() == "login" {
++                    quiet.0 = true;
++                    let _ = s.eval::<()>(HIDE_ACCOUNT_FORM);
++                }
++            }
++        }
 +        return;
 +    }
-+    let refused = failed.read().any(|m| m.refusal.is_some() || m.terminal);
++    // In the browser the glue manager retries a refusal on its backoff; the form stays down.
++    let refused = !cfg!(target_arch = "wasm32")
++        && failed.read().any(|m| m.refusal.is_some() || m.terminal);
++    failed.clear();
 +    let past_login = state.is_some_and(|s| *s.get() != ClientState::Login);
 +    let Some(script) = script.filter(|s| s.vm_kind() == benilla_ui::script::VmKind::Glue) else {
 +        if past_login {
@@ -9042,6 +9297,13 @@ index 00000000..d9ccbe5f
 +/// Run condition: in the browser only (the focus signal has no page natively).
 +fn cfg_web() -> bool {
 +    cfg!(target_arch = "wasm32")
++}
++
++/// Whether the page signed the player in this session (browser only): the glue screens then play
++/// no music.
++pub(crate) fn page_signed_in() -> bool {
++    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
++    *ON.get_or_init(|| cfg!(target_arch = "wasm32") && crate::run_mode::env_login())
 +}
 +
 +/// Whether the quiet login stands and the glue VM is on its login screen: the scene, the music and
@@ -9206,7 +9468,7 @@ index 62bb9425..4d40c382 100644
                  info!("follow: refused — {key}");
                  errors.0.push(crate::ui_action::UiError::key(key));
 diff --git a/crates/benilla-app/src/text_filter.rs b/crates/benilla-app/src/text_filter.rs
-index 47e27d62..d6919156 100644
+index 47e27d62..772967d0 100644
 --- a/crates/benilla-app/src/text_filter.rs
 +++ b/crates/benilla-app/src/text_filter.rs
 @@ -30,41 +30,32 @@ use benilla_formats::FilterPattern;
@@ -9267,7 +9529,7 @@ index 47e27d62..d6919156 100644
              each: Vec::new(),
          }
      }
-@@ -72,6 +63,92 @@ impl PatternList {
+@@ -72,6 +63,94 @@ impl PatternList {
      fn len(&self) -> usize {
          self.each.len()
      }
@@ -9323,7 +9585,9 @@ index 47e27d62..d6919156 100644
 +                    self.patterns.push(translated);
 +                    self.done.each.push(re);
 +                }
-+                Err(e) => warn!(
++                // A row the regex engine refuses (`{性}交`'s bare braces) is skipped, quietly: the
++                // count of skips is in the compile's own summary.
++                Err(e) => debug!(
 +                    "skipping {} expression {:?} (record ID {}): {e}",
 +                    self.list, row.pattern, row.id
 +                ),
@@ -9360,7 +9624,7 @@ index 47e27d62..d6919156 100644
  }
  
  /// Translate one shipped PCRE pattern to `regex`: `\<`/`\>` become `\b`, other escapes stay
-@@ -150,6 +227,12 @@ pub(crate) struct TextFilter {
+@@ -150,6 +229,12 @@ pub(crate) struct TextFilter {
      spam: PatternList,
      /// `[0xb6e5f0]`: zero-initialized, advanced mod 8, never reset.
      mask_index: usize,
@@ -9373,7 +9637,7 @@ index 47e27d62..d6919156 100644
  }
  
  impl Default for TextFilter {
-@@ -159,6 +242,8 @@ impl Default for TextFilter {
+@@ -159,6 +244,8 @@ impl Default for TextFilter {
              profanity: PatternList::empty(),
              spam: PatternList::empty(),
              mask_index: 0,
@@ -9382,7 +9646,7 @@ index 47e27d62..d6919156 100644
          }
      }
  }
-@@ -168,10 +253,62 @@ impl TextFilter {
+@@ -168,10 +255,62 @@ impl TextFilter {
          TextFilter {
              profanity: PatternList::compile(profanity, "chat profanity filter"),
              spam: PatternList::compile(spam, "chat spam filter"),
@@ -9446,7 +9710,7 @@ index 47e27d62..d6919156 100644
      pub(crate) fn profanity_len(&self) -> usize {
          self.profanity.len()
      }
-@@ -183,17 +320,25 @@ impl TextFilter {
+@@ -183,17 +322,25 @@ impl TextFilter {
      /// `0x4a1ca0`: whether the text matches the spam list. The reference also scans a server-pushed
      /// list (SMSG `0x332`) that vmangos never sends. `enabled` is `spamFilter`, which the reference
      /// tests at the call site.
@@ -9476,7 +9740,7 @@ index 47e27d62..d6919156 100644
              return false;
          }
          self.mask_uncached(text)
-@@ -204,7 +349,7 @@ impl TextFilter {
+@@ -204,7 +351,7 @@ impl TextFilter {
      fn mask_uncached(&mut self, text: &mut String) -> bool {
          // The subject is ASCII-lowercased, byte-aligned with `text` and masked in step.
          let mut subject = ascii_lower(text);
@@ -9485,7 +9749,7 @@ index 47e27d62..d6919156 100644
          let mut any = false;
          let mut i = 0;
          while i < candidates.len() {
-@@ -240,9 +385,8 @@ impl TextFilter {
+@@ -240,9 +387,8 @@ impl TextFilter {
                  // The buffer moved: re-derive the candidates past this pattern.
                  candidates = self
                      .profanity
@@ -9496,7 +9760,7 @@ index 47e27d62..d6919156 100644
                      .filter(|&c| c > p)
                      .collect();
                  i = 0;
-@@ -269,6 +413,33 @@ mod tests {
+@@ -269,6 +415,33 @@ mod tests {
              .collect()
      }
  
@@ -9530,7 +9794,7 @@ index 47e27d62..d6919156 100644
      /// `\<` and `\>` are non-directional word boundaries, as the reference's compiler treats them.
      #[test]
      fn the_angle_escapes_are_non_directional_word_boundaries() {
-@@ -348,7 +519,7 @@ mod tests {
+@@ -348,7 +521,7 @@ mod tests {
              r"(w\s*w\s*w\s*\.)?\s*i\s*t\s*e\s*m\s*b\s*a\s*y\s*(\.\s*c\s*a)",
              r"(w\s*w\s*w\s*\.)?\s*g\s*m\s*w\s*o\s*r\s*k\s*e\s*r\s*(\.\s*c\s*o\s*m\s*)",
          ]);
@@ -9539,7 +9803,7 @@ index 47e27d62..d6919156 100644
          assert!(f.is_spam(true, "buy gold at www.itembay.ca cheap"));
          assert!(f.is_spam(true, "w w w . i t e m b a y . c a"));
          assert!(f.is_spam(true, "W W W . I T E M B A Y . C A"), "CASELESS");
-@@ -427,7 +598,7 @@ impl ChatTextFilter<'_> {
+@@ -427,7 +600,7 @@ impl ChatTextFilter<'_> {
      /// `CHAT_MSG_FILTERED`, no `"GM"` tag, a non-GM viewer, `spamFilter` on, then the predicate.
      /// Every exit, a GM viewer's included, still reaches the mask arm (`0x49abb7`).
      pub(crate) fn should_drop(
@@ -9548,7 +9812,7 @@ index 47e27d62..d6919156 100644
          chat_type: u8,
          chat_tag: u8,
          viewer_is_gm: bool,
-@@ -472,13 +643,24 @@ fn load_text_filter_lists(
+@@ -472,13 +645,36 @@ fn load_text_filter_lists(
      let spam = spam
          .inspect_err(|e| warn!("chat spam filter unavailable: {e:#}"))
          .unwrap_or_default();
@@ -9570,15 +9834,27 @@ index 47e27d62..d6919156 100644
 +
 +/// The per-frame compile slice of a pending [`TextFilter`]: a few milliseconds a frame keep the
 +/// glue screens drawing while the lists compile.
-+fn compile_text_filter_step(mut filter: ResMut<TextFilter>) {
++///
++/// Only in the world, once the loading cover is down: the glue screens and the world entry are
++/// the loads a player waits on, and 5,220 expressions were 16 s of 4 ms slices there. A chat line
++/// before the compile ends finishes it at once ([`TextFilter::mask`]), so filtering never differs.
++fn compile_text_filter_step(
++    mut filter: ResMut<TextFilter>,
++    state: Option<Res<State<crate::char_select::ClientState>>>,
++    cover: Option<Res<crate::loading_screen::LoadingScreen>>,
++) {
 +    if !filter.is_pending() {
++        return;
++    }
++    let in_world = state.is_some_and(|s| *s.get() == crate::char_select::ClientState::InWorld);
++    if !in_world || cover.is_some_and(|c| c.covering()) {
 +        return;
 +    }
 +    filter.step(std::time::Duration::from_millis(4));
  }
  
  pub(crate) struct TextFilterPlugin;
-@@ -498,9 +680,8 @@ impl Plugin for TextFilterPlugin {
+@@ -498,9 +694,8 @@ impl Plugin for TextFilterPlugin {
          app.add_observer(on_cvar);
          app.init_resource::<TextFilterSwitches>()
              .init_resource::<TextFilter>()
@@ -10198,10 +10474,78 @@ index 0daba316..1cc9df95 100644
                  Update,
                  (
 diff --git a/crates/benilla-app/src/ui_gossip/mod.rs b/crates/benilla-app/src/ui_gossip/mod.rs
-index 6a92c84f..7bdc77c8 100644
+index 6a92c84f..3638642e 100644
 --- a/crates/benilla-app/src/ui_gossip/mod.rs
 +++ b/crates/benilla-app/src/ui_gossip/mod.rs
-@@ -359,7 +359,7 @@ fn drain_gossip(
+@@ -31,8 +31,15 @@ pub(crate) struct GossipState {
+     pub(crate) options: Vec<GossipOption>,
+     pub(crate) quests: Vec<QuestOption>,
+     records: HashMap<u32, Vec<NpcTextBlock>>,
++    /// Frames since a select went out with no new menu or close after it. A select clears the
++    /// VM's copy of the options (the reference's `0x58af10` waits for the server's answer), so a
++    /// server that never answers left a painted menu whose clicks did nothing at all.
++    awaiting_reply: Option<u32>,
+ }
+ 
++/// Frames a select waits for the server's answer before the menu takes clicks again (~2 s).
++const SELECT_REPLY_FRAMES: u32 = 120;
++
+ impl GossipState {
+     pub(crate) fn cached_record(&self, text_id: u32) -> Option<&[NpcTextBlock]> {
+         self.records.get(&text_id).map(Vec::as_slice)
+@@ -59,6 +66,7 @@ impl GossipState {
+     pub(crate) fn open_menu(&mut self, menu: WireMenu, npc_gender: u8) -> bool {
+         let text_id = menu.text_id;
+         self.npc = Some(menu.npc);
++        self.awaiting_reply = None;
+         self.menu_id = menu.menu_id;
+         self.text_id = text_id;
+         self.options = menu.options;
+@@ -113,6 +121,7 @@ impl GossipState {
+     /// Close the menu; the records stay.
+     pub(crate) fn clear(&mut self) {
+         self.npc = None;
++        self.awaiting_reply = None;
+         self.menu_id = 0;
+         self.text_id = 0;
+         self.greeting = None;
+@@ -256,7 +265,7 @@ fn complete_quests(own: Option<&ObjectStore>) -> Vec<u32> {
+ #[allow(clippy::too_many_arguments)]
+ fn feed_gossip(
+     script: Option<NonSendMut<UiScript>>,
+-    state: Res<GossipState>,
++    mut state: ResMut<GossipState>,
+     self_q: Query<(&ObjectStore, &Guid), With<SelfPlayer>>,
+     index: Res<GuidIndex>,
+     stores: Query<&ObjectStore>,
+@@ -295,6 +304,18 @@ fn feed_gossip(
+     if state.text_pending() {
+         return;
+     }
++    // A select the server never answered: the menu takes clicks again, re-pushed as it was.
++    if let Some(frames) = state.awaiting_reply.as_mut() {
++        *frames += 1;
++        if *frames >= SELECT_REPLY_FRAMES {
++            state.awaiting_reply = None;
++            info!(
++                "ui_gossip: no answer to the select on menu {} — the menu takes clicks again",
++                state.menu_id
++            );
++            *last = None; // re-push the snapshot below
++        }
++    }
+     let force_gossip = state
+         .npc
+         .and_then(|g| stores.get(*index.0.get(&g)?).ok())
+@@ -355,11 +376,14 @@ fn drain_gossip(
+         return;
+     };
+     for (pos, code) in script.take_gossip_selects() {
+-        let Some(npc) = state.npc else { continue };
++        let Some(npc) = state.npc else {
++            info!("ui_gossip: SelectGossipOption({pos}) with no menu open — ignored");
++            continue;
++        };
          // Refused while the text query is out, as the reference's `SelectGossipOption`
          // (`0x58af16`) refuses under the latch `0xc00be8`.
          if state.text_pending() {
@@ -10210,7 +10554,7 @@ index 6a92c84f..7bdc77c8 100644
                  "ui_gossip: SelectGossipOption({pos}) while the text query is in flight — refused"
              );
              continue;
-@@ -370,7 +370,7 @@ fn drain_gossip(
+@@ -370,7 +394,7 @@ fn drain_gossip(
              .and_then(|i| state.options.get(i as usize))
          {
              Some(opt) => {
@@ -10219,16 +10563,18 @@ index 6a92c84f..7bdc77c8 100644
                      "ui_gossip: select option {pos} (menu {}, index {})",
                      state.menu_id, opt.index
                  );
-@@ -381,7 +381,7 @@ fn drain_gossip(
+@@ -380,8 +404,9 @@ fn drain_gossip(
+                     option: opt.index,
                      code,
                  });
++                state.awaiting_reply = Some(0);
              }
 -            None => debug!("ui_gossip: SelectGossipOption({pos}) out of range — ignored"),
 +            None => info!("ui_gossip: SelectGossipOption({pos}) out of range — ignored"),
          }
      }
      // Quest-row clicks: the 1-based row picks the quest.
-@@ -556,6 +556,52 @@ mod tests {
+@@ -556,6 +581,69 @@ mod tests {
  
      const GUARD: u64 = 0xF130_0000_0000_0007; // HIGHGUID_UNIT
  
@@ -10276,6 +10622,23 @@ index 6a92c84f..7bdc77c8 100644
 +            })
 +            .collect();
 +        assert_eq!(sent, vec![(SELF, 61010, 2, None)]);
++
++        // The server never answers: after the wait the same option selects again.
++        app.world_mut()
++            .non_send_resource_mut::<UiScript>()
++            .run("SelectGossipOption(2)")
++            .unwrap();
++        let _ = tick(&mut app);
++        assert_eq!(selects_sent(&rx), 0, "the cleared menu refuses while the answer is due");
++        for _ in 0..SELECT_REPLY_FRAMES {
++            let _ = tick(&mut app);
++        }
++        app.world_mut()
++            .non_send_resource_mut::<UiScript>()
++            .run("SelectGossipOption(2)")
++            .unwrap();
++        let _ = tick(&mut app);
++        assert_eq!(selects_sent(&rx), 1, "the menu took the click again");
 +    }
 +
      /// A guard's sub-menu on a first-visit text: nothing fires while the query is out, the old
@@ -10832,6 +11195,122 @@ index e3ad8318..c97e7f4e 100644
      /// Build an addon over a temp AddOns root, so the walk can be tested without an install.
      fn dir_addon(root: &Path, name: &str, toc: &str) -> Addon {
          let folder = root.join(name);
+diff --git a/crates/benilla-app/src/ui_script/builtin_default_bindings.wtf b/crates/benilla-app/src/ui_script/builtin_default_bindings.wtf
+new file mode 100644
+index 00000000..de53db5e
+--- /dev/null
++++ b/crates/benilla-app/src/ui_script/builtin_default_bindings.wtf
+@@ -0,0 +1,110 @@
++bind ESCAPE TOGGLEGAMEMENU
++bind W MOVEFORWARD
++bind UP MOVEFORWARD
++bind S MOVEBACKWARD
++bind DOWN MOVEBACKWARD
++bind A TURNLEFT
++bind LEFT TURNLEFT
++bind D TURNRIGHT
++bind RIGHT TURNRIGHT
++bind Q STRAFELEFT
++bind E STRAFERIGHT
++bind SPACE JUMP
++bind X SITORSTAND
++bind Z TOGGLESHEATH
++bind NUMLOCK TOGGLEAUTORUN
++bind BUTTON4 TOGGLEAUTORUN
++bind NUMPADDIVIDE TOGGLERUN
++bind BUTTON1 CAMERAORSELECTORMOVE
++bind BUTTON2 TURNORACTION
++bind ENTER OPENCHAT
++bind / OPENCHATSLASH
++bind R REPLY
++bind SHIFT-R REPLY2
++bind TAB TARGETNEARESTENEMY
++bind SHIFT-TAB TARGETPREVIOUSENEMY
++bind CTRL-TAB TARGETNEARESTFRIEND
++bind CTRL-SHIFT-TAB TARGETPREVIOUSFRIEND
++bind F1 TARGETSELF
++bind F2 TARGETPARTYMEMBER1
++bind F3 TARGETPARTYMEMBER2
++bind F4 TARGETPARTYMEMBER3
++bind F5 TARGETPARTYMEMBER4
++bind F ASSISTTARGET
++bind G TARGETLASTHOSTILE
++bind T ATTACKTARGET
++bind 1 ACTIONBUTTON1
++bind 2 ACTIONBUTTON2
++bind 3 ACTIONBUTTON3
++bind 4 ACTIONBUTTON4
++bind 5 ACTIONBUTTON5
++bind 6 ACTIONBUTTON6
++bind 7 ACTIONBUTTON7
++bind 8 ACTIONBUTTON8
++bind 9 ACTIONBUTTON9
++bind 0 ACTIONBUTTON10
++bind - ACTIONBUTTON11
++bind = ACTIONBUTTON12
++bind SHIFT-1 ACTIONPAGE1
++bind SHIFT-2 ACTIONPAGE2
++bind SHIFT-3 ACTIONPAGE3
++bind SHIFT-4 ACTIONPAGE4
++bind SHIFT-5 ACTIONPAGE5
++bind SHIFT-6 ACTIONPAGE6
++bind SHIFT-UP PREVIOUSACTIONPAGE
++bind SHIFT-DOWN NEXTACTIONPAGE
++bind SHIFT-MOUSEWHEELUP PREVIOUSACTIONPAGE
++bind SHIFT-MOUSEWHEELDOWN NEXTACTIONPAGE
++bind CTRL-1 BONUSACTIONBUTTON1
++bind CTRL-2 BONUSACTIONBUTTON2
++bind CTRL-3 BONUSACTIONBUTTON3
++bind CTRL-4 BONUSACTIONBUTTON4
++bind CTRL-5 BONUSACTIONBUTTON5
++bind CTRL-6 BONUSACTIONBUTTON6
++bind CTRL-7 BONUSACTIONBUTTON7
++bind CTRL-8 BONUSACTIONBUTTON8
++bind CTRL-9 BONUSACTIONBUTTON9
++bind CTRL-0 BONUSACTIONBUTTON10
++bind CTRL-F1 SHAPESHIFTBUTTON1
++bind CTRL-F2 SHAPESHIFTBUTTON2
++bind CTRL-F3 SHAPESHIFTBUTTON3
++bind CTRL-F4 SHAPESHIFTBUTTON4
++bind CTRL-F5 SHAPESHIFTBUTTON5
++bind CTRL-F6 SHAPESHIFTBUTTON6
++bind CTRL-F7 SHAPESHIFTBUTTON7
++bind CTRL-F8 SHAPESHIFTBUTTON8
++bind CTRL-F9 SHAPESHIFTBUTTON9
++bind CTRL-F10 SHAPESHIFTBUTTON10
++bind B OPENALLBAGS
++bind SHIFT-B TOGGLEBACKPACK
++bind F12 TOGGLEBACKPACK
++bind F11 TOGGLEBAG1
++bind F10 TOGGLEBAG2
++bind F9 TOGGLEBAG3
++bind F8 TOGGLEBAG4
++bind C TOGGLECHARACTER0
++bind U TOGGLECHARACTER2
++bind H TOGGLECHARACTER4
++bind P TOGGLESPELLBOOK
++bind SHIFT-P TOGGLEPETBOOK
++bind N TOGGLETALENTS
++bind L TOGGLEQUESTLOG
++bind M TOGGLEWORLDMAP
++bind O TOGGLESOCIAL
++bind Y TOGGLEACHIEVEMENT
++bind I TOGGLELFGPARENT
++bind ALT-Z TOGGLEUI
++bind V NAMEPLATES
++bind SHIFT-V FRIENDNAMEPLATES
++bind CTRL-V ALLNAMEPLATES
++bind CTRL-M TOGGLEMUSIC
++bind CTRL-S TOGGLESOUND
++bind CTRL-R TOGGLEFPS
++bind PRINTSCREEN SCREENSHOT
++bind MOUSEWHEELUP CAMERAZOOMIN
++bind MOUSEWHEELDOWN CAMERAZOOMOUT
++bind HOME PREVVIEW
++bind END NEXTVIEW
++bind PAGEUP CHATPAGEUP
++bind PAGEDOWN CHATPAGEDOWN
++bind SHIFT-PAGEDOWN CHATBOTTOM
 diff --git a/crates/benilla-app/src/ui_script/extract/mod.rs b/crates/benilla-app/src/ui_script/extract/mod.rs
 index 6a80823d..c9cf9a9d 100644
 --- a/crates/benilla-app/src/ui_script/extract/mod.rs
@@ -11084,23 +11563,29 @@ index 35ecfc2f..d47c8d21 100644
 +    }
  }
 diff --git a/crates/benilla-app/src/ui_script/glue_mgr.rs b/crates/benilla-app/src/ui_script/glue_mgr.rs
-index e0d9f91b..ba4c04ee 100644
+index e0d9f91b..393ba69e 100644
 --- a/crates/benilla-app/src/ui_script/glue_mgr.rs
 +++ b/crates/benilla-app/src/ui_script/glue_mgr.rs
-@@ -542,6 +542,12 @@ pub(crate) struct GlueMgr {
+@@ -542,6 +542,18 @@ pub(crate) struct GlueMgr {
      staged_vm: Option<u64>,
      /// The glue VM that holds the create screen's tables.
      create_vm: Option<u64>,
-+    /// The page's credentials were submitted on the login screen ([`auto_submit`]), once per
-+    /// process: a refusal leaves the screen to the player.
++    /// The page's credentials were submitted on the login screen ([`auto_submit`]).
 +    auto_login_tried: bool,
++    /// The page-signed-in reconnect: attempts since the last time the logon got past the login
++    /// screen, and when the next one goes ([`RECONNECT_BACKOFF_MS`]).
++    auto_attempts: u32,
++    auto_next_ms: Option<u32>,
++    /// The screen was past the login screen since the last attempt: a return to it is a lost
++    /// session (or a refused logon) the page's credentials retry.
++    auto_was_past: bool,
 +    /// The one published realm a connect picked for itself ([`only_realm`]), for the frame to
 +    /// write into `realmName` as `ChangeRealm` would.
 +    picked_realm: Option<String>,
  }
  
  impl GlueMgr {
-@@ -923,6 +929,13 @@ impl GlueMgr {
+@@ -923,6 +935,13 @@ impl GlueMgr {
                  if self.selected.is_none() {
                      self.selected = select_by_name(&self.holder, realm_name);
                  }
@@ -11114,7 +11599,7 @@ index e0d9f91b..ba4c04ee 100644
                  match &self.selected {
                      Some(r) => {
                          info!("glue: the connect dials {:?}", r.name);
-@@ -1351,6 +1364,18 @@ impl GlueMgr {
+@@ -1351,6 +1370,18 @@ impl GlueMgr {
  
  /// `SelectRealmByName` (`0x5ab6f0`): the first realm in the holder whose name matches, case
  /// folded (`0x64a4c0`), whatever its flags.
@@ -11133,7 +11618,7 @@ index e0d9f91b..ba4c04ee 100644
  fn select_by_name(holder: &[RealmInfo], name: &str) -> Option<RealmInfo> {
      holder
          .iter()
-@@ -1407,6 +1432,8 @@ pub(crate) struct GlueAsks<'w> {
+@@ -1407,6 +1438,8 @@ pub(crate) struct GlueAsks<'w> {
      abandon: Option<Res<'w, crate::net::LoginAbandon>>,
      /// The roster whose pending pick names the entering character to the in-world files.
      roster: Option<ResMut<'w, crate::char_select::Roster>>,
@@ -11142,7 +11627,7 @@ index e0d9f91b..ba4c04ee 100644
  }
  
  /// The scripted run's pick on the stock screen, once its roster has loaded: the named row's
-@@ -1450,6 +1477,37 @@ enum EnterWorld {
+@@ -1450,6 +1483,73 @@ enum EnterWorld {
  }
  
  /// The CVars each agreement is read from and written to.
@@ -11150,9 +11635,42 @@ index e0d9f91b..ba4c04ee 100644
 +/// gate signs the player in) submitted on the stock login screen as its Login button would, once:
 +/// the agreements recorded as the Accept verb records them, then [`GlueMgr::login`]. A declared
 +/// identity that resolves to an error, or a refused logon, leaves the screen to the player.
-+fn auto_submit(mgr: &mut GlueMgr, s: &mut UiScript, logins: &mut Vec<GlueLogin>) {
-+    if mgr.auto_login_tried || mgr.screen != "login" || mgr.state != ScreenState::Idle {
++fn auto_submit(mgr: &mut GlueMgr, s: &mut UiScript, logins: &mut Vec<GlueLogin>, now_ms: u32) {
++    if mgr.screen != "login" {
++        mgr.auto_was_past = true;
 +        return;
++    }
++    if mgr.state != ScreenState::Idle {
++        return;
++    }
++    if mgr.auto_login_tried {
++        // Back on the login screen after an attempt: in the browser, with the page's
++        // credentials, the client reconnects on its own after a backoff rather than standing the
++        // login screen up (the page shows "Disconnected — reconnecting…"). Natively, a refusal
++        // leaves the screen to the player, as before.
++        if !cfg!(target_arch = "wasm32") {
++            return;
++        }
++        if std::mem::take(&mut mgr.auto_was_past) {
++            mgr.auto_attempts = 0;
++        }
++        match mgr.auto_next_ms {
++            None => {
++                let Some(&wait) = RECONNECT_BACKOFF_MS.get(mgr.auto_attempts as usize) else {
++                    return; // out of attempts: the player's Reconnect button reloads the page
++                };
++                mgr.auto_next_ms = Some(now_ms.saturating_add(wait));
++                info!("login: back at the login screen — reconnecting in {} s", wait / 1000);
++                crate::webprogress::signal(&format!("reconnect:{}", wait / 1000));
++                return;
++            }
++            Some(at) if now_ms < at => return,
++            Some(_) => {
++                mgr.auto_next_ms = None;
++                mgr.auto_attempts += 1;
++                crate::webprogress::signal("reconnecting");
++            }
++        }
 +    }
 +    let Some(found) = crate::run_mode::fast_path() else {
 +        return;
@@ -11177,44 +11695,51 @@ index e0d9f91b..ba4c04ee 100644
 +    mgr.login(f.user, f.pass, logins);
 +}
 +
++/// The page-signed-in reconnect's waits, in order; past the last, no more attempts.
++const RECONNECT_BACKOFF_MS: [u32; 4] = [2_000, 5_000, 15_000, 30_000];
++
  fn notice_cvar(notice: GlueNotice) -> &'static str {
      match notice {
          GlueNotice::Tos => "readTOS",
-@@ -1554,6 +1612,7 @@ pub(crate) fn drive_glue_mgr(
+@@ -1554,6 +1654,11 @@ pub(crate) fn drive_glue_mgr(
      // The verbs the last tick's Lua called.
      if let Some(s) = script.as_deref_mut() {
          mgr.screen = s.glue_screen();
 +        let quiet = crate::startup_pace::quiet_on_login_screen(asks.quiet.as_deref(), &mgr.screen);
++        // The page signed the player in: no glue music or ambience on any glue screen. It starved
++        // behind the loads (~2 s of injected silence) and its stream is memory the session never
++        // needed. Deviation: the reference plays the glue track on every glue screen.
++        let quiet_audio = quiet || crate::startup_pace::page_signed_in();
          for request in s.take_glue_requests() {
              match request {
                  GlueRequest::Login(c) => mgr.login(c.account, c.password, &mut logins),
-@@ -1568,6 +1627,7 @@ pub(crate) fn drive_glue_mgr(
+@@ -1568,6 +1673,7 @@ pub(crate) fn drive_glue_mgr(
                      // Through the VM's mirror, whose writes the CVar sync persists.
                      s.set_cvar_engine(notice_cvar(notice), "1");
                  }
-+                GlueRequest::PlayGlueMusic(_) if quiet => {}
++                GlueRequest::PlayGlueMusic(_) if quiet_audio => {}
                  GlueRequest::PlayGlueMusic(file) => {
                      asks.music.write(crate::sound::GlueMusicRequest::Play(file));
                  }
-@@ -1621,6 +1681,7 @@ pub(crate) fn drive_glue_mgr(
+@@ -1621,6 +1727,7 @@ pub(crate) fn drive_glue_mgr(
                      let roster: Vec<String> = mgr.roster.iter().map(|c| c.name.clone()).collect();
                      super::addons::save_glue_addons(&realm, &roster, &changes);
                  }
-+                GlueRequest::PlayGlueAmbience { .. } if quiet => {}
++                GlueRequest::PlayGlueAmbience { .. } if quiet_audio => {}
                  GlueRequest::PlayGlueAmbience { name, fade } => {
                      asks.music
                          .write(crate::sound::GlueMusicRequest::Ambience { name, fade });
-@@ -1636,6 +1697,9 @@ pub(crate) fn drive_glue_mgr(
+@@ -1636,6 +1743,9 @@ pub(crate) fn drive_glue_mgr(
                  | GlueRequest::RealmSplit(_) => {}
              }
          }
 +        if glue_up {
-+            auto_submit(&mut mgr, s, &mut logins);
++            auto_submit(&mut mgr, s, &mut logins, now_ms);
 +        }
          mgr.realm_cells = s.glue_realm_cells();
          // `EnterWorld`'s `lastCharacterIndex` (`0x4d9bd0`), through the VM's mirror, whose
          // writes the CVar sync persists.
-@@ -1674,6 +1738,11 @@ pub(crate) fn drive_glue_mgr(
+@@ -1674,6 +1784,11 @@ pub(crate) fn drive_glue_mgr(
      for (realms, failed) in lists {
          mgr.on_realm_list(realms, failed, &realm_name);
      }
@@ -11226,7 +11751,7 @@ index e0d9f91b..ba4c04ee 100644
      for msg in news.failures.read() {
          mgr.on_failed(msg);
      }
-@@ -1858,7 +1927,7 @@ fn glue_create_catalog(
+@@ -1858,7 +1973,7 @@ fn glue_create_catalog(
                  file: c.file.clone(),
              })
              .collect(),
@@ -11235,7 +11760,7 @@ index e0d9f91b..ba4c04ee 100644
          ranges,
          hair,
          names: create
-@@ -2025,6 +2094,41 @@ pub(super) fn seat_glue_vm(world: &mut World, script: &mut UiScript) {
+@@ -2025,6 +2140,41 @@ pub(super) fn seat_glue_vm(world: &mut World, script: &mut UiScript) {
      world.insert_resource(mgr);
  }
  
@@ -11336,10 +11861,49 @@ index b2568d42..5bfe0545 100644
 +    }
 +}
 diff --git a/crates/benilla-app/src/ui_script/glue_scene.rs b/crates/benilla-app/src/ui_script/glue_scene.rs
-index 24c22064..277f86b9 100644
+index 24c22064..58a76a81 100644
 --- a/crates/benilla-app/src/ui_script/glue_scene.rs
 +++ b/crates/benilla-app/src/ui_script/glue_scene.rs
-@@ -90,11 +90,16 @@ pub(crate) fn feed_stock_glue_preview(
+@@ -32,7 +32,15 @@ fn stock_preview(
+     let Some(pane) = pane else {
+         return (None, None, 0.0, None);
+     };
+-    let scene = GlueScene::from_model_path(&pane.path);
++    // Lite character select (the page signed the player in): one shared stage, the human
++    // scene, for every character, so moving through the list never loads another race's
++    // animated backdrop and its art. The character itself is the stock one. Deviation: the
++    // reference stands each race on its own scene.
++    let scene = if pane.select && crate::startup_pace::page_signed_in() {
++        Some(GlueScene::Human)
++    } else {
++        GlueScene::from_model_path(&pane.path)
++    };
+     if scene.is_none() {
+         warn_once!(
+             "glue scene: {} is none of the shipped glue scenes; the glue booth stands nothing",
+@@ -66,11 +74,16 @@ fn stock_preview(
+     } else {
+         (None, 0.0)
+     };
+-    let fog = pane.fog.map(|f| SceneFog {
+-        rgb: f.rgb(),
+-        near: f.near,
+-        far: f.far,
+-    });
++    let lite = pane.select && crate::startup_pace::page_signed_in();
++    let fog = if lite {
++        GlueScene::Human.stock_fog()
++    } else {
++        pane.fog.map(|f| SceneFog {
++            rgb: f.rgb(),
++            near: f.near,
++            far: f.far,
++        })
++    };
+     (scene, look, yaw, fog)
+ }
+ 
+@@ -90,11 +103,16 @@ pub(crate) fn feed_stock_glue_preview(
      state: Option<Res<State<crate::char_select::ClientState>>>,
      mut preview: ResMut<GluePreview>,
      mut feed: Local<super::VmMemo<StockFeed>>,
@@ -11442,7 +12006,7 @@ index 6ce42723..23055eb8 100644
                  }
              }
 diff --git a/crates/benilla-app/src/ui_script/lifecycle.rs b/crates/benilla-app/src/ui_script/lifecycle.rs
-index 8c13cb8e..60924d43 100644
+index 8c13cb8e..12d9e7c1 100644
 --- a/crates/benilla-app/src/ui_script/lifecycle.rs
 +++ b/crates/benilla-app/src/ui_script/lifecycle.rs
 @@ -9,12 +9,15 @@ use bevy::prelude::*;
@@ -11557,7 +12121,7 @@ index 8c13cb8e..60924d43 100644
  /// Seat the VM's screen size, display modes and text measurer for the load, under the current
  /// window and `uiScale`: the load-edge half of [`super::extract::tick_script`]'s per-frame pair. A
  /// fresh VM answers 1024×768 until then, and a value computed once at load keeps it: stock
-@@ -369,16 +413,38 @@ fn seat_raster_seam_for_load(world: &mut World, script: &mut UiScript) {
+@@ -369,16 +413,44 @@ fn seat_raster_seam_for_load(world: &mut World, script: &mut UiScript) {
  /// state edge because the initial transition runs after `PostStartup`: a capture booting straight
  /// into `InWorld` still loads after [`benilla_assets::AssetSet::Open`].
  pub(crate) fn load_ingame_ui_on_world_entry(world: &mut World) {
@@ -11583,6 +12147,12 @@ index 8c13cb8e..60924d43 100644
 +/// Everything [`load_ingame_ui_on_world_entry`] does before the core's rows load; `None` when no
 +/// UI loads this entry.
 +fn begin_entry_load(world: &mut World) -> Option<EntryLoadJob> {
++    // The glue VM is gone by now: its screens' sprites (login, character select and create, an
++    // overlay's glue art) leave the cache, so nothing from before the world stays resident.
++    if let Some(mut assets) = world.get_resource_mut::<benilla_assets::WorldAssets>() {
++        let n = assets.drop_ui_sprites();
++        info!("ui_script: {n} glue-screen sprite cache entries released at the world entry");
++    }
      // The parked VM goes back into the world, where the CVar fold reads it; a reload has none
      // parked and uses the live one.
      unpark_boot_vm(world);
@@ -11598,7 +12168,7 @@ index 8c13cb8e..60924d43 100644
      };
      // The character whose AddOn enable state gates which addons run.
      let identity = world
-@@ -482,9 +548,45 @@ pub(crate) fn load_ingame_ui_on_world_entry(world: &mut World) {
+@@ -482,9 +554,45 @@ pub(crate) fn load_ingame_ui_on_world_entry(world: &mut World) {
      } else {
          Default::default()
      };
@@ -11647,7 +12217,7 @@ index 8c13cb8e..60924d43 100644
          crate::ui_chat::commands::register_dev_commands(script, crate::run_mode::dev_affordances());
          // The new Minimap's zoom indices from the persisted CVars, as the reference's minimap reset
          // copies each CVar into its live index; `Minimap:SetZoom` owns them from here.
-@@ -503,7 +605,19 @@ pub(crate) fn load_ingame_ui_on_world_entry(world: &mut World) {
+@@ -503,7 +611,19 @@ pub(crate) fn load_ingame_ui_on_world_entry(world: &mut World) {
                  crate::ui_chat::restore_chat_looks(world, script);
              },
          );
@@ -11668,7 +12238,7 @@ index 8c13cb8e..60924d43 100644
      // The load's record goes to `Logs\FrameXML.log` (`0x490187`-`0x4901b6`), after any
      // `LoadAddOn` block the load ran; nothing reaches chat.
      script.finish_ui_load_log();
-@@ -1176,7 +1290,8 @@ mod tests {
+@@ -1176,7 +1296,8 @@ mod tests {
      /// `CooldownFrame_SetTimer` hides a cooldown whose start is not above 0.
      #[test]
      fn a_rebuilt_vm_inherits_the_running_gettime_clock() {
@@ -11694,10 +12264,40 @@ index 79567cc4..00490fce 100644
          return; // hermetic capture, or no state folder
      };
 diff --git a/crates/benilla-app/src/ui_script/manifest.rs b/crates/benilla-app/src/ui_script/manifest.rs
-index 5dc172ee..7b9257d6 100644
+index 5dc172ee..38a9c1ad 100644
 --- a/crates/benilla-app/src/ui_script/manifest.rs
 +++ b/crates/benilla-app/src/ui_script/manifest.rs
-@@ -287,6 +287,9 @@ fn load_layer(script: &UiScript) -> Vec<String> {
+@@ -243,15 +243,24 @@ pub(crate) fn default_bindings() -> Vec<benilla_ui::script::keybind::KeyBinding>
+             benilla_ui::script::keybind::parse_bindings_wtf(&String::from_utf8_lossy(&bytes))
+         }
+         None => {
+-            warn!(
+-                "ui_script: {} is not in the patch chain — every command ships unbound",
+-                reference_ui::DEFAULT_BINDINGS
+-            );
+-            Vec::new()
++            // Once per process: the binding store asks again on every VM.
++            static ONCE: std::sync::Once = std::sync::Once::new();
++            ONCE.call_once(|| {
++                warn!(
++                    "ui_script: {} is not in the patch chain — using built-in default bindings",
++                    reference_ui::DEFAULT_BINDINGS
++                );
++            });
++            benilla_ui::script::keybind::parse_bindings_wtf(BUILTIN_DEFAULT_BINDINGS)
+         }
+     }
+ }
+ 
++/// The stock 3.3.5a `WTF\DefaultBindings.wtf`'s keys, compiled in: a streamed slice (or an
++/// install) without the file left every command unbound, WASD and Enter included. Deviation: the
++/// reference ships no fallback, and a client missing the file has no keys.
++const BUILTIN_DEFAULT_BINDINGS: &str = include_str!("builtin_default_bindings.wtf");
++
+ /// The chain's `Bindings.xml` text, for the tests that hold benilla against it.
+ #[cfg(test)]
+ pub(crate) fn stock_bindings_file() -> Option<String> {
+@@ -287,6 +296,9 @@ fn load_layer(script: &UiScript) -> Vec<String> {
  /// reference keys `AddOns.txt` per character; `roster`, the realm's characters, decides an addon
  /// this one has no row for. `version_check` is the persisted `checkAddonVersion`, since this VM
  /// has no CVar table yet at load.
@@ -11707,7 +12307,7 @@ index 5dc172ee..7b9257d6 100644
  pub(crate) fn load_ingame_ui(
      script: &mut UiScript,
      identity: Option<&(String, String)>,
-@@ -304,22 +307,96 @@ pub(super) fn load_ingame_ui_with(
+@@ -304,22 +316,96 @@ pub(super) fn load_ingame_ui_with(
      version_check: bool,
      layer: bool,
  ) -> Vec<String> {
@@ -11819,10 +12419,23 @@ index 5dc172ee..7b9257d6 100644
  }
  
  #[cfg(test)]
-@@ -360,6 +437,23 @@ mod tests {
+@@ -360,6 +446,36 @@ mod tests {
          );
      }
  
++    /// With no `DefaultBindings.wtf` in the chain, the built-in table binds the movement and chat
++    /// keys rather than leaving every command unbound.
++    #[test]
++    fn a_chain_without_default_bindings_falls_back_to_the_built_in_table() {
++        let _chain = fixture::lay(&[(reference_ui::DEFAULT_BINDINGS, None)]);
++        let d = default_bindings();
++        let bound = |k: &str, c: &str| d.iter().any(|(key, cmd)| key == k && cmd == c);
++        assert!(bound("W", "MOVEFORWARD"));
++        assert!(bound("ENTER", "OPENCHAT"));
++        assert!(bound("BUTTON2", "TURNORACTION"));
++        assert!(bound("=", "ACTIONBUTTON12"));
++    }
++
 +    /// The browser's sliced load ([`IngameUiLoad`]) runs the same rows in the same order.
 +    #[test]
 +    fn the_sliced_core_load_is_the_one_shot_load_a_row_at_a_time() {
@@ -11844,7 +12457,7 @@ index 5dc172ee..7b9257d6 100644
      /// `.xml` running its own `<Script file=>` in place.
      #[test]
 diff --git a/crates/benilla-app/src/ui_script/mod.rs b/crates/benilla-app/src/ui_script/mod.rs
-index d1156053..3d27e98f 100644
+index d1156053..b90587bb 100644
 --- a/crates/benilla-app/src/ui_script/mod.rs
 +++ b/crates/benilla-app/src/ui_script/mod.rs
 @@ -13,6 +13,7 @@ use benilla_world::schedule::WorldStage;
@@ -11886,6 +12499,126 @@ index d1156053..3d27e98f 100644
              ui_now: 0.0,
          }
      }
+@@ -304,10 +309,38 @@ impl UiScaleCvar {
+     /// The dial as `kind`'s VM sees it: the game UI's parent alone takes the scale
+     /// (`CGGameUI::SetUIScale 0x513240` scales the frame at `[0xbd0778]`), so the glue screens
+     /// stay 768 units tall.
+-    pub(crate) fn for_vm(&self, kind: benilla_ui::script::VmKind) -> f32 {
+-        match kind {
+-            benilla_ui::script::VmKind::Glue => 1.0,
+-            _ => self.0,
++    ///
++    /// Deviation: the glue screens take the same scale. The reference keeps them 768 units tall
++    /// whatever the dial, which on a large browser window draws the login and character screens
++    /// (and Forever UI's glue) oversized next to the game's own scaled UI.
++    pub(crate) fn for_vm(&self, _kind: benilla_ui::script::VmKind) -> f32 {
++        self.0
++    }
++}
++
++/// The two CVars behind [`UiScaleCvar`]: `uiScale` counts only with `useUiScale` on, as in the
++/// reference; off, the OFF leg's value on the windows we ship against ([`DEFAULT_UI_SCALE`]).
++#[derive(Resource, Clone, Copy)]
++pub(crate) struct UiScaleDials {
++    pub(crate) ui_scale: f32,
++    pub(crate) use_ui_scale: bool,
++}
++
++impl Default for UiScaleDials {
++    fn default() -> Self {
++        Self {
++            ui_scale: DEFAULT_UI_SCALE,
++            use_ui_scale: false,
++        }
++    }
++}
++
++impl UiScaleDials {
++    pub(crate) fn effective(&self) -> f32 {
++        if self.use_ui_scale {
++            self.ui_scale
++        } else {
++            DEFAULT_UI_SCALE
+         }
+     }
+ }
+@@ -340,10 +373,26 @@ pub(crate) fn seam_scale(window_h: f32, ui_scale: f32) -> f32 {
+ pub(crate) struct UiScriptPlugin;
+ 
+ /// `uiScale`'s change callback: the dial's own `[0.5, 1.5]` clamp.
+-pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut scale: ResMut<UiScaleCvar>) {
++pub(crate) fn on_cvar(
++    ev: On<crate::cvars::CvarChanged>,
++    mut scale: ResMut<UiScaleCvar>,
++    dials: Option<ResMut<UiScaleDials>>,
++) {
++    let Some(mut dials) = dials else {
++        // No dials resource (a test app): the old reading, `uiScale` alone.
++        if ev.is("uiScale") {
++            scale.0 = ev.num().clamp(0.5, 1.5);
++        }
++        return;
++    };
+     if ev.is("uiScale") {
+-        scale.0 = ev.num().clamp(0.5, 1.5);
++        dials.ui_scale = ev.num().clamp(0.5, 1.5);
++    } else if ev.is("useUiScale") {
++        dials.use_ui_scale = ev.flag();
++    } else {
++        return;
+     }
++    scale.0 = dials.effective();
+ }
+ 
+ /// `/console reloadUI`: the same deferred rebuild `ReloadUI()` and `/reload` queue.
+@@ -365,6 +414,10 @@ impl Plugin for UiScriptPlugin {
+         // The quit root runs in `Last`: the close button's `AppExit` is written in `PostUpdate`.
+         crate::shutdown::on_app_exit(app, shutdown_on_exit.into_configs());
+         app.insert_resource(UiScaleCvar(default_ui_scale()))
++            .insert_resource(UiScaleDials {
++                ui_scale: default_ui_scale(),
++                use_ui_scale: std::env::var_os("WOW_UI_SCALE").is_some(),
++            })
+             .init_resource::<glue_mgr::GlueMgr>()
+             .init_resource::<UiFrameCost>()
+             .init_resource::<crate::bindings::WheelNotches>()
+@@ -1125,12 +1178,34 @@ mod seam_scale_tests {
+     use super::seam_scale;
+ 
+     #[test]
+-    fn the_glue_screens_ignore_the_ui_scale_dial() {
++    fn the_glue_screens_take_the_ui_scale_dial_too() {
++        // A deviation: the reference keeps the glue 768 units tall.
+         let dial = super::UiScaleCvar(0.9);
+-        assert_eq!(dial.for_vm(benilla_ui::script::VmKind::Glue), 1.0);
++        assert_eq!(dial.for_vm(benilla_ui::script::VmKind::Glue), 0.9);
+         assert_eq!(dial.for_vm(benilla_ui::script::VmKind::InGame), 0.9);
+     }
+ 
++    #[test]
++    fn ui_scale_counts_only_with_use_ui_scale_and_the_first_run_keeps_1080p_proportions() {
++        use crate::ui_script::{UiScaleCvar, UiScaleDials, DEFAULT_UI_SCALE};
++        let mut d = UiScaleDials {
++            ui_scale: 0.7,
++            use_ui_scale: false,
++        };
++        assert_eq!(d.effective(), DEFAULT_UI_SCALE, "off: the dial is not consulted");
++        d.use_ui_scale = true;
++        assert_eq!(d.effective(), 0.7);
++        use crate::cvars::first_run_ui_scale as f;
++        assert!((f(1080.0) - 0.9).abs() < 1e-6);
++        assert!((f(1250.0) - 0.7776).abs() < 1e-3, "the owner's 2000x1250 window");
++        assert_eq!(f(720.0), 1.0, "small windows: never above 1.0");
++        assert_eq!(f(4000.0), 0.64, "never below the slider's floor");
++        // Same px per UI unit at 1250 as at 1080 with 0.9: the 1080p proportions.
++        assert!((seam_scale(1250.0, f(1250.0)) - seam_scale(1080.0, 0.9)).abs() < 1e-3);
++        // The glue takes the scale too (a deviation).
++        assert_eq!(UiScaleCvar(0.8).for_vm(benilla_ui::script::VmKind::Glue), 0.8);
++    }
++
+     #[test]
+     fn seam_scale_is_the_768_base_times_the_dial() {
+         // Identity at the design height, proportional elsewhere.
 diff --git a/crates/benilla-app/src/ui_script/reference_ui.rs b/crates/benilla-app/src/ui_script/reference_ui.rs
 index 4e883954..c249cb82 100644
 --- a/crates/benilla-app/src/ui_script/reference_ui.rs
@@ -11934,6 +12667,41 @@ index c4a2f3ed..58f5a2de 100644
  
  use super::*;
  
+diff --git a/crates/benilla-app/src/ui_script/session.rs b/crates/benilla-app/src/ui_script/session.rs
+index 0142bb48..efa36376 100644
+--- a/crates/benilla-app/src/ui_script/session.rs
++++ b/crates/benilla-app/src/ui_script/session.rs
+@@ -160,6 +160,8 @@ mod tests {
+     /// `Local`s in VM-holding systems that are not memory about the VM, keyed
+     /// `(path under src/, parameter name)`.
+     const EXEMPT: &[(&str, &str)] = &[
++        // The last focus tile sent to the page: about the page's prefetch, not the VM.
++        ("startup_pace.rs", "last"),
+         // The glue instruments' own progress, which crosses the glue VM's swaps by design.
+         ("capture/glue_create.rs", "step"),
+         ("capture/realm_list.rs", "step"),
+diff --git a/crates/benilla-app/src/ui_script/world_entry_tests.rs b/crates/benilla-app/src/ui_script/world_entry_tests.rs
+index 74af25c7..1b093893 100644
+--- a/crates/benilla-app/src/ui_script/world_entry_tests.rs
++++ b/crates/benilla-app/src/ui_script/world_entry_tests.rs
+@@ -1358,14 +1358,15 @@ BindProbeSet = SetBinding(\"J\", \"TOGGLEWORLDMAP\")
+     let script = world
+         .get_non_send_resource::<benilla_ui::script::UiScript>()
+         .expect("VM");
+-    // The defaults are the install's `WTF\DefaultBindings.wtf`: none without one.
++    // The defaults are the install's `WTF\DefaultBindings.wtf`, else the built-in table: `M`
++    // either way.
+     assert_eq!(
+         script
+             .eval::<Option<String>>("BindProbeKey")
+             .ok()
+             .flatten()
+             .as_deref(),
+-        benilla_formats::wow_data().map(|_| "M"),
++        Some("M"),
+         "an addon's file scope must read the stock binding — `M` is TOGGLEWORLDMAP's own default"
+     );
+     assert_eq!(
 diff --git a/crates/benilla-app/src/ui_shapeshift.rs b/crates/benilla-app/src/ui_shapeshift.rs
 index b2c4d74b..84047ba4 100644
 --- a/crates/benilla-app/src/ui_shapeshift.rs
@@ -14632,6 +15400,35 @@ index c3976845..80318e02 100644
                  continue; // a missing or unreadable group is skipped
              };
              if let (Some(h), Some(nav)) =
+diff --git a/crates/benilla-assets/src/world_assets/mod.rs b/crates/benilla-assets/src/world_assets/mod.rs
+index 1cbbc2e0..8f15b07c 100644
+--- a/crates/benilla-assets/src/world_assets/mod.rs
++++ b/crates/benilla-assets/src/world_assets/mod.rs
+@@ -312,6 +312,24 @@ impl WorldAssets {
+     }
+ 
+     /// A clamp-sampled sRGB sprite, mip 0 only: the celestial discs and every UI quad.
++    /// Forget every cached UI sprite (plain, tiled, resampled, portrait) and its decoded pixels:
++    /// the glue screens' art would otherwise stay resident all session, each handle held by this
++    /// cache. What the in-game UI draws is decoded again on its first use. The minimap masks and
++    /// the generated sprites stay: they are the game's and cheap. Returns how many entries went.
++    pub fn drop_ui_sprites(&mut self) -> usize {
++        let n = self.sprites.len()
++            + self.tiled_sprites.len()
++            + self.resampled_sprites.len()
++            + self.resample_sources.len()
++            + self.portraits.len();
++        self.sprites = HashMap::new();
++        self.tiled_sprites = HashMap::new();
++        self.resampled_sprites = HashMap::new();
++        self.resample_sources = HashMap::new();
++        self.portraits = HashMap::new();
++        n
++    }
++
+     pub fn sprite_texture(
+         &mut self,
+         path: &str,
 diff --git a/crates/benilla-formats/Cargo.toml b/crates/benilla-formats/Cargo.toml
 index 0c92c546..560d5bf1 100644
 --- a/crates/benilla-formats/Cargo.toml
@@ -14981,10 +15778,10 @@ index 7f79ed01..ebfad336 100644
  
 diff --git a/crates/benilla-formats/src/web.rs b/crates/benilla-formats/src/web.rs
 new file mode 100644
-index 00000000..30eec2af
+index 00000000..5f5e12d3
 --- /dev/null
 +++ b/crates/benilla-formats/src/web.rs
-@@ -0,0 +1,335 @@
+@@ -0,0 +1,370 @@
 +//! Web-target chain plumbing: `wasm32-unknown-unknown` has no filesystem, so [`crate::Chain`]
 +//! answers every read/existence/listing question with an HTTP call against the Data URL scheme a
 +//! companion web host (`wenilla-host`, Lane H) serves — `GET {origin}/data/{encoded name}`,
@@ -15120,12 +15917,24 @@ index 00000000..30eec2af
 +// Fetch every URL at once into the store; resolves when all have landed (or failed).
 +export function prefetch_urls(urls) {
 +    const m = (globalThis.__wenilla_prefetch ??= new Map());
++    const inflight = (globalThis.__wenilla_inflight ??= new Map());
++    const failed = (globalThis.__wenilla_failed ??= new Set());
 +    return Promise.all(urls.map((u) => {
 +        const key = keyOf(u);
-+        if (m.has(key)) return null;
-+        return fetch(u).then((r) => (r.ok ? r.arrayBuffer() : null))
-+            .then((b) => { if (b) m.set(key, b); }, () => {});
++        if (m.has(key) || failed.has(key)) return null;
++        if (inflight.has(key)) return inflight.get(key);
++        const p = fetch(u).then((r) => (r.ok ? r.arrayBuffer() : null))
++            .then((b) => { if (b) m.set(key, b); else failed.add(key); }, () => failed.add(key))
++            .finally(() => inflight.delete(key));
++        inflight.set(key, p);
++        return p;
 +    }));
++}
++// Whether a read of `url` needs no request: its body is stored, or its fetch already failed.
++export function settled_in_store(url) {
++    const key = keyOf(url);
++    return !!((globalThis.__wenilla_prefetch && globalThis.__wenilla_prefetch.has(key))
++        || (globalThis.__wenilla_failed && globalThis.__wenilla_failed.has(key)));
 +}
 +export function now_ms() {
 +    return performance.now();
@@ -15140,6 +15949,7 @@ index 00000000..30eec2af
 +        fn sync_get(url: &str) -> Result<JsValue, JsValue>;
 +        fn now_ms() -> f64;
 +        fn prefetch_urls(urls: js_sys::Array) -> js_sys::Promise;
++        fn settled_in_store(url: &str) -> bool;
 +        fn slow(msg: &str);
 +    }
 +
@@ -15168,8 +15978,8 @@ index 00000000..30eec2af
 +
 +    /// Reads slower than this, and main-thread work between two reads longer than [`SLOW_GAP_MS`],
 +    /// are named on the console: the boot's slow spots, without a profiler.
-+    const SLOW_READ_MS: f64 = 100.0;
-+    const SLOW_GAP_MS: f64 = 250.0;
++    const SLOW_READ_MS: f64 = 1000.0;
++    const SLOW_GAP_MS: f64 = 1000.0;
 +
 +    thread_local! {
 +        static LAST: std::cell::RefCell<(f64, String)> = const {
@@ -15226,6 +16036,27 @@ index 00000000..30eec2af
 +            urls.push(&format!("{base}/{}", crate::web::encode_name(n)).into());
 +        }
 +        prefetch_urls(urls)
++    }
++
++    /// Whether every one of `names` (chain names) can be read with no round trip: each is stored,
++    /// or absent per the name index, or its fetch already failed. Starts the fetch of the rest, all
++    /// at once, so a caller that polls this once a frame waits about one round trip in all.
++    pub fn ready_or_prefetch(names: &[String]) -> bool {
++        let base = data_base();
++        let mut missing = Vec::new();
++        for n in names {
++            if crate::web::host_lacks(n) {
++                continue;
++            }
++            if !settled_in_store(&format!("{base}/{}", crate::web::encode_name(n))) {
++                missing.push(n.clone());
++            }
++        }
++        if missing.is_empty() {
++            return true;
++        }
++        let _ = prefetch_into_store(&missing);
++        false
 +    }
 +
 +    /// The page's body store's copy of `url`'s file, if it holds one: the async readers' first
@@ -15318,7 +16149,8 @@ index 00000000..30eec2af
 +
 +#[cfg(target_arch = "wasm32")]
 +pub use wasm::{
-+    data_base, exists_sync, fetch_sync, prefetch_into_store, read_stats, stored, trace, ReadStats,
++    data_base, exists_sync, fetch_sync, prefetch_into_store, read_stats, ready_or_prefetch, stored,
++    trace, ReadStats,
 +};
 diff --git a/crates/benilla-protocol/Cargo.toml b/crates/benilla-protocol/Cargo.toml
 index 7bc71d87..00544100 100644
@@ -18863,7 +19695,7 @@ index e2f3cfb0..83802b21 100644
  
  /// Fire a frame's `OnUpdate` with `arg1 = elapsed`.
 diff --git a/crates/benilla-ui/src/script/extract.rs b/crates/benilla-ui/src/script/extract.rs
-index 6fefdcc2..6d153998 100644
+index 6fefdcc2..7fdd8122 100644
 --- a/crates/benilla-ui/src/script/extract.rs
 +++ b/crates/benilla-ui/src/script/extract.rs
 @@ -264,6 +264,7 @@ fn extract_one(
@@ -18884,6 +19716,15 @@ index 6fefdcc2..6d153998 100644
                  }
              }
              // A title region never draws: `CreateTitleRegion 0x773910` builds a plain
+@@ -309,7 +313,7 @@ fn extract_one(
+             }
+             let mut data = data_ref.cloned().unwrap_or_default();
+             // One hop (region combine `0x772180`): the region's alpha times its owner's
+-            // `effective_alpha`, which `SetAlpha 0x76a690` already carries down the tree.
++            // `effective_alpha`, the product of its own and its ancestors' (`GetEffectiveAlpha`).
+             let alpha =
+                 owner_frame.map(|f| f.effective_alpha).unwrap_or(1.0) * data.alpha.unwrap_or(1.0);
+             if let Some(fo) = state_font {
 @@ -380,6 +384,13 @@ fn extract_one(
                  r.bottom += dy;
                  r.top += dy;
@@ -20604,6 +21445,32 @@ index 4972bee7..312e7bc6 100644
      // `HasScript(name)`: 1 if the widget can carry that script kind, else nil, whether or not one
      // is set. Answered from the flat `SCRIPT_KINDS`, so another type's kind reads 1 too, where the
      // reference's tables are per widget type (base `0x76a0d0`; a plain Frame has no `OnClick`).
+diff --git a/crates/benilla-ui/src/script/object/frame_state.rs b/crates/benilla-ui/src/script/object/frame_state.rs
+index 1f5c703d..7b85f49a 100644
+--- a/crates/benilla-ui/src/script/object/frame_state.rs
++++ b/crates/benilla-ui/src/script/object/frame_state.rs
+@@ -481,6 +481,21 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
+             Ok(model.arena.frame(h).map(|f| f.alpha).unwrap_or(1.0))
+         })?,
+     )?;
++    // GetEffectiveAlpha (`0x49f900`): the product of the frame's own alpha and its ancestors'.
++    m.set(
++        "GetEffectiveAlpha",
++        lua.create_function(|lua, this: Table| {
++            let h = frame_handle_of(lua, &this)?;
++            let model = lua
++                .app_data_ref::<crate::script::ModelCell>()
++                .expect("model");
++            Ok(model
++                .arena
++                .frame(h)
++                .map(|f| f.effective_alpha)
++                .unwrap_or(1.0))
++        })?,
++    )?;
+     // `SetBackdrop(table|nil)` (`0x7776e0` → `0x76a5d0`) installs or removes the tiled background
+     // and 8-piece border, both white until tinted; the two colour setters tint the background and
+     // the border respectively (`0x77f410`/`0x77f440`).
 diff --git a/crates/benilla-ui/src/script/object/protected.rs b/crates/benilla-ui/src/script/object/protected.rs
 new file mode 100644
 index 00000000..27b7a4d3
@@ -22765,9 +23632,20 @@ index ad223e63..12173ed5 100644
      }
  
 diff --git a/crates/benilla-ui/src/script/types.rs b/crates/benilla-ui/src/script/types.rs
-index fc704d89..e358563a 100644
+index fc704d89..03e31ae6 100644
 --- a/crates/benilla-ui/src/script/types.rs
 +++ b/crates/benilla-ui/src/script/types.rs
+@@ -355,8 +355,8 @@ impl Gradient {
+ pub(crate) struct RegionData {
+     /// `Show`/`Hide` and XML `hidden=`: a hidden region emits no quad, whatever its owner's state.
+     pub(crate) hidden: bool,
+-    /// `SetAlpha`, XML `alpha=`; `None` is 1. Drawn times the owner frame's alpha, one hop only:
+-    /// frame `SetAlpha` (`0x76a690`) cascades to child frames and only invalidates regions.
++    /// `SetAlpha`, XML `alpha=`; `None` is 1. Drawn times the owner frame's effective alpha, the
++    /// product down its parent chain (`GetEffectiveAlpha`).
+     ///
+     /// Deviation: kept apart from [`Self::vertex_color`], which the reference's `Texture:SetAlpha`
+     /// (`0x79b580`) rewrites, because the drawn product differs only on a region that sets both,
 @@ -410,8 +410,22 @@ pub(crate) struct RegionData {
      /// `0x79c080`). Stored, not applied: there a set flag makes `SetTexCoord` re-derive the rect
      /// from the UV quad (`0x770462`); no stock or corpus code sets it.
@@ -23805,7 +24683,7 @@ index a428d54a..53460702 100644
              state: ButtonVisualState::Normal,
          }
 diff --git a/crates/benilla-ui/src/widget/mod.rs b/crates/benilla-ui/src/widget/mod.rs
-index bb486a2f..2fced697 100644
+index bb486a2f..fa9f0fdb 100644
 --- a/crates/benilla-ui/src/widget/mod.rs
 +++ b/crates/benilla-ui/src/widget/mod.rs
 @@ -205,6 +205,9 @@ pub struct Frame {
@@ -23818,6 +24696,18 @@ index bb486a2f..2fced697 100644
      /// This frame's own scale (`ownScale +0xb8`, default 1.0).
      pub scale: f32,
      /// `layoutScale` = `parentEffective * ownScale`, ε-gated (`0x76ac90`).
+@@ -453,9 +456,9 @@ impl WidgetArena {
+ 
+         let shown = true;
+         let scale = 1.0f32;
+-        // 1.0 whatever the parent's: only `SetAlpha` pushes alpha down the tree.
++        // Its own alpha starts at 1.0; what draws is the product with the parent's.
+         let alpha = 1.0f32;
+-        let effective_alpha = alpha;
++        let effective_alpha = parent.map_or(1.0, |p| self.frame(p).unwrap().effective_alpha) * alpha;
+ 
+         let frame = Frame {
+             disabled_layers: 0,
 @@ -496,6 +499,7 @@ impl WidgetArena {
              max_resize: (0.0, 0.0),
              user_placed: false,
@@ -23826,6 +24716,117 @@ index bb486a2f..2fced697 100644
              scale,
              effective_scale: parent_scale * scale,
              ignore_parent_scale: false,
+diff --git a/crates/benilla-ui/src/widget/propagation.rs b/crates/benilla-ui/src/widget/propagation.rs
+index d36bfb17..5a604e2c 100644
+--- a/crates/benilla-ui/src/widget/propagation.rs
++++ b/crates/benilla-ui/src/widget/propagation.rs
+@@ -192,8 +192,10 @@ impl WidgetArena {
+ 
+     // ── Alpha ────────────────────────────────────────────────────────────────────────────────────
+ 
+-    /// `SetAlpha` (`0x76a690`): write the raw value to `h` and every descendant frame (`+0xc8`),
+-    /// with no draw-time product, so a child's own later `SetAlpha` holds until an ancestor's next.
++    /// `SetAlpha` (Frame map `0xac1550`, `0x49f9e0`): the frame's own alpha; what draws is the
++    /// product down the parent chain, which `GetEffectiveAlpha` (`0x49f900`) answers. 1.12 wrote
++    /// the raw value into every descendant instead; 3.3.5a keeps each frame's own, so a child an
++    /// addon hid with `SetAlpha(0)` stays hidden through its parent's fade.
+     /// Every draw target `set_alpha` on `h` reaches: `h`, its descendants, and their regions.
+     pub fn subtree_targets(&self, h: FrameHandle) -> Vec<crate::order::ZTarget> {
+         let mut out = Vec::new();
+@@ -215,10 +217,27 @@ impl WidgetArena {
+     pub fn set_alpha(&mut self, h: FrameHandle, alpha: f32) {
+         let Some(f) = self.frame_mut(h) else { return };
+         f.alpha = alpha;
+-        f.effective_alpha = alpha;
+-        let children = self.frame(h).expect("just wrote it").children.clone();
++        let pa = self.parent_effective_alpha(h);
++        self.propagate_alpha(h, pa);
++    }
++
++    /// Recompute `effective_alpha = parent's * own` down the subtree from `h`.
++    fn propagate_alpha(&mut self, h: FrameHandle, parent_alpha: f32) {
++        let (own, children) = {
++            let f = self.frame(h).expect("live node in propagation");
++            (f.alpha, f.children.clone())
++        };
++        let eff = parent_alpha * own;
++        self.frame_mut(h).unwrap().effective_alpha = eff;
+         for c in children {
+-            self.set_alpha(c, alpha);
++            self.propagate_alpha(c, eff);
++        }
++    }
++
++    fn parent_effective_alpha(&self, h: FrameHandle) -> f32 {
++        match self.frame(h).and_then(|f| f.parent) {
++            Some(p) => self.frame(p).map_or(1.0, |pf| pf.effective_alpha),
++            None => 1.0,
+         }
+     }
+ 
+@@ -256,7 +275,8 @@ impl WidgetArena {
+     /// Phase 2 of `SetParent` (`0x4911b0`): relink, strata := the parent's (MEDIUM for none),
+     /// level := the parent's + 1 (0 for none) with its same-strata subtree shifted along
+     /// (`0x491232`/`0x4912b1` push propagate 1 to `0x4910a0`), scale re-inherited, then the show
+-    /// half, returning the frames that became visible; alpha is untouched. The show half runs for
++    /// half, returning the frames that became visible; the own alpha is kept and its product
++    /// re-taken under the new parent. The show half runs for
+     /// a shown frame whose new parent is visible or absent, so a frame moved out of a hidden
+     /// parent shows with its new one, as the stock quest log's detail pane relies on.
+     pub fn reparent_finish(
+@@ -294,6 +314,8 @@ impl WidgetArena {
+         self.set_frame_level(h, plevel, true);
+         let ps = self.parent_effective_scale(h);
+         self.propagate_scale(h, ps);
++        let pa = self.parent_effective_alpha(h);
++        self.propagate_alpha(h, pa);
+ 
+         if self.frame(h).is_some_and(|f| f.shown) && self.parent_visible(h) {
+             self.propagate_visible(h, true, &mut shown);
+diff --git a/crates/benilla-ui/src/widget/tests.rs b/crates/benilla-ui/src/widget/tests.rs
+index 523d2e8d..1fbaf31e 100644
+--- a/crates/benilla-ui/src/widget/tests.rs
++++ b/crates/benilla-ui/src/widget/tests.rs
+@@ -236,23 +236,31 @@ fn generational_handle_detects_reuse() {
+ // ── Alpha ────────────────────────────────────────────────────────────────────────────────────
+ 
+ #[test]
+-fn set_alpha_overwrites_the_subtree() {
++fn set_alpha_is_own_and_multiplies_down_the_subtree() {
+     let mut a = arena();
+     let root = a.create(FrameKind::Frame, None, None);
+     let child = a.create(FrameKind::Frame, None, Some(root));
+     let grandchild = a.create(FrameKind::Frame, None, Some(child));
+     a.set_alpha(root, 0.5);
+     for h in [root, child, grandchild] {
+-        assert_eq!(a.frame(h).unwrap().alpha, 0.5);
+         assert_eq!(a.frame(h).unwrap().effective_alpha, 0.5);
+     }
+-    // Last write wins: the child's own SetAlpha holds until the parent sets again.
+-    a.set_alpha(child, 1.0);
+-    assert_eq!(a.frame(root).unwrap().effective_alpha, 0.5);
+-    assert_eq!(a.frame(child).unwrap().effective_alpha, 1.0);
+-    assert_eq!(a.frame(grandchild).unwrap().effective_alpha, 1.0);
+-    // A frame created under a dimmed parent starts at 1.0.
++    assert_eq!(a.frame(child).unwrap().alpha, 1.0, "a child keeps its own");
++    // A child hidden by its own SetAlpha(0) stays hidden through its parent's fade.
++    a.set_alpha(child, 0.0);
++    a.set_alpha(root, 1.0);
++    assert_eq!(a.frame(root).unwrap().effective_alpha, 1.0);
++    assert_eq!(a.frame(child).unwrap().effective_alpha, 0.0);
++    assert_eq!(a.frame(grandchild).unwrap().effective_alpha, 0.0);
++    a.set_alpha(child, 0.5);
++    a.set_alpha(root, 0.5);
++    assert_eq!(a.frame(grandchild).unwrap().effective_alpha, 0.25);
++    // A frame created under a dimmed parent draws dimmed, its own alpha 1.
+     let late = a.create(FrameKind::Frame, None, Some(root));
++    assert_eq!(a.frame(late).unwrap().alpha, 1.0);
++    assert_eq!(a.frame(late).unwrap().effective_alpha, 0.5);
++    // Reparenting re-takes the product.
++    a.set_parent(late, None);
+     assert_eq!(a.frame(late).unwrap().effective_alpha, 1.0);
+ }
+ 
 diff --git a/crates/benilla-world/Cargo.toml b/crates/benilla-world/Cargo.toml
 index 4c2a0dba..f396c26b 100644
 --- a/crates/benilla-world/Cargo.toml
@@ -25041,7 +26042,7 @@ index 70edfa15..7d0edf29 100644
  
  /// One diverted batch, kept after its cell bakes so an unload or a later admission can re-bake.
 diff --git a/crates/benilla-world/src/terrain_stream.rs b/crates/benilla-world/src/terrain_stream.rs
-index e2e4d769..23ea86bd 100644
+index e2e4d769..58cc482f 100644
 --- a/crates/benilla-world/src/terrain_stream.rs
 +++ b/crates/benilla-world/src/terrain_stream.rs
 @@ -3,7 +3,8 @@
@@ -25054,6 +26055,98 @@ index e2e4d769..23ea86bd 100644
  
  use benilla_assets::coords::{bevy_to_wow, placement_rotation, wow_to_bevy};
  use benilla_assets::{AdtTile, M2Model, WdtIndex, WmoModel};
+@@ -110,6 +111,9 @@ struct TileState {
+     next_cell: usize,
+     /// Every cell is up: the residency bit the loading screen counts.
+     furnished: bool,
++    /// The ADT failed to load (not on the host, or unparsable): resolved as empty ground, so a
++    /// streamed slice missing a tile never holds the loading screen up.
++    failed: bool,
+     /// The uniqueIds of the placements this tile references, released when it unloads.
+     placements: Vec<u32>,
+     liquid: Vec<Entity>,
+@@ -686,6 +690,7 @@ fn stream_terrain(
+                     material: None,
+                     next_cell: 0,
+                     furnished: false,
++                    failed: false,
+                     placements: Vec::new(),
+                     liquid: Vec::new(),
+                     wall: None,
+@@ -796,13 +801,19 @@ fn stream_terrain(
+         }
+     }
+ 
++    // A tile whose ADT failed is empty ground, resolved: it counts as furnished, once, named.
++    for (tx, ty) in resolve_failed_tiles(&mut state.tiles, |h| {
++        asset_server.load_state(h.id()).is_failed()
++    }) {
++        warn!("terrain: tile {dir}_{tx}_{ty}.adt failed to load — streamed as empty ground");
++    }
+     // Publish residency; the pacing edge is read and advanced once per frame.
+     state.settled = stale_empty
+         && fresh_empty
+         && state
+             .tiles
+             .values()
+-            .all(|t| t.entity.is_some() && t.furnished);
++            .all(|t| (t.entity.is_some() || t.failed) && t.furnished);
+     let was_paced = std::mem::replace(&mut state.was_paced, focus.paced);
+     if let Some(p) = load_progress.as_mut() {
+         p.focus_tile = Some((cx, cy));
+@@ -1312,11 +1323,44 @@ mod focus_tests {
+     }
+ }
+ 
++/// Mark every unfurnished tile whose ADT `failed` as resolved empty ground; the tiles marked.
++fn resolve_failed_tiles(
++    tiles: &mut HashMap<(i32, i32), TileState>,
++    failed: impl Fn(&Handle<AdtTile>) -> bool,
++) -> Vec<(i32, i32)> {
++    let mut out = Vec::new();
++    for (&c, tile) in tiles.iter_mut() {
++        if !tile.furnished && failed(&tile.handle) {
++            tile.furnished = true;
++            tile.failed = true;
++            out.push(c);
++        }
++    }
++    out
++}
++
+ #[cfg(test)]
+ mod straddler_tests {
+     use super::*;
+     use bevy::ecs::system::RunSystemOnce;
+ 
++    /// An ADT the host lacks (a slice missing a tile) resolves as empty ground: furnished, so the
++    /// residency the loading screen waits on completes instead of hanging at 0/4.
++    #[test]
++    fn an_absent_adt_resolves_as_empty_ground() {
++        let mut tiles: HashMap<(i32, i32), TileState> = HashMap::new();
++        tiles.insert((30, 20), tile_listing(&[]));
++        tiles.insert((31, 20), tile_listing(&[]));
++        let marked = resolve_failed_tiles(&mut tiles, |_| true);
++        assert_eq!(marked.len(), 2);
++        assert!(tiles.values().all(|t| t.furnished && t.failed));
++        assert!(resolve_failed_tiles(&mut tiles, |_| true).is_empty(), "once");
++        let mut ok: HashMap<(i32, i32), TileState> = HashMap::new();
++        ok.insert((1, 1), tile_listing(&[]));
++        assert!(resolve_failed_tiles(&mut ok, |_| false).is_empty());
++        assert!(!ok[&(1, 1)].furnished);
++    }
++
+     fn tile_listing(uids: &[u32]) -> TileState {
+         TileState {
+             handle: Default::default(),
+@@ -1324,6 +1368,7 @@ mod straddler_tests {
+             material: None,
+             next_cell: 0,
+             furnished: false,
++            failed: false,
+             placements: uids.to_vec(),
+             liquid: Vec::new(),
+             wall: None,
 diff --git a/crates/benilla-world/src/terrain_stream/collider.rs b/crates/benilla-world/src/terrain_stream/collider.rs
 index 62bed189..e8af8ebf 100644
 --- a/crates/benilla-world/src/terrain_stream/collider.rs
@@ -25271,7 +26364,7 @@ index 17b04ebc..4bbcaff8 100644
  use benilla_assets::{chunks_to_mesh, AdtTile};
  use bevy::camera::primitives::MeshAabb;
 diff --git a/crates/benilla-world/src/terrain_stream/merge.rs b/crates/benilla-world/src/terrain_stream/merge.rs
-index 5233dae1..822f1b9d 100644
+index 5233dae1..87930243 100644
 --- a/crates/benilla-world/src/terrain_stream/merge.rs
 +++ b/crates/benilla-world/src/terrain_stream/merge.rs
 @@ -34,9 +34,11 @@ use crate::wmo_portal::WmoGroupVis;
@@ -25326,6 +26419,14 @@ index 5233dae1..822f1b9d 100644
                      });
                  if let Some(slot) = slot {
                      acc.slots.push(u32::from(*slot));
+@@ -661,6 +673,7 @@ mod tests {
+             material: None,
+             next_cell: 0,
+             furnished: false,
++            failed: false,
+             placements: Vec::new(),
+             liquid: Vec::new(),
+             wall: None,
 diff --git a/crates/benilla-world/src/terrain_stream/spawn/mod.rs b/crates/benilla-world/src/terrain_stream/spawn/mod.rs
 index 7f1cfaa1..ef00d1bb 100644
 --- a/crates/benilla-world/src/terrain_stream/spawn/mod.rs
@@ -25378,6 +26479,18 @@ index 7f1cfaa1..ef00d1bb 100644
                              // The ground tile is still decoding: wait, rather than bake the lit
                              // fallback into a straddling tree whose tile lands a frame later.
                              ShadeResolve::Pending => continue,
+diff --git a/crates/benilla-world/src/terrain_stream/weld.rs b/crates/benilla-world/src/terrain_stream/weld.rs
+index 8e9883b9..377adc59 100644
+--- a/crates/benilla-world/src/terrain_stream/weld.rs
++++ b/crates/benilla-world/src/terrain_stream/weld.rs
+@@ -193,6 +193,7 @@ mod tests {
+             material: None,
+             next_cell: 0,
+             furnished: false,
++            failed: false,
+             placements: Vec::new(),
+             liquid: Vec::new(),
+             wall: None,
 diff --git a/crates/benilla-world/src/terrain_stream/window.rs b/crates/benilla-world/src/terrain_stream/window.rs
 index b27810fd..04d1c756 100644
 --- a/crates/benilla-world/src/terrain_stream/window.rs
@@ -39237,10 +40350,10 @@ index 00000000..3d84ae8f
 \ No newline at end of file
 diff --git a/web/boot.js b/web/boot.js
 new file mode 100644
-index 00000000..f737ea24
+index 00000000..1eee5a88
 --- /dev/null
 +++ b/web/boot.js
-@@ -0,0 +1,650 @@
+@@ -0,0 +1,739 @@
 +// boot.js — the pre-login loading experience, shared by the dev page (web/index.html) and the
 +// realm page (crates/wenilla-realm/templates/play.html).
 +//
@@ -39316,6 +40429,7 @@ index 00000000..f737ea24
 +      prefetch.then(() => mark('boot data prefetched')),
 +    ]);
 +    w = await init({ module_or_path: module });
++    window.__wenilla_wasm = w;
 +    mark('client instantiated');
 +  } catch (e) {
 +    ui.fail('The client failed to start: ' + (e && e.message ? e.message : e));
@@ -39713,6 +40827,82 @@ index 00000000..f737ea24
 +}
 +
 +/// One boot milestone on the console, in ms since the page started (`performance.now()`).
++/// "Disconnected — reconnecting…" over the canvas while the client retries the page's sign-in:
++/// `secs` until the next attempt, -1 while one runs, `null` to take it down. Its button reloads the
++/// page, a fresh sign-in.
++let reconnectEl = null;
++let reconnectTimer = null;
++function reconnectOverlay(secs) {
++  if (typeof document === 'undefined') return;
++  clearInterval(reconnectTimer);
++  if (secs === null) {
++    if (reconnectEl) reconnectEl.remove();
++    reconnectEl = null;
++    return;
++  }
++  if (!reconnectEl) {
++    reconnectEl = document.createElement('div');
++    reconnectEl.setAttribute('role', 'status');
++    reconnectEl.style.cssText =
++      'position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;' +
++      'gap:14px;background:rgba(0,0,0,.82);color:#f4e2b0;font:600 18px/1.4 system-ui,sans-serif;z-index:2147483000';
++    const line = document.createElement('div');
++    const btn = document.createElement('button');
++    btn.textContent = 'Reconnect';
++    btn.style.cssText = 'font:600 15px system-ui,sans-serif;padding:8px 20px;border-radius:6px;' +
++      'border:1px solid #c9a24a;background:#2a1c08;color:#f4e2b0;cursor:pointer';
++    btn.onclick = () => location.reload();
++    reconnectEl.append(line, btn);
++    document.body.appendChild(reconnectEl);
++  }
++  const line = reconnectEl.firstChild;
++  let left = secs;
++  const paint = () => {
++    line.textContent = left < 0 ? 'Disconnected — reconnecting…'
++      : `Disconnected — reconnecting in ${left} s…`;
++  };
++  paint();
++  if (left > 0) reconnectTimer = setInterval(() => { left = Math.max(0, left - 1); paint(); }, 1000);
++}
++
++/// The page's memory, for the owner's memory pass: the JS heap (Chrome's `performance.memory`),
++/// the wasm linear memory (it grows and never shrinks, so the numbers after a free show headroom
++/// reused, not a smaller buffer), and the body store. Also `window.__wenilla_mem()`.
++function memoryNow() {
++  const mb = (b) => Math.round((b / 1048576) * 10) / 10;
++  let store = 0;
++  for (const v of (globalThis.__wenilla_prefetch || new Map()).values()) store += v.byteLength || 0;
++  const heap = performance.memory ? mb(performance.memory.usedJSHeapSize) : null;
++  const wasm = window.__wenilla_wasm && window.__wenilla_wasm.memory
++    ? mb(window.__wenilla_wasm.memory.buffer.byteLength)
++    : null;
++  return { jsHeapMB: heap, wasmMB: wasm, storeMB: mb(store) };
++}
++if (typeof window !== 'undefined') window.__wenilla_mem = memoryNow;
++function logMemory(when) {
++  try {
++    const m = memoryNow();
++    console.log(`boot: memory ${when}: JS heap ${m.jsHeapMB ?? '?'} MB, wasm ${m.wasmMB ?? '?'} MB, body store ${m.storeMB} MB`);
++  } catch (_) {
++    /* no numbers */
++  }
++}
++
++/// In the world, the glue screens' files leave the body store: nothing reads them until a logout,
++/// which fetches them again (the HTTP cache usually has them).
++function dropGlueBodies() {
++  const m = globalThis.__wenilla_prefetch;
++  if (!m) return;
++  let n = 0;
++  for (const k of [...m.keys()]) {
++    if (/^interface\\(gluexml|glues)\\/.test(k) || /^interface\\addons\\[^\\]+\\glue/.test(k)) {
++      m.delete(k);
++      n++;
++    }
++  }
++  if (n) console.log(`boot: ${n} glue-screen files released from the body store`);
++}
++
 +/// Keys reach the client only through the canvas's own listeners (winit), so the canvas takes
 +/// focus when the overlay goes and at the first world frame: with the page signing the player in,
 +/// nothing else had put it there. A page control the player is typing in keeps it.
@@ -39745,6 +40935,7 @@ index 00000000..f737ea24
 +    if (stage === 'startup') ui.setStage('Loading interface…');
 +    else if (stage === 'ready') {
 +      mark('ready (first glue screen)');
++      logMemory('first glue screen');
 +      window.__wenilla_phase = 'glue';
 +      ui.hide();
 +      focusCanvas();
@@ -39762,19 +40953,30 @@ index 00000000..f737ea24
 +            prefetchWorld().catch(() => {});
 +          });
 +      }
++    } else if (typeof stage === 'string' && stage.startsWith('reconnect:')) {
++      reconnectOverlay(Number(stage.slice(10)) || 0);
++    } else if (stage === 'reconnecting') {
++      reconnectOverlay(-1);
 +    } else if (typeof stage === 'string' && stage.startsWith('focus:')) {
++      reconnectOverlay(null);
 +      WORLD.focus = stage.slice(6);
 +      // After the interface prefetch, which the world entry reads synchronously; retargeted on
 +      // each new selection.
 +      if (WORLD.uiDone && !skipPrefetch) prefetchWorld().catch(() => {});
 +    } else if (stage === 'enter') {
++      reconnectOverlay(null);
 +      mark('world session started');
++      logMemory('character select, at Enter World');
 +      window.__wenilla_phase = 'enter';
 +      if (UI_BOOST.add) UI_BOOST.add(UI_PREFETCH_CONCURRENCY);
 +    } else if (stage === 'world') {
 +      mark('first world frame');
 +      window.__wenilla_phase = 'world';
 +      focusCanvas();
++      logMemory('entering the world');
++      dropGlueBodies();
++      // Settled numbers, once the entry's own transients are gone.
++      setTimeout(() => logMemory('in world (+20 s)'), 20000);
 +    }
 +  };
 +  // The reads no store answered, as a manifest (`{"names": [...]}`, first-need order, one entry

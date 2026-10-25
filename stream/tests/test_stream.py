@@ -81,7 +81,7 @@ def check(name, cond, extra=""):
 
 # --- /wrath/play signed out
 st, h, b = get("/wrath")
-check("signed out /wrath: straight to sign-in", st in (302, 303) and "/login?next=%2Fwrath" in (h.get("location") or ""))
+check("signed out /wrath: saved-key sign-in page", st == 200 and b"AUTO" not in b and b"/auth/key" in b and "connect-src 'self'" in (h.get("content-security-policy") or h.get("Content-Security-Policy") or ""))
 st, h, b = get("/wrath/play?mini=mini")
 check("signed out: sign-in page", st == 200 and b"Sign in with Google" in b)
 check("signed out: no realm mark", not any(c.startswith("ovstream") for c in soap["commands"]))
@@ -132,7 +132,9 @@ st, h, b = get("/__env.js", cookie=f"wu_play={sid}")
 txt = b.decode()
 check("env: 200 js", st == 200 and h["content-type"].startswith("application/javascript"))
 check("env: global name the client reads", txt.startswith("window.__wenilla_env = "))
-env = json.loads(txt[len("window.__wenilla_env = "):].rstrip().rstrip(";"))
+env = json.loads(txt.split("\n")[0][len("window.__wenilla_env = "):].rstrip(";"))
+check("env: Forever UI on by default", env.get("foreverui") == "1")
+check("env: ?foreverui= on the page is copied over the env (the env outranks the query)", "get('foreverui')" in txt and "e.foreverui=v" in txt)
 check("env: user/pass/host", env["user"] == "WR000123" and env["pass"] == "Pa55word1234abcd" and env["host"] == "play.openvanilla.app", env)
 check("env: no dev_query_creds", "dev_query_creds" not in env)
 check("env: no-store + same-origin", h.get("cache-control") == "no-store" and h.get("cross-origin-resource-policy") == "same-origin")
@@ -154,6 +156,8 @@ st, h, b = get("/wrath", cookie="wr_session=good")
 check("off: no Play-in-browser button", b"/wrath/play?mini=mini" not in b)
 os.environ["WU_STREAM"] = "1"
 st, h, b = get("/wrath", cookie="wr_session=good")
+check("on: /wrath (Play now) goes straight into the game", st in (302, 303) and (h.get("location") or h.get("Location") or "") == "/wrath/play?mini=mini", str(st))
+st, h, b = get("/wrath/account", cookie="wr_session=good")
 check("on: account page shows the button + Discord line", b"/wrath/play?mini=mini" in b and b"discord.gg/hVeUxYwbkr" in b)
 
 # --- the realm does not confirm the mark: no session
@@ -171,10 +175,12 @@ st, h, b = get("/__auth", cookie=f"wu_play={sid}", headers={"X-Forwarded-Uri": "
 check("end: the session is gone", st == 302)
 
 # --- rate limit on the gate
-codes = [get("/__gate?code=x", ip="10.9.9.9")[0] for _ in range(25)]
-check("gate rate limit", codes.count(429) == 5, codes)
-plays = [get("/wrath/play?mini=mini", ip="10.9.9.8")[0] for _ in range(12)]
-check("play rate limit", plays.count(429) == 2, plays)
+codes = [get("/__gate?code=x", ip="10.9.9.9")[0] for _ in range(65)]
+check("gate rate limit (60 a minute per address)", codes.count(429) == 5, codes)
+plays = [get("/wrath/play?mini=mini", ip="10.9.9.8") for _ in range(32)]
+check("play rate limit (30 a minute per address)", [p[0] for p in plays].count(429) == 2, [p[0] for p in plays])
+busy = plays[-1][2]
+check("a 429 page retries by itself, no script", b'http-equiv="refresh"' in busy and b"<script" not in busy and b"Trying again" in busy)
 
 # --- per-user session cap
 for _ in range(5):
@@ -187,7 +193,7 @@ check("own: no button while WU_OWNFILES is not 1", b"/wrath/play?mode=own" not i
 st, h, b = get("/wrath/play?mode=own", cookie="wr_session=good", ip="10.1.0.1")
 check("own: refused while WU_OWNFILES is not 1", st == 404)
 os.environ["WU_OWNFILES"] = "1"
-st, h, b = get("/wrath", cookie="wr_session=good")
+st, h, b = get("/wrath/account", cookie="wr_session=good")
 check("own: realm list shows both ways to play", b"<h2>Dalaran</h2>" in b and b"Play in the browser with my game folder" in b
       and b"/wrath/play?mode=own" in b and b"/wrath/play?mini=mini" in b)
 st, h, b = get("/wrath/play?mode=own", ip="10.1.0.1")
@@ -243,7 +249,7 @@ soap["reply"] = "ovstream ok"
 del os.environ["WU_OWNFILES"]
 
 # --- the existing page still works unchanged
-st, h, b = get("/wrath", cookie="wr_session=good")
+st, h, b = get("/wrath/account", cookie="wr_session=good")
 check("/wrath account page still shows the login", st == 200 and b"WR000123" in b)
 
 print(f"\n{count - fails}/{count} passed")

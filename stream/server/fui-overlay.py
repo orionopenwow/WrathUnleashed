@@ -37,6 +37,9 @@ MARK_STOCK = "# the slice's own tier 0"
 WWW_KEY = "foreverui_overlay"
 TOC_REL = ("Interface", "GlueXML", "GlueXML.toc")
 GLUE_ENTRY = "ForeverUIGlue.xml"
+# WrathUnleashed (fui-glue): extra glue files listed right after GLUE_ENTRY when the overlay has
+# them (stream\fui-web, copied in by "Add Forever UI to the stream.bat"). Not Forever UI's own.
+GLUE_EXTRA = ("ForeverUIGlueWeb.xml",)
 TEXT_EXT = (".toc", ".lua", ".xml")
 # Login-screen art fetched with the boot set, smallest first (one round trip saved per file).
 BOOT_ART_BUDGET = 8 * 1024 * 1024
@@ -134,25 +137,33 @@ def write_atomic(path, data, like=None):
     os.replace(tmp, path)
 
 
-def patched_toc(stock: bytes) -> bytes:
-    """The stock GlueXML.toc with Forever UI's one entry, before the always-last localisation file."""
+def patched_toc(stock: bytes, extra=()) -> bytes:
+    """The stock GlueXML.toc with Forever UI's one entry (and the WrathUnleashed `extra` entries
+    right after it), before the always-last localisation file."""
     text = stock.decode("latin-1")
     nl = "\r\n" if "\r\n" in text else "\n"
     lines = text.split(nl)
-    if any(l.strip().lower() == GLUE_ENTRY.lower() for l in lines):
-        return stock
+    low = [l.strip().lower() for l in lines]
+    if GLUE_ENTRY.lower() in low:
+        at = low.index(GLUE_ENTRY.lower()) + 1
+        missing = [e for e in extra if e.lower() not in low]
+        if not missing:
+            return stock
+        lines[at:at] = missing
+        return nl.join(lines).encode("latin-1")
     at = None
     for i, l in enumerate(lines):
         s = l.strip().lower()
         if s.startswith("## this always runs last") or s == "gluelocalizationpost.xml":
             at = i
             break
+    entries = [GLUE_ENTRY] + [e for e in extra if e.lower() not in low]
     if at is None:
         while lines and lines[-1] == "":
             lines.pop()
-        lines += [GLUE_ENTRY, ""]
+        lines += entries + [""]
     else:
-        lines[at:at] = [GLUE_ENTRY, ""]
+        lines[at:at] = entries + [""]
     return nl.join(lines).encode("latin-1")
 
 
@@ -243,17 +254,18 @@ def apply_slice(overlay, slice_dir):
             made_dirs.append(chain_name(slice_dir, nxt))
         gx = nxt
     toc = child(gx, TOC_REL[-1])
+    extra = [e for e in GLUE_EXTRA if f"interface\\gluexml\\{e.lower()}" in names_low]
     if toc is not None:
         stock = open(toc, "rb").read()
         bk = os.path.join(st, "backup", chain_name(slice_dir, toc).replace("\\", os.sep))
         os.makedirs(os.path.dirname(bk), exist_ok=True)
         write_atomic(bk, stock, like=toc)
-        new = patched_toc(stock)
+        new = patched_toc(stock, extra)
         write_atomic(toc, new, like=toc)
-        toc_note = "patched from the slice's stock copy (kept)"
+        toc_note = "patched from the slice's stock copy (kept)" + (f", + {', '.join(extra)}" if extra else "")
     elif toc_src is not None:
         toc = os.path.join(gx, TOC_REL[-1])
-        shutil.copyfile(toc_src, toc)
+        write_atomic(toc, patched_toc(open(toc_src, "rb").read(), extra))
         os.chmod(toc, 0o644)
         added.append((chain_name(slice_dir, toc), os.path.getsize(toc)))
         toc_note = "the slice had none: Forever UI's own copy"

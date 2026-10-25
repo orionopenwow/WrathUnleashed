@@ -133,6 +133,16 @@ select.st-done { color: var(--ok); } select.st-doing { color: var(--warn); } sel
 .switches { display: flex; flex-direction: column; gap: 8px; }
 .sw { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel2); }
 
+/* bug reports */
+.reps { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.rep { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; background: var(--panel2); display: flex; flex-direction: column; gap: 6px; }
+.rep.new { border-left: 3px solid var(--warn); }
+.rep-h, .rep-f { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.rep-t { white-space: pre-wrap; overflow-wrap: anywhere; }
+.rep .tele { background: #090c10; border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; user-select: all; overflow-wrap: anywhere; }
+.rep select.st-new { color: var(--warn); } .rep select.st-fixed { color: var(--ok); } .rep select.st-wontfix { color: var(--dim); }
+.offscreen { position: fixed; left: -9999px; top: 0; }
+
 /* modal and toasts */
 .modal-back { position: fixed; inset: 0; background: #000a; display: flex; align-items: center; justify-content: center; z-index: 20; padding: 16px; }
 .modal { background: var(--panel); border: 1px solid var(--line2); border-radius: 10px; padding: 16px; width: 420px; max-width: 100%; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 20px 50px #0008; }

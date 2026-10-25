@@ -20,6 +20,10 @@ It does its work with the server's own tools:
 Every action is written to /srv/wrath/gmconsole-audit.log. Secrets are scrubbed from everything it
 shows or writes. It never deletes characters or accounts and never drops tables.
 
+Bug reports: ov_bug_reports (ov_reports.lua) and gm_ticket are read; the one write is
+ov_bug_reports.status. GET /api/export/new-reports returns the new ones as JSON for a scheduled
+triage task: loopback only, "Authorization: Bearer <GM_TOKEN>" (no cookie needed).
+
 stdlib only (python:3.12-alpine).
 """
 import hashlib
@@ -1526,9 +1530,258 @@ def api_jobs(q):
     return {"jobs": jobs_view()}
 
 
+# ----------------------------------------------------------------------------------------------
+# Bug reports (ov_reports.lua's acore_characters.ov_bug_reports) and native GM tickets (gm_ticket)
+# ----------------------------------------------------------------------------------------------
+# Read through the same docker-exec mysql as everything else. User text never enters SQL as a quoted
+# literal: the search goes in as a hex literal (X'...'), statuses come from a fixed list, ids are ints.
+# Text columns come back HEX()-encoded so tabs, newlines and backslashes in reports survive mysql -B.
+# The only write is ov_bug_reports.status.
+
+REPORT_STATES = ("new", "seen", "fixed", "wontfix")
+MAPS = {0: "Eastern Kingdoms", 1: "Kalimdor", 30: "Alterac Valley", 33: "Shadowfang Keep", 34: "The Stockade",
+        36: "The Deadmines", 43: "Wailing Caverns", 47: "Razorfen Kraul", 48: "Blackfathom Deeps", 70: "Uldaman",
+        90: "Gnomeregan", 109: "Sunken Temple", 129: "Razorfen Downs", 189: "Scarlet Monastery", 209: "Zul'Farrak",
+        229: "Blackrock Spire", 230: "Blackrock Depths", 249: "Onyxia's Lair", 289: "Scholomance", 309: "Zul'Gurub",
+        329: "Stratholme", 349: "Maraudon", 389: "Ragefire Chasm", 409: "Molten Core", 429: "Dire Maul",
+        469: "Blackwing Lair", 489: "Warsong Gulch", 509: "Ruins of Ahn'Qiraj", 529: "Arathi Basin", 530: "Outland",
+        531: "Temple of Ahn'Qiraj", 533: "Naxxramas", 571: "Northrend", 574: "Utgarde Keep", 575: "Utgarde Pinnacle",
+        576: "The Nexus", 578: "The Oculus", 595: "Culling of Stratholme", 599: "Halls of Stone",
+        600: "Drak'Tharon Keep", 601: "Azjol-Nerub", 602: "Halls of Lightning", 603: "Ulduar", 604: "Gundrak",
+        608: "The Violet Hold", 609: "Ebon Hold", 615: "The Obsidian Sanctum", 616: "The Eye of Eternity",
+        619: "Ahn'kahet", 624: "Vault of Archavon", 631: "Icecrown Citadel", 632: "The Forge of Souls",
+        649: "Trial of the Crusader", 650: "Trial of the Champion", 658: "Pit of Saron", 668: "Halls of Reflection",
+        724: "The Ruby Sanctum"}
+# GM tickets mapped onto the same four states for the filter (they stay read-only here)
+_TICKET_STATE = {"new": "t.type = 0 AND t.viewed = 0", "seen": "t.type = 0 AND t.viewed <> 0",
+                 "fixed": "t.type = 1", "wontfix": "t.type = 2"}
+
+
+def map_name(m):
+    try:
+        m = int(m)
+    except (TypeError, ValueError):
+        return "?"
+    return MAPS.get(m, "map %d" % m)
+
+
+def area_name(a):
+    try:
+        a = int(a)
+    except (TypeError, ValueError):
+        return None
+    return ZONES.get(a) if a else None
+
+
+def unhex(s):
+    try:
+        return bytes.fromhex(s or "").decode("utf-8", "replace")
+    except ValueError:
+        return ""
+
+
+def num_or(v, cast=int):
+    try:
+        return cast(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def like_hex(q):
+    """A LIKE '%q%' pattern for user text as a hex literal: nothing in it can close a quote."""
+    q = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return "CONCAT('%%', CONVERT(X'%s' USING utf8mb4), '%%') COLLATE utf8mb4_unicode_ci" % q.encode("utf-8").hex()
+
+
+def report_search(v):
+    s = "".join(" " if unicodedata.category(ch)[0] == "C" else ch for ch in str(v or ""))
+    return re.sub(r"\s+", " ", s).strip()[:100]
+
+
+def report_status_arg(v):
+    v = str(v or "").strip().lower()
+    if v in ("", "all"):
+        return None
+    if v not in REPORT_STATES:
+        raise Bad("status: all, " + ", ".join(REPORT_STATES))
+    return v
+
+
+def tele_cmd(x, y, z, m):
+    if None in (x, y, z, m):
+        return None
+    return ".go xyz %.2f %.2f %.2f %d" % (x, y, z, m)
+
+
+def query_reports(status=None, search="", limit=200, since=0):
+    where = []
+    if status:
+        where.append("status = '%s'" % status)          # from REPORT_STATES only
+    if search:
+        p = like_hex(search)
+        where.append("(text LIKE %s OR char_name LIKE %s)" % (p, p))
+    if since:
+        where.append("id > %d" % since)
+    rows = sql("acore_characters",
+               "SELECT id, account_id, char_guid, HEX(char_name), level, class, map_id, zone_id, area_id, "
+               "pos_x, pos_y, pos_z, HEX(text), status, UNIX_TIMESTAMP(created_at) FROM ov_bug_reports%s "
+               "ORDER BY created_at DESC, id DESC LIMIT %d;\n" % (" WHERE " + " AND ".join(where) if where else "", limit))
+    out = []
+    for r in rows:
+        if len(r) < 15:
+            continue
+        x, y, z, m = num_or(r[9], float), num_or(r[10], float), num_or(r[11], float), num_or(r[6])
+        cls = num_or(r[5])
+        out.append({"kind": "report", "id": num_or(r[0]), "account_id": num_or(r[1]), "char_guid": num_or(r[2]),
+                    "char_name": unhex(r[3]), "level": num_or(r[4]), "class": CLASSES.get(cls, "class %s" % r[5]),
+                    "map_id": m, "map": map_name(m), "zone_id": num_or(r[7]), "zone": zone_name(r[7]),
+                    "area_id": num_or(r[8]), "area": area_name(r[8]), "x": x, "y": y, "z": z,
+                    "text": unhex(r[12]), "status": r[13] if r[13] in REPORT_STATES else (r[13] or "new"),
+                    "created": num_or(r[14]), "tele": tele_cmd(x, y, z, m)})
+    return out
+
+
+def query_tickets(status=None, search="", limit=200):
+    where = []
+    if status:
+        where.append(_TICKET_STATE[status])
+    if search:
+        p = like_hex(search)
+        where.append("(t.description LIKE %s OR t.name LIKE %s)" % (p, p))
+    rows = sql("acore_characters",
+               "SELECT t.id, t.playerGuid, HEX(t.name), HEX(t.description), t.createTime, t.mapId, t.posX, t.posY, "
+               "t.posZ, t.type, t.viewed, c.level, c.class, HEX(IFNULL(t.response, '')) FROM gm_ticket t "
+               "LEFT JOIN characters c ON c.guid = t.playerGuid%s ORDER BY t.createTime DESC, t.id DESC LIMIT %d;\n"
+               % (" WHERE " + " AND ".join(where) if where else "", limit))
+    out = []
+    for r in rows:
+        if len(r) < 14:
+            continue
+        x, y, z, m = num_or(r[6], float), num_or(r[7], float), num_or(r[8], float), num_or(r[5])
+        typ, viewed, cls = num_or(r[9]), num_or(r[10]) or 0, num_or(r[12])
+        st = {0: "seen" if viewed else "new", 1: "fixed", 2: "wontfix"}.get(typ, "new")
+        out.append({"kind": "ticket", "id": num_or(r[0]), "char_guid": num_or(r[1]), "char_name": unhex(r[2]),
+                    "level": num_or(r[11]), "class": CLASSES.get(cls, "?") if cls is not None else "?",
+                    "map_id": m, "map": map_name(m), "zone_id": None, "zone": None, "area_id": None, "area": None,
+                    "x": x, "y": y, "z": z, "text": unhex(r[3]), "status": st,
+                    "ticket_state": {0: "open", 1: "closed", 2: "character deleted"}.get(typ, "?"),
+                    "response": unhex(r[13]), "created": num_or(r[4]), "tele": tele_cmd(x, y, z, m)})
+    return out
+
+
+def api_reports(q):
+    status = report_status_arg(q.get("status"))
+    search = report_search(q.get("q"))
+    out = {"status": status or "all", "q": search, "states": REPORT_STATES, "reports": [], "tickets": [],
+           "error": None, "ticket_error": None}
+    try:
+        out["reports"] = query_reports(status, search)
+    except ToolError:
+        out["error"] = "could not read ov_bug_reports (is ov_reports.lua loaded? it creates the table)"
+    if q.get("tickets", "1") != "0":
+        try:
+            out["tickets"] = query_tickets(status, search)
+        except ToolError:
+            out["ticket_error"] = "could not read gm_ticket"
+    items = out["reports"] + out["tickets"]
+    items.sort(key=lambda r: (r["created"] or 0, r["kind"] == "report", r["id"] or 0), reverse=True)
+    out["items"] = items
+    try:
+        counts = sql("acore_characters", "SELECT status, COUNT(*) FROM ov_bug_reports GROUP BY status;\n")
+        out["counts"] = {r[0]: num_or(r[1]) for r in counts if len(r) == 2}
+    except ToolError:
+        out["counts"] = {}
+    return out
+
+
+def a_report_status(a):
+    rid = intval(a.get("id"), 1, 2 ** 32 - 1, "report id")
+    st = str(a.get("status") or "").strip().lower()
+    if st not in REPORT_STATES:
+        raise Bad("status: " + ", ".join(REPORT_STATES))
+    rows = sql("acore_characters", "UPDATE ov_bug_reports SET status = '%s' WHERE id = %d;\n"
+               "SELECT status FROM ov_bug_reports WHERE id = %d;\n" % (st, rid, rid))
+    if not rows or rows[-1][0] != st:
+        raise Bad("no bug report #%d" % rid)
+    return "report #%d: %s" % (rid, st)
+
+
+ACTIONS["report_status"] = (a_report_status, False, ("id", "status"))
+
+
+def export_new_reports(q):
+    """New bug reports (and new GM tickets) for a scheduled triage task. Read-only."""
+    since = intval(q.get("since") or 0, 0, 2 ** 32 - 1, "since")
+    reports = query_reports("new", "", limit=500, since=since)
+    try:
+        tickets, terr = query_tickets("new", "", limit=200), None
+    except ToolError:
+        tickets, terr = [], "could not read gm_ticket"
+    return {"realm": SLUG, "at": now_iso(), "since": since, "count": len(reports), "reports": reports,
+            "tickets": tickets, "ticket_error": terr}
+
+
+# ----------------------------------------------------------------------------------------------
+# Health (read-only)
+# ----------------------------------------------------------------------------------------------
+
+ERROR_LINE = re.compile(r"(?i)(\berror\b|\bfatal\b|crash|assert|exception|\bfailed\b)")
+
+
+def error_logs(n=20):
+    def get():
+        rc, out = docker("logs", "--tail", "4000", WORLD, timeout=30)
+        if rc != 0:
+            return ["(no world server log: " + out[:120] + ")"]
+        return [ln[:400] for ln in clean_lines(out) if ERROR_LINE.search(ln)][-n:]
+    return cached("errlogs:%d" % n, 15, get)
+
+
+def parse_size(s):
+    m = re.match(r"\s*([\d.]+)\s*([KMGT]?i?B)?", s or "")
+    if not m:
+        return None
+    unit = (m.group(2) or "B").upper().replace("I", "")
+    mult = {"B": 1, "KB": 1024, "MB": 1024 ** 2, "GB": 1024 ** 3, "TB": 1024 ** 4}.get(unit, 1)
+    return int(float(m.group(1)) * mult)
+
+
+def container_stats():
+    def get():
+        rc, out = docker("stats", "--no-stream", "--format", "{{json .}}", WORLD, DB, timeout=30)
+        if rc != 0:
+            return {"error": "docker stats failed: " + out[:160]}
+        res = {}
+        for line in out.splitlines():
+            try:
+                d = json.loads(line)
+            except ValueError:
+                continue
+            used, _, limit = (d.get("MemUsage") or "").partition("/")
+            res[d.get("Name") or d.get("Container") or ""] = {
+                "cpu_pct": num_or((d.get("CPUPerc") or "").rstrip("%"), float),
+                "mem_pct": num_or((d.get("MemPerc") or "").rstrip("%"), float),
+                "mem_used": parse_size(used), "mem_limit": parse_size(limit), "mem_usage": d.get("MemUsage") or ""}
+        return res
+    return cached("dstats", 10, get)
+
+
+def api_health(q):
+    p = api_players({})
+    st = container_stats()
+    by = {c["name"]: c for c in containers()}
+    return {"realm": p["realm"], "players_real": None if p.get("error") else len(p["players"]),
+            "bots_online": p["bots_online"], "players_error": p.get("error"),
+            "world": dict(st.get(WORLD) or {}, health=health(by.get(WORLD)), started=iso_to_epoch(started_at(WORLD))),
+            "database": dict(st.get(DB) or {}, health=health(by.get(DB)), started=iso_to_epoch(started_at(DB))),
+            "stats_error": st.get("error"), "host": host_stats(), "errors": error_logs(20), "at": now_iso()}
+
+
 GETS = {"/api/overview": api_overview, "/api/players": api_players, "/api/accounts": api_accounts,
         "/api/updates": api_updates, "/api/streaming": api_streaming, "/api/beacons": api_beacons,
-        "/api/speed": api_speed, "/api/logs": api_logs, "/api/jobs": api_jobs}
+        "/api/speed": api_speed, "/api/logs": api_logs, "/api/jobs": api_jobs,
+        "/api/reports": api_reports, "/api/health": api_health}
+EXPORT_PATH = "/api/export/new-reports"
 
 # The owner's tools on his PC (C:\Users\campw\Desktop\WrathUnleashed): uploads still come from these.
 BATS = [
@@ -1639,6 +1892,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, b"ok\n", "text/plain")
         if u.path == "/login":
             return self.login(q.get("t", ""))
+        if u.path == EXPORT_PATH:
+            return self.export(q)
         s = self.session()
         if not s:
             if u.path.startswith("/api/"):
@@ -1655,6 +1910,28 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(404, {"error": "not found"})
         try:
             return self.send(200, fn(q))
+        except Bad as e:
+            return self.send(400, {"error": str(e)})
+        except ToolError as e:
+            return self.send(502, {"error": str(e)})
+
+    def export(self, q):
+        """GET /api/export/new-reports[?since=<id>] with "Authorization: Bearer <GM_TOKEN>" from loopback
+        only (for a scheduled triage task on the server). No cookie, no query-string token."""
+        if self.client_address[0] not in ("127.0.0.1", "::1", "::ffff:127.0.0.1"):
+            return self.send(403, {"error": "loopback only"})
+        now = time.time()
+        _fails[:] = [x for x in _fails if now - x < 600]
+        if len(_fails) >= 20:
+            return self.send(429, {"error": "too many wrong tokens; wait 10 minutes"})
+        auth = self.headers.get("Authorization") or ""
+        tok = auth[7:].strip() if auth[:7].lower() == "bearer " else ""
+        if not tok or not hmac.compare_digest(tok.encode(), TOKEN.encode()):
+            _fails.append(now)
+            time.sleep(0.5)
+            return self.send(401, {"error": "Authorization: Bearer <GM_TOKEN> required"})
+        try:
+            return self.send(200, export_new_reports(q))
         except Bad as e:
             return self.send(400, {"error": str(e)})
         except ToolError as e:

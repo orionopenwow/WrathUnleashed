@@ -1,0 +1,7 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
+..\FrameXML\UI.xsd">
+	<!-- WrathUnleashed's fixes to Forever UI's login screens for the browser client. Listed in
+	     GlueXML.toc right after ForeverUIGlue.xml (fui-overlay.py), so every Forever UI frame
+	     exists when it runs. Not part of Forever UI itself. -->
+	<Script file="ForeverUIGlueWeb.lua"/>
+</Ui>

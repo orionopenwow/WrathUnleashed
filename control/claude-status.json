@@ -1,0 +1,81 @@
+{
+ "updated": "Sat 24 Oct, 22:45",
+ "waiting_on_you": [
+  {
+   "tag": "launch",
+   "text": "Press Launch all",
+   "detail": "Dungeon Finder fix first (live, nobody kicked), then the Forever UI clean-up, the dungeon slice (30-60 min) and the GitHub save. The client step already ran."
+  },
+  {
+   "tag": "github",
+   "text": "Link GitHub in claude.ai",
+   "detail": "Settings → Connectors, then run 'Set up automatic deploys.bat' once."
+  }
+ ],
+ "now": [
+  {
+   "tag": "memory",
+   "text": "Lean server: Dalaran and the starter zones first",
+   "detail": "Bots, grids and map settings tuned for the least memory, once the check shows today's numbers."
+  },
+  {
+   "tag": "ui",
+   "text": "Character select clean-up",
+   "detail": "Removing the Lich King logo, fixing the Realms/Menu buttons, placing the list, name, buttons and model properly."
+  },
+  {
+   "tag": "loading",
+   "text": "Loading screens in our style",
+   "detail": "Orion background, our loading bar, no file counts or packs on screen."
+  },
+  {
+   "tag": "client",
+   "text": "Cutting the Dalaran entry from 122 s to under 30 s",
+   "detail": "Nearby ground first, the rest streams in behind; no debug addon at load."
+  },
+  {
+   "tag": "bridge",
+   "text": "Turning on the page bridge",
+   "detail": "Touch icons, cooldowns and the phone layout need it; touch movement works without it."
+  }
+ ],
+ "done": [
+  {
+   "tag": "lfg",
+   "text": "Found why the Dungeon Finder ignored every queue",
+   "detail": "mod-ale reads 'no answer' from the queue check as 'no'; the check now says yes explicitly. Tests now model this, so it can't come back unnoticed."
+  },
+  {
+   "tag": "check",
+   "text": "Server check works: 7.6 GB RAM, 2.1 GB free; world server 2.4 GB at 170% CPU with 60 bots; database 1.6 GB"
+  },
+  {
+   "tag": "chat",
+   "text": "Chat works (say)",
+   "detail": "Phone keyboards still need a client fix (they paste text instead of key presses)."
+  },
+  {
+   "tag": "boost",
+   "text": "Level 80 boost works end to end",
+   "detail": "Menu, spec, professions, gear, Dalaran."
+  },
+  {
+   "tag": "keys",
+   "text": "Keyboard works",
+   "detail": "The bindings file is in the slice now; the next build has its own as backup."
+  },
+  {
+   "tag": "realm",
+   "text": "Dungeon Finder from 10, .bug, .stuck, .wu, cross-faction groups"
+  },
+  {
+   "tag": "spam",
+   "text": "'Not streamed' message loop in Dalaran fixed"
+  },
+  {
+   "tag": "signin",
+   "text": "Sign-in limits raised; a busy page retries by itself"
+  }
+ ],
+ "note": ""
+}
