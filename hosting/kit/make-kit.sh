@@ -9,7 +9,7 @@ REALM="${1:-$KIT/../realm}"
 [ -f "$REALM/profiles/main.env" ] || { echo "no realm folder at $REALM" >&2; exit 1; }
 rm -rf "$KIT/realm-files"
 mkdir -p "$KIT/realm-files/profiles" "$KIT/realm-files/sql"
-cp "$REALM"/profiles/{main,brawl,progression,casual}.env "$KIT/realm-files/profiles/"
+cp "$REALM"/profiles/{main,brawl,progression,casual,dalaran}.env "$KIT/realm-files/profiles/"
 cp "$REALM/modules.env" "$KIT/realm-files/"
 cp -r "$REALM/custom/lua_scripts" "$KIT/realm-files/lua_scripts"
 for f in brawl_world.sql brawl_world_2.sql main_unbrawl.sql main_world.sql modern_combos.sql; do

@@ -17,7 +17,7 @@ plus one block. Readers that don't know `community` can show the record as is.
 | `state` | `live` while heartbeats arrive (3 missed beats = `offline`); gone after 24 h |
 | `order` | always `1000`: below official realms; then live first, then by name. Never paid, never voted. |
 | `profile.address` / `port` | the relay's name and the realm's own relay auth port |
-| `profile.ruleset` | `main`, `brawl`, `progression` (the host's profile) |
+| `profile.ruleset` | `main`, `brawl`, `progression`, `dalaran` (the host's profile), `casual` or `custom` |
 | `connect` | `{"kind": "web-signin", "url": "https://openvanilla.app/join/<id>", "label": "Join this realm"}` |
 | `status` | `{"url": "https://relay.openvanilla.app/r/<id>/status.json", "format": "openvanilla-status-1"}` |
 | `media` | empty: no host-supplied images or links are shown in v1 |

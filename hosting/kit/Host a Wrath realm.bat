@@ -6,7 +6,8 @@ rem No port forwarding: the realm talks out to the relay, players connect to the
 rem sees your home IP address. Safe to run again: it keeps your realm, characters and invite link.
 rem
 rem It asks three things the first time: the realm's name, its profile, private or public.
-rem Answers can also come from the environment: WU_NAME, WU_PROFILE, WU_VISIBILITY, WU_WOW_DIR.
+rem Answers can also come from the environment: WU_NAME, WU_PROFILE (main, brawl, progression, dalaran),
+rem WU_VISIBILITY, WU_WOW_DIR.
 cd /d "%~dp0"
 
 rem ---- images (the prebuilt ones are published by WrathUnleashed's CI; the local build is the fallback)
@@ -49,10 +50,11 @@ if not defined WU_PROFILE (
   echo   main         normal Wrath from level 1, or a one-time boost to 80
   echo   brawl        everyone starts at 80 in Dalaran, everything unlocked
   echo   progression  blizzlike, Vanilla then TBC then Wrath per character
+  echo   dalaran      a light Dalaran hangout: no bots, boost to 80 straight to Dalaran, your own rules
   set "WU_PROFILE=!D!"
   set /p "WU_PROFILE=Profile [!D!]: "
 )
-if /i not "%WU_PROFILE%"=="main" if /i not "%WU_PROFILE%"=="brawl" if /i not "%WU_PROFILE%"=="progression" (echo Please type main, brawl or progression. & set "WU_PROFILE=" & goto askprofile)
+if /i not "%WU_PROFILE%"=="main" if /i not "%WU_PROFILE%"=="brawl" if /i not "%WU_PROFILE%"=="progression" if /i not "%WU_PROFILE%"=="dalaran" (echo Please type main, brawl, progression or dalaran. & set "WU_PROFILE=" & goto askprofile)
 :askvis
 if not defined WU_VISIBILITY (
   set "D=private"
@@ -114,6 +116,7 @@ echo.
 echo Send your friends the invite link above. They open it once, make an account there, then play with
 echo   set realmlist %WU_RELAY%
 echo "Check my realm.bat" tests everything the way a player would.
+echo Your realm's rules: state\rules.txt ^(then "Realm tools.bat rules"^). Your GM login: state\host-login.txt
 pause
 exit /b 0
 
@@ -155,6 +158,7 @@ if exist "state\applied-%WU_PROFILE%" exit /b 0
 set "FILES=modern_combos.sql"
 if /i "%WU_PROFILE%"=="brawl" set "FILES=brawl_world.sql brawl_world_2.sql modern_combos.sql"
 if /i "%WU_PROFILE%"=="main" set "FILES=main_unbrawl.sql main_world.sql modern_combos.sql"
+if /i "%WU_PROFILE%"=="dalaran" set "FILES=main_unbrawl.sql main_world.sql modern_combos.sql"
 echo.
 echo == World changes for the %WU_PROFILE% profile ^(once^)
 for %%F in (%FILES%) do (

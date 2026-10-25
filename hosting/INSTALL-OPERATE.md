@@ -11,7 +11,7 @@ which steps need your OK), and how to run it afterwards. Design: `README.md`.
 | `relay/` + `kit/tools/wunet/` | the relay VM (`/opt/wu-relay`) | the relay server, its Docker/systemd/Caddy setup, the join page |
 | `site/` | the website repo (`www/`) | `join/index.html`, a snippet for `404.html`, the community-record schema for the Beacons page |
 | `server/set-realm-address.sh` | `WrathUnleashed\server\` (replaces the old one) | same as before, plus a world port and `--relay STATE_DIR` |
-| `.github/workflows/` | the repo that carries `hosting/` | tests (`wu-hosting.yml`) and the image build (`wu-images.yml`, publishing off) |
+| `.github/workflows/` | the repo that carries `hosting/` | tests (`wu-hosting.yml`) and the image build (`wu-images.yml`: publishes on a push to main, see 9.4) |
 | `tests/` | with the code | unit tests, docker end-to-end, soak |
 
 After copying `kit\` to `WrathUnleashed\host\`, run `Make host kit.bat` there once: it fills
@@ -50,7 +50,7 @@ This is also the first real-client check of the one thing the sandbox could not 
    hit. It installs Docker if needed, writes `/opt/wu-relay/relay.env` with a fresh listing site
    secret, builds the image, opens 22/80/443/3724/40000-40999 in ufw, starts relay + Caddy (TLS
    for `https://` and `wss://` is automatic once DNS points there).
-4. **Publish the images** the kit pulls: run `wu-images.yml` by hand with `publish` ticked →
+4. **Publish the images** the kit pulls: `wu-images.yml` (on a push to main, or by hand; see 9.4) →
    `ghcr.io/orionopenwow/wu-ac-wotlk-{db-import,authserver,worldserver}:stable`,
    `wu-host-tools:1`, `wu-relay:1`. They contain AzerothCore + the pinned modules (AGPL: sources
    stay public, `sources.lock` + patches), no Blizzard data. Until then the kit builds the small
@@ -70,7 +70,7 @@ This is also the first real-client check of the one thing the sandbox could not 
 ## 4. Hosting (what players do)
 
 Windows: unzip the kit, double-click `Host a Wrath realm.bat`. macOS/Linux: `bash host-wrath-realm.sh`.
-Questions: realm name, profile (main / brawl / progression), private or public. First start: game
+Questions: realm name, profile (main / brawl / progression / dalaran), private or public. First start: game
 data extraction (minutes), database import (5-20 min). It ends with the invite link and the host's
 own GM login (`state\host-login.txt`).
 
@@ -149,7 +149,101 @@ who reinstalls with the same `state\` keeps the same id, ports and listing.
 - DNS: `relay.openvanilla.app` A record (no AAAA).
 - Deploying the relay (`deploy-relay.sh`, 2 SSH connections) and the listing site secret's
   hand-off to the website.
-- Publishing images to ghcr.io (`wu-images.yml`, `publish` input).
+- Publishing images to ghcr.io (`wu-images.yml`, see 9.4).
 - Pushing the workflows and the code; website changes (join page, 404 snippet, Beacons community list).
 - Opening hosting to everyone vs a closed beta (`RELAY_ALLOW_FILE`), and the default limits.
 - Running the 1-hour soak on the relay VM (`tests/soak/SOAK-PLAN.md`).
+
+## 9. Beacons beta (relay on the existing box, Dalaran hangouts, realm list)
+
+### 9.1 The relay on play.openvanilla.app: the "relay" step
+
+`hosting/relay/Deploy relay.bat` (control panel step `relay`) puts the relay on the existing Hetzner
+box instead of a separate VM. One SSH login; the relay's source goes over stdin; `relay/deploy/relay-up.sh`
+runs on the box:
+
+* **TLS**: no second Caddy (80/443 belong to the site's `wenilla-realm-caddy-1`). The relay's web side
+  listens on the `wenilla-realm_default` bridge gateway (`172.x.0.1:8099`), and a marked site block for
+  `relay.openvanilla.app` is added to the site's Caddyfile (backup first, restored if Caddy refuses).
+  `RELAY_TRUSTED_PROXIES` lets the relay read `X-Forwarded-For` from that bridge only.
+* **Ports**: game ports 40000-40999 on the host network. 3724 is the realm's own authserver here, so the
+  shared port is off (`RELAY_SHARED_AUTH_PORT=0`): players use `set realmlist relay.openvanilla.app:<port>`
+  (the join page shows it), which needs the 7.1 check with a real client. ufw is opened if active; a
+  Hetzner Cloud Firewall, if any, needs TCP 40000-40999 by hand.
+* **Memory**: the container is capped at 192 MB (`WU_RELAY_MEM` in `/opt/wu-relay/.env`), 1 CPU, 128 pids.
+* **Backup, health, rollback**: `/opt/wu-relay/backups/<time>/` (compose, relay.env, state/, Caddyfile; the
+  last five kept) and the old image as `wu-relay:rollback`. `/healthz` must answer from the box and from
+  inside Caddy, the memory limit must be set and `/api/listing/realms.json` must answer; otherwise it
+  rolls back. Re-running it is the update.
+* **DNS**: if `relay.openvanilla.app` has no A record (or points elsewhere), the relay is still installed
+  and healthy, Caddy is left alone, and the step ends with `ACTION NEEDED` and the exact record:
+  **A `relay` -> the box's IPv4, no AAAA**. The step exits 3 (shown as failed in the control panel);
+  run it again once the record exists.
+* `relay.env` (chmod 600) gets a new listing site secret on first install; it is never printed.
+
+### 9.2 The "dalaran" hosting preset
+
+`Host a Wrath realm.bat` now offers `dalaran`: `realm/profiles/dalaran.env` (copied into `realm-files\` by
+`Make host kit.bat`). A light hangout for a host's PC:
+
+* every new character picks level 1 or the one-time **boost to 80** (`ov_main.lua`: spec kit, professions,
+  teleported to Dalaran with the hearthstone set there); `.qol hub dalaran` (and the other hubs), free
+  repairs, free respec, duel reset;
+* **no bots** by default (`WU_BOTS=0`; `--bots N` to add some), database buffer 256 MB, 40 players max,
+  idle map areas unload after a minute;
+* the same world SQL as `main` (`main_unbrawl`, `main_world`, `modern_combos`).
+
+**The host's GM login** is made on first run for every profile: `state\host-login.txt` (account and
+password; only the SRP6 verifier goes into the database) at GM level 3 (administrator) on this realm.
+Useful commands in game (type them in chat):
+
+| Command | What it does |
+|---|---|
+| `.gm on` / `.gm off`, `.gm visible off` | GM mode (untargetable, no aggro), invisible |
+| `.announce TEXT`, `.notify TEXT` | message to everyone (chat / on screen) |
+| `.tele dalaran`, `.qol hub dalaran` | go to Dalaran |
+| `.appear NAME`, `.summon NAME` | go to a player / bring them to you |
+| `.kick NAME`, `.mute NAME MINUTES REASON`, `.unmute NAME` | moderation |
+| `.ban account NAME 1d REASON`, `.unban account NAME` | bans (durations like `30m`, `1d`, `-1` = permanent) |
+| `.account set gmlevel NAME 1 -1` | make a friend a moderator (1), GM (2) or admin (3); `0` takes it back |
+| `.account set password NAME NEW NEW` | reset a friend's password |
+| `.character level NAME 80`, `.revive` | level a character, revive the selected one |
+| `.server info`, `.saveall`, `.server restart 300` | status, save everyone, restart in 5 minutes |
+
+Without the game: `docker attach wu-host-worldserver` opens the server console (same commands without
+the dot; leave with Ctrl+P then Ctrl+Q). Friends' accounts: `Realm tools.bat friend NAME`.
+
+**The rules text** lives in `state\rules.txt` (one rule per line, up to 10, 120 characters each; the
+dalaran preset starts it with four hangout rules). Tagline, summary, type (PvE, PvP, RP, RP-PvP, Fun) and
+Discord invite live in `state\beacon.json`; the name comes from setup. After editing either file run
+`Realm tools.bat rules` (`bash host-wrath-realm.sh rules`): the agent sends the new text with its next
+signed heartbeat, and the realm list shows it as "House rules".
+
+### 9.3 The realm list on the play page
+
+`https://play.openvanilla.app/wrath/realms` (linked from the play and sign-in pages): WrathUnleashed first
+(its own status), then the public community realms from the relay's `/api/listing/realms.json` with name,
+ruleset, players (and bots), house rules and a **Join** link (`https://relay.openvanilla.app/join/<id>`).
+The list is fetched in the background and cached (60 s; 30 s after a failure); a page waits at most 2.5 s,
+and only before the very first fetch, so a slow or dead relay never slows the play page. The relay step
+writes the relay's address on the Docker network to `/srv/wrath/portal/relay-listing.url`, so the list
+works before DNS. Deployed with the `signin` step (it installs the new `wrath_portal.py`).
+
+### 9.4 Publishing the images
+
+`.github/workflows/wu-images.yml`: a push to main that touches `realm/custom/sources.lock`, its patches,
+`fetch.sh`, `hosting/kit/tools/` or `hosting/relay/` (or Actions > wu-images > Run workflow) builds and
+publishes `ghcr.io/orionopenwow/wu-ac-wotlk-{db-import,authserver,worldserver}:stable` (the names the kit
+pulls with `WU_IMAGE=ghcr.io/orionopenwow/wu-ac-wotlk`, `WU_TAG=stable`), `wu-host-tools:1` and
+`wu-relay:1`, each also as `:sha-<commit>`. AzerothCore + modules from source, mod-arac's client DBCs
+removed from the build context, no game data. Only the built-in `GITHUB_TOKEN`; no secrets in files.
+The owner, once:
+
+1. Push the workflow file: the git credential needs the `workflow` scope (`gh auth refresh -s workflow`).
+2. Organization orionopenwow > Settings > Actions > General: allow Actions; Workflow permissions may stay
+   "Read" (the file asks for `packages: write` itself) unless the org blocks that, then pick "Read and write".
+3. Organization > Settings > Packages: allow public packages. After the first run, open each package
+   (wu-ac-wotlk-db-import, -authserver, -worldserver, wu-host-tools, wu-relay) > Package settings >
+   Change visibility > **Public** (hosts pull without logging in), and check "Manage Actions access"
+   lists WrathUnleashed with **Write** (only needed if a package was created outside this repo).
+4. The first realm build takes 1-2 hours on GitHub's runners.

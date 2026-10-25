@@ -60,6 +60,7 @@ if /i "%STEP%"=="scripts" set "BAT=realm\Server pass - finder 10 and bug reports
 if /i "%STEP%"=="realm"   set "BAT=realm\Server pass - finder 10 and bug reports.bat"
 if /i "%STEP%"=="gm"      set "BAT=gmconsole\Install GM Console.bat"
 if /i "%STEP%"=="lean"    set "BAT=realm\Lean server.bat"
+if /i "%STEP%"=="relay"   set "BAT=hosting\relay\Deploy relay.bat"
 if /i "%STEP%"=="foreverui" set "BAT=stream\Add Forever UI to the stream.bat"
 if /i "%STEP%"=="slice"   (set "BAT=stream\Make mini slice.bat" & set "INTERACTIVE=1")
 if /i "%STEP%"=="ship"    (set "BAT=Ship WrathUnleashed.bat" & set "INTERACTIVE=1")

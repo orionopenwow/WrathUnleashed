@@ -12,9 +12,10 @@
 #   bash host-wrath-realm.sh public|private
 #   bash host-wrath-realm.sh claim TOKEN   link the realm to your Hero Key account (token from the site)
 #   bash host-wrath-realm.sh signup invite|open|off   who may make accounts on the join page
+#   bash host-wrath-realm.sh rules         after editing state/rules.txt or state/beacon.json (realm list text)
 #   bash host-wrath-realm.sh logs [service]
 #
-# Answers can come from the environment (no questions): WU_NAME, WU_PROFILE (main|brawl|progression),
+# Answers can come from the environment (no questions): WU_NAME, WU_PROFILE (main|brawl|progression|dalaran),
 # WU_VISIBILITY (private|public), WU_WOW_DIR (your 3.3.5a folder). Images: WU_IMAGE / WU_TAG
 # (prebuilt, default below), falling back to the locally built ov/ac-wotlk-*:custom.
 set -euo pipefail
@@ -149,7 +150,7 @@ profile_sql() {
   [ -f "$KIT/state/applied-$p" ] && return 0
   case "$p" in
     brawl) files="brawl_world.sql brawl_world_2.sql modern_combos.sql" ;;
-    main)  files="main_unbrawl.sql main_world.sql modern_combos.sql" ;;
+    main|dalaran) files="main_unbrawl.sql main_world.sql modern_combos.sql" ;;
     *)     files="modern_combos.sql" ;;
   esac
   step "World changes for the $p profile (once)"
@@ -172,7 +173,7 @@ cmd_up() {
   WU_VISIBILITY="${WU_VISIBILITY:-$(state_get visibility)}"
   step "Your realm"
   ask WU_NAME "Realm name" "My Wrath Realm"
-  ask WU_PROFILE "Profile: main (level 1 or boost to 80), brawl (everyone 80), progression (Vanilla->TBC->Wrath)" "main" main brawl progression
+  ask WU_PROFILE "Profile: main (level 1 or boost to 80), brawl (everyone 80), progression (Vanilla->TBC->Wrath), dalaran (light hangout, no bots)" "main" main brawl progression dalaran
   ask WU_VISIBILITY "Private (friends with your link) or public (listed in Beacons)" "private" private public
   pick_images
   tools init --name "$WU_NAME" --profile "$WU_PROFILE" --visibility "$WU_VISIBILITY" --image "$IMG" --tag "$TAG" \
@@ -203,6 +204,7 @@ cmd_up() {
   say "Send your friends the invite link above. They open it once, make an account there, then play with"
   say "  set realmlist $WU_RELAY"
   say "Check everything with: bash host-wrath-realm.sh check"
+  say "Your realm's rules: state/rules.txt (then: bash host-wrath-realm.sh rules). Your GM login: state/host-login.txt"
 }
 
 cmd_check() {
@@ -226,6 +228,7 @@ case "${1:-up}" in
   new-invite) need_docker; tools new-invite ;;
   public|private) need_docker; tools visibility "$1"; say "Restart for the anti-cheat setting: bash host-wrath-realm.sh" ;;
   signup) need_docker; [ $# -ge 2 ] || die "Usage: bash host-wrath-realm.sh signup invite|open|off"; tools signup "$2" ;;
+  rules) need_docker; tools rules ;;
   claim) need_docker; [ $# -ge 2 ] || die "Usage: bash host-wrath-realm.sh claim TOKEN"; tools claim "$2" ;;
   logs) need_docker; shift; "${COMPOSE[@]}" logs --tail 200 "$@" ;;
   -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;

@@ -24,6 +24,7 @@ import asyncio
 import collections
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 import os
@@ -63,7 +64,10 @@ class Config:
         self.port_min = _env_int("RELAY_PORT_MIN", 40000)
         self.port_max = _env_int("RELAY_PORT_MAX", 40999)
         self.state_file = e("RELAY_STATE", "/var/lib/wu-relay/state.json")
-        self.trust_proxy = e("RELAY_TRUST_PROXY", "1") == "1"   # X-Forwarded-For from loopback only
+        self.trust_proxy = e("RELAY_TRUST_PROXY", "1") == "1"   # X-Forwarded-For from a trusted proxy only
+        # Who may set X-Forwarded-For: loopback (Caddy on the host network) and, when Caddy runs in a
+        # Docker bridge network (a box that already has a web stack), that network, e.g. 172.18.0.0/16.
+        self.trusted_proxies = e("RELAY_TRUSTED_PROXIES", "127.0.0.1/32,::1/128")
         self.allow_file = e("RELAY_ALLOW_FILE", "")             # realm ids; empty = open registration
         self.block_file = e("RELAY_BLOCK_FILE", "")             # realm ids refused and delisted (re-read every minute)
         self.site_origins = [o for o in e("RELAY_SITE_ORIGINS", "https://openvanilla.app").split(",") if o]
@@ -96,6 +100,17 @@ class Config:
             if not hasattr(self, k):
                 raise AttributeError(k)
             setattr(self, k, v)
+        nets = self.trusted_proxies if isinstance(self.trusted_proxies, (list, tuple)) else self.trusted_proxies.split(",")
+        self.trusted_proxies = [ipaddress.ip_network(str(n).strip(), strict=False) for n in nets if str(n).strip()]
+
+    def is_trusted_proxy(self, peer):
+        try:
+            a = ipaddress.ip_address(peer)
+        except ValueError:
+            return False
+        if getattr(a, "ipv4_mapped", None):
+            a = a.ipv4_mapped
+        return any(a.version == n.version and a in n for n in self.trusted_proxies)
 
 
 def utc_day(now=None):
@@ -667,7 +682,7 @@ class Relay:
 
     # ---------------------------------------------------------------- HTTP
     def client_ip(self, req):
-        if self.cfg.trust_proxy and req.peer in ("127.0.0.1", "::1") and req.headers.get("x-forwarded-for"):
+        if self.cfg.trust_proxy and self.cfg.is_trusted_proxy(req.peer) and req.headers.get("x-forwarded-for"):
             return req.headers["x-forwarded-for"].split(",")[-1].strip()
         return req.peer
 

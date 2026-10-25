@@ -1,0 +1,36 @@
+# wu-relay on the existing box (play.openvanilla.app), next to the realm and the website.
+# Written to /opt/wu-relay/compose.yml by relay-up.sh ("Deploy relay.bat"); no Caddy of its own: the
+# site's Caddy (wenilla-realm-caddy-1, on the wenilla-realm_default bridge) terminates TLS for
+# relay.openvanilla.app and proxies to RELAY_HTTP_BIND (that bridge's gateway address, port 8099).
+# Host networking for the game ports (40000-40999): publishing 1000 ports through Docker's proxy would
+# start 1000 processes. The box has ~3.3 GB free, so the relay is capped hard (WU_RELAY_MEM, /opt/wu-relay/.env).
+name: wu-relay
+services:
+  relay:
+    image: wu-relay:1                 # built on the box by relay-up.sh (the previous one is kept as wu-relay:rollback)
+    container_name: wu-relay
+    restart: unless-stopped
+    network_mode: host
+    env_file: relay.env
+    volumes:
+      - ./state:/var/lib/wu-relay     # state.json (the port book), listing.json, blocked.txt: backed up before each update
+    read_only: true
+    tmpfs: ["/tmp:size=16m"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
+    mem_limit: ${WU_RELAY_MEM:-192m}
+    memswap_limit: ${WU_RELAY_MEM:-192m}
+    cpus: 1.0
+    pids_limit: 128
+    stop_grace_period: 20s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,urllib.request;urllib.request.urlopen('http://'+os.environ['RELAY_HTTP_BIND']+'/healthz',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }   # IPs appear only as salted daily hashes

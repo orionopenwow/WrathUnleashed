@@ -8,7 +8,8 @@
 #
 #   .env (written by setup):  WU_IMAGE / WU_TAG      realm images (prebuilt, else ov/ac-wotlk:custom)
 #                              DB_ROOT_PASSWORD       generated, never leaves this PC
-#                              WU_PROFILE             main | brawl | progression
+#                              WU_PROFILE             main | brawl | progression | dalaran
+#                              WU_DB_BUFFER, WU_PLAYER_LIMIT  database memory, player cap (dalaran: 256M, 40)
 #                              WU_WARDEN, WU_BOTS     anti-cheat on/off, number of random bots
 #                              WU_TOOLS_IMAGE         the agent/tools image
 name: wu-host

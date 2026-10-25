@@ -247,7 +247,7 @@ SharedArrayBuffer (the design `ownfiles.js` uses).
 | `www-files/` | the browser additions: `ownfiles.js` (+ worker, `mpq.js`, `chain.js`), `sections.js` (+ worker), and the edited `index.html`/`boot.js` for reference; `www-patch.py` applies the same edits to the uploaded client build. `web.patch` is the same change for the source tree (`web/` + `scripts/web-build.sh`) |
 | `Size report.bat`, `Make mini slice.bat`, `Upload a mini slice.bat`, `Record a capture.bat` | your PC |
 | `wenilla-host-stream.patch` | the Rust changes (`--record`, `--export`, `--only-listed`, `--deps`, lite BLP, `--size-report`, tier lists, `/data/__tier`) |
-| `tests/` | `python3 -I tests/test_stream.py wrath_portal.py`, `python3 -I tests/test_lua.py`, `bash tests/test_server_scripts.sh <linux host>`, `node --test tests/sections.browser.test.cjs` |
+| `tests/` | `python3 -I tests/test_stream.py wrath_portal.py`, `python3 -I tests/test_realms.py wrath_portal.py` (the /wrath/realms list), `python3 -I tests/test_lua.py`, `bash tests/test_server_scripts.sh <linux host>`, `node --test tests/sections.browser.test.cjs` |
 
 ## wenilla-host switches
 

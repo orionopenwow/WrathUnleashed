@@ -11,6 +11,8 @@
   python -m wuhost.setup visibility public|private
   python -m wuhost.setup claim TOKEN                the token the website gave your Hero Key account
   python -m wuhost.setup signup invite|open|off     who may make accounts from the join page
+  python -m wuhost.setup rules                      re-read state/rules.txt and state/beacon.json (the
+                                                    realm list text) after you edited them
 
 Re-running init keeps the realm key, passwords and invite (it only changes what you pass), so
 running "Host a Wrath realm" again is always safe.
@@ -30,7 +32,22 @@ STATE = os.path.join(KIT, "state")
 NAME_RE = re.compile(r"^[A-Za-z0-9 _'-]{1,32}$")
 PROFILES = {"main": "WrathUnleashed main: normal Wrath from level 1, or a one-time boost to 80",
             "brawl": "Brawl: everyone starts at 80 in Dalaran with everything unlocked",
-            "progression": "Progression: blizzlike 1x, Vanilla then TBC then Wrath per character"}
+            "progression": "Progression: blizzlike 1x, Vanilla then TBC then Wrath per character",
+            "dalaran": "Dalaran hangout: light on your PC, no bots, boost to 80 straight to Dalaran"}
+# Per-profile settings for .env (docker-compose.host.yml): a Dalaran hangout runs on a small PC.
+PROFILE_ENV = {"dalaran": {"WU_DB_BUFFER": "256M", "WU_PLAYER_LIMIT": "40"}}
+PROFILE_BOTS = {"dalaran": 0}
+# The text the realm list and the join page show; the host edits these two files (then: Realm tools > rules).
+EDITABLE = ("tagline", "summary", "type", "discord")
+DEFAULT_RULES = {"dalaran": [
+    "Be kind: no harassment, hate speech or spam.",
+    "Duel anyone who agrees; no griefing in Dalaran.",
+    "No cheats, bots or exploits. Report bugs with .bug",
+    "The host's word is final: the host is the GM here.",
+]}
+DEFAULT_TAGLINE = {"dalaran": "A Dalaran hangout: boost to 80, duel, queue, meet."}
+RULES_HELP = ("# Your realm's rules: one per line (up to 10, 120 characters each). Lines starting with # are\n"
+              "# ignored. Shown on the realm list and your join page. After editing: Realm tools > rules.\n")
 ALNUM = string.ascii_uppercase + string.digits
 B32 = "ABCDEFGHJKMNPQRSTVWXYZ23456789"
 
@@ -71,10 +88,36 @@ def invite_link(cfg):
     return base + (f"#{cfg['invite_secret']}" if cfg["visibility"] == "private" else "")
 
 
+def read_rules():
+    """state/rules.txt: one rule per line; None when the file is not there."""
+    try:
+        with open(path("rules.txt"), encoding="utf-8-sig") as f:
+            lines = [ln.strip() for ln in f]
+    except OSError:
+        return None
+    return [ln[:120] for ln in lines if ln and not ln.startswith("#")][:10]
+
+
+def read_beacon_edits():
+    """The fields the host may edit in state/beacon.json (name and ruleset come from setup)."""
+    try:
+        with open(path("beacon.json"), encoding="utf-8-sig") as f:
+            doc = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return {k: doc[k] for k in EDITABLE if isinstance(doc, dict) and k in doc} if isinstance(doc, dict) else {}
+
+
 def beacon_record(cfg):
     """What the listing will show (it rebuilds the rest itself); kept in state/beacon.json so the
-    host can see and edit the text (tagline, summary, rules, discord) before going public."""
+    host can see and edit the text (tagline, summary, type, discord), and the rules in state/rules.txt."""
     rec = cfg.get("record") or {}
+    rec.update(read_beacon_edits())
+    rules = read_rules()
+    if rules is not None:
+        rec["rules"] = rules
+    if not rec.get("tagline"):
+        rec["tagline"] = DEFAULT_TAGLINE.get(cfg["profile"], "")
     rec.setdefault("tagline", "")
     rec.setdefault("summary", "")
     rec.setdefault("rules", [])
@@ -100,6 +143,11 @@ def write_env(cfg, image, tag, tools_image):
                     keep[k] = v
     except OSError:
         pass
+    for prof_env in PROFILE_ENV.values():   # another profile's settings go when the profile changes
+        for k, v in prof_env.items():
+            if keep.get(k) == v and k not in PROFILE_ENV.get(cfg["profile"], {}):
+                del keep[k]
+    keep.update(PROFILE_ENV.get(cfg["profile"], {}))
     keep.update(env)
     fd = os.open(os.path.join(KIT, ".env"), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
@@ -115,7 +163,7 @@ def cmd_init(a):
         sys.exit("Realm name: 1-32 letters, digits, spaces, _ ' or -")
     profile = a.profile or cfg.get("profile", "main")
     if profile not in PROFILES:
-        sys.exit("Profile must be main, brawl or progression")
+        sys.exit("Profile must be main, brawl, progression or dalaran")
     vis = a.visibility or cfg.get("visibility", "private")
     if vis not in ("public", "private"):
         sys.exit("Choose private or public")
@@ -133,7 +181,9 @@ def cmd_init(a):
         # Warden: stock clients on a public realm get the core's anti-cheat; a friends' realm leaves
         # it off so the WrathUnleashed browser/desktop client (no Warden module) can join too.
         warden=(vis == "public") if a.warden is None else a.warden == "on",
-        bots=a.bots if a.bots is not None else cfg.get("bots", 40),
+        bots=(a.bots if a.bots is not None
+              else cfg["bots"] if cfg.get("profile") == profile and "bots" in cfg
+              else PROFILE_BOTS.get(profile, 40)),
         signup=cfg.get("signup", "invite"),
     )
     cfg.setdefault("invite_secret", gen(20, B32))
@@ -144,14 +194,21 @@ def cmd_init(a):
         cfg["gm"] = {"username": user, "salt": salt.hex(), "verifier": ver.hex()}
         write_private("host-login.txt", f"Your own game login on your realm (a GM account):\n"
                                         f"  account:  {user}\n  password: {pw}\n")
+    if not os.path.exists(path("rules.txt")):
+        with open(path("rules.txt"), "w", encoding="utf-8") as f:
+            f.write(RULES_HELP + "".join(r + "\n" for r in DEFAULT_RULES.get(profile, [])))
     cfg["record"] = beacon_record(cfg)
     save(cfg)
-    with open(path("beacon.json"), "w", encoding="utf-8") as f:
-        json.dump(cfg["record"], f, indent=1)
+    write_beacon(cfg)
     write_env(cfg, a.image, a.tag, a.tools_image)
     with open(path("invite.txt"), "w", encoding="utf-8") as f:
         f.write(invite_link(cfg) + "\n")
     print(json.dumps({"realm_id": rid, "first_run": first, "invite": invite_link(cfg)}))
+
+
+def write_beacon(cfg):
+    with open(path("beacon.json"), "w", encoding="utf-8") as f:
+        json.dump(cfg["record"], f, indent=1)
 
 
 def cmd_show(a):
@@ -167,6 +224,8 @@ def cmd_show(a):
     print(f"Realm:      {cfg['name']}  ({cfg['profile']}, {cfg['visibility']})")
     print(f"Realm id:   {cfg['realm_id']}")
     print(f"Invite:     {invite_link(cfg)}")
+    rules = (cfg.get("record") or {}).get("rules") or []
+    print(f"Rules:      {len(rules)} line(s), from state/rules.txt" + (f" (first: {rules[0]})" if rules else ""))
     if cfg["visibility"] == "private":
         print("            Only people with this link can join. Keep the part after # private.")
     else:
@@ -208,6 +267,7 @@ def _edit(fn):
     fn(cfg)
     cfg["record"] = beacon_record(cfg)
     save(cfg)
+    write_beacon(cfg)
     with open(path("invite.txt"), "w", encoding="utf-8") as f:
         f.write(invite_link(cfg) + "\n")
     print(invite_link(cfg))
@@ -229,6 +289,13 @@ def cmd_claim(a):
 
 def cmd_signup(a):
     _edit(lambda c: c.update(signup=a.mode))
+
+
+def cmd_rules(a):
+    """Re-read state/rules.txt and state/beacon.json; the agent sends the new text with its next heartbeat."""
+    _edit(lambda c: None)
+    rec = load()["record"]
+    sys.stderr.write(f"Realm list text updated: {len(rec.get('rules') or [])} rule(s), tagline: {rec.get('tagline') or '(none)'}\n")
 
 
 def main(argv=None):
@@ -264,6 +331,7 @@ def main(argv=None):
     p = sub.add_parser("signup")
     p.add_argument("mode", choices=["invite", "open", "off"])
     p.set_defaults(fn=cmd_signup)
+    sub.add_parser("rules").set_defaults(fn=cmd_rules)
     a = ap.parse_args(argv)
     a.fn(a)
     return 0

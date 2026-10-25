@@ -16,8 +16,9 @@ echo   5  private    friends with the link only
 echo   6  claim      link the realm to your Hero Key account (token from openvanilla.app)
 echo   7  signup     who may make accounts on the join page (invite / open / off)
 echo   8  logs       the last lines of every server's log
-set /p "N=Pick 1-8: "
-for %%P in ("1 show" "2 friend" "3 newinvite" "4 public" "5 private" "6 claim" "7 signup" "8 logs") do for /f "tokens=1,2" %%A in (%%P) do if "%N%"=="%%A" goto %%B
+echo   9  rules      after editing state\rules.txt or state\beacon.json: update the realm list text
+set /p "N=Pick 1-9: "
+for %%P in ("1 show" "2 friend" "3 newinvite" "4 public" "5 private" "6 claim" "7 signup" "8 logs" "9 rules") do for /f "tokens=1,2" %%A in (%%P) do if "%N%"=="%%A" goto %%B
 echo Nothing picked. & pause & exit /b 0
 
 :show
@@ -48,6 +49,9 @@ pause & exit /b 0
 set "M=%~2"
 if "%M%"=="" set /p "M=invite / open / off: "
 %T% signup %M%
+pause & exit /b 0
+:rules
+%T% rules && echo Done. The realm list and your join page show it within a minute ^(public realms^).
 pause & exit /b 0
 :logs
 docker compose -f "%~dp0docker-compose.host.yml" --project-directory "%~dp0." logs --tail 80

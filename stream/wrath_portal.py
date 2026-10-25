@@ -11,6 +11,8 @@ Two listeners, both inside Docker networks only (never published on the host):
          GET /wrath            signed out: a button to the site's sign-in (Google or Hero Key)
                                signed in:  the player's game account name and password
          GET /wrath/healthz    200 when AzerothCore's SOAP answers
+         GET /wrath/realms     public: the official realm first, then community realms from the
+                               Beacons relay's listing (cached; a dead relay never slows the page)
          GET /wrath/status.json  public realm status for the website's Beacons page, the launcher
                                and the GM console (CORS *, cached 30 s, at most one SOAP call per
                                30 s however many visitors ask)
@@ -69,6 +71,12 @@ Settings (environment, /srv/wrath/portal.env):
   WU_SLICE_DIR           where <slice>.json lives (default /app/slices; maxTier is read from it)
   WU_OWNFILES            1 = show "Play with my own game files" (the browser client on STREAM_HOST
                          with the player's own Data folder); 0 = off (default; stream-up.sh sets 1)
+  WU_RELAY_LISTING       the Beacons relay's listing for GET /wrath/realms. Unset: the URL in
+                         /app/relay-listing.url (the relay step writes the relay's address on the Docker
+                         network there, so the list works without DNS), else
+                         https://relay.openvanilla.app/api/listing/realms.json
+  WU_JOIN_BASE           where a community realm's Join link goes (default https://relay.openvanilla.app,
+                         which serves /join/<realm id> itself)
 
 Passwords are never logged.
 """
@@ -431,7 +439,8 @@ def signed_out_page() -> bytes:
     return render(
         f'<h1>{html.escape(REALM_NAME)}</h1><p class="sub">Wrath of the Lich King 3.3.5a</p>'
         '<p><a class="btn" href="/login?next=%2Fwrath">Sign in with Google or your Hero Key</a></p>'
-        '<p class="fine">Already played on Open Vanilla? Use the same sign-in. Your Wrath login appears here.</p>')
+        '<p class="fine">Already played on Open Vanilla? Use the same sign-in. Your Wrath login appears here.</p>'
+        '<p class="fine"><a href="/wrath/realms">All realms</a>, including community realms hosted by players</p>')
 
 
 def stream_off_page() -> bytes:
@@ -580,8 +589,183 @@ def account_page(display: str, user: str, password: str, nonce: str) -> bytes:
         '<li>Log in with the account and password above.</li></ol>'
         '<p class="fine">This login is yours alone. Sign in here again any time to see it.</p></details></div>'
         f'<p class="fine foot">No game files? Dalaran needs none. For the whole world: '
-        f'{html.escape(DISCORD_HELP.split(DISCORD_URL)[0])}<a href="{DISCORD_URL}">{html.escape(DISCORD_URL.split("//")[-1])}</a></p>')
+        f'{html.escape(DISCORD_HELP.split(DISCORD_URL)[0])}<a href="{DISCORD_URL}">{html.escape(DISCORD_URL.split("//")[-1])}</a></p>'
+        '<p class="fine"><a href="/wrath/realms">Community realms</a>: Dalaran hangouts and realms hosted by players</p>')
     return render(body, nonce, COPY_JS)
+
+
+# ----------------------------------------------------------------------------------------------
+# Community realms (GET /wrath/realms): the Beacons listing on the relay
+# ----------------------------------------------------------------------------------------------
+#
+# Public realms hosted by players announce themselves to the relay (hosting/relay/wurelay/listing.py,
+# signed heartbeats); its GET /api/listing/realms.json is read here in the BACKGROUND and cached, so a
+# slow or dead relay never slows the play page: a request waits at most LISTING_WAIT seconds, and only
+# when nothing was ever fetched since this process started. The official realm is always listed first,
+# from this service's own status (never from the relay).
+
+RELAY_LISTING = os.environ.get("WU_RELAY_LISTING", "")
+RELAY_LISTING_DEFAULT = "https://relay.openvanilla.app/api/listing/realms.json"
+# Written by the relay step (hosting/relay/deploy/relay-up.sh) into /srv/wrath/portal (mounted at /app):
+# the relay's address on the Docker network, so the list works before DNS and without a container restart.
+RELAY_LISTING_FILE = os.environ.get("WU_RELAY_LISTING_FILE", "/app/relay-listing.url")
+JOIN_BASE = os.environ.get("WU_JOIN_BASE", "https://relay.openvanilla.app").rstrip("/")
+LISTING_TTL = 60          # seconds a good answer is used before it is refreshed (in the background)
+LISTING_RETRY = 30        # after a failure
+LISTING_WAIT = 2.5        # the longest a page request ever waits for the relay
+LISTING_MAX = 200
+LISTING_BYTES = 2_000_000
+REALM_ID_RE = re.compile(r"^[a-z2-7]{16}$")
+RULESET_LABELS = {"main": "Level 1 or boost to 80", "brawl": "Brawl: everyone 80",
+                  "progression": "Progression", "casual": "Casual", "dalaran": "Dalaran hangout",
+                  "custom": "Custom rules"}
+_listing: dict = {"at": -1e9, "ok": False, "realms": [], "fetched": False}
+_listing_lock = threading.Lock()
+_listing_busy = threading.Lock()
+_listing_done = threading.Event()
+
+
+def _nonneg(v):
+    return v if isinstance(v, int) and not isinstance(v, bool) and 0 <= v < 1_000_000 else None
+
+
+def clean_listing_record(rec) -> dict | None:
+    """One listing record, reduced to what the page shows; None when it doesn't look like one."""
+    if not isinstance(rec, dict) or rec.get("official"):   # only the official realm is official
+        return None
+    com = rec.get("community") if isinstance(rec.get("community"), dict) else {}
+    rid = com.get("realmId")
+    if not isinstance(rid, str) or not REALM_ID_RE.match(rid):
+        return None
+    prof = rec.get("profile") if isinstance(rec.get("profile"), dict) else {}
+    hb = com.get("lastHeartbeat") if isinstance(com.get("lastHeartbeat"), dict) else {}
+    ruleset = prof.get("ruleset") if prof.get("ruleset") in RULESET_LABELS else "custom"
+
+    def txt(v, n):
+        return " ".join(v.split())[:n] if isinstance(v, str) else ""
+    return {"id": rid, "name": txt(rec.get("name"), 32) or "Unnamed realm", "tagline": txt(rec.get("tagline"), 80),
+            "type": txt(rec.get("type"), 8) or "PvE", "ruleset": ruleset, "live": rec.get("state") == "live",
+            "players": _nonneg(hb.get("players")), "bots": _nonneg(hb.get("bots")),
+            "claimed": bool(com.get("claimed")),
+            "rules": [t for t in (txt(x, 120) for x in (rec.get("rules") if isinstance(rec.get("rules"), list) else [])[:10]) if t]}
+
+
+def listing_url() -> str:
+    if RELAY_LISTING:
+        return RELAY_LISTING
+    try:
+        with open(RELAY_LISTING_FILE, encoding="utf-8") as f:
+            u = f.read().strip()
+        if re.match(r"^https?://[A-Za-z0-9.:-]+/api/listing/realms\.json$", u):
+            return u
+    except OSError:
+        pass
+    return RELAY_LISTING_DEFAULT
+
+
+def fetch_listing() -> list[dict]:
+    req = urllib.request.Request(listing_url(), headers={"Accept": "application/json", "User-Agent": "wrath-portal"})
+    with urllib.request.urlopen(req, timeout=LISTING_WAIT) as r:
+        raw = r.read(LISTING_BYTES + 1)
+    if len(raw) > LISTING_BYTES:
+        raise ValueError("listing too large")
+    doc = json.loads(raw.decode("utf-8"))
+    recs = doc.get("realms") if isinstance(doc, dict) else None
+    if not isinstance(recs, list):
+        raise ValueError("not a listing")
+    out, seen = [], set()
+    for rec in recs[:LISTING_MAX]:
+        c = clean_listing_record(rec)
+        if c and c["id"] not in seen:
+            seen.add(c["id"])
+            out.append(c)
+    out.sort(key=lambda r: (not r["live"], -(r["players"] or 0), r["name"].lower()))
+    return out
+
+
+def _refresh_listing() -> None:
+    try:
+        realms, ok = fetch_listing(), True
+    except Exception as e:  # noqa: BLE001 - any failure: keep the last good list, try again later
+        realms, ok = None, False
+        log.info("community listing unavailable: %s", str(e)[:120])
+    with _listing_lock:
+        _listing["at"] = time.monotonic()
+        _listing["ok"] = ok
+        _listing["fetched"] = True
+        if ok:
+            _listing["realms"] = realms
+    _listing_busy.release()
+    _listing_done.set()
+
+
+def community_realms() -> tuple[list[dict], bool]:
+    """(realms, fresh): the cached list and whether the last fetch worked. Never blocks longer than
+    LISTING_WAIT, and only before the first fetch has finished."""
+    with _listing_lock:
+        age = time.monotonic() - _listing["at"]
+        stale = age > (LISTING_TTL if _listing["ok"] else LISTING_RETRY)
+        fetched = _listing["fetched"]
+    if stale and _listing_busy.acquire(blocking=False):
+        _listing_done.clear()
+        threading.Thread(target=_refresh_listing, daemon=True).start()
+    if not fetched:
+        _listing_done.wait(LISTING_WAIT)
+    with _listing_lock:
+        return list(_listing["realms"]), _listing["ok"]
+
+
+def _players_text(players, bots, live) -> str:
+    if not live:
+        return "offline"
+    if players is None:
+        return '<span class="live">● online</span>'
+    s = f'<span class="live">● online</span> · {players} playing'
+    return s + (f" · {bots} bots" if bots else "")
+
+
+def realms_page() -> bytes:
+    st = realm_status()
+    official = (
+        f'<div class="realm"><h2>{html.escape(REALM_NAME)}</h2>'
+        '<div class="tags"><span class="tag">Official</span><span class="tag">Level 1 or boost to 80</span>'
+        f'{_players_text(_nonneg(st.get("players")), _nonneg(st.get("bots")), bool(st.get("online")))}</div>'
+        '<p>The WrathUnleashed realm: Dalaran in your browser, or the whole world with your own game files.</p>'
+        '<p><a class="btn" href="/wrath">Play</a></p></div>')
+    realms, ok = community_realms()
+    rows = []
+    for r in realms:
+        name = html.escape(r["name"])
+        tags = (f'<span class="tag">{html.escape(RULESET_LABELS[r["ruleset"]])}</span>'
+                f'<span class="tag">{html.escape(r["type"])}</span>'
+                + ('' if r["claimed"] else '<span class="tag">unclaimed</span>')
+                + _players_text(r["players"], r["bots"], r["live"]))
+        join = f'{JOIN_BASE}/join/{r["id"]}'
+        rows.append(
+            f'<div class="realm"><h2>{name}</h2><div class="tags">{tags}</div>'
+            + (f'<p>{html.escape(r["tagline"])}</p>' if r["tagline"] else '')
+            + ('<details><summary>House rules</summary><ol>'
+               + "".join(f'<li>{html.escape(x)}</li>' for x in r["rules"]) + '</ol></details>' if r["rules"] else '')
+            + f'<p><a class="btn" href="{html.escape(join)}" rel="noopener noreferrer">Join</a></p></div>')
+    if rows:
+        community = "".join(rows)
+        if not ok:
+            community = '<p class="fine">The realm list may be a little out of date right now.</p>' + community
+    elif ok:
+        community = ('<p class="fine">No community realms are open right now. Anyone can host one: '
+                     'a private realm for friends or a public Dalaran hangout, with their own GM login and rules.</p>')
+    else:
+        community = '<p class="fine">The community realm list isn\'t reachable right now. Try again in a minute.</p>'
+    body = (f'<style>{REALM_CSS}</style>'
+            f'<div class="top"><span class="eyebrow">{html.escape(REALM_NAME)}</span>'
+            '<a class="keylink" href="/wrath">Back</a></div>'
+            '<h1>Realms</h1><p class="sub">Wrath of the Lich King 3.3.5a</p>'
+            + official +
+            '<h2 class="eyebrow" style="margin-top:20px">Community realms</h2>'
+            + community +
+            '<p class="fine foot">Community realms are run by players on their own PCs, through the relay '
+            '(nobody sees anyone\'s home address). Each host sets their own house rules and is the GM there.</p>')
+    return render(body)
 
 
 class _Window:
@@ -967,6 +1151,12 @@ class PageHandler(BaseHTTPRequestHandler):
         if path == "/wrath/healthz":
             ok, kind = health()
             self.send(200 if ok else 503, b"ok\n" if ok else f"soap {kind}\n".encode(), "text/plain")
+            return
+        if path == "/wrath/realms":
+            if not page_limit.hit(self.ip(), 120):
+                self.send(429, busy_page())
+                return
+            self.send(200, realms_page())
             return
         if path not in ("/wrath", "/wrath/account"):
             self.send(404, b"not found\n", "text/plain")

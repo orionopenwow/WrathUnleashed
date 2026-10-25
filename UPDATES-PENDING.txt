@@ -36,3 +36,5 @@
 1025v ship  Save to GitHub (orionopenwow/WrathUnleashed)
 1025w scripts  Every new race/class combo starts with its full class kit (weapon, armour, ammo, Hearthstone, food); live reload
 1025x ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1025y signin  Play page: Realms list at /wrath/realms (official first, then community realms from Beacons)
+1025z ship  Save the Beacons beta to GitHub (orionopenwow/WrathUnleashed)

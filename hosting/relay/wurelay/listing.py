@@ -38,7 +38,7 @@ from wunet import keys
 from . import httpd
 
 TYPES = ("PvE", "PvP", "RP", "RP-PvP", "Fun")
-RULESETS = ("main", "brawl", "progression", "casual", "custom")
+RULESETS = ("main", "brawl", "progression", "casual", "dalaran", "custom")
 HTTPS_DISCORD = re.compile(r"^https://(discord\.gg|discord\.com/invite)/[A-Za-z0-9-]{2,32}$")
 CLAIM_RE = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
 SKEW = 300

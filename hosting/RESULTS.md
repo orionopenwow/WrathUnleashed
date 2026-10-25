@@ -1,5 +1,14 @@
 # Test results (2026-10-24, this sandbox: Python 3.13, no Docker daemon)
 
+## Beacons beta (2026-10-25): 61 passed
+`cd hosting/tests && python -m pytest -q` -> 61 passed: the 46 below plus
+`test_relay_deploy.py` (9: the relay step against stub docker/curl/ss: DNS missing or pointing elsewhere
+-> plain A-record instructions + exit 3 with Caddy untouched, clean install, idempotent re-run, failed
+health check -> rollback to the old image and config, Caddy refusing -> Caddyfile restored, memory cap,
+the .bat's single SSH login) and `test_beacons_beta.py` (6: the dalaran preset, rules text, kit files,
+trusted proxy range, the image workflow). Stream: `test_stream.py` 67/67, `test_realms.py` 33/33
+(/wrath/realms: official first, escaping, cache, slow relay answered in 2.5 s, dead relay instant).
+
 ## Unit and integration tests: 46 passed (twice: `cryptography` Ed25519 and the pure-Python fallback)
 `cd hosting/tests && python -m pytest -v`. Real relay + real agent + fake AzerothCore 3.3.5a
 (tests/fake_realm.py: SRP6 server side, realm list, auth challenge, session digest, RC4 headers,

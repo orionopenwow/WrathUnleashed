@@ -22,7 +22,8 @@ How to install and run it: `INSTALL-OPERATE.md`. Nothing here is deployed, pushe
 `Host a Wrath realm.bat` (Windows) / `host-wrath-realm.sh` (macOS, Linux). Docker is the only
 prerequisite: every helper runs in containers, so no Python on the host.
 
-* Asks three things: realm name, profile (`main` / `brawl` / `progression`), private or public.
+* Asks three things: realm name, profile (`main` / `brawl` / `progression` / `dalaran`: a light
+  Dalaran hangout, see INSTALL-OPERATE 9.2), private or public.
   Defaults come from the last run, so re-running is the "restart/update" button.
 * Images are variables: `WU_IMAGE=ghcr.io/orionopenwow/wu-ac-wotlk`, `WU_TAG=stable` (to be
   published by CI, `.github/workflows/wu-images.yml`), falling back to the PC's own
