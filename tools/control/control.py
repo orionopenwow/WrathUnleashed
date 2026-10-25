@@ -168,11 +168,33 @@ def start_run(msg: str, items=None, record=True, title="Starting") -> bool:
     return True
 
 
+SELF = Path(__file__).resolve()
+try:
+    SELF_MTIME = SELF.stat().st_mtime
+except OSError:
+    SELF_MTIME = 0.0
+
+
+def restart_if_updated() -> None:
+    """When Claude ships a new control.py, the window restarts itself (minimised, Autopilot as it was) once idle."""
+    try:
+        if SELF.stat().st_mtime == SELF_MTIME or state["running"]:
+            return
+    except OSError:
+        return
+    emit("line", "== The control window was updated: restarting it (a few seconds).")
+    flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+    subprocess.Popen([sys.executable, str(SELF), "--quiet", "--wait-port"], cwd=str(ROOT), creationflags=flags)
+    time.sleep(0.5)
+    os._exit(0)
+
+
 def autopilot_loop() -> None:
     """Runs Claude's new steps on their own while the switch is on; a server check every 3 hours."""
     next_check = time.time() + 300
     while True:
         time.sleep(30)
+        restart_if_updated()
         if not autopilot_on():
             continue
         try:
@@ -377,6 +399,14 @@ class H(http.server.BaseHTTPRequestHandler):
             if not start_run("", [item], False, "Server check"):
                 return self._send(409, '{"error":"already running"}')
             return self._send(200, '{"ok":true}')
+        if self.path == "/api/gm-console":
+            bat = ROOT / "gmconsole" / "Open GM Console.bat"
+            if not bat.exists():
+                return self._send(404, '{"error":"gmconsole\\Open GM Console.bat is missing"}')
+            # Its own window (it keeps the SSH tunnel open; closing that window closes the console).
+            subprocess.Popen(["cmd", "/c", "start", "WrathUnleashed GM Console", "cmd", "/k", "call", str(bat)],
+                             cwd=str(bat.parent), creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            return self._send(200, '{"ok":true}')
         if self.path == "/api/open-game":
             webbrowser.open("https://play.openvanilla.app/wrath")
             return self._send(200, '{"ok":true}')
@@ -432,6 +462,7 @@ a{color:var(--blue)}.hist a{font-family:var(--mono);font-size:12px}
 <header><h1>WrathUnleashed <span>Control</span></h1>
 <div class="health" id="health"></div>
 <button id="auto" title="While this window is open, Claude's updates run on their own">Autopilot: …</button>
+<button id="gmc" title="Opens the GM console (bug reports, players, health, logs) in your browser">GM console</button>
 <button id="check">Check server</button><button id="game">Open the game</button></header>
 <main>
 <div class="stack">
@@ -470,6 +501,7 @@ if(!$("con").childElementCount&&s.lines)s.lines.forEach(line)}
 $("go").onclick=async()=>{$("con").innerHTML="";const r=await fetch("/api/launch",{method:"POST",headers:{...H,"Content-Type":"application/json"},body:JSON.stringify({message:$("msg").value})});if(!r.ok)alert("Couldn't start: "+(await r.text()));refresh()};
 $("check").onclick=async()=>{$("con").innerHTML="";const r=await fetch("/api/check",{method:"POST",headers:H});if(!r.ok)alert("Busy: "+(await r.text()));refresh()};
 $("auto").onclick=async()=>{await fetch("/api/autopilot",{method:"POST",headers:{...H,"Content-Type":"application/json"},body:JSON.stringify({on:!$("auto").dataset.on})});refresh()};
+$("gmc").onclick=async()=>{const r=await fetch("/api/gm-console",{method:"POST",headers:H});if(!r.ok)alert("Couldn't open it: "+(await r.text()))};
 $("game").onclick=()=>fetch("/api/open-game",{method:"POST",headers:H});
 const es=new EventSource(`/api/events?t=${T}`);
 es.onmessage=e=>{const m=JSON.parse(e.data);if(m.kind==="line")line(m.data);else refresh()};
@@ -490,9 +522,16 @@ def main() -> int:
                 self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
             super().server_bind()
 
-    try:
-        srv = Server(("127.0.0.1", PORT), H)
-    except OSError:
+    srv = None
+    # --wait-port: started by restart_if_updated(); the old copy is still letting go of the port.
+    for _ in range(40 if "--wait-port" in sys.argv else 1):
+        try:
+            srv = Server(("127.0.0.1", PORT), H)
+            break
+        except OSError:
+            if "--wait-port" in sys.argv:
+                time.sleep(0.5)
+    if srv is None:
         # Already running (another window): just open it.
         print("WrathUnleashed Control is already running; opening it.")
         if not QUIET:

@@ -58,8 +58,8 @@ def taken(parts):
     low = [p.lower() for p in parts]
     if len(low) < 3 or low[0] != "interface" or any(p.startswith(".") or not p for p in low):
         return False
-    if low[1] == "addons" and low[2] == "foreverui" and len(low) >= 4:
-        return True
+    if low[1] == "addons" and low[2] in ("foreverui", "wrathunleashedui") and len(low) >= 4:
+        return True   # WrathUnleashedUI: our own defaults addon (stream/fui-web), shipped with Forever UI
     if low[1] == "foreverui" and len(low) >= 3:
         return True
     if low[1] == "gluexml" and len(low) == 3 and (low[2].startswith("foreverui") or low[2] == "gluexml.toc"):

@@ -20,7 +20,7 @@ local function player(over)
     function p:GetAccountId() return self.account or 42 end
     function p:GetGUIDLow() return self.guid or 5 end
     function p:GetName() return self.name or "Smokepally" end
-    function p:GetLevel() return 12 end
+    function p:GetLevel() return self.level or 12 end
     function p:GetClass() return 2 end
     function p:GetMapId() return 0 end
     function p:GetZoneId() return 12 end
@@ -31,6 +31,7 @@ local function player(over)
     function p:IsInCombat() return self.combat end
     function p:IsDead() return self.dead end
     function p:CastSpell(t, s, trig) self.casts[#self.casts + 1] = { s, trig } end
+    function p:RegisterEvent(fn, delay, rep) self.timers = self.timers or {}; self.timers[#self.timers + 1] = fn end
     return p
 end
 
@@ -90,6 +91,30 @@ check("other commands untouched", events[42](42, w, "boost") == nil and events[4
 local l = player()
 events[3](3, l)
 check("login tip", l.msgs[1]:match("%.bug"))
+
+-- the level 80 guide
+local g = player()
+check(".guide handled", events[42](42, g, "guide") == false)
+check(".guide shows every line", #g.msgs == #OV_REPORTS_TEST.GUIDE and g.msgs[2]:match("Dungeon Finder"))
+check(".wu mentions .guide", (function() local x = player(); events[42](42, x, "wu"); return x.msgs[1]:match("%.guide") end)())
+check("level event registered", events[13] ~= nil)
+local up = player({ level = 80 })
+events[13](13, up, 79)
+check("reaching 80 queues the guide", up.timers and #up.timers == 1)
+up.timers[1](1, 4000, 1, up)
+check("...and shows it", #up.msgs == #OV_REPORTS_TEST.GUIDE)
+local mid = player({ level = 45 })
+events[13](13, mid, 44)
+check("below 80: no guide", not mid.timers)
+local again = player({ level = 80 })
+events[13](13, again, 80)
+check("already 80 (a level event at 80): no repeat", not again.timers)
+local l80 = player({ level = 80 })
+events[3](3, l80)
+check("an 80's login points to .guide", l80.msgs[2] and l80.msgs[2]:match("%.guide"))
+local l12 = player()
+events[3](3, l12)
+check("a level 12's login doesn't", #l12.msgs == 1)
 
 print(string.format("\n%d/%d passed", pass, pass + fail))
 os.exit(fail == 0 and 0 or 1)

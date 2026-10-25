@@ -95,6 +95,8 @@ rem WrathUnleashed (fui-glue): its own fixes to the login screens (no logo, top 
 rem select layout), from stream\fui-web next to this file. fui-overlay.py lists
 rem ForeverUIGlueWeb.xml in GlueXML.toc right after ForeverUIGlue.xml.
 if exist "%~dp0fui-web\Interface\GlueXML\ForeverUIGlueWeb.xml" copy /y "%~dp0fui-web\Interface\GlueXML\ForeverUIGlueWeb.*" "!F!\GlueXML\" >nul || goto fail
+rem WrathUnleashedUI (fui-web\Interface\AddOns): our in-game defaults (every action bar on, a level 80's bars filled).
+if exist "%~dp0fui-web\Interface\AddOns\WrathUnleashedUI\WrathUnleashedUI.toc" xcopy /e /i /y /q "%~dp0fui-web\Interface\AddOns\WrathUnleashedUI" "!F!\AddOns\WrathUnleashedUI\" >nul || goto fail
 if not exist "!F!\GlueXML\ForeverUIGlue.xml" (echo Forever UI's login screens ^(ForeverUIGlue.xml^) are missing from !SRC!. & goto fail)
 for /f %%b in ('powershell -NoProfile -Command "(Get-ChildItem -Recurse -File '!STG!' | Measure-Object Length -Sum).Sum"') do set "BYTES=%%b"
 for /f %%n in ('powershell -NoProfile -Command "(Get-ChildItem -Recurse -File '!STG!\foreverui').Count"') do set "NFILES=%%n"

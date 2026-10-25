@@ -1,19 +1,29 @@
 {
- "updated": "Sun 25 Oct, 00:31",
+ "updated": "Sun 25 Oct, 00:47",
  "waiting_on_you": [],
  "now": [
   {
    "tag": "client",
-   "text": "Next client: dungeons and Dalaran look",
-   "detail": "Grey screen after the Dungeon Finder teleport, pink Dalaran streets, Crystalsong minimap, a 32 s stall entering Dalaran, our loading screen on teleports, the I key."
+   "text": "Next client: faster Dalaran, our loading screen on teleports",
+   "detail": "The 32 s stall entering Dalaran, Dalaran minimap and street texture, Dungeon Finder checkboxes."
   },
   {
    "tag": "ui",
    "text": "Forever UI: iterate until it matches",
-   "detail": "Dungeon Finder role icons and checkboxes, then bars, bags, character window at 16:9, 16:10 and phone."
+   "detail": "Bars, bags, character window at 16:9, 16:10 and phone."
   }
  ],
  "done": [
+  {
+   "tag": "client",
+   "text": "Client 20261025a live: dungeons render after the Dungeon Finder teleport",
+   "detail": "Trial of the Champion: queued, group formed, entered, renders. Bot role icons fixed."
+  },
+  {
+   "tag": "page",
+   "text": "One game tab at a time",
+   "detail": "A second tab offers 'Play here' instead of knocking both off. Esc works in fullscreen."
+  },
   {
    "tag": "ship",
    "text": "Tonight saved to orionopenwow/WrathUnleashed",

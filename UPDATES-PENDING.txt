@@ -19,3 +19,9 @@
 1025e ship  Tidy the update list wording
 1025f client  Client 20261025a: fixes the grey view inside dungeons after the Dungeon Finder teleport, bot role icons; one game tab at a time ("Play here" moves it), Esc works in fullscreen
 1025g ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1025h foreverui  Modern UI size by default (smaller minimap, everything in proportion) with a UI size slider; every action bar on; level 80 bars filled; Esc > Mods & Workshop (addons on/off, workshop and repos)
+1025i ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1025j scripts  Level 80 guide: .guide, shown on reaching 80 (boost too), with a pointer at login for 80s
+1025k ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1025l foreverui  Default keys for every bar (1-7 and F G T Z X; Shift, Ctrl, Alt for the bars above; 8 9 0 - = left free), talent planner on
+1025m ship  Save to GitHub (orionopenwow/WrathUnleashed)
