@@ -108,3 +108,9 @@
 1031a slice  Rebuild the streamed slice: every player mount and summon, zone music and ambience, torch and fountain sounds, the Dalaran minimap, target circles and shadows, transports (new slice tool)
 1031b ship  Save to GitHub (orionopenwow/WrathUnleashed)
 1030f ship  Save to GitHub (orionopenwow/WrathUnleashed): the Leyline Launcher in the stone, parchment and gold look (own title bar, live realm status, links), cleaned UI art
+1032a slice  Rebuild the streamed slice at 7.4 GB: every dungeon and raid back, full sound in Dalaran, the capitals and the starting areas, grass and creature footsteps (instance music deferred)
+1032b ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1033a scripts  Builder: edit mode commands (.build pick, spawnat, placeat) for the free building camera
+1033b foreverui  Edit mode HUD (F7 or /edit): banner, tool bar, click to select, Props to place by clicking, G to carry
+1033c client  Client 20261025g: edit mode (F7) free building camera, click-select, carry and drop props with Q/E turning; plus the 20261025f fixes (animated char select/create, no black create screen, no falling through, no black screen in Dalaran)
+1033d ship  Save to GitHub (orionopenwow/WrathUnleashed): edit mode, the Leyline Launcher look

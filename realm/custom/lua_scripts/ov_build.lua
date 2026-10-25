@@ -17,6 +17,10 @@
 --   .build load <name|code>           pastes a build at your position and facing
 --   .build share <name>               prints the build's code (6 letters and digits) to give to others
 --   .build saved                      your saved builds
+--   Edit mode (the browser client's free camera, EditMode.lua) also sends:
+--   .build pick <object id>           selects the clicked prop (its GUID counter)
+--   .build spawnat <id> <x> <y> <z>   a prop at an exact point you clicked (within 100 yards, in the area)
+--   .build placeat <x> <y> <z> <deg>  moves the selection to an exact point and turns it <deg> (a drag-and-drop)
 --   GM only: .build grant <name> | revoke <name> | purge <name>
 --
 -- Who builds: GMs always; others once a GM runs .build grant <name> (stored in mod_builder_roles). Building
@@ -474,7 +478,7 @@ end
 
 local function propName(p) return (byId[p.entry] and byId[p.entry].name) or ("prop " .. p.entry) end
 
-local function spawnCommand(player, word)
+local function spawnCommand(player, word, at)
     local c, count = findProp(word)
     if not c then
         if count and count > 1 then return say(player, "More than one prop matches '" .. word .. "'; use its id (|cffffff00.build catalog " .. word .. "|r).") end
@@ -482,12 +486,17 @@ local function spawnCommand(player, word)
     end
     local key, why = buildArea(player)
     if not key then return say(player, why) end
+    if at and not insideArea(key, player:GetMapId(), at.x, at.y, at.z) then
+        return say(player, "That spot is outside the build area.")
+    end
     local guid, now = player:GetGUIDLow(), os.time()
     if lastSpawn[guid] == now then return say(player, "One prop a second.") end
     if countOwner(guid) >= perPlayer() then return say(player, string.format("You have %s, the most allowed (|cffffff00.build delete|r or |cffffff00.build clear|r).", plural(countOwner(guid), "prop"))) end
     if countArea(key) >= perArea() then return say(player, string.format("This area is full (%d props).", perArea())) end
     lastSpawn[guid] = now
-    local p = addProp(guid, player:GetName(), key, c.id, player:GetMapId(), player:GetX(), player:GetY(), player:GetZ(), player:GetO())
+    local px, py, pz, po = player:GetX(), player:GetY(), player:GetZ(), player:GetO()
+    if at then px, py, pz = at.x, at.y, at.z end
+    local p = addProp(guid, player:GetName(), key, c.id, player:GetMapId(), px, py, pz, po)
     if not live[p.id] then
         props[p.id] = nil
         exec(string.format("DELETE FROM mod_builder_props WHERE id = %d", p.id))
@@ -855,10 +864,78 @@ local function purgeCommand(player, arg)
     say(player, string.format("Purged %s of %s.", plural(n, "prop"), arg))
 end
 
+------------------------------------------------------------------------------------------------
+-- edit mode: exact points from the browser client's free camera (EditMode.lua)
+------------------------------------------------------------------------------------------------
+local EXACT_RANGE = 100      -- yards from the builder an exact point may be
+
+local function guidCounter(g)
+    if g == nil then return nil end
+    if GetGUIDLow then
+        local ok, v = pcall(GetGUIDLow, g)
+        if ok and v then return tonumber(v) end
+    end
+    return nil
+end
+
+-- Three numbers, a real point, near the player.
+local function exactPoint(player, xs, ys, zs)
+    local x, y, z = tonumber(xs or ""), tonumber(ys or ""), tonumber(zs or "")
+    if not (x and y and z) or x ~= x or y ~= y or z ~= z then return nil end
+    if dist2(x, y, player:GetX(), player:GetY()) > EXACT_RANGE or math.abs(z - player:GetZ()) > EXACT_RANGE then
+        return nil, "too far"
+    end
+    return { x = x, y = y, z = z }
+end
+
+local function pickCommand(player, arg)
+    local want = tonumber(arg or "")
+    if not want then return say(player, "Usage: |cffffff00.build pick <object id>|r (edit mode sends it when you click a prop).") end
+    local guid = player:GetGUIDLow()
+    for id, g in pairs(live) do
+        local p = props[id]
+        if p and guidCounter(g) == want then
+            if p.owner ~= guid and not isGM(player) then return say(player, "That prop is " .. p.ownerName .. "'s.") end
+            selected[guid] = id
+            return say(player, propName(p) .. " selected.")
+        end
+    end
+    say(player, "That isn't a Builder prop.")
+end
+
+local function spawnAtCommand(player, words)
+    local at, why = exactPoint(player, words[3], words[4], words[5])
+    if not at then
+        return say(player, why == "too far" and "That spot is too far from your character." or
+            "Usage: |cffffff00.build spawnat <id> <x> <y> <z>|r")
+    end
+    spawnCommand(player, words[2], at)
+end
+
+local function placeAtCommand(player, words)
+    local at, why = exactPoint(player, words[2], words[3], words[4])
+    if not at then
+        return say(player, why == "too far" and "That spot is too far from your character." or
+            "Usage: |cffffff00.build placeat <x> <y> <z> [degrees]|r")
+    end
+    local deg = tonumber(words[5] or "0") or 0
+    if deg ~= deg or math.abs(deg) > 360 then return say(player, "Turn by up to 360 degrees.") end
+    local p = selection(player)
+    if not p then return end
+    if not rateMove(player:GetGUIDLow()) then return say(player, "Slow down a little.") end
+    if p.map ~= player:GetMapId() or not insideArea(p.area, p.map, at.x, at.y, at.z) then
+        return say(player, "That would take it out of the build area.")
+    end
+    pushUndo(player:GetGUIDLow(), { kind = "place", id = p.id, x = p.x, y = p.y, z = p.z, o = p.o })
+    placeProp(p, at.x, at.y, at.z, p.o + math.rad(deg), player)
+    say(player, propName(p) .. " placed.")
+end
+
 local function showHelp(player)
     say(player, "Builder: place props in build areas and share builds as codes. /builder opens the window.")
     say(player, "  |cffffff00.build catalog [word]|r  |cffffff00.build spawn <id|name>|r  |cffffff00.build near|r  |cffffff00.build select <n>|r")
     say(player, "  |cffffff00.build move x|y|z <yards>|r  |cffffff00.build turn <deg>|r  |cffffff00.build undo|r  |cffffff00.build delete|r  |cffffff00.build clear|r")
+    say(player, "  Edit mode (F7 in the browser client): click a prop to select it, G to carry it, Props to place new ones.")
     say(player, "  |cffffff00.build save <name>|r  |cffffff00.build load <name|code>|r  |cffffff00.build share <name>|r  |cffffff00.build saved|r  |cffffff00.build where|r")
     say(player, string.format("  Limits: %d props per player, %d per area, one spawn a second.", perPlayer(), perArea()))
     if isGM(player) then say(player, "  GM: |cffffff00.build grant <name>|r  |cffffff00.build revoke <name>|r  |cffffff00.build purge <name>|r") end
@@ -885,6 +962,9 @@ local function run(player, text)
     elseif sub == "where" or sub == "areas" then whereCommand(player)
     elseif sub == "saved" or sub == "builds" then savedCommand(player)
     elseif sub == "spawn" or sub == "place" then spawnCommand(player, table.concat(words, " ", 2))
+    elseif sub == "spawnat" then spawnAtCommand(player, words)
+    elseif sub == "placeat" then placeAtCommand(player, words)
+    elseif sub == "pick" then pickCommand(player, words[2])
     elseif sub == "near" or sub == "list" then nearCommand(player)
     elseif sub == "select" or sub == "sel" then selectCommand(player, words[2])
     elseif sub == "move" then moveCommand(player, (words[2] or ""):lower(), words[3])

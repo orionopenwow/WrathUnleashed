@@ -1,0 +1,500 @@
+diff --git a/crates/benilla-app/src/cvars/table.rs b/crates/benilla-app/src/cvars/table.rs
+index 3db4deb8..78ec28d4 100644
+--- a/crates/benilla-app/src/cvars/table.rs
++++ b/crates/benilla-app/src/cvars/table.rs
+@@ -156,6 +156,7 @@ pub(crate) const REGISTERED_GRAPHICS: &[Registered] = &[
+         "contrast-adaptive sharpening in the FFXGlow combine, 0 off to 1",
+     ),
+     ours("colorContrast", "1", "the combine's contrast, 1 neutral"),
++    ours("leylineEditMode", "0", "Leyline edit mode: the free building camera (F7 or the Builder window)"),
+     ours(
+         "colorSaturation",
+         "1",
+diff --git a/crates/benilla-app/src/pipe_warm/mod.rs b/crates/benilla-app/src/pipe_warm/mod.rs
+index f556c93b..159c0166 100644
+--- a/crates/benilla-app/src/pipe_warm/mod.rs
++++ b/crates/benilla-app/src/pipe_warm/mod.rs
+@@ -85,6 +85,16 @@ pub(crate) fn plugin(app: &mut App) {
+     let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
+         return;
+     };
++    // Small mesh slabs (owner smoke 2026-10-25: Trial of the Champion → hearth to Dalaran went
++    // black). Bevy's default lets a general slab grow by 1.5× up to 512 MiB, and each growth needs
++    // the old and the new buffer alive at once; the 204 MB "general mesh slab 12" creation failed
++    // in the browser, and every later frame submitted an invalid command buffer. Capping slabs at
++    // 64 MiB keeps every growth step small enough for a browser's GPU process.
++    render_app.insert_resource(bevy::render::mesh::allocator::MeshAllocatorSettings {
++        max_slab_size: 64 * 1024 * 1024,
++        large_threshold: 32 * 1024 * 1024,
++        ..Default::default()
++    });
+     render_app.insert_resource(PipeWatch(shared));
+     render_app.add_systems(Render, watch_pipelines.in_set(RenderSystems::Cleanup));
+ }
+diff --git a/crates/benilla-app/src/player.rs b/crates/benilla-app/src/player.rs
+index e600730c..71d90b7a 100644
+--- a/crates/benilla-app/src/player.rs
++++ b/crates/benilla-app/src/player.rs
+@@ -41,6 +41,7 @@ mod camera_water;
+ // The five named camera views, inside `player/` to write the rig's `pub(super)` fields.
+ pub(crate) mod camera_view;
+ mod drunk;
++pub(crate) mod edit_mode;
+ mod embody;
+ mod flags;
+ mod flight;
+@@ -269,6 +270,22 @@ impl Plugin for PlayerPlugin {
+         // The world camera renders only in world or under the loading screen, whose covered
+         // render compiles the world's pipelines before the first visible frame.
+         .add_systems(Update, setup::gate_world_camera)
++        // Leyline edit mode (F7 / the Builder window): the free-fly detach before `control`, the
++        // camera kept near the parked body after it.
++        .init_resource::<edit_mode::EditMode>()
++        .init_resource::<edit_mode::EditGrab>()
++        .add_systems(
++            Update,
++            (
++                edit_mode::sync_edit_mode.before(control),
++                edit_mode::clamp_edit_camera.after(control),
++                edit_mode::edit_tools.after(control),
++                edit_mode::edit_gizmos.after(control),
++            )
++                .in_set(WorldStage::Input)
++                .run_if(not(resource_exists::<crate::run_mode::CaptureMode>))
++                .in_set(crate::char_select::InWorldGated),
++        )
+         // Off in capture mode, where the harness pins the camera, and in world only, so the glue
+         // screens keep the cursor and send no movement.
+         .add_systems(
+diff --git a/crates/benilla-app/src/player/edit_mode.rs b/crates/benilla-app/src/player/edit_mode.rs
+new file mode 100644
+index 00000000..70ca7c9a
+--- /dev/null
++++ b/crates/benilla-app/src/player/edit_mode.rs
+@@ -0,0 +1,284 @@
++//! Leyline edit mode: step out of the character into a free-fly building camera.
++//!
++//! F7 (or the Builder window's switch) flips the `leylineEditMode` CVar; this module follows it.
++//! On, the body is parked where it stands and the camera flies free (WASD, Space/C, Ctrl 5×, mouse
++//! to look), the same free fly the client uses before the server places us. The server is told
++//! nothing: building itself goes through the realm's `.build` commands, which check every change.
++//! The camera stays within [`EDIT_RADIUS`] of the body, so edit mode is a building view and not a
++//! way to scout. Off, the camera seats back on the body as usual.
++
++use super::camera::FlyCam;
++use super::Player;
++use crate::cvars::Cvars;
++use bevy::prelude::*;
++
++/// The CVar the Builder window and F7 share; the UI hides itself while it reads `1`.
++pub(crate) const EDIT_CVAR: &str = "leylineEditMode";
++/// How far (yards) the edit camera may go from the parked body.
++pub(crate) const EDIT_RADIUS: f32 = 120.0;
++/// The toggle key. Unbound in the stock 3.3.5a bindings.
++pub(crate) const EDIT_KEY: KeyCode = KeyCode::F7;
++
++/// Whether edit mode is on this frame, for the systems that act differently while building.
++#[derive(Resource, Default, Clone, Copy, PartialEq, Eq, Debug)]
++pub(crate) struct EditMode {
++    pub(crate) on: bool,
++}
++
++/// Follows the CVar (and F7) into [`EditMode`] and the free-fly detach. Runs before `control`.
++pub(super) fn sync_edit_mode(
++    keys: Res<ButtonInput<KeyCode>>,
++    capture: Res<crate::ui_script::UiKeyboardCapture>,
++    cvars: Option<ResMut<Cvars>>,
++    mut edit: ResMut<EditMode>,
++    mut player: ResMut<Player>,
++) {
++    let Some(mut cvars) = cvars else {
++        return;
++    };
++    let cvar_on = cvars.flag(EDIT_CVAR).unwrap_or(false);
++    // Not in control of a body (loading, a new character, a session end): edit mode is off, and a
++    // saved `1` from an earlier session must not open the next one in the editor.
++    if !player.active {
++        if cvar_on {
++            let _ = cvars.set(EDIT_CVAR, "0");
++        }
++        if edit.on {
++            edit.on = false;
++        }
++        return;
++    }
++    let mut want = cvar_on;
++    if !capture.typing && keys.just_pressed(EDIT_KEY) {
++        want = !want;
++        let _ = cvars.set(EDIT_CVAR, if want { "1" } else { "0" });
++    }
++    if want != edit.on {
++        edit.on = want;
++        player.detached = want;
++        info!("edit mode {}", if want { "on: free camera, body parked" } else { "off: back in the body" });
++    }
++}
++
++/// Keeps the edit camera within [`EDIT_RADIUS`] of the parked body. Runs after `control`.
++pub(super) fn clamp_edit_camera(
++    edit: Res<EditMode>,
++    player: Res<Player>,
++    mut cam: Query<&mut Transform, With<FlyCam>>,
++) {
++    if !edit.on {
++        return;
++    }
++    let Ok(mut t) = cam.single_mut() else {
++        return;
++    };
++    t.translation = clamp_to(t.translation, player.pos, EDIT_RADIUS);
++}
++
++/// `p` pulled back onto the sphere of `radius` around `centre` when it is outside it.
++fn clamp_to(p: Vec3, centre: Vec3, radius: f32) -> Vec3 {
++    let off = p - centre;
++    if off.length() > radius {
++        centre + off.normalize() * radius
++    } else {
++        p
++    }
++}
++
++/// Grab key: pick up the selected prop and carry it on the cursor; again (or a click) to drop it.
++pub(crate) const GRAB_KEY: KeyCode = KeyCode::KeyG;
++/// Turn the carried prop 15 degrees left / right.
++pub(crate) const TURN_LEFT: KeyCode = KeyCode::KeyQ;
++pub(crate) const TURN_RIGHT: KeyCode = KeyCode::KeyE;
++/// Put the carried prop back where it was.
++pub(crate) const CANCEL_KEY: KeyCode = KeyCode::Backspace;
++const TURN_STEP_DEG: f32 = 15.0;
++
++/// The prop the builder last clicked in edit mode, and the carry in progress.
++#[derive(Resource, Default)]
++pub(crate) struct EditGrab {
++    /// The last clicked GameObject (the server is told to select it; it refuses props not ours).
++    pub(crate) entity: Option<Entity>,
++    pub(crate) guid: Option<u64>,
++    /// Carrying: the pose to put back on cancel, and the turn so far in degrees.
++    carry: Option<(Transform, f32)>,
++}
++
++/// The counter part of a GameObject guid, as the realm's `GetGUIDLow` reads it.
++fn guid_counter(guid: u64) -> u64 {
++    guid & 0x00FF_FFFF
++}
++
++/// Calls the edit HUD (WrathUnleashedUI's EditMode.lua) if it is loaded.
++fn call_hud(script: Option<&benilla_ui::script::UiScript>, chunk: &str) {
++    if let Some(script) = script {
++        crate::ui_script::run_or_warn(script, chunk);
++    }
++}
++
++/// Clicks, grab, turn and drop while editing. A click hands the HUD the ground point and the prop
++/// under the cursor (it decides: place the prop chosen in the palette, or select the clicked one);
++/// G carries the selected prop on the cursor, Q/E turn it, a click or G drops it (sent to the
++/// realm as an exact place, which it checks), X puts it back.
++#[allow(clippy::too_many_arguments)]
++pub(super) fn edit_tools(
++    edit: Res<EditMode>,
++    mut clicks: MessageReader<benilla_world::interact::WorldClick>,
++    hovered: Res<crate::target::HoveredObject>,
++    occlusion: Res<crate::target::PickOcclusion>,
++    keys: Res<ButtonInput<KeyCode>>,
++    capture: Res<crate::ui_script::UiKeyboardCapture>,
++    mut grab: ResMut<EditGrab>,
++    mut transforms: Query<&mut Transform, Without<FlyCam>>,
++    script: Option<NonSend<benilla_ui::script::UiScript>>,
++) {
++    let script = script.as_deref();
++    if !edit.on {
++        clicks.clear();
++        if let Some((start, _)) = grab.carry.take() {
++            if let Some(mut t) = grab.entity.and_then(|e| transforms.get_mut(e).ok()) {
++                *t = start;
++            }
++        }
++        return;
++    }
++    let typing = capture.typing;
++    let pressed = |k: KeyCode| !typing && keys.just_pressed(k);
++    let point = occlusion.point;
++
++    // Carrying: follow the cursor's ground point, turn on Q/E.
++    if let Some((start, mut turn)) = grab.carry {
++        if pressed(TURN_LEFT) {
++            turn += TURN_STEP_DEG;
++        }
++        if pressed(TURN_RIGHT) {
++            turn -= TURN_STEP_DEG;
++        }
++        grab.carry = Some((start, turn));
++        if let Some(mut t) = grab.entity.and_then(|e| transforms.get_mut(e).ok()) {
++            if let Some(p) = point {
++                t.translation = p;
++            }
++            t.rotation = Quat::from_rotation_y(turn.to_radians()) * start.rotation;
++        }
++        if pressed(CANCEL_KEY) {
++            if let Some(mut t) = grab.entity.and_then(|e| transforms.get_mut(e).ok()) {
++                *t = start;
++            }
++            grab.carry = None;
++            call_hud(script, "local E = WrathUnleashedUI and WrathUnleashedUI.EditMode; if E and E.Note then E.Note('Put back.') end");
++            clicks.clear();
++            return;
++        }
++        let drop = pressed(GRAB_KEY) || clicks.read().count() > 0;
++        if drop {
++            grab.carry = None;
++            let at = grab
++                .entity
++                .and_then(|e| transforms.get(e).ok())
++                .map(|t| t.translation)
++                .or(point);
++            if let Some(at) = at {
++                let w = benilla_assets::coords::bevy_to_wow(at);
++                call_hud(
++                    script,
++                    &format!(
++                        "local E = WrathUnleashedUI and WrathUnleashedUI.EditMode; if E and E.Drop then E.Drop({:.3}, {:.3}, {:.3}, {:.1}) end",
++                        w[0], w[1], w[2], turn
++                    ),
++                );
++            }
++        }
++        return;
++    }
++
++    // Not carrying: G picks the selection up.
++    if pressed(GRAB_KEY) {
++        if let Some(e) = grab.entity {
++            if let Ok(t) = transforms.get(e) {
++                grab.carry = Some((*t, 0.0));
++                call_hud(script, "local E = WrathUnleashedUI and WrathUnleashedUI.EditMode; if E and E.Note then E.Note('Carrying: move the mouse, Q/E to turn, click or G to drop, Backspace to put back.') end");
++            }
++        } else {
++            call_hud(script, "local E = WrathUnleashedUI and WrathUnleashedUI.EditMode; if E and E.Note then E.Note('Click one of your props first, then G to carry it.') end");
++        }
++    }
++
++    // A click: tell the HUD where, and which prop (if any) was under the cursor.
++    for _ in clicks.read() {
++        let go = hovered.target.zip(hovered.guid);
++        if let Some((e, g)) = go {
++            grab.entity = Some(e);
++            grab.guid = Some(g);
++        }
++        let pt = point
++            .map(|p| {
++                let w = benilla_assets::coords::bevy_to_wow(p);
++                format!("{:.3}, {:.3}, {:.3}", w[0], w[1], w[2])
++            })
++            .unwrap_or_else(|| "nil, nil, nil".into());
++        let low = go.map_or("nil".to_string(), |(_, g)| guid_counter(g).to_string());
++        call_hud(
++            script,
++            &format!(
++                "local E = WrathUnleashedUI and WrathUnleashedUI.EditMode; if E and E.Clicked then E.Clicked({pt}, {low}) end"
++            ),
++        );
++    }
++}
++
++/// Draws the edit view's markers: a gold ring and a facing arrow on the selected prop (cyan while
++/// carried), and a small ring where the cursor meets the ground, which is where a click places.
++pub(super) fn edit_gizmos(
++    edit: Res<EditMode>,
++    grab: Res<EditGrab>,
++    occlusion: Res<crate::target::PickOcclusion>,
++    globals: Query<&GlobalTransform>,
++    mut gizmos: Gizmos,
++) {
++    if !edit.on {
++        return;
++    }
++    let flat = Quat::from_rotation_arc(Vec3::Z, Vec3::Y);
++    if let Some(p) = occlusion.point {
++        gizmos
++            .circle(Isometry3d::new(p + Vec3::Y * 0.05, flat), 0.35, Color::srgba(1.0, 1.0, 1.0, 0.8))
++            .resolution(24);
++    }
++    let Some(gt) = grab.entity.and_then(|e| globals.get(e).ok()) else {
++        return;
++    };
++    let carrying = grab.carry.is_some();
++    let color = if carrying {
++        Color::srgb(0.22, 0.74, 0.97)
++    } else {
++        Color::srgb(0.89, 0.72, 0.36)
++    };
++    let at = gt.translation();
++    gizmos.circle(Isometry3d::new(at + Vec3::Y * 0.05, flat), 1.4, color).resolution(48);
++    gizmos.circle(Isometry3d::new(at + Vec3::Y * 0.05, flat), 1.55, color).resolution(48);
++    // The prop's facing, flat on the ground.
++    let fwd = (gt.rotation() * Vec3::NEG_Z).with_y(0.0).normalize_or_zero();
++    if fwd != Vec3::ZERO {
++        gizmos.arrow(at + Vec3::Y * 0.1, at + Vec3::Y * 0.1 + fwd * 2.2, color);
++    }
++    gizmos.line(at, at + Vec3::Y * 2.5, color);
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn the_camera_stays_within_the_radius() {
++        let c = Vec3::new(10.0, 0.0, 0.0);
++        assert_eq!(clamp_to(Vec3::new(20.0, 0.0, 0.0), c, 50.0), Vec3::new(20.0, 0.0, 0.0));
++        let far = clamp_to(Vec3::new(210.0, 0.0, 0.0), c, 50.0);
++        assert!((far - Vec3::new(60.0, 0.0, 0.0)).length() < 1e-4);
++    }
++
++    #[test]
++    fn the_guid_counter_is_the_low_24_bits() {
++        assert_eq!(guid_counter(0xF110_0007_6D00_1234), 0x00_1234);
++    }
++}
+diff --git a/crates/benilla-app/src/player/mover.rs b/crates/benilla-app/src/player/mover.rs
+index 50822410..ce00caa3 100644
+--- a/crates/benilla-app/src/player/mover.rs
++++ b/crates/benilla-app/src/player/mover.rs
+@@ -34,6 +34,10 @@ pub(super) fn water_floor(
+         .flatten()
+ }
+ 
++
++/// How far below the void guard looks for any ground at all (yards): Dalaran floats about 600
++/// over Crystalsong, so a real drop always finds the forest floor within this.
++const VOID_PROBE: f32 = 2000.0;
+ /// What [`step`] decided, for the move flags and the wire that follow it in `control`.
+ pub(super) struct Outcome {
+     /// The settle hold while the world streams in after a teleport: frozen, gravity off.
+@@ -123,7 +127,28 @@ pub(super) fn step(
+     // The settle hold after a teleport or login: the world streams in over several frames, so the
+     // body is frozen with gravity off. The terrain streamer releases it on the destination's
+     // residency, never on ground contact, which a flyer or a swimmer never makes.
+-    let held = player.settling;
++    // The void guard (WrathUnleashed): falling with nothing at all below for [`VOID_PROBE`] yards
++    // means the ground there has not streamed in yet (a tile, or a city's collider still
++    // building). Falling on would drop the player through the world, so the body waits frozen,
++    // as under the settle hold, and the page says why. A flyer, a swimmer or a rooted body is
++    // left alone; real ground anywhere below ends it.
++    let over_void = !player.settling
++        && !on_walkable
++        && !on_water
++        && !player.steep_support
++        && !player.wedged
++        && !player.modes.can_fly
++        && !player.modes.rooted
++        && player.vel_y <= 0.0
++        && probe_down(center, VOID_PROBE).is_none();
++    if over_void != player.void_hold {
++        player.void_hold = over_void;
++        crate::webprogress::signal(if over_void { "ground-wait:1" } else { "ground-wait:0" });
++        if over_void {
++            info!("void guard: nothing under the body for {VOID_PROBE} yd — held until the ground streams in");
++        }
++    }
++    let held = player.settling || over_void;
+     // Rooted, nothing moves the body: `SetRoot` (`0x7c7340`) clears FALLING (`0x7c6290`) and the
+     // direction bits, so the dispatcher (`0x634040`) skips the fall integrator (`0x635b00`) and the
+     // walk resolver returns on a step under `2^-20`. A root caught mid-air hangs until `ClearRoot`
+diff --git a/crates/benilla-app/src/player/state.rs b/crates/benilla-app/src/player/state.rs
+index 5044df7f..b13e68b1 100644
+--- a/crates/benilla-app/src/player/state.rs
++++ b/crates/benilla-app/src/player/state.rs
+@@ -397,6 +397,9 @@ pub(crate) struct Player {
+     /// standing, since the straight-down ground probe sees only the steep face; re-earned each
+     /// frame.
+     pub(super) steep_support: bool,
++    /// The void guard ([`super::mover::step`]): airborne over nothing, so the ground under the
++    /// body has not streamed in yet; the body waits, frozen, until something is below.
++    pub(super) void_hold: bool,
+     /// A hover grant owes a jump: the reference's handler `0x61a620` calls `CMovement::Jump(0)`
+     /// (`0x61a630`) before setting the flag, and its disable arm calls `StartFalling` (`0x61a637`).
+     /// Latched for the take-off site, since our mover re-derives ground contact every frame and
+diff --git a/crates/benilla-app/src/portrait/glue_backdrop.rs b/crates/benilla-app/src/portrait/glue_backdrop.rs
+index 8a749cd0..ff828dbf 100644
+--- a/crates/benilla-app/src/portrait/glue_backdrop.rs
++++ b/crates/benilla-app/src/portrait/glue_backdrop.rs
+@@ -24,8 +24,10 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+ 
+ use super::glue_booth::GlueLook;
+ 
+-/// The minimal backdrop is on: the scene model is read stage-only and never drawn.
+-pub(crate) const MINIMAL_GLUE_BACKDROP: bool = true;
++/// The minimal backdrop: off (owner, 2026-10-25: "put the animated background back"). The race's
++/// own animated scene stands behind the character at select and create again; flip to `true` for
++/// the plain faction room.
++pub(crate) const MINIMAL_GLUE_BACKDROP: bool = false;
+ 
+ /// Whether `token`'s scene gets the minimal backdrop: character select and create, not the login
+ /// screen's.
+@@ -353,15 +355,20 @@ pub(super) fn drive_glue_backdrop(
+     real: Res<Time<bevy::time::Real>>,
+     mut setup: (ResMut<Assets<Mesh>>, ResMut<Assets<Image>>),
+ ) {
+-    let Some(view) = scene.backdrop_view() else {
++    // The assets first, whenever a glue scene is up: the scene's spawn waits on them, and the view
++    // exists only after that spawn, so creating them on the view stood both waiting for ever (the
++    // black character screen of 2026-10-25).
++    let Some(mut backdrop) = backdrop else {
++        if preview.scene.is_some() && MINIMAL_GLUE_BACKDROP {
++            commands.insert_resource(GlueBackdrop::new(
++                &mut setup.0,
++                &mut setup.1,
++                &mut materials,
++            ));
++        }
+         return;
+     };
+-    let Some(mut backdrop) = backdrop else {
+-        commands.insert_resource(GlueBackdrop::new(
+-            &mut setup.0,
+-            &mut setup.1,
+-            &mut materials,
+-        ));
++    let Some(view) = scene.backdrop_view() else {
+         return;
+     };
+     let key = view.key();
+diff --git a/crates/benilla-app/src/portrait/glue_booth.rs b/crates/benilla-app/src/portrait/glue_booth.rs
+index b09c8382..b38d1179 100644
+--- a/crates/benilla-app/src/portrait/glue_booth.rs
++++ b/crates/benilla-app/src/portrait/glue_booth.rs
+@@ -393,7 +393,7 @@ struct PendingSwap {
+ }
+ 
+ /// The bound on that hold, so a look whose assembly never completes cannot freeze the screen.
+-const GLUE_SWAP_HOLD_SECS: f32 = 2.0;
++const GLUE_SWAP_HOLD_SECS: f32 = 6.0;
+ 
+ /// Whether the stage may swap this frame: nothing coherent is `standing`, both the requested art
+ /// and body are ready, or the hold has reached [`GLUE_SWAP_HOLD_SECS`].
+diff --git a/crates/benilla-app/src/target/hover.rs b/crates/benilla-app/src/target/hover.rs
+index 2b3de0f8..efe563c4 100644
+--- a/crates/benilla-app/src/target/hover.rs
++++ b/crates/benilla-app/src/target/hover.rs
+@@ -554,7 +554,11 @@ pub(super) fn update_hovered_object(
+     self_q: Query<&ObjectStore, With<crate::net::SelfPlayer>>,
+     parts: PickParts,
+     mut cache: GoPickSet,
++    // Leyline edit mode picks every placed object, eligible for a mouseover or not: building
++    // props are plain decorations the stock gate would never highlight.
++    edit: Option<Res<crate::player::edit_mode::EditMode>>,
+ ) {
++    let editing = edit.is_some_and(|e| e.on);
+     *cache.frame = cache.frame.wrapping_add(1);
+     let added_parts = &cache.added;
+     let removed_parts = &mut cache.removed;
+@@ -730,7 +734,7 @@ pub(super) fn update_hovered_object(
+             store.0.gameobject_faction(),
+             self_store,
+         );
+-        if !crate::target::cursor_mode::mouseover_eligible(
++        if !editing && !crate::target::cursor_mode::mouseover_eligible(
+             store.0.gameobject_type_id(),
+             store.0.gameobject_flags(),
+             store.0.gameobject_dynamic_flags(),

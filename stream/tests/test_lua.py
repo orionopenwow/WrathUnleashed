@@ -113,6 +113,13 @@ json_tiers = {n: sorted(m["id"] for m in t["maps"]) for n, t in ordered}
 check("lua tiers == mini.json tiers", lua_tiers == json_tiers, f"{lua_tiers} vs {json_tiers}")
 check("mini.json maxTier in range", 1 <= doc["maxTier"] <= max(json_tiers))
 check("mini.json has a budget", isinstance(doc.get("budgetMB"), int) and 1024 <= doc["budgetMB"] <= 8192)
+sp_ = doc.get("soundPolicy", {})
+check("sound policy: music only where players live, ambience everywhere",
+      set(sp_.get("musicKinds", [])) == {"base", "home", "city", "starter"}
+      and {"dungeon", "raid", "arena", "battleground"} <= set(sp_.get("ambienceKinds", [])))
+last = next(t for t in doc["tiers"] if t["key"] == doc["order"][-1])
+check("sound policy: the deferred music is the last tier, a tier with no maps",
+      last.get("collectDeferred") is True and not last.get("maps") and sum(1 for t in doc["tiers"] if t.get("collectDeferred")) == 1)
 
 # 3. lfg_ids.py
 lfg = load("lfg", os.path.join(HERE, "lua/lfg_ids.py"))

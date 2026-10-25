@@ -88,7 +88,7 @@ in game: lua/ov_slices.lua                  a marked account that leaves the sli
 Each tier in `slices/mini.json` has a stable `key`. The top-level **`order`** list is the priority:
 a tier's number is its position there. **To reorder, move a key; to drop a tier, delete its key from
 `order`.** Each tier is exported separately, and the slice grows until the budget (`budgetMB`,
-6144 now) is reached. The realm reads the same file: `stream-up.sh` and every slice upload run
+7424 now) is reached. The realm reads the same file: `stream-up.sh` and every slice upload run
 `lua/tiers_lua.py` to make `ov_slices_tiers.lua`, so nothing is listed twice.
 
 The kit's order (the owner's priority; tier numbers are positions, so they follow any change):
@@ -176,6 +176,24 @@ this. The export report shows the MB saved and the full size per tier.
    A base prefix ending in `*` (`Textures\*`) takes only the files directly in that folder (the
    target circle, unit shadows, sun and moon). These need a `wenilla-host.exe` built from the
    current `wenilla-host-stream.patch`; an older one ignores `Textures\*` and walks no sounds.
+
+   **Sound policy** (`soundPolicy` in `mini.json`): zone music and intros are taken only by the
+   kinds players live in (`base`, `home`, `city`, `starter`: Dalaran, the capitals, the starter
+   areas, the Goldshire inn); ambience by every kind. A tier's own `"music"` / `"ambience"` wins.
+   What a tier does not take is deferred to the one tier with `"collectDeferred": true`, `music`,
+   last in `order`: dungeon, raid, arena and battleground music streams only if the budget leaves
+   room, and those places otherwise play their ambience and effects without music. Only the tiles
+   inside a map entry's zone, box or tiles give music and ambience, not its `marginTiles` (the realm
+   keeps players inside). Doodad and game-object emitters, ground-effect doodads (the grass and
+   clover clumps of each chunk's texture layers, `GroundEffectTexture` → `GroundEffectDoodad`) and
+   spawned creatures' footsteps (`CreatureSoundData.FootstepID` × `FootstepTerrainLookup`) are always
+   taken; creature voices are not (about 1.5 MB per sound-data row).
+
+   **What each class costs**: step 3 ("Walking the game data") now prints every tier's size as
+   stored and its biggest folders (`size 517.4 MB (cumulative 3709.3): Sound\Music 120.3,
+   World\Maps 98.1, ...`), the same line goes into `tier-N.txt` as a `# size` comment, and the
+   walk ends with every folder over 5 MB across all tiers and the last tier that fits `budgetMB` by
+   these sizes (before "lite": the export's numbers are a little smaller).
 2. **Record, the accuracy check**: "Record a capture.bat dalaran" runs the browser client locally from
    your own game files against the live realm and writes every file it actually asks for to
    `record\names-dalaran.txt`. "Make mini slice.bat" adds every `record\*.txt` at the end, so whatever

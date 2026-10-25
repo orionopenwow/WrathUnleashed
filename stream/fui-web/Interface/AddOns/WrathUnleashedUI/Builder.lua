@@ -168,6 +168,12 @@ end
 
 function B.Spawn()
     if not B.pick then setStatus("Pick a prop first."); return false end
+    -- In edit mode the next click on the ground places it (EditMode.lua); otherwise at your feet.
+    if W.EditMode and W.EditMode.IsOn and W.EditMode.IsOn() then
+        W.EditMode.StartPlacing(B.pick)
+        setStatus("Click the ground where it goes.")
+        return true
+    end
     return B.Command("spawn " .. B.pick.id)
 end
 
@@ -239,6 +245,10 @@ local function build()
     close:SetPoint("TOPRIGHT", -6, -6)
     button(win, "Done", 90, function() win:Hide() end, "BOTTOMRIGHT", -16, 14)
     button(win, "Help", 70, function() B.Command("help") end, "BOTTOMLEFT", 16, 14)
+    -- Edit mode (EditMode.lua): the free building camera; F7 does the same.
+    win.edit = button(win, "Edit mode (F7)", 120, function()
+        if W.EditMode then W.EditMode.Toggle() end
+    end, "BOTTOMRIGHT", -112, 14)
     tinsert(UISpecialFrames, "WrathUnleashedBuilderFrame")   -- Esc closes it
 
     -- search and category

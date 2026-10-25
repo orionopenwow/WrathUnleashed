@@ -292,7 +292,7 @@ def transports_sql(doc: dict, tiers: set[int], base: str | None) -> str:
     return (" UNION ".join(parts) + ";\n") if parts else "SELECT 1 FROM DUAL WHERE FALSE;\n"
 
 
-TOTEMS_SQL = "SELECT DISTINCT 'c', 0, DisplayId, '{tier}' FROM player_totem_model WHERE DisplayId <> 0;\n"
+TOTEMS_SQL = "SELECT DISTINCT 'c', 0, ModelID, '{tier}' FROM player_totem_model WHERE ModelID <> 0;\n"
 
 
 def mounts_tier(doc: dict, tiers: set[int], forced: bool) -> str | None:

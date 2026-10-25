@@ -441,7 +441,7 @@ index 7435cc2a..7ccaa8b9 100644
  pub mod ws;
  
 diff --git a/crates/wenilla-host/src/main.rs b/crates/wenilla-host/src/main.rs
-index b43f024d..dcb4ecd5 100644
+index b43f024..7818a5d 100644
 --- a/crates/wenilla-host/src/main.rs
 +++ b/crates/wenilla-host/src/main.rs
 @@ -8,11 +8,20 @@
@@ -476,7 +476,7 @@ index b43f024d..dcb4ecd5 100644
  )]
  struct Cli {
      /// Address to listen on. Loopback by default; anything else exposes `/data` to that
-@@ -30,17 +40,256 @@ struct Cli {
+@@ -30,17 +40,299 @@ struct Cli {
      #[arg(long, default_value = "127.0.0.1:8090")]
      bind: String,
      /// Directory holding the wasm-bindgen output (`index.html`, `wenilla.js`, `*.wasm`) —
@@ -595,11 +595,41 @@ index b43f024d..dcb4ecd5 100644
 +        eprintln!("warning: {w}");
 +    }
 +    let result = wenilla_host::deps::walk(&chain, &cats, &spec, &tiers, &displays);
++    // Sizes from the chain listing (as stored, before "lite"): a per-tier breakdown by folder, so
++    // what a class of files costs shows before anything is exported.
++    let sizes: std::collections::HashMap<String, u64> = chain
++        .list()
++        .map(|v| v.into_iter().map(|e| (wenilla_host::data::name_key(&e.name), e.size)).collect())
++        .unwrap_or_default();
++    let budget_mb = read_json(spec_path).ok().and_then(|v| v.get("budgetMB")?.as_u64());
++    let mb = |b: u64| b as f64 / (1024.0 * 1024.0);
++    let mut cumulative = 0u64;
++    let mut totals: std::collections::HashMap<String, (u64, usize)> = std::collections::HashMap::new();
++    let mut fit: Option<u32> = None;
 +    for t in &result {
 +        let path = out.join(format!("tier-{}.txt", t.tier));
 +        let mut body = format!("# tier {} {} (wenilla-host --deps)\n", t.tier, t.name);
 +        for n in &t.notes {
 +            body.push_str(&format!("# {n}\n"));
++        }
++        let classes = wenilla_host::deps::size_breakdown(&t.names, &sizes);
++        let bytes: u64 = classes.iter().map(|c| c.1).sum();
++        cumulative += bytes;
++        if budget_mb.is_none_or(|b| mb(cumulative) <= b as f64) {
++            fit = Some(t.tier);
++        }
++        let shown: Vec<String> = classes
++            .iter()
++            .filter(|c| mb(c.1) >= 1.0)
++            .take(10)
++            .map(|c| format!("{} {:.1}", c.0, mb(c.1)))
++            .collect();
++        let line = format!("{:.1} MB (cumulative {:.1}): {}", mb(bytes), mb(cumulative), shown.join(", "));
++        body.push_str(&format!("# size {line}\n"));
++        for c in &classes {
++            let e = totals.entry(c.0.clone()).or_default();
++            e.0 += c.1;
++            e.1 += c.2;
 +        }
 +        for n in &t.names {
 +            body.push_str(n);
@@ -615,6 +645,19 @@ index b43f024d..dcb4ecd5 100644
 +        );
 +        for n in &t.notes {
 +            println!("         {n}");
++        }
++        println!("         size {line}");
++    }
++    let mut all: Vec<_> = totals.into_iter().collect();
++    all.sort_by_key(|c| std::cmp::Reverse(c.1 .0));
++    println!("\nall walked tiers: {:.1} MB as stored (lite textures make the export smaller)", mb(cumulative));
++    for (c, (b, n)) in all.iter().filter(|c| mb(c.1 .0) >= 5.0) {
++        println!("  {:<36} {:>9.1} MB {:>7} files", c, mb(*b), n);
++    }
++    if let Some(b) = budget_mb {
++        match fit {
++            Some(t) => println!("budgetMB {b}: tiers up to {t} fit by these sizes"),
++            None => println!("budgetMB {b}: not even the base fits by these sizes"),
 +        }
 +    }
 +    Ok(())
@@ -738,7 +781,7 @@ index b43f024d..dcb4ecd5 100644
  }
  
  #[tokio::main]
-@@ -50,30 +299,92 @@ async fn main() -> Result<()> {
+@@ -50,30 +342,92 @@ async fn main() -> Result<()> {
          .init();
      let cli = Cli::parse();
  
@@ -758,14 +801,6 @@ index b43f024d..dcb4ecd5 100644
 +    let Some(www) = cli.www.clone() else {
 +        bail!("--www (the browser build folder) is required to serve");
 +    };
-+
-+    let chain = if cli.only_listed && cli.data.is_none() {
-+        None
-+    } else {
-+        let c = Arc::new(open_chain(&cli.data)?);
-+        tracing::info!(data = %cli.data.as_ref().map(|d| d.display().to_string()).unwrap_or_default(), "patch chain open");
-+        Some(c)
-+    };
  
 -    let app = wenilla_host::data::router(chain)
 -        .merge(wenilla_host::ws::router(
@@ -773,6 +808,14 @@ index b43f024d..dcb4ecd5 100644
 -            wenilla_host::ALLOWED_PORTS,
 -        ))
 -        .merge(wenilla_host::static_site::router(&cli.www));
++    let chain = if cli.only_listed && cli.data.is_none() {
++        None
++    } else {
++        let c = Arc::new(open_chain(&cli.data)?);
++        tracing::info!(data = %cli.data.as_ref().map(|d| d.display().to_string()).unwrap_or_default(), "patch chain open");
++        Some(c)
++    };
++
 +    // The player's own loose `Interface` folder beside `Data` (their addons), when there is one.
 +    let loose = cli
 +        .data
@@ -850,10 +893,10 @@ index b43f024d..dcb4ecd5 100644
  
 diff --git a/crates/wenilla-host/src/deps.rs b/crates/wenilla-host/src/deps.rs
 new file mode 100644
-index 00000000..9689c2a0
+index 00000000..8e093bf2
 --- /dev/null
 +++ b/crates/wenilla-host/src/deps.rs
-@@ -0,0 +1,1469 @@
+@@ -0,0 +1,1724 @@
 +//! `--deps`: work out, without playing, which game files a "mini" slice needs — a static walk of
 +//! the game data from a slice description (`slices/mini.json`), tier by tier.
 +//!
@@ -917,6 +960,20 @@ index 00000000..9689c2a0
 +    pub prefixes: Vec<String>,
 +    pub names: Vec<String>,
 +    pub maps: Vec<MapSpec>,
++    /// Zone music and intros (`"music"`; default: on for the kinds players live in, `base`,
++    /// `home`, `city`, `starter`, off for dungeons, raids, arenas and battlegrounds). Off, the
++    /// tier's music is deferred to the tier with `"collectDeferred": true`.
++    pub music: bool,
++    /// Zone and WMO ambience (`"ambience"`, default on); off, deferred like music.
++    pub ambience: bool,
++    /// This tier takes the music and ambience earlier tiers deferred (`"collectDeferred"`): the
++    /// optional last tier, streamed only if the budget leaves room.
++    pub collect_deferred: bool,
++}
++
++/// Whether a tier of this `kind` takes its zone music unless it says otherwise.
++pub fn music_by_kind(kind: &str) -> bool {
++    matches!(kind, "" | "base" | "home" | "city" | "starter")
 +}
 +
 +pub struct MapSpec {
@@ -987,6 +1044,18 @@ index 00000000..9689c2a0
 +                }
 +            }
 +        }
++        // "soundPolicy": {"musicKinds": [...], "ambienceKinds": [...]}: the tier kinds that take
++        // their zone music / ambience when the tier does not say; an empty kind is the base's.
++        let sp = v.get("soundPolicy");
++        let policy = |field: &str, default: fn(&str) -> bool| -> Box<dyn Fn(&str) -> bool> {
++            match sp.and_then(|p| p.get(field)).and_then(|a| a.as_array()) {
++                Some(a) => {
++                    let kinds: Vec<String> = a.iter().filter_map(|k| k.as_str().map(str::to_owned)).collect();
++                    Box::new(move |k: &str| kinds.iter().any(|x| x == if k.is_empty() { "base" } else { k }))
++                }
++                None => Box::new(default),
++            }
++        };
 +        let mut out = Vec::new();
 +        for t in tiers {
 +            let key = t.get("key").and_then(|k| k.as_str()).unwrap_or("").to_owned();
@@ -1038,6 +1107,13 @@ index 00000000..9689c2a0
 +                prefixes: strings_of(t, "prefixes"),
 +                names: strings_of(t, "names"),
 +                maps,
++                music: t.get("music").and_then(|v| v.as_bool()).unwrap_or_else(|| {
++                    policy("musicKinds", music_by_kind)(t.get("kind").and_then(|k| k.as_str()).unwrap_or(""))
++                }),
++                ambience: t.get("ambience").and_then(|v| v.as_bool()).unwrap_or_else(|| {
++                    policy("ambienceKinds", |_| true)(t.get("kind").and_then(|k| k.as_str()).unwrap_or(""))
++                }),
++                collect_deferred: t.get("collectDeferred").and_then(|v| v.as_bool()).unwrap_or(false),
 +            });
 +        }
 +        out.sort_by_key(|t| t.tier);
@@ -1132,17 +1208,24 @@ index 00000000..9689c2a0
 +    pub wmo_minimap: HashMap<String, Vec<String>>,
 +    /// `SoundEntries` id → its files (`DirectoryBase` + `File[i]`, as the client joins them).
 +    pub kit_files: HashMap<u32, Vec<String>>,
-+    /// `AreaTable` id → the kits of its music (day, night), intro and ambience (day, night),
-+    /// each inherited from the nearest parent that has one.
-+    pub area_kits: HashMap<u32, Vec<u32>>,
-+    /// `WMOAreaTable.WMOID` → the kits of all its rows (ambience, music, intro) and the
++    /// `AreaTable` id → the kits of its music (day, night) and intro, and of its ambience (day,
++    /// night), each inherited from the nearest parent that has one.
++    pub area_kits: HashMap<u32, AudioKits>,
++    /// `WMOAreaTable.WMOID` → the kits of all its rows (music and intro, ambience) and the
 +    /// `AreaTable` areas those rows count as.
-+    pub wmo_kits: HashMap<u32, (Vec<u32>, Vec<u32>)>,
++    pub wmo_kits: HashMap<u32, (AudioKits, Vec<u32>)>,
 +    /// game-object display → its non-zero `GameObjectDisplayInfo` sound slots.
 +    pub gameobject_kits: HashMap<u32, Vec<u32>>,
 +    /// What the base takes whatever it walks: every `LiquidType` loop, the ghost and underwater
 +    /// beds.
 +    pub base_kits: Vec<u32>,
++    /// `GroundEffectTexture` id (an MCLY layer's `effectId`) → its detail doodads (the grass and
++    /// clover clumps the client scatters over that ground).
++    pub ground_effects: HashMap<u32, Vec<String>>,
++    /// creature display → its footstep kits on every terrain (`CreatureSoundData.FootstepID` ×
++    /// `FootstepTerrainLookup`, dry and splash). Voices are left out: about 1.5 MB per sound-data
++    /// row against a few KB of footsteps.
++    pub creature_footsteps: HashMap<u32, Vec<u32>>,
 +    /// Catalogs that failed to load (the walk goes on without them; printed by `--deps`).
 +    pub warnings: Vec<String>,
 +}
@@ -1233,6 +1316,7 @@ index 00000000..9689c2a0
 +        let areas = raw(chain, "AreaTable.dbc");
 +        let wmo_areas = raw(chain, "WMOAreaTable.dbc");
 +        let liquids = raw(chain, "LiquidType.dbc");
++        let ge_rows = raw(chain, "GroundEffectTexture.dbc");
 +        match benilla_formats::load_sound_kit_catalog(chain) {
 +            Err(e) => self.warnings.push(format!("SoundEntries.dbc: {e:#}")),
 +            Ok(kits) => {
@@ -1261,12 +1345,13 @@ index 00000000..9689c2a0
 +            for r in 0..d.rows() {
 +                let id = d.u32(r, 0);
 +                if let Some(a) = cat.resolve(id) {
-+                    let mut k = Vec::new();
-+                    k.extend(a.music.map(|m| m.sounds).into_iter().flatten());
-+                    k.extend(a.intro.map(|i| i.sound_id));
-+                    k.extend(a.ambience.map(|m| m.kits).into_iter().flatten());
-+                    k.retain(|&x| x != 0);
-+                    if !k.is_empty() {
++                    let mut k = AudioKits::default();
++                    k.music.extend(a.music.map(|m| m.sounds).into_iter().flatten());
++                    k.music.extend(a.intro.map(|i| i.sound_id));
++                    k.ambience.extend(a.ambience.map(|m| m.kits).into_iter().flatten());
++                    k.music.retain(|&x| x != 0);
++                    k.ambience.retain(|&x| x != 0);
++                    if !k.music.is_empty() || !k.ambience.is_empty() {
 +                        self.area_kits.insert(id, k);
 +                    }
 +                }
@@ -1278,10 +1363,11 @@ index 00000000..9689c2a0
 +            if d.fields > 10 {
 +                for r in 0..d.rows() {
 +                    let e = self.wmo_kits.entry(d.u32(r, 1)).or_default();
-+                    e.0.extend(cat.ambience_row(d.u32(r, 6)).map(|a| a.kits).into_iter().flatten());
-+                    e.0.extend(cat.zone_music(d.u32(r, 7)).map(|m| m.sounds).into_iter().flatten());
-+                    e.0.extend(cat.intro(d.u32(r, 8)).map(|i| i.sound_id));
-+                    e.0.retain(|&x| x != 0);
++                    e.0.ambience.extend(cat.ambience_row(d.u32(r, 6)).map(|a| a.kits).into_iter().flatten());
++                    e.0.music.extend(cat.zone_music(d.u32(r, 7)).map(|m| m.sounds).into_iter().flatten());
++                    e.0.music.extend(cat.intro(d.u32(r, 8)).map(|i| i.sound_id));
++                    e.0.music.retain(|&x| x != 0);
++                    e.0.ambience.retain(|&x| x != 0);
 +                    let area = d.u32(r, 10);
 +                    if area != 0 && !e.1.contains(&area) {
 +                        e.1.push(area);
@@ -1313,6 +1399,46 @@ index 00000000..9689c2a0
 +        }
 +        self.base_kits.sort_unstable();
 +        self.base_kits.dedup();
++        match benilla_formats::load_ground_effect_catalog(chain) {
++            Err(e) => self.warnings.push(format!("ground effects: {e:#}")),
++            Ok(ge) => {
++                if let Some(d) = ge_rows.as_deref().and_then(RawDbc::new) {
++                    for r in 0..d.rows() {
++                        let id = d.u32(r, 0);
++                        if let Some(e) = ge.effect(id) {
++                            let m: Vec<String> = e.models().into_iter().map(str::to_owned).collect();
++                            if !m.is_empty() {
++                                self.ground_effects.insert(id, m);
++                            }
++                        }
++                    }
++                }
++            }
++        }
++        match (benilla_formats::load_creature_voice_catalog(chain), benilla_formats::load_footstep_catalog(chain)) {
++            (Ok(voices), Ok(steps)) => {
++                for &display in self.creature.keys() {
++                    let Some(class) = voices.for_display(display).map(|v| v.footstep_class).filter(|&c| c != 0) else {
++                        continue;
++                    };
++                    let mut kits = Vec::new();
++                    // TerrainType.SoundID runs 0..9 in 12340; a few spare ids cost nothing.
++                    for terrain in 0..16 {
++                        if let Some((dry, splash)) = steps.resolve_terrain(class, terrain) {
++                            for k in [dry, splash] {
++                                if k != 0 && !kits.contains(&k) {
++                                    kits.push(k);
++                                }
++                            }
++                        }
++                    }
++                    if !kits.is_empty() {
++                        self.creature_footsteps.insert(display, kits);
++                    }
++                }
++            }
++            (Err(e), _) | (_, Err(e)) => self.warnings.push(format!("creature footsteps: {e:#}")),
++        }
 +    }
 +}
 +
@@ -1372,6 +1498,13 @@ index 00000000..9689c2a0
 +    out
 +}
 +
++/// An area's or a WMO's sound kits, music (with the intro) apart from ambience.
++#[derive(Default, Clone, Debug)]
++pub struct AudioKits {
++    pub music: Vec<u32>,
++    pub ambience: Vec<u32>,
++}
++
 +/// The walk's result: one ordered list of names per tier, each without the names of earlier
 +/// tiers, plus notes on what could not be resolved.
 +pub struct TierNames {
@@ -1379,6 +1512,36 @@ index 00000000..9689c2a0
 +    pub name: String,
 +    pub names: Vec<String>,
 +    pub notes: Vec<String>,
++}
++
++/// The folder class a name is counted under in the `--deps` size breakdown: two levels for
++/// `Sound\`, `Textures\` and `World\` (`Sound\Music`, `Textures\GuildEmblems`, `World\Maps`),
++/// three for `World\wmo\` (`World\wmo\Transports`), else the top folder (`Creature`, `Item`).
++pub fn size_class(name: &str) -> String {
++    let parts: Vec<&str> = name.split(['\\', '/']).collect();
++    let top = parts.first().copied().unwrap_or("").to_ascii_lowercase();
++    let depth = match top.as_str() {
++        "world" if parts.get(1).is_some_and(|p| p.eq_ignore_ascii_case("wmo")) => 3,
++        "sound" | "textures" | "world" => 2,
++        _ => 1,
++    };
++    let n = depth.min(parts.len().saturating_sub(1)).max(1);
++    parts[..n].join("\\")
++}
++
++/// `(class, bytes, files)` of `names` by [`size_class`], biggest first; `sizes` maps a name key
++/// to its size (the chain listing).
++pub fn size_breakdown(names: &[String], sizes: &HashMap<String, u64>) -> Vec<(String, u64, usize)> {
++    let mut by: HashMap<String, (String, u64, usize)> = HashMap::new();
++    for n in names {
++        let c = size_class(n);
++        let e = by.entry(c.to_ascii_lowercase()).or_insert_with(|| (c, 0, 0));
++        e.1 += sizes.get(&name_key(n)).copied().unwrap_or(0);
++        e.2 += 1;
++    }
++    let mut v: Vec<_> = by.into_values().collect();
++    v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
++    v
 +}
 +
 +/// `.mdx` / `.mdl` (the DBC spelling) → `.m2` (what is in the archives).
@@ -1564,6 +1727,16 @@ index 00000000..9689c2a0
 +        out.extend(adt.models.iter().map(|m| m2_name(m)));
 +        out.extend(adt.wmos.iter().cloned());
 +        // The areas its chunks are in: their music and ambience (the client's `CurrentArea`).
++        let mut effects: Vec<u32> = adt
++            .mcnk_chunks
++            .iter()
++            .filter_map(|c| c.layers.as_ref())
++            .flat_map(|l| l.layers.iter().map(|l| l.effect_id))
++            .filter(|&e| e != 0 && e != u32::MAX)
++            .collect();
++        effects.sort_unstable();
++        effects.dedup();
++        out.extend(effects.into_iter().map(|e| format!("{TOKEN}ge:{e}")));
 +        let mut areas: Vec<u32> = adt.mcnk_chunks.iter().map(|c| c.header.area_id).filter(|&a| a != 0).collect();
 +        areas.sort_unstable();
 +        areas.dedup();
@@ -1629,6 +1802,14 @@ index 00000000..9689c2a0
 +    tokens: HashSet<String>,
 +    /// Sound files added since the last [`Walker::take`].
 +    pub sound_files: usize,
++    /// Whether zone music and ambience are taken now (the tier's `music`/`ambience`); what is
++    /// not is kept in `deferred` for [`Walker::add_deferred`].
++    pub music: bool,
++    pub ambience: bool,
++    deferred: Vec<u32>,
++    /// ADT tiles in a map entry's margin: their areas' music and ambience are not taken (the realm
++    /// keeps players inside the zone or box; their models and emitters still are).
++    quiet: HashSet<String>,
 +    pub notes: Vec<String>,
 +}
 +
@@ -1643,6 +1824,10 @@ index 00000000..9689c2a0
 +            cat: None,
 +            tokens: HashSet::new(),
 +            sound_files: 0,
++            music: true,
++            ambience: true,
++            deferred: Vec::new(),
++            quiet: HashSet::new(),
 +            notes: Vec::new(),
 +        }
 +    }
@@ -1668,10 +1853,30 @@ index 00000000..9689c2a0
 +
 +    /// An area's music, intro and ambience (parents inherited).
 +    pub fn add_area(&mut self, cat: &Catalogs, area: u32) {
-+        if !self.tokens.insert(format!("area:{area}")) {
++        if !self.tokens.insert(format!("area:{area}:{}{}", self.music, self.ambience)) {
 +            return;
 +        }
-+        for &k in cat.area_kits.get(&area).into_iter().flatten() {
++        if let Some(k) = cat.area_kits.get(&area) {
++            self.add_audio(cat, &k.clone());
++        }
++    }
++
++    /// Music and ambience kits, each taken now or deferred by the tier's policy.
++    fn add_audio(&mut self, cat: &Catalogs, k: &AudioKits) {
++        for (kits, now) in [(&k.music, self.music), (&k.ambience, self.ambience)] {
++            for &kit in kits {
++                if now {
++                    self.add_kit(cat, kit);
++                } else if !self.deferred.contains(&kit) {
++                    self.deferred.push(kit);
++                }
++            }
++        }
++    }
++
++    /// Everything earlier tiers deferred (the `collectDeferred` tier).
++    pub fn add_deferred(&mut self, cat: &Catalogs) {
++        for k in std::mem::take(&mut self.deferred) {
 +            self.add_kit(cat, k);
 +        }
 +    }
@@ -1697,16 +1902,23 @@ index 00000000..9689c2a0
 +                }
 +            }
 +            "wmo" => {
-+                if !self.tokens.insert(tok.to_owned()) {
++                if !self.tokens.insert(format!("{tok}:{}{}", self.music, self.ambience)) {
 +                    return;
 +                }
 +                if let Some((kits, areas)) = v.parse().ok().and_then(|id: u32| cat.wmo_kits.get(&id)) {
-+                    for &k in kits {
-+                        self.add_kit(cat, k);
-+                    }
++                    self.add_audio(cat, kits);
 +                    for &a in areas {
 +                        self.add_area(cat, a);
 +                    }
++                }
++            }
++            "ge" => {
++                if !self.tokens.insert(tok.to_owned()) {
++                    return;
++                }
++                let models = v.parse().ok().and_then(|id: u32| cat.ground_effects.get(&id));
++                for m in models.into_iter().flatten() {
++                    self.add_model(m);
 +                }
 +            }
 +            "mm" => {
@@ -1764,6 +1976,7 @@ index 00000000..9689c2a0
 +    pub fn drain(&mut self) {
 +        while let Some(name) = self.queue.pop_front() {
 +            let key = name_key(&name);
++            let quiet = self.quiet.contains(&key);
 +            let cached = self.refs.and_then(|c| c.borrow().get(&key).cloned());
 +            let refs = match cached {
 +                Some(r) => r,
@@ -1780,6 +1993,7 @@ index 00000000..9689c2a0
 +            };
 +            for r in refs {
 +                match (r.strip_prefix(TOKEN), self.cat) {
++                    (Some(tok), _) if quiet && tok.starts_with("area:") => {}
 +                    (Some(tok), Some(cat)) => self.token(cat, tok),
 +                    (Some(_), None) => {}
 +                    (None, _) => {
@@ -1853,6 +2067,9 @@ index 00000000..9689c2a0
 +            self.add(&g.model);
 +        }
 +        let ([x0, x1, y0, y1], note) = tile_rect(cat, m);
++        // The entry's own tiles, without the margin: only their areas give music and ambience.
++        let inner = MapSpec { margin_tiles: 0, zone: m.zone, world_box: m.world_box, tiles: m.tiles, id: m.id };
++        let ([ix0, ix1, iy0, iy1], _) = tile_rect(cat, &inner);
 +        if let Some(n) = note {
 +            self.notes.push(n);
 +        }
@@ -1870,7 +2087,11 @@ index 00000000..9689c2a0
 +                {
 +                    continue;
 +                }
-+                if self.add(&format!("{base}_{x}_{y}.adt")) {
++                let adt = format!("{base}_{x}_{y}.adt");
++                if !(ix0..=ix1).contains(&x) || !(iy0..=iy1).contains(&y) {
++                    self.quiet.insert(name_key(&adt));
++                }
++                if self.add(&adt) {
 +                    tiles += 1;
 +                }
 +            }
@@ -1898,6 +2119,9 @@ index 00000000..9689c2a0
 +                format!("{b}.blp")
 +            };
 +            self.add(&format!("Textures\\BakedNpcTextures\\{b}"));
++        }
++        for &k in cat.creature_footsteps.get(&display).into_iter().flatten() {
++            self.add_kit(cat, k);
 +        }
 +    }
 +
@@ -1929,6 +2153,8 @@ index 00000000..9689c2a0
 +    let mut listed: Option<Vec<String>> = None;
 +    let mut out = Vec::new();
 +    for t in spec.tiers.iter().filter(|t| tiers.contains(&t.tier)) {
++        w.music = t.music;
++        w.ambience = t.ambience;
 +        if !t.prefixes.is_empty() && listed.is_none() {
 +            listed = Some(src.list());
 +        }
@@ -1967,6 +2193,11 @@ index 00000000..9689c2a0
 +            w.add_base_sounds(cat);
 +        }
 +        w.drain();
++        if t.collect_deferred {
++            let n = w.deferred.len();
++            w.add_deferred(cat);
++            w.notes.push(format!("{n} deferred music and ambience kits"));
++        }
 +        if w.sound_files > 0 {
 +            w.notes.push(format!("{} sound files (music, ambience, emitters)", w.sound_files));
 +        }
@@ -2231,8 +2462,8 @@ index 00000000..9689c2a0
 +        cat.kit_files.insert(2, vec!["Sound\\Ambience\\WMOAmbience\\DalaranSewers.wav".into(), "Sound\\Missing.wav".into()]);
 +        cat.kit_files.insert(3, vec!["Sound\\Music\\ZoneMusic\\Dalaran\\DC_GeneralWalkUni01.mp3".into()]);
 +        cat.kit_files.insert(4, vec!["Sound\\Ambience\\Water\\River_LakeStillA.wav".into()]);
-+        cat.wmo_kits.insert(77, (vec![1, 2], vec![4395]));
-+        cat.area_kits.insert(4395, vec![3]);
++        cat.wmo_kits.insert(77, (AudioKits { music: vec![1], ambience: vec![2] }, vec![4395]));
++        cat.area_kits.insert(4395, AudioKits { music: vec![3], ambience: vec![] });
 +        cat.base_kits = vec![4];
 +        let spec = SliceSpec::parse(
 +            r#"{"order":["base","dalaran"],"tiers":[{"key":"base","prefixes":["Textures\\*"]},
@@ -2271,22 +2502,89 @@ index 00000000..9689c2a0
 +            ("Sound\\Doodad\\Door.wav", vec![1]),
 +            ("World\\G\\Door.m2", m2(1, "")),
 +            ("World\\G\\Door00.skin", vec![1]),
++            ("Sound\\Creature\\Rat\\FootstepRat2.wav", vec![1]),
 +        ]);
 +        let mut cat = Catalogs::default();
 +        cat.map_dir.insert(571, "Northrend".into());
-+        cat.area_kits.insert(2817, vec![9]);
++        cat.area_kits.insert(2817, AudioKits { music: vec![9], ambience: vec![] });
 +        cat.kit_files.insert(9, vec!["Sound\\Music\\CS.mp3".into()]);
 +        cat.kit_files.insert(10, vec!["Sound\\Doodad\\Door.wav".into()]);
 +        cat.gameobject.insert(5, "World\\G\\Door.mdx".into());
 +        cat.gameobject_kits.insert(5, vec![10]);
++        cat.creature.insert(6, ("World\\G\\Door.mdx".into(), vec![], None));
++        cat.kit_files.insert(11, vec!["Sound\\Creature\\Rat\\FootstepRat2.wav".into()]);
++        cat.creature_footsteps.insert(6, vec![11]);
 +        let mut w = Walker::new(&src).with_catalogs(&cat);
 +        // no WDT in the fake: the zone's audio is still taken before the tiles
 +        w.add_map(&cat, &MapSpec { zone: Some(2817), ..MapSpec::whole(571) });
 +        w.add_gameobject(&cat, 5);
++        w.add_creature(&cat, 6);
 +        w.drain();
 +        let got: HashSet<String> = w.take().iter().map(|n| name_key(n)).collect();
 +        assert!(got.contains("sound\\doodad\\door.wav") && got.contains("world\\g\\door.m2"), "{got:?}");
 +        assert!(got.contains("sound\\music\\cs.mp3"), "{got:?}");
++        assert!(got.contains("sound\\creature\\rat\\footsteprat2.wav"), "{got:?}");
++    }
++
++    #[test]
++    fn instance_music_waits_for_the_collecting_tier_and_cities_keep_theirs() {
++        let mut mohd = vec![0u8; 0x40];
++        mohd[0x20] = 9;
++        let src = Fake::new(&[
++            ("World\\wmo\\Dungeon\\Raid.wmo", chunk(b"DHOM", &mohd)),
++            ("World\\wmo\\City\\City.wmo", chunk(b"DHOM", &{ let mut m = mohd.clone(); m[0x20] = 8; m })),
++            ("Sound\\Music\\Raid.mp3", vec![1]),
++            ("Sound\\Ambience\\Raid.wav", vec![1]),
++            ("Sound\\Music\\City.mp3", vec![1]),
++        ]);
++        let mut cat = Catalogs::default();
++        cat.kit_files.insert(1, vec!["Sound\\Music\\Raid.mp3".into()]);
++        cat.kit_files.insert(2, vec!["Sound\\Ambience\\Raid.wav".into()]);
++        cat.kit_files.insert(3, vec!["Sound\\Music\\City.mp3".into()]);
++        cat.wmo_kits.insert(9, (AudioKits { music: vec![1], ambience: vec![2] }, vec![]));
++        cat.wmo_kits.insert(8, (AudioKits { music: vec![3], ambience: vec![] }, vec![]));
++        let spec = SliceSpec::parse(
++            r#"{"order":["base","city","raid","music"],"tiers":[{"key":"base"},
++                {"key":"city","kind":"city","names":["World\\wmo\\City\\City.wmo"]},
++                {"key":"raid","kind":"raid","names":["World\\wmo\\Dungeon\\Raid.wmo"]},
++                {"key":"music","kind":"base","collectDeferred":true}]}"#,
++        )
++        .unwrap();
++        assert!(spec.tiers[1].music && !spec.tiers[2].music && spec.tiers[2].ambience);
++        let out = walk(&src, &cat, &spec, &[0, 1, 2, 3], &[]);
++        let has = |t: usize, n: &str| out[t].names.iter().any(|x| name_key(x) == n);
++        assert!(has(1, "sound\\music\\city.mp3"));
++        assert!(has(2, "sound\\ambience\\raid.wav") && !has(2, "sound\\music\\raid.mp3"));
++        assert!(has(3, "sound\\music\\raid.mp3"), "{:?}", out[3].names);
++        // without the collecting tier the raid's music is simply not streamed
++        let out = walk(&src, &cat, &spec, &[0, 1, 2], &[]);
++        assert!(out.iter().all(|t| !t.names.iter().any(|n| name_key(n) == "sound\\music\\raid.mp3")));
++        // "music": true on a raid tier overrides its kind
++        let spec = SliceSpec::parse(r#"{"tiers":[{"tier":0,"kind":"raid","music":true,"ambience":false}]}"#).unwrap();
++        assert!(spec.tiers[0].music && !spec.tiers[0].ambience);
++        // the slice-wide policy by kind
++        let spec = SliceSpec::parse(
++            r#"{"soundPolicy":{"musicKinds":["home"],"ambienceKinds":["home","city"]},
++                "tiers":[{"tier":0},{"tier":1,"kind":"city"},{"tier":2,"kind":"dungeon"},{"tier":3,"kind":"home"}]}"#,
++        )
++        .unwrap();
++        let got: Vec<(bool, bool)> = spec.tiers.iter().map(|t| (t.music, t.ambience)).collect();
++        assert_eq!(got, [(false, false), (false, true), (false, false), (true, true)]);
++    }
++
++    #[test]
++    fn size_classes() {
++        assert_eq!(size_class("Sound\\Music\\ZoneMusic\\Dalaran\\DC_IntroUni01.mp3"), "Sound\\Music");
++        assert_eq!(size_class("World\\wmo\\Transports\\Transport_Zeppelin\\Z.wmo"), "World\\wmo\\Transports");
++        assert_eq!(size_class("World\\Maps\\Northrend\\Northrend_30_21.adt"), "World\\Maps");
++        assert_eq!(size_class("Creature\\Horse\\Horse.m2"), "Creature");
++        assert_eq!(size_class("Textures\\unitselecttexture.blp"), "Textures");
++        let mut sizes = HashMap::new();
++        sizes.insert(name_key("Creature\\A.m2"), 3 << 20);
++        sizes.insert(name_key("Creature\\B.m2"), 1 << 20);
++        sizes.insert(name_key("Sound\\Music\\M.mp3"), 2 << 20);
++        let b = size_breakdown(&["Creature\\A.m2".into(), "Sound\\Music\\M.mp3".into(), "creature\\b.m2".into()], &sizes);
++        assert_eq!(b, [("Creature".to_string(), 4 << 20, 2), ("Sound\\Music".to_string(), 2 << 20, 1)]);
 +    }
 +
 +    #[test]
@@ -2981,10 +3279,10 @@ index 00000000..4529b621
 +}
 diff --git a/crates/wenilla-host/src/size.rs b/crates/wenilla-host/src/size.rs
 new file mode 100644
-index 00000000..8cb7d4f4
+index 00000000..92cb3f6e
 --- /dev/null
 +++ b/crates/wenilla-host/src/size.rs
-@@ -0,0 +1,539 @@
+@@ -0,0 +1,541 @@
 +//! `--size-report`: how much disk every part of the game would take on the stream server, measured
 +//! from the game data without writing any game file. The same static walk as `--deps` (this
 +//! module only adds the bookkeeping), so a number here is what `--export` would write.
@@ -3248,6 +3546,8 @@ index 00000000..8cb7d4f4
 +}
 +
 +fn walk_tier<S: Source>(w: &mut Walker<S>, src: &S, cat: &Catalogs, t: &crate::deps::TierSpec, displays: &[Display]) {
++    w.music = t.music;
++    w.ambience = t.ambience;
 +    if !t.prefixes.is_empty() {
 +        let all = src.list();
 +        for p in &t.prefixes {

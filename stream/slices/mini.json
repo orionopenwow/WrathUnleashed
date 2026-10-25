@@ -2,8 +2,8 @@
  "slice": "mini",
  "title": "WrathUnleashed in the browser",
  "comment": "The one streamed slice. Each tier has a stable \"key\"; \"order\" lists the keys in priority order and a tier's number is its position there (move a key to reorder, delete it to drop the tier). Tiers are exported in that order until budgetMB; maxTier is the highest tier number the server actually holds (\"Make mini slice.bat\" lowers it to what fit; the gate passes it to the realm). The realm rule reads the same file (lua/tiers_lua.py makes ov_slices_tiers.lua from it), so nothing is listed twice. A map entry is the whole map, or a \"zone\" (AreaTable id, tiles from its world-map rect), or a world \"box\" [x min, x max, y min, y max]; marginTiles widens the streamed tiles, the realm rule uses the zone or box itself. Tier 0 (base) and Dalaran are always first.",
- "maxTier": 56,
- "budgetMB": 6144,
+ "maxTier": 57,
+ "budgetMB": 7424,
  "lite": {
   "comment": "Item models and textures are worn by everyone (spec kits, free Armory gear) and there are too many to pick from, so all of them ship, with textures cut to their mips of at most maxPx on the long side. --export reports what that saved.",
   "maxPx": 256,
@@ -11,6 +11,11 @@
    "Item\\ObjectComponents\\",
    "Item\\TextureComponents\\"
   ]
+ },
+ "soundPolicy": {
+  "comment": "Which tier kinds take their zone music and ambience (wenilla-host --deps walks them from each tier's areas and WMOs; a tier's own \"music\" / \"ambience\" true or false wins). What a tier does not take is deferred to the tier with \"collectDeferred\": true, the last in \"order\", so dungeon and raid music only streams if the budget leaves room. Doodad, game-object and creature-footstep sounds are always taken. Only the tiles inside a map entry's zone or box give music and ambience, never its marginTiles.",
+  "musicKinds": ["base", "home", "city", "starter"],
+  "ambienceKinds": ["base", "home", "city", "starter", "dungeon", "raid", "arena", "battleground"]
  },
  "lowLevel": {
   "comment": "Stream characters below this level live in their faction's starter area and capital; from it on, the Dungeon Finder and the whole .play menu open.",
@@ -73,7 +78,8 @@
     "botanica",
     "mechanar",
     "arcatraz",
-    "magisters-terrace"
+    "magisters-terrace",
+    "music"
   ],
  "tiers": [
   {
@@ -1999,6 +2005,16 @@
      "raid": true
     }
    ]
+  },
+  {
+   "key": "music",
+   "kind": "base",
+   "name": "Dungeon, raid, arena and battleground music",
+   "notes": "Not a place: the zone music the dungeon, raid, arena and battleground tiers left out (soundPolicy), collected here by wenilla-host --deps. Last in order, so it streams only if the budget leaves room; without it those places play their ambience and effects with no music.",
+   "collectDeferred": true,
+   "maps": [],
+   "capture": [],
+   "measuredMB": null
   }
  ],
  "notStreamed": "The open world beyond the starter areas and capitals, questing outside them, Wintergrasp, Alterac Valley, Isle of Conquest, the Deeprun Tram."
