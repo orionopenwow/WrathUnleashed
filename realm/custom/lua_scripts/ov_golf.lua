@@ -14,6 +14,7 @@
 --                      shot <angle> <power>            on your turn: tenths of a degree 0-3599, permille 0-1000
 --                      rest <shot> <end> <x> <y> <z> <hash>     where the roll ended (every member reports)
 --                      skip                            host: skip the player whose turn it is (idle 45 s+)
+--                      top <course> | replay <id>      the course's best rounds; one round's inputs to watch
 --                      publish <course text>           (in parts) publish a course from the editor: everyone may play it
 --   server -> client   courses  key,title,holes,par,author;...
 --                      invite   <id> <host> <title>
@@ -24,6 +25,8 @@
 --                      turn     <name> <stroke> <x> <y> <z> <color> <phase>
 --                      shot     <name> <x> <y> <z> <angle> <power> <phase> <stroke> <shot>
 --                      score    <name>=<s1>,<s2>,...;...       strokes per hole so far
+--                      top      <course>\t<id,name,strokes,verified,players;...>
+--                      replay   <id> <name> <strokes>\n<inputs: per hole "angle,power,phase;..." joined by |>\n<course text>
 --                      msg      <text>
 --                      done     <name>=<total>;...  then  end
 -- mod-ale events: 4 ON_LOGOUT, 28 ON_MAP_CHANGE, 42 ON_COMMAND (".golf ..." does the same as the window).
@@ -31,7 +34,16 @@
 -- title replaces it; ".golf unpublish <key>" (GM) takes one down. A course is only geometry and names, so the
 -- only text players can put on screen (titles, hole names) is cut to letters, digits and simple punctuation.
 
-local OVMod = require("ov_modapi")
+local OVMod
+do
+    -- ALE loads scripts in name order, so ov_modapi.lua may not have run yet: require loads it once.
+    local ok, m = pcall(function() return require("ov_modapi") end)
+    OVMod = (ok and type(m) == "table" and m) or _G.OVMod
+    if not OVMod then
+        print("[ov_golf] ov_modapi.lua is missing: minigolf needs the OVMOD channel; not loaded")
+        return
+    end
+end
 
 local MOD = "wugolf"
 local TAG = "|cff8fe36b[Minigolf]|r "
@@ -290,6 +302,12 @@ exec([[CREATE TABLE IF NOT EXISTS mod_golf_courses (
   ckey VARCHAR(32) NOT NULL PRIMARY KEY, author_guid INT UNSIGNED NOT NULL, author VARCHAR(12) NOT NULL,
   title VARCHAR(48) NOT NULL, text MEDIUMTEXT NOT NULL, updated_at INT UNSIGNED NOT NULL, KEY author (author_guid))]])
 
+exec([[CREATE TABLE IF NOT EXISTS mod_golf_runs (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, guid INT UNSIGNED NOT NULL, name VARCHAR(12) NOT NULL,
+  course VARCHAR(32) NOT NULL, strokes SMALLINT UNSIGNED NOT NULL, players TINYINT UNSIGNED NOT NULL,
+  verified TINYINT UNSIGNED NOT NULL, inputs MEDIUMTEXT NOT NULL, played_at INT UNSIGNED NOT NULL,
+  KEY course_strokes (course, strokes))]])
+
 local MAX_PUBLISHED = 5
 local MAX_COURSE_TEXT = 14 * 1024
 
@@ -375,6 +393,13 @@ local function nextTurn(s)
         local pb = best(p.guid, s.key)
         exec(string.format("INSERT INTO mod_golf_scores (guid, name, course, strokes, par, players, verified, played_at) VALUES (%d, '%s', '%s', %d, %d, %d, %d, %d)",
             p.guid, p.name, s.key, t, s.par, #s.players, verified, now()))
+        -- A round with a skipped turn, a lost report or a leaver can't be replayed shot for shot.
+        if not p.irregular and not p.gone then
+            local holes = {}
+            for h = 1, #s.course.holes do holes[h] = table.concat((p.log or {})[h] or {}, ";") end
+            exec(string.format("INSERT INTO mod_golf_runs (guid, name, course, strokes, players, verified, inputs, played_at) VALUES (%d, '%s', '%s', %d, %d, %d, '%s', %d)",
+                p.guid, p.name, s.key, t, #s.players, verified, table.concat(holes, "|"), now()))
+        end
         local pl = playerOf(p)
         if pl then
             local diff = t - s.par
@@ -535,7 +560,12 @@ local function shotCommand(player, a, p)
     s.shotNo = (s.shotNo or 0) + 1
     s.checks[s.shotNo] = { shooter = m.guid, hashes = {} }
     s.checks[s.shotNo - 4] = nil
-    broadcast(s, "shot", string.format("%s %s %s %s %d %d %d %d %d", m.name, fmt(m.ball.x), fmt(m.ball.y), fmt(m.ball.z), a, p, phase(s), s.stroke, s.shotNo))
+    local ph = phase(s)
+    -- The round's input log, for replays: every client can re-run it and get the same strokes.
+    m.log = m.log or {}
+    m.log[s.hole] = m.log[s.hole] or {}
+    table.insert(m.log[s.hole], string.format("%d,%d,%d", a, p, ph))
+    broadcast(s, "shot", string.format("%s %s %s %s %d %d %d %d %d", m.name, fmt(m.ball.x), fmt(m.ball.y), fmt(m.ball.z), a, p, ph, s.stroke, s.shotNo))
 end
 
 local ENDS = { rest = true, holed = true, out = true, water = true }
@@ -581,6 +611,7 @@ local function skipCommand(player)
     local idle = now() - (s.phase == "rolling" and s.shotAt or s.turnAt or now())
     if idle < IDLE_SKIP then return say(player, "Give them " .. (IDLE_SKIP - idle) .. " more seconds.") end
     note(s, m.name .. "'s turn is skipped.")
+    m.irregular = true
     m.strokes[s.hole] = capFor(s.course.holes[s.hole].par)
     m.done = true
     nextTurn(s)
@@ -621,6 +652,39 @@ local function unpublishCommand(player, key)
     say(player, "Taken down: " .. key)
 end
 
+-- The course's best rounds, one per character: id,name,strokes,verified,players;...
+local function topCommand(player, key)
+    key = (key or ""):gsub("[^%w_]", "")
+    if not byKey[key] then return send(player, "top", key .. "\t") end
+    local rows, seen = {}, {}
+    if CharDBQuery then
+        local ok, q = pcall(CharDBQuery, string.format(
+            "SELECT id, name, strokes, verified, players FROM mod_golf_runs WHERE course = '%s' ORDER BY strokes ASC, played_at ASC LIMIT 60", key))
+        if ok and q then
+            repeat
+                local name = q:GetString(1)
+                if not seen[name] and #rows < 10 then
+                    seen[name] = true
+                    rows[#rows + 1] = string.format("%d,%s,%d,%d,%d", q:GetUInt32(0), name, q:GetUInt32(2), q:GetUInt32(3), q:GetUInt32(4))
+                end
+            until not q:NextRow()
+        end
+    end
+    send(player, "top", key .. "\t" .. table.concat(rows, ";"))
+end
+
+-- A round's inputs and its course, for the client to play back (and so check) on its own.
+local function replayCommand(player, id)
+    id = tonumber(id or "")
+    if not id or not CharDBQuery then return end
+    local ok, q = pcall(CharDBQuery, string.format("SELECT name, course, strokes, inputs FROM mod_golf_runs WHERE id = %d", id))
+    if not ok or not q then return say(player, "That round isn't on record.") end
+    local key = q:GetString(1)
+    local entry = byKey[key]
+    if not entry then return say(player, "That round's course is no longer on this realm.") end
+    send(player, "replay", string.format("%d %s %d\n%s\n%s", id, q:GetString(0), q:GetUInt32(2), q:GetString(3), entry.text))
+end
+
 local function coursesText()
     local parts = {}
     for _, e in ipairs(COURSES) do
@@ -649,6 +713,8 @@ local function run(player, text)
     elseif word == "shot" then shotCommand(player, a, b)
     elseif word == "rest" then restCommand(player, a, b, c, d, e, f)
     elseif word == "skip" then skipCommand(player)
+    elseif word == "top" then topCommand(player, a)
+    elseif word == "replay" then replayCommand(player, a)
     elseif word == "unpublish" then unpublishCommand(player, a)
     else
         say(player, ".golf courses | start [course] | join <id> | go | leave | skip | unpublish <key> (GM). Or open /golf (browser client).")
@@ -656,7 +722,7 @@ local function run(player, text)
 end
 
 -- The window's channel: each message name is the command.
-for _, name in ipairs({ "courses", "start", "join", "go", "leave", "shot", "rest", "skip" }) do
+for _, name in ipairs({ "courses", "start", "join", "go", "leave", "shot", "rest", "skip", "top", "replay" }) do
     OVMod.On(MOD, name, function(player, data) run(player, name .. " " .. (data or "")) end)
 end
 -- A course from the editor arrives whole (ov_modapi reassembles its parts).
@@ -669,6 +735,7 @@ if CreateLuaEvent then
             if s.state == "play" and s.phase == "rolling" and now() - (s.shotAt or now()) > REST_WAIT then
                 local m = current(s)
                 note(s, m.name .. "'s ball was lost in the post; it counts where it was hit from.")
+                m.irregular = true
                 finishShot(s, "rest", m.ball.x, m.ball.y, m.ball.z)
             elseif s.state == "lobby" and now() - s.t0 > 600 then
                 endSession(s, "The game wasn't started in time.")

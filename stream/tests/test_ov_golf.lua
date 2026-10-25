@@ -23,9 +23,35 @@ local events, serverEvents, luaEvents = {}, {}, {}
 function RegisterPlayerEvent(id, fn) events[id] = events[id] or {}; table.insert(events[id], fn) end
 function RegisterServerEvent(id, fn) serverEvents[id] = fn end
 function CreateLuaEvent(fn, delay, rep) luaEvents[#luaEvents + 1] = fn end
-local sql = {}
-function CharDBExecute(s) sql[#sql + 1] = s end
-function CharDBQuery() return nil end
+local sql, runs = {}, {}
+function CharDBExecute(s)
+    sql[#sql + 1] = s
+    local guid, name, course, strokes, players, verified, inputs, at = s:match(
+        "^INSERT INTO mod_golf_runs %(.-%) VALUES %((%d+), '(%w+)', '([%w_]+)', (%d+), (%d+), (%d+), '([^']*)', (%d+)%)")
+    if guid then runs[#runs + 1] = { id = #runs + 1, name = name, course = course, strokes = tonumber(strokes), players = tonumber(players), verified = tonumber(verified), inputs = inputs } end
+end
+local function result(rows)
+    if not rows or #rows == 0 then return nil end
+    local r = { rows = rows, i = 1 }
+    function r:GetUInt32(c) return tonumber(self.rows[self.i][c + 1]) end
+    function r:GetString(c) return tostring(self.rows[self.i][c + 1] or "") end
+    function r:NextRow() self.i = self.i + 1; return self.i <= #self.rows end
+    return r
+end
+function CharDBQuery(q)
+    local course = q:match("FROM mod_golf_runs WHERE course = '([%w_]+)'")
+    if course then
+        local list = {}
+        for _, r in ipairs(runs) do if r.course == course then list[#list + 1] = r end end
+        table.sort(list, function(a, b) return a.strokes < b.strokes end)
+        local rows = {}
+        for _, r in ipairs(list) do rows[#rows + 1] = { r.id, r.name, r.strokes, r.verified, r.players } end
+        return result(rows)
+    end
+    local id = q:match("FROM mod_golf_runs WHERE id = (%d+)")
+    if id then local r = runs[tonumber(id)]; return r and result({ { r.name, r.course, r.strokes, r.inputs } }) end
+    return nil
+end
 
 local players, byGuid = {}, {}
 local P = {}
@@ -310,6 +336,90 @@ G.OnRest("Ann", "rest", 0.2, 0.11, 6, "beef"); deliver()
 check("the rest report gives the next turn from there", (called("ball ") or ""):match("^ball Ann 0 0%.200 0%.110 6%.000") ~= nil)
 G.Leave()
 check("leaving clears the course", called("end") == "end" and next(golfMod.sessions) == nil)
+
+-- The course editor: publish a course in parts, the realm lists it with its author.
+local myCourse = "course Ann's 'Quick' Nine\nby Ann\n\nhole 2 Opener\ntee  0 0 0\ncup  0 0 8\nturf 0 -0.25 4   1.5 0.25 5.5\n"
+    .. string.rep("# padding so the course needs several parts\n", 30)
+local editorOn = true
+local plainGolf = LeylineGolf
+LeylineGolf = function(text)
+    if text == "editorstate" then return editorOn and "on=1 hole=1 holes=1 par=2 tool=select sel=- pieces=1 undo=0 redo=0 grid=0.25 carry=0 name=Opener|" or "on=0" end
+    if text == "editortext" then return myCourse end
+    return plainGolf(text)
+end
+check("the editor is offered when the client has it", G.Editor.Available())
+G.Editor.Start()
+check("the editor starts here", called("editor on here") ~= nil)
+G.Editor.Publish()
+check("publishing also keeps a saved copy", WrathUnleashedUIDB.golfCourses and WrathUnleashedUIDB.golfCourses["Ann's 'Quick' Nine"] == myCourse)
+local pump
+for _, f in ipairs(frames) do if f.scripts.OnUpdate and f ~= _G["LeylineGolfHud"] and f ~= _G["LeylineGolfEditor"] and not f.name then pump = f end end
+for i = 1, 5 do t = t + 1.1; if pump then pump:Fire("OnUpdate") end end
+deliver()
+local listed
+for _, c in ipairs(golfMod.COURSES) do if c.author == "Ann" then listed = c end end
+check("the realm publishes it under the author's name", listed and listed.key == "ann_annsquicknine")
+check("quotes never reach the database", listed and not listed.text:find("'", 1, true))
+local stored = false
+for _, q in ipairs(sql) do if q:find("REPLACE INTO mod_golf_courses", 1, true) and q:find("ann_annsquicknine", 1, true) then stored = true end end
+check("and stores it", stored)
+toServer(ann, "courses", ""); local cl = find(inbox(ann), "courses") or ""
+check("everyone's course list shows it with the author", cl:find("ann_annsquicknine,Anns Quick Nine,1,2,Ann", 1, true) ~= nil)
+for i = 1, 5 do
+    toServer(ann, "publish", "course Extra " .. i .. "\nhole 2\ntee 0 0 0\ncup 0 0 5\nturf 0 -0.25 2 1 0.25 4\n")
+end
+check("five courses each at most", lastChat(ann):find("You have 5 courses published", 1, true) ~= nil)
+toServer(ann, "publish", "course Broken\nhole 2\ncup 0 0 5\n")
+check("a course the game would refuse can't be published", lastChat(ann):find("can't be published", 1, true) ~= nil)
+golfMod.run(ann, "unpublish ann_annsquicknine")
+check("only a GM takes a course down", lastChat(ann):find("Only a GM", 1, true) ~= nil)
+function ann:GetGMRank() return 3 end
+golfMod.run(ann, "unpublish ann_annsquicknine")
+check("a GM can", lastChat(ann):find("Taken down", 1, true) ~= nil)
+ann.GetGMRank = nil
+editorOn = false
+G.Editor.Stop()
+LeylineGolf = plainGolf
+
+-- Leaderboards and replays: a solo round where every putt drops is recorded, listed and replayed.
+golfMod.run(ann, "leave")
+toServer(ann, "start", "meadow"); toServer(ann, "go", ""); inbox(ann)
+for h = 1, 9 do
+    clock = clock + 2
+    toServer(ann, "shot", (h * 10) .. " " .. (500 + h))
+    toServer(ann, "rest", golfMod.sessions[next(golfMod.sessions)].shotNo .. " holed 0 0 0 abcd")
+end
+inbox(ann)
+local run = runs[#runs]
+check("a finished round's inputs are recorded", run and run.name == "Ann" and run.strokes == 9 and select(2, run.inputs:gsub("|", "")) == 8
+    and run.inputs:match("^10,501,%d+|20,502,%d+|") ~= nil)
+check("the Bo round (with a leaver) has no replay", (function() for _, r in ipairs(runs) do if r.name == "Bo" then return false end end return true end)())
+SlashCmdList["LEYLINEGOLF"]("")
+G.pick = "meadow"
+G.AskTop("meadow"); deliver()
+check("best rounds list the course's top rounds", G.view == "top" and G.top.rows[1] and G.top.rows[1].name == "Ann" and G.top.rows[1].strokes == 9)
+calls = {}
+local hudFrame = _G["LeylineGolfHud"]
+G.Watch(G.top.rows[1].id); deliver()
+check("watching loads the course where you stand", (called("load ") or ""):match("^load here\n") ~= nil)
+check("a replay never arms your aim", called("aim ") == nil)
+t = t + 2; hudFrame:Fire("OnUpdate")
+check("the replay plays the logged shot with its logged phase", (called("shot ") or ""):match("^shot Ann 0%.000 0%.110 0%.000 10 501 %d+$") ~= nil
+    and called("shot "):match("(%d+)$") == run.inputs:match("^10,501,(%d+)"))
+for h = 1, 9 do
+    G.OnRest("Ann", "holed", 0, 0, 0, "abcd")
+    t = t + 2; hudFrame:Fire("OnUpdate")
+end
+check("a faithful replay checks out", G.replayResult == true)
+t = t + 4; hudFrame:Fire("OnUpdate")
+-- The same round, but the replay rolls differently on hole 1 (a tampered record would do this).
+G.Watch(G.top.rows[1].id); deliver()
+t = t + 2; hudFrame:Fire("OnUpdate")
+G.OnRest("Ann", "rest", 0, 0.11, 3, "abcd")
+t = t + 2; hudFrame:Fire("OnUpdate")
+for h = 1, 12 do G.OnRest("Ann", "holed", 0, 0, 0, "abcd"); t = t + 2; hudFrame:Fire("OnUpdate") end
+check("a replay that doesn't reproduce the score says so", G.replayResult == false)
+t = t + 4; hudFrame:Fire("OnUpdate")
 
 -- Without the browser client's function the window says what's needed.
 LeylineGolf = nil

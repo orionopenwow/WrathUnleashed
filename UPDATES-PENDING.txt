@@ -130,3 +130,10 @@
 1037b-golf foreverui  Minigolf HUD (Golf.lua: /golf, Practice, scorecard, power meter, course editor UI) and the edit mode HUD
 1037c-golf client  Client 20261025i: Leyline minigolf (deterministic course physics, Meadow Nine, aim and roll camera) on top of 20261025h edit mode tools
 1037d-golf ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline minigolf, edit mode tools, course guide
+1038a-golf scripts  Minigolf referee goes live: ov_golf.lua added to the realm script upload (it was left out of the list), safe load order
+1038b-golf foreverui  Minigolf HUD: course editor bar, publishing, the aim keys stay captured on your turn
+1038c-golf client  Client 20261025j: minigolf course editor (place, carry, turn, tilt, size, copy, undo; test a hole; publish)
+1038d-golf ship  Save to GitHub (orionopenwow/WrathUnleashed): minigolf course editor and realm referee
+1039a-golf scripts  Minigolf: every finished round's shots are recorded; best rounds per course; replays
+1039b-golf foreverui  Minigolf HUD: Best rounds and Watch (a replay checks the recorded score), test-hole fix
+1039c-golf ship  Save to GitHub (orionopenwow/WrathUnleashed): minigolf leaderboards and replays

@@ -264,7 +264,8 @@ end
 
 local function showAimCapture(on)
     if not aimFrame then return end
-    if on then aimFrame:Show() else aimFrame:Hide() end
+    -- The client takes the aim on its next frame; until then "aiming=0" doesn't mean the aim ended.
+    if on then G.aimArmed = now(); aimFrame:Show() else aimFrame:Hide() end
 end
 
 local function buildHud()
@@ -331,6 +332,8 @@ local function buildHud()
     hud.note:SetJustifyH("CENTER")
 
     hud:SetScript("OnUpdate", function()
+        if G.stopAt and now() >= G.stopAt then return G.Stop() end
+        if G.replayAt and now() >= G.replayAt then G.replayAt = nil; Referee.AutoShot() end
         if hud.noteAt and now() - hud.noteAt > 6 then hud.note:SetText(""); G.notes = {}; hud.noteAt = nil end
         local st = golf("state") or ""
         local aiming = st:match("aiming=1") ~= nil
@@ -349,7 +352,7 @@ local function buildHud()
             hud.meter:Hide(); hud.keys:Hide()
             if myTurn and not G.shotSent then hud.resume:Show() else hud.resume:Hide() end
         end
-        if not aiming and aimFrame:IsShown() then showAimCapture(false) end
+        if not aiming and aimFrame:IsShown() and now() - (G.aimArmed or 0) > 1 then showAimCapture(false) end
     end)
 
     -- While aiming, this frame takes the keyboard so A/D/W/S/Space aim instead of walking.
@@ -459,7 +462,7 @@ dispatch = function(name, data)
             G.rolling, G.shotSent = nil, nil
             golf("phase " .. phase)
             golf(string.format("ball %s %d %s %s %s", who, tonumber(color), x, y, z))
-            if who == me() then
+            if who == me() and not (Referee.R and Referee.R.replay and G.practice) then
                 golf("aim " .. who)
                 showAimCapture(true)
                 if tonumber(stroke) == 1 then sound("RaidWarning") end
@@ -489,13 +492,38 @@ dispatch = function(name, data)
     elseif name == "msg" then
         noteLine(tidy(data))
         if data:find("hole in one") then sound("AuctionWindowOpen") end
+    elseif name == "top" then
+        local key, rows = data:match("^([%w_]*)\t(.*)$")
+        if key then
+            G.top = { key = key, rows = {} }
+            for id, n, st, v, pl in (rows or ""):gmatch("(%d+),([^,;]+),(%d+),(%d),(%d+)") do
+                G.top.rows[#G.top.rows + 1] = { id = tonumber(id), name = tidy(n), strokes = tonumber(st), verified = v == "1", players = tonumber(pl) }
+            end
+            G.view = "top"
+            G.Refresh()
+            status(#G.top.rows > 0 and "Click a round to watch it (and check it)." or "No rounds on record for this course yet.")
+        end
+    elseif name == "replay" then
+        local head, inputs, text = data:match("^([^\n]*)\n([^\n]*)\n(.*)$")
+        local id, who, claimed = (head or ""):match("^(%d+) (%S+) (%d+)")
+        if id then
+            local holes, h = {}, 0
+            for part in (inputs .. "|"):gmatch("([^|]*)|") do
+                h = h + 1
+                holes[h] = {}
+                for shot in part:gmatch("[^;]+") do holes[h][#holes[h] + 1] = shot end
+            end
+            G.Replay(text, { id = tonumber(id), who = tidy(who), claimed = tonumber(claimed), holes = holes })
+        end
     elseif name == "published" then
         status("Published as " .. tidy(data) .. ".")
         G.Ask()
     elseif name == "done" then
+        G.finished = true
         showResults(data)
     elseif name == "end" then
-        G.Stop()
+        -- After a finished round the last putt's celebration plays out first.
+        if G.finished then G.StopSoon() else G.Stop() end
         if data ~= "" then status(tidy(data)) end
     end
 end
@@ -555,7 +583,10 @@ function G.Begin(text, where)
     setBanner()
 end
 
+function G.StopSoon() G.stopAt = now() + 3 end
+
 function G.Stop()
+    G.stopAt, G.finished = nil, nil
     golf("end")
     G.playing, G.practice, G.turn, G.rolling, G.session, G.lobby = false, false, nil, nil, nil, nil
     G.title, G.score, G.order, G.players = "", {}, {}, {}
@@ -578,6 +609,22 @@ function G.Practice(text, hole, where)
     Referee.Start(text or PRACTICE_COURSE, hole)
 end
 
+function G.Replay(text, replay)
+    if not has() then status("Replays need the Leyline browser client (20261025i or newer)."); return end
+    G.Stop()
+    G.practice = true
+    noteLine("Watching " .. replay.who .. "'s round (" .. replay.claimed .. " strokes)")
+    Referee.Start(text, nil, replay)
+end
+
+function G.AskTop(key)
+    if not key then status("Pick a course first."); return end
+    send("top", key)
+    status("Asking for the best rounds...")
+end
+
+function G.Watch(id) send("replay", tostring(id)); status("Fetching the round...") end
+
 function G.PlayHere(key)
     G.practice = false
     send("start", key or "")
@@ -591,8 +638,10 @@ Referee = {}
 
 local function capFor(par) return math.min(par + 4, 9) end
 
-function Referee.Start(text, startHole)
-    local R = { holes = {}, hole = 1, strokes = {}, shotNo = 0, t0 = now(), only = startHole }
+-- replay = { id, who, claimed, holes = { { "a,p,ph", ... }, ... } }: play a recorded round shot for shot.
+function Referee.Start(text, startHole, replay)
+    local R = { holes = {}, hole = 1, strokes = {}, shotNo = 0, t0 = now(), only = startHole, replay = replay,
+        who = replay and replay.who or me() }
     for raw in (text .. "\n"):gmatch("([^\n]*)\n") do
         local line = raw:gsub("#.*$", "")
         local word, rest = line:match("^%s*(%S+)%s*(.-)%s*$")
@@ -614,12 +663,13 @@ function Referee.Start(text, startHole)
 end
 
 local function phase() return math.floor((now() - Referee.R.t0) * 120) end
+local function who() return Referee.R and Referee.R.who or me() end
 
 function Referee.Score()
     local R = Referee.R
     local cells = {}
     for h = 1, #R.holes do cells[#cells + 1] = R.strokes[h] and tostring(R.strokes[h]) or "-" end
-    dispatch("score", me() .. "=" .. table.concat(cells, ","))
+    dispatch("score", who() .. "=" .. table.concat(cells, ","))
 end
 
 function Referee.StartHole()
@@ -627,6 +677,7 @@ function Referee.StartHole()
     local h = R.holes[R.hole]
     R.ball = { h.tee[1], h.tee[2] + 0.11, h.tee[3] }
     R.done = false
+    R.next = 1
     dispatch("hole", string.format("%d %d %s", R.hole, h.par, h.name))
     Referee.Score()
     Referee.Turn()
@@ -635,17 +686,37 @@ end
 function Referee.Turn()
     local R = Referee.R
     R.phase = "aim"
-    dispatch("turn", string.format("%s %d %.3f %.3f %.3f 0 %d", me(), (R.strokes[R.hole] or 0) + 1, R.ball[1], R.ball[2], R.ball[3], phase()))
+    dispatch("turn", string.format("%s %d %.3f %.3f %.3f 0 %d", who(), (R.strokes[R.hole] or 0) + 1, R.ball[1], R.ball[2], R.ball[3], phase()))
+    if R.replay then G.replayAt = now() + 1.4 end
+end
+
+-- The next logged shot of a replay, with its original phase (spinners stand where they stood).
+function Referee.AutoShot()
+    local R = Referee.R
+    if not R or not R.replay or R.phase ~= "aim" then return end
+    local shot = (R.replay.holes[R.hole] or {})[R.next]
+    if not shot then
+        R.mismatch = true
+        dispatch("msg", "|cffff6060The record has no more shots for this hole: it doesn't match the score.|r")
+        R.done = true
+        R.phase = "between"
+        return Referee.NextHole()
+    end
+    R.next = R.next + 1
+    local a, p, ph = shot:match("^(%d+),(%d+),(%-?%d+)$")
+    R.phase, R.shotNo = "rolling", R.shotNo + 1
+    dispatch("shot", string.format("%s %.3f %.3f %.3f %s %s %s %d %d", who(), R.ball[1], R.ball[2], R.ball[3], a or 0, p or 0, ph or 0,
+        (R.strokes[R.hole] or 0) + 1, R.shotNo))
 end
 
 function Referee.Receive(name, data)
     local R = Referee.R
     if not R then return end
-    if name == "shot" and R.phase == "aim" then
+    if name == "shot" and R.phase == "aim" and not R.replay then
         local a, p = data:match("^(%d+) (%d+)$")
         if not a then return end
         R.phase, R.shotNo = "rolling", R.shotNo + 1
-        dispatch("shot", string.format("%s %.3f %.3f %.3f %s %s %d %d %d", me(), R.ball[1], R.ball[2], R.ball[3], a, p, phase(),
+        dispatch("shot", string.format("%s %.3f %.3f %.3f %s %s %d %d %d", who(), R.ball[1], R.ball[2], R.ball[3], a, p, phase(),
             (R.strokes[R.hole] or 0) + 1, R.shotNo))
     elseif name == "rest" and R.phase == "rolling" then
         local n, kind, x, y, z = data:match("^(%d+) (%a+) (%S+) (%S+) (%S+)")
@@ -670,7 +741,18 @@ function Referee.Receive(name, data)
         end
         Referee.Score()
         R.phase = "between"
+        if R.done and R.replay and R.replay.holes[R.hole] and R.next <= #R.replay.holes[R.hole] then
+            R.mismatch = true
+            dispatch("msg", "|cffff6060The record has shots left on a finished hole: it doesn't match.|r")
+        end
         if not R.done then return Referee.Turn() end
+        return Referee.NextHole()
+    end
+end
+
+function Referee.NextHole()
+    local R = Referee.R
+    do
         -- Testing one hole from the editor: straight back to the editor.
         if R.only then return G.StopSoon() end
         if R.hole < #R.holes then
@@ -679,8 +761,14 @@ function Referee.Receive(name, data)
         end
         local total = 0
         for _, v in pairs(R.strokes) do total = total + v end
+        if R.replay then
+            local ok = not R.mismatch and total == R.replay.claimed
+            dispatch("msg", ok and string.format("|cff8fe36bReplay checks out: %d strokes, as recorded.|r", total)
+                or string.format("|cffff6060This replay gives %d strokes; the record says %d. It doesn't check out.|r", total, R.replay.claimed))
+            G.replayResult = ok
+            return G.StopSoon()
+        end
         dispatch("done", me() .. "=" .. total)
-        local best = W.db and W.db.golfBest or nil
         if WrathUnleashedUIDB then
             WrathUnleashedUIDB.golfBest = WrathUnleashedUIDB.golfBest or {}
             local key = R.title or "course"
@@ -690,8 +778,7 @@ function Referee.Receive(name, data)
                 if pb then dispatch("msg", "A new practice best: " .. total .. " (was " .. pb .. ")") end
             end
         end
-        local _ = best
-        G.Stop()
+        G.StopSoon()
     end
 end
 
@@ -893,9 +980,27 @@ end
 
 function G.Refresh()
     if not win then return end
+    if G.view == "top" and G.top then
+        win.listTitle:SetText("Best rounds: " .. (G.top.key or ""))
+        win.back:Show()
+        for i, row in ipairs(win.rows) do
+            local r = G.top.rows[i]
+            row.course, row.round = nil, r
+            if r then
+                row.text:SetText(string.format("%d.  %s   %d strokes   %s", i, r.name, r.strokes,
+                    r.verified and "|cff8fe36bverified|r" or ("|cffa0a0a0" .. (r.players > 1 and "unverified" or "solo") .. "|r")))
+                row:Show()
+            else
+                row:Hide()
+            end
+        end
+        return G.RefreshLobby()
+    end
+    win.listTitle:SetText("Courses on this realm")
+    win.back:Hide()
     for i, row in ipairs(win.rows) do
         local c = G.courses[i]
-        row.course = c
+        row.course, row.round = c, nil
         if c then
             row.text:SetText(string.format("%s%s  |cffa0a0a0by %s, %d holes, par %d|r", c.key == G.pick and "|cff40ff40> |r" or "", c.title,
                 c.author or "Leyline", c.holes, c.par))
@@ -904,6 +1009,10 @@ function G.Refresh()
             row:Hide()
         end
     end
+    return G.RefreshLobby()
+end
+
+function G.RefreshLobby()
     local l = G.lobby
     if G.invite then
         win.lobby:SetText(string.format("|cffffd100%s|r invites you to %s.", G.invite.host, G.invite.title))
@@ -942,7 +1051,9 @@ local function build()
     local close = CreateFrame("Button", nil, win, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", -6, -6)
     tinsert(UISpecialFrames, "LeylineGolfFrame")
-    label(win, "Courses on this realm", "GameFontNormal", "TOPLEFT", 22, -48)
+    win.listTitle = label(win, "Courses on this realm", "GameFontNormal", "TOPLEFT", 22, -48)
+    win.back = button(win, "Courses", 70, function() G.view = "courses"; G.Refresh() end, "TOPRIGHT", -40, -44)
+    win.back:Hide()
     win.rows = {}
     for i = 1, 6 do
         local row = CreateFrame("Button", nil, win)
@@ -950,17 +1061,20 @@ local function build()
         row:SetPoint("TOPLEFT", 22, -66 - (i - 1) * 21)
         row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
         row.text = label(row, "", "GameFontHighlight", "LEFT", 4, 0)
-        row:SetScript("OnClick", function(self) if self.course then G.pick = self.course.key; G.Refresh() end end)
+        row:SetScript("OnClick", function(self)
+            if self.round then return G.Watch(self.round.id) end
+            if self.course then G.pick = self.course.key; G.Refresh() end
+        end)
         win.rows[i] = row
     end
     win.play = button(win, "Play here", 110, function() G.PlayHere(G.pick) end, "TOPLEFT", 22, -200)
     win.practice = button(win, "Practice", 100, function() G.Practice() end, "TOPLEFT", 138, -200)
-    win.refresh = button(win, "Refresh", 80, function() G.Ask() end, "TOPLEFT", 244, -200)
-    win.editor = button(win, "Course editor", 110, function()
+    win.refresh = button(win, "Best rounds", 90, function() G.AskTop(G.pick) end, "TOPLEFT", 242, -200)
+    win.editor = button(win, "Course editor", 100, function()
         local mine = E.MyCourses()
         local pick = mine[G.myPick or 0]
         E.Start(pick and pick.text, pick and pick.title)
-    end, "TOPLEFT", 328, -200)
+    end, "TOPLEFT", 336, -200)
     win.mine = button(win, "My courses: new", 160, function()
         local mine = E.MyCourses()
         G.myPick = ((G.myPick or 0) + 1) % (#mine + 1)
