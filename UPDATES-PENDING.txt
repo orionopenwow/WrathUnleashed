@@ -32,3 +32,5 @@
 1025r scripts  Every mount for level 80s (on reaching 80, the boost, or first login at 80; .mounts re-runs it)
 1025s foreverui  Collections window (Shift-P, /collections, micro-menu button): Mounts and Pets with search, preview and summon
 1025t ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1025u foreverui  Bars: the two extra bottom bars stacked straight above the main bar (lined up), right bars off the screen edge, no stray totem "Fire" button before level 30
+1025v ship  Save to GitHub (orionopenwow/WrathUnleashed)
