@@ -123,6 +123,7 @@ export function dock() {
   panel.id = 'ow-dock-panel';
   // A real move, not a copy: every listener (full screen, bell, sections) stays attached.
   for (const p of parts) panel.append(p);
+  try { panel.append(bugButton()); } catch (e) { console.warn('wrath-page.js bug button', e); }
   root.append(handle, panel);
   document.body.append(root);
   const set = (open) => {
@@ -146,6 +147,90 @@ export function dock() {
   } catch { /* fine */ }
   status.dock = true;
   return root;
+}
+
+// -- Report a bug ------------------------------------------------------------------------------
+// One queue for every bug: the menu's "Report a bug" sends the same `.bug <text>` a player types in
+// game (ov_reports.lua stores it with the character and position in ov_bug_reports; the GM console's
+// Bug Reports tab shows it). The page adds what the player can't easily say: the client build, the
+// browser, memory, the map. Written before entering the world, it waits and goes once in the world.
+
+let bridge = null;
+const BUG_KEY = 'wu-bug-pending';
+const BUG_MAX = 480;   // ov_reports.lua keeps 500
+
+function bugContext() {
+  const bits = [];
+  try { bits.push('web ' + (document.querySelector('meta[name="wu-build"]')?.content || window.__wenilla_build || 'client')); } catch { /* fine */ }
+  try {
+    const ua = navigator.userAgentData?.brands?.find((b) => !/Not.?A.?Brand|Chromium/i.test(b.brand));
+    bits.push(ua ? `${ua.brand} ${ua.version}` : (navigator.userAgent.match(/(Firefox|Edg|Chrome|Safari)\/[\d.]+/) || ['browser'])[0]);
+  } catch { /* fine */ }
+  try { bits.push(`${innerWidth}x${innerHeight}@${devicePixelRatio}`); } catch { /* fine */ }
+  try { const m = window.__wenilla_mem?.(); if (m) bits.push(`wasm ${Math.round(m.wasmMB)}MB`); } catch { /* fine */ }
+  try { const st = bridge?.state; if (st?.map?.id != null) bits.push('map ' + st.map.id); } catch { /* fine */ }
+  return ' [' + bits.join(', ') + ']';
+}
+
+function inWorld() {
+  try { return bridge?.state?.session?.state === 'inworld' && typeof bridge.chat === 'function'; } catch { return false; }
+}
+
+function sendBug(text) {
+  const clean = String(text).replace(/[\r\n\t]+/g, ' ').replace(/\|/g, '/').trim();
+  if (!clean) return 'empty';
+  const line = (clean + bugContext()).slice(0, BUG_MAX);
+  if (inWorld()) { bridge.chat('.bug ' + line); return 'sent'; }
+  try { localStorage.setItem(BUG_KEY, line); } catch { return 'nowhere'; }
+  const t = setInterval(() => {
+    if (!inWorld()) return;
+    clearInterval(t);
+    let pending = null;
+    try { pending = localStorage.getItem(BUG_KEY); localStorage.removeItem(BUG_KEY); } catch { /* fine */ }
+    if (pending) bridge.chat('.bug ' + pending);
+  }, 3000);
+  return 'queued';
+}
+
+function bugButton() {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.id = 'wu-bug';
+  b.textContent = 'Report a bug';
+  b.title = 'Tell us what went wrong: it goes to the same queue as .bug in game';
+  b.addEventListener('click', () => {
+    const box = document.createElement('div');
+    box.id = 'wu-bug-box';
+    box.setAttribute('role', 'dialog');
+    box.style.cssText = 'position:fixed;inset:0;z-index:2147483600;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55)';
+    box.innerHTML = '<div style="background:#0d111c;border:1px solid #6b5a2e;border-radius:10px;padding:18px 20px;width:min(440px,92vw);color:#e9e4d4;font:15px/1.45 Georgia,serif">'
+      + '<div style="color:#f0d389;font-size:18px;margin-bottom:6px">Report a bug</div>'
+      + '<div style="font-size:13px;opacity:.8;margin-bottom:8px">What happened, and what you expected. Your character, place and browser are added for you.</div>'
+      + '<textarea maxlength="400" style="width:100%;height:96px;box-sizing:border-box;background:#070a12;color:#e9e4d4;border:1px solid #3a3320;border-radius:6px;padding:8px;font:14px system-ui"></textarea>'
+      + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">'
+      + '<button data-x="cancel" type="button" style="padding:8px 14px;border-radius:6px;border:1px solid #3a3320;background:#151a28;color:#e9e4d4">Cancel</button>'
+      + '<button data-x="send" type="button" style="padding:8px 16px;border-radius:6px;border:0;background:linear-gradient(#f0d389,#d8b25a);color:#1b1406;font-weight:600">Send</button></div>'
+      + '<div data-x="note" style="font-size:13px;margin-top:8px;min-height:1em"></div></div>';
+    document.body.append(box);
+    const ta = box.querySelector('textarea');
+    const note = box.querySelector('[data-x="note"]');
+    const close = () => box.remove();
+    ta.focus();
+    // keys typed here are for the box, not the game
+    box.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') close(); }, true);
+    box.addEventListener('keyup', (e) => e.stopPropagation(), true);
+    box.querySelector('[data-x="cancel"]').addEventListener('click', close);
+    box.addEventListener('click', (e) => { if (e.target === box) close(); });
+    box.querySelector('[data-x="send"]').addEventListener('click', () => {
+      const r = sendBug(ta.value);
+      if (r === 'empty') { note.textContent = 'Write a few words first.'; return; }
+      note.textContent = r === 'sent' ? 'Sent. Thank you: it is in the bug queue.'
+        : r === 'queued' ? 'Saved: it goes in as soon as you are in the world.'
+        : 'Could not save it here: in game, type .bug and what happened.';
+      setTimeout(close, 1600);
+    });
+  });
+  return b;
 }
 
 // -- Signing in --------------------------------------------------------------------------------
@@ -430,10 +515,11 @@ let installed = null;
 export async function install(wenilla) {
   if (installed) return installed;
   installed = status;
-  window.wuPage = { status, CONFIG };
+  window.wuPage = { status, CONFIG, sendBug: (t) => sendBug(t) };
   if (!wenilla) {
     try { wenilla = (await import(BASE + 'bridge.js')).wenilla || window.wenilla; } catch (e) { console.warn('wrath-page.js: bridge.js', e); }
   }
+  bridge = wenilla || null;
   // Stage timings first, so the earliest stages are seen.
   import(BASE + 'stages.js').then((m) => m.installStages(wenilla)).catch((e) => console.warn('stages.js:', e));
   import(BASE + 'input.js').then((m) => m.installInput()).catch((e) => console.warn('input.js:', e));

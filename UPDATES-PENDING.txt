@@ -25,3 +25,5 @@
 1025k ship  Save to GitHub (orionopenwow/WrathUnleashed)
 1025l foreverui  Default keys for every bar (1-7 and F G T Z X; Shift, Ctrl, Alt for the bars above; 8 9 0 - = left free), talent planner on
 1025m ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1025n client  Report a bug in the page menu (same queue as .bug, with browser and place added)
+1025o ship  Save to GitHub (orionopenwow/WrathUnleashed)
