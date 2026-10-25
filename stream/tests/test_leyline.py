@@ -17,13 +17,17 @@ def check(name, ok, extra=""):
 
 page = wp.leyline_page().decode()
 check("renders a page", page.startswith("<!doctype") or "<html" in page.lower(), page[:80])
-check("heading", "Leyline" in page and "An open network of realms and mods" in page)
-for part in ("Play", "Host", "Mod", "Open", "Coming next"):
-    check(f"section {part}", f">{part}<" in page)
+check("heading", "<h1>Leyline</h1>" in page and "open-source, community-built MMO project" in page)
+for part in ("Realm list", "What Leyline does", "Where it's going"):
+    check(f"section {part}", part in page.replace("&#x27;", "'").replace("\\'", "'"))
+check("three big buttons", page.count('class="ly-btn') == 3)
+check("owner's art", "leyline-emblem.webp" in page and "leyline-bg.webp" in page)
+check("planned items marked", page.count(">planned<") == 6)
+check("art allow-listed", "leyline-emblem.webp" in wp.ART_TYPES and "leyline-bg.webp" in wp.ART_TYPES)
 check("play button", 'href="/wrath"' in page)
 check("host guide link", "hosting/INSTALL-OPERATE.md" in page)
 check("realm list link", 'href="/wrath/realms"' in page)
-check("live players", "4 playing" in page and "30 bots" in page, re.findall(r"[^<>]*playing[^<>]*", page)[:2])
+check("live players", "<td>4 <span class='sub'>+30 bots</span></td>" in page, re.findall(r"<td>[^<]*<span class='sub'>[^<]*", page)[:2])
 check("link card", 'property="og:url" content="https://' in page and "/wrath/leyline" in page and "twitter:card" in page)
 visible = re.sub(r"<[^>]+>", " ", re.sub(r"<style.*?</style>", " ", page, flags=re.S))
 bad = re.findall(r"(?i)world of warcraft|\bwow\b|warcraft|lich king|blizzard", visible)

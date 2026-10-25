@@ -55,3 +55,5 @@
 1026o ship  Save to GitHub (orionopenwow/WrathUnleashed)
 1026p signin  New page: play.openvanilla.app/wrath/leyline, what Leyline is (play, host, mod, open), linked from the realm list
 1026q ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1026r signin  The Leyline page in its own look (your emblem and nebula art): hub nav, Play / Client launcher / Host realm, live realm list, features and aims
+1026s ship  Save to GitHub (orionopenwow/WrathUnleashed)

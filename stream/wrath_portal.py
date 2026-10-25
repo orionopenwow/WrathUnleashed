@@ -427,6 +427,7 @@ ART_TYPES = {
     "wu-divider.webp": "image/webp", "wu-dragon-l.webp": "image/webp", "wu-dragon-r.webp": "image/webp",
     "Cinzel-SemiBold.woff2": "font/woff2", "Cinzel-OFL.txt": "text/plain; charset=utf-8",
     "wu-card.webp": "image/webp",   # the link-preview card (tools/art/wu-card.html, 1200 x 630)
+    "leyline-emblem.webp": "image/webp", "leyline-bg.webp": "image/webp",   # the Leyline page (owner's art)
 }
 ART_MAX_AGE = 7 * 86400
 _theme_ver = {"key": None, "v": ""}
@@ -676,7 +677,7 @@ def account_page(display: str, user: str, password: str, nonce: str) -> bytes:
         'game files, read on your computer and never uploaded.</p>'
         + ('<p><a class="btn" href="/wrath/play?mode=own">Play in the browser with my game folder</a></p>'
            if ownfiles_on() else '')
-        + '<details><summary>Play with the desktop client or the player package</summary>'
+        + '<details id="desktop"><summary>Play with the desktop client or the player package</summary>'
         '<label>Account</label><div class="row">'
         f'<div class="field" id="acct">{html.escape(user)}</div>'
         '<button class="ghost" data-copy="acct" type="button">Copy</button></div>'
@@ -872,50 +873,142 @@ def realms_page() -> bytes:
 LEYLINE_REPO = "https://github.com/orionopenwow/WrathUnleashed"
 
 
+LEYLINE_CSS = """
+:root{--ly-cyan:#5fe3ff;--ly-violet:#b48cff;--ly-ink:#e8ecff;--ly-dim:#a9b0d6;--ly-panel:rgba(14,16,40,.78);
+--ly-line:rgba(120,150,255,.28);--ly-glow:0 0 18px rgba(95,227,255,.35)}
+*{box-sizing:border-box}html,body{margin:0}
+body.ly{min-height:100vh;color:var(--ly-ink);font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+background:#05060f url(ART_BG) center top/cover fixed no-repeat}
+@media (max-width:700px){body.ly{background-attachment:scroll}}
+.ly a{color:var(--ly-cyan)}
+.ly-nav{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between;
+padding:10px 16px;background:rgba(6,8,22,.82);backdrop-filter:blur(6px);border-bottom:1px solid var(--ly-line)}
+.ly-nav .grp{display:flex;gap:6px;flex-wrap:wrap}
+.ly-nav a{font:600 12px/1 system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;color:var(--ly-dim);
+padding:8px 11px;border:1px solid var(--ly-line);border-radius:4px;background:rgba(20,24,60,.6)}
+.ly-nav a:hover,.ly-nav a:focus-visible{color:var(--ly-ink);border-color:var(--ly-cyan);box-shadow:var(--ly-glow)}
+.ly-nav a.hot{color:#1a1030;background:linear-gradient(180deg,#9ff0ff,var(--ly-cyan));border-color:#9ff0ff}
+.ly-wrap{max-width:1040px;margin:0 auto;padding:24px 16px 56px}
+.ly-hero{text-align:center;padding:12px 0 8px}
+.ly-emblem{width:min(300px,70vw);height:auto;mix-blend-mode:screen;filter:drop-shadow(0 0 28px rgba(150,110,255,.55));
+-webkit-mask-image:radial-gradient(closest-side,#000 74%,transparent 100%);mask-image:radial-gradient(closest-side,#000 74%,transparent 100%)}
+@media (prefers-reduced-motion:no-preference){.ly-emblem{animation:ly-float 7s ease-in-out infinite}}
+@keyframes ly-float{50%{transform:translateY(-6px)}}
+.ly h1{font:600 clamp(40px,8vw,72px)/1 'OW Cinzel','Cinzel',Georgia,serif;letter-spacing:.14em;margin:6px 0 10px;
+background:linear-gradient(180deg,#e9fbff,var(--ly-cyan) 55%,#7aa2ff);-webkit-background-clip:text;background-clip:text;color:transparent;
+text-shadow:0 0 24px rgba(95,227,255,.25)}
+.ly-lede{max-width:640px;margin:0 auto 10px;color:var(--ly-ink)}
+.ly-ver{display:inline-block;font-size:12px;color:var(--ly-dim);border:1px solid var(--ly-line);border-radius:999px;padding:2px 10px}
+.ly-cta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:26px auto 30px;max-width:900px}
+@media (max-width:700px){.ly-cta{grid-template-columns:1fr}}
+.ly-btn{display:flex;align-items:center;justify-content:center;gap:10px;min-height:64px;padding:12px 16px;text-decoration:none;
+font:600 clamp(17px,2.2vw,21px)/1.1 'OW Cinzel','Cinzel',Georgia,serif;letter-spacing:.08em;color:var(--ly-ink)!important;
+background:linear-gradient(180deg,rgba(40,52,110,.92),rgba(16,20,52,.95));border:1px solid rgba(140,170,255,.45);border-radius:6px;
+box-shadow:inset 0 0 0 1px rgba(255,255,255,.05),0 6px 18px rgba(0,0,0,.45)}
+.ly-btn:hover,.ly-btn:focus-visible{border-color:var(--ly-cyan);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),var(--ly-glow)}
+.ly-btn.violet{background:linear-gradient(180deg,rgba(90,52,160,.92),rgba(36,18,80,.95));border-color:rgba(190,150,255,.55)}
+.ly-btn svg{width:26px;height:26px;flex:none}
+.ly-panel{background:var(--ly-panel);border:1px solid var(--ly-line);border-radius:8px;padding:18px;margin:18px 0;
+box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.ly h2{font:600 22px/1.2 'OW Cinzel','Cinzel',Georgia,serif;letter-spacing:.12em;text-align:center;margin:0 0 14px;color:#dff7ff}
+.ly-table{width:100%;border-collapse:collapse;font-size:15px}
+.ly-table th{font:600 11px/1 system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--ly-dim);text-align:left;
+padding:10px;border-bottom:1px solid var(--ly-line)}
+.ly-table td{padding:10px;border-bottom:1px solid rgba(120,150,255,.12)}
+.ly-table tr.off td{color:var(--ly-dim)}
+.ly-table .sub{display:block;font-size:12px;color:var(--ly-dim)}
+.ly-on{color:#5ef0a0}.ly-off{color:var(--ly-dim)}
+@media (max-width:640px){.ly-table thead{display:none}.ly-table tr{display:grid;grid-template-columns:1fr auto;gap:2px 10px;
+padding:10px 0;border-bottom:1px solid rgba(120,150,255,.12)}.ly-table td{border:0;padding:0 4px}
+.ly-table td.name{grid-column:1/-1}}
+.ly-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media (max-width:860px){.ly-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.ly-grid{grid-template-columns:1fr}}
+.ly-feat{background:rgba(18,22,54,.7);border:1px solid var(--ly-line);border-radius:6px;padding:16px}
+.ly-feat h3{margin:0 0 6px;font:600 17px/1.2 'OW Cinzel','Cinzel',Georgia,serif;letter-spacing:.06em;color:var(--ly-cyan)}
+.ly-feat p{margin:0;color:var(--ly-ink)}
+.ly-feat .soon{display:inline-block;margin-left:6px;font:600 10px/1 system-ui;letter-spacing:.1em;text-transform:uppercase;
+color:var(--ly-violet);border:1px solid rgba(180,140,255,.5);border-radius:999px;padding:3px 7px;vertical-align:middle}
+.ly-fine{color:var(--ly-dim);font-size:14px;text-align:center;margin-top:22px}
+@font-face{font-family:'OW Cinzel';src:url(ART_FONT) format('woff2');font-display:swap}
+"""
+
+
 def leyline_page() -> bytes:
-    """/wrath/leyline: what Leyline is, in plain facts (what's live today, and what's coming, marked so).
-    TODO(owner): the opening line under the heading is a plain description, to be replaced with the owner's words."""
+    """/wrath/leyline: the Leyline network's own page, in its own look (the owner's emblem and nebula art,
+    cyan and violet), with its features and aims in plain facts: what's live today, and what's planned (marked).
+    The hero line under the title is the owner's own (from his mockup), trimmed to what's true today."""
+    e = html.escape
     st = realm_status()
-    live = _players_text(_nonneg(st.get("players")), _nonneg(st.get("bots")), bool(st.get("online")))
+    rows = [(REALM_NAME, "Official · level 1 or boost to 80", "PvE", _nonneg(st.get("players")), _nonneg(st.get("bots")),
+             bool(st.get("online")), "/wrath")]
+    realms, _ok = community_realms()
+    for r in realms[:20]:
+        rows.append((r["name"], RULESET_LABELS[r["ruleset"]], r["type"], r["players"], r["bots"], r["live"],
+                     f'{JOIN_BASE}/join/{r["id"]}'))
+    trs = []
+    for name, sub, typ, players, bots, live, link in rows:
+        who = "–" if players is None else (f"{players}" + (f" <span class='sub'>+{bots} bots</span>" if bots else ""))
+        trs.append(f'<tr class="{"" if live else "off"}"><td class="name"><a href="{e(link)}">{e(name)}</a>'
+                   f'<span class="sub">{e(sub)}</span></td><td>{e(typ)}</td><td>{who}</td>'
+                   f'<td class="{"ly-on" if live else "ly-off"}">{"● online" if live else "offline"}</td></tr>')
+    icon_play = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4z" fill="currentColor"/></svg>'
+    icon_rocket = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 19c1-3 3-5 5-6M14 4c3 0 6 3 6 6l-7 7-6-6z"/><circle cx="15" cy="9" r="1.6"/></svg>'
+    icon_portal = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 5a7 7 0 1 0 7 7"/><path d="M12 8a4 4 0 1 0 4 4"/></svg>'
 
-    def card(title: str, text: str, link: str = "", label: str = "", primary: bool = False) -> str:
-        btn = (f'<p><a class="btn{" primary" if primary else ""}" href="{html.escape(link)}"'
-               + (' rel="noopener noreferrer"' if link.startswith("http") else '') + f'>{html.escape(label)}</a></p>') if link else ''
-        return f'<div class="realm"><h2>{html.escape(title)}</h2>{text}{btn}</div>'
-
-    body = (f'<style>{REALM_CSS}</style>'
-            f'<div class="top"><span class="eyebrow">Leyline</span><a class="keylink" href="/wrath">Back</a></div>'
-            f'{crest("Leyline")}<p class="sub">An open network of realms and mods</p>{RULE}'
-            '<p>Leyline links game realms that anyone can host, with open mods and open source code. '
-            'You can play in the browser, host your own realm from your own PC, and share mods with everyone on the network.</p>'
-            + card("Play", f'<div class="tags"><span class="tag">WrathUnleashed</span>{live}</div>'
-                   '<p>The flagship realm runs in your browser: no install, sign in with a Hero Key. '
-                   'Hang out in Dalaran, start at level 1 or boost to 80, and queue for dungeons; bots fill the group '
-                   'and are always labelled as bots.</p>', "/wrath", "Play now", primary=True)
-            + card("Host",
-                   '<p>Run your own realm on your own PC with the host kit. You get your own GM login, your own '
-                   'house rules and a world preset (main, brawl, progression or a Dalaran hangout).</p>'
-                   '<ul><li><b>Private:</b> friends join with your invite link.</li>'
-                   '<li><b>Public:</b> your realm appears on the realm list beside the official one.</li>'
-                   '<li><b>Safe:</b> players connect through the Leyline relay, so your home address stays hidden '
-                   'and you open no ports.</li></ul>',
-                   f"{LEYLINE_REPO}/blob/main/hosting/INSTALL-OPERATE.md", "How to host")
-            + card("Mod",
-                   '<p>In the game, Esc &rarr; <b>Mods &amp; Workshop</b> sets your UI size, turns addons on and off '
-                   'and links to the open repos. Mods use one open format that anyone can publish to.</p>',
-                   f"{LEYLINE_REPO}/tree/main/mods", "The mod format")
-            + card("Open",
-                   '<p>The code is open source, and every project it builds on is credited.</p>',
-                   LEYLINE_REPO, "Source code")
-            + '<h2 class="eyebrow">Coming next</h2>'
-            '<ul class="fine"><li>Host a realm from a browser tab, with a link to share.</li>'
-            '<li>One-click mod installs from the Workshop.</li>'
-            '<li>Hop between realms from the in-game menu, with friends across realms.</li>'
-            '<li>A Goldshire Inn demo you can try right here, with no sign-up.</li></ul>'
-            '<p class="fine foot">The full world needs your own 3.3.5a game files; the browser streams only small '
-            'areas (Dalaran, the starting zones, dungeons). No shop, nothing to buy. '
-            '<a href="/wrath/realms">See all realms</a>.</p>')
-    return render(body, wide=True, meta=card_meta("/wrath/leyline", "Leyline · an open network of realms and mods"))
+    def feat(title, text, soon=False):
+        return (f'<div class="ly-feat"><h3>{e(title)}{"<span class=soon>planned</span>" if soon else ""}</h3>'
+                f'<p>{text}</p></div>')
+    css = (LEYLINE_CSS.replace("ART_BG", art_url("leyline-bg.webp")).replace("ART_FONT", art_url("Cinzel-SemiBold.woff2")))
+    body = (
+        '<nav class="ly-nav" aria-label="Leyline"><div class="grp">'
+        '<a href="/wrath/leyline">Hub</a><a href="/wrath/realms">Realms</a>'
+        f'<a href="{e(LEYLINE_REPO)}/tree/main/mods" rel="noopener noreferrer">Mods</a>'
+        f'<a href="{e(LEYLINE_REPO)}/blob/main/hosting/INSTALL-OPERATE.md" rel="noopener noreferrer">Server</a></div>'
+        '<div class="grp"><a href="/login?next=%2Fwrath">Sign in</a><a class="hot" href="/wrath">Play now</a></div></nav>'
+        '<div class="ly-wrap"><header class="ly-hero">'
+        f'<img class="ly-emblem" src="{art_url("leyline-emblem.webp")}" alt="" width="300" height="248">'
+        '<h1>Leyline</h1>'
+        '<p class="ly-lede">An open-source, community-built MMO project. Play in your browser or a client, '
+        'build and share mods, and host your own realm.</p>'
+        '<span class="ly-ver">Alpha</span></header>'
+        '<div class="ly-cta">'
+        f'<a class="ly-btn" href="/wrath">{icon_play}Play now</a>'
+        f'<a class="ly-btn" href="/wrath#desktop">{icon_rocket}Client launcher</a>'
+        f'<a class="ly-btn violet" href="{e(LEYLINE_REPO)}/blob/main/hosting/INSTALL-OPERATE.md" rel="noopener noreferrer">{icon_portal}Host realm</a>'
+        '</div>'
+        '<section class="ly-panel" aria-labelledby="ly-realms"><h2 id="ly-realms">Realm list</h2>'
+        '<table class="ly-table"><thead><tr><th>Realm</th><th>Type</th><th>Players</th><th>Status</th></tr></thead>'
+        f'<tbody>{"".join(trs)}</tbody></table>'
+        '<p class="ly-fine">Community realms run on their hosts\' own PCs and join through the Leyline relay. '
+        '<a href="/wrath/realms">All realms and house rules</a></p></section>'
+        '<section class="ly-panel" aria-labelledby="ly-what"><h2 id="ly-what">What Leyline does</h2><div class="ly-grid">'
+        + feat("Play in the browser", "No install: sign in with a Hero Key and play the flagship realm, WrathUnleashed. "
+               "Dalaran hangout, level 1 or a boost to 80, and a Dungeon Finder where labelled bots fill the group.")
+        + feat("Host your own realm", "Run a realm on your own PC with the host kit: your own GM login, house rules and "
+               "world preset. Private by invite link, or public on the realm list.")
+        + feat("A relay that hides you", "Players reach your realm through the Leyline relay, so your home address stays "
+               "hidden and you open no ports.")
+        + feat("Mods and addons", "In the game, Esc &rarr; Mods &amp; Workshop sets your UI size and turns addons on and off. "
+               "Mods use one open format that anyone can publish to.")
+        + feat("Open source", "Every line is on GitHub, and every project it builds on is credited.")
+        + feat("Fair by design", "No shop and nothing to buy. Bots are always labelled and counted apart from players.")
+        + '</div></section>'
+        '<section class="ly-panel" aria-labelledby="ly-aims"><h2 id="ly-aims">Where it\'s going</h2><div class="ly-grid">'
+        + feat("Host from a browser tab", "Start a realm from a tab and share a link: no install, no server bill.", True)
+        + feat("One-click mods", "Browse the Workshop and install mods and modes into a realm in one click.", True)
+        + feat("Hop between realms", "A realm list in the in-game menu, with friends, settings and addons that travel with you.", True)
+        + feat("A peer-to-peer network", "Realms, hangouts and mods shared between players, so the network grows with them.", True)
+        + feat("Try it here", "A Goldshire Inn demo on this page, with no sign-up.", True)
+        + feat("Builders' tools", "Build in the world with your own models, and share it on the Workshop.", True)
+        + '</div></section>'
+        '<p class="ly-fine">The full world needs your own 3.3.5a game files; the browser streams only small areas '
+        '(Dalaran, the starting zones, dungeons). '
+        f'<a href="{e(LEYLINE_REPO)}" rel="noopener noreferrer">Source code</a></p></div>')
+    meta = card_meta("/wrath/leyline", "Leyline · an open-source, community-built MMO project")
+    return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            f'<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">'
+            f'<title>Leyline</title>{meta}<style>{css}</style></head><body class="ly">{body}</body></html>').encode("utf-8")
 
 
 class _Window:
