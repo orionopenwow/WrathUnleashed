@@ -8,6 +8,8 @@ Reads the relay's public listing and writes a small Lua data file next to the re
 
     OV_LEYLINE_LISTING   listing URL      default https://relay.openvanilla.app/api/listing/realms.json
     OV_LEYLINE_OUT       file to write    default /srv/wrath/custom/lua_scripts/leyline-realms.dat
+    OV_LEYLINE_HOME      the Dalaran Hangout's realm id (this realm through the relay), listed first; default:
+                         the id in /srv/wrath/hangout-realm.id (OV_LEYLINE_HOME_FILE; written by the hangout step)
     --from FILE          read a listing from a local JSON file instead (tests)
 
 On any failure the old file is left as it is (the window shows its age) and the exit code is 1.
@@ -19,6 +21,7 @@ import json, os, re, sys, tempfile, time, urllib.request
 
 LISTING = os.environ.get("OV_LEYLINE_LISTING", "https://relay.openvanilla.app/api/listing/realms.json")
 OUT = os.environ.get("OV_LEYLINE_OUT", "/srv/wrath/custom/lua_scripts/leyline-realms.dat")
+HOME_FILE = os.environ.get("OV_LEYLINE_HOME_FILE", "/srv/wrath/hangout-realm.id")
 MAX_BYTES, MAX_REALMS, TIMEOUT = 2_000_000, 60, 10
 REALM_ID = re.compile(r"^[a-z2-7]{16}$")
 RULESETS = {"main", "brawl", "progression", "casual", "dalaran", "custom"}
@@ -50,7 +53,18 @@ def clean(rec):
             "live": rec.get("state") == "live", "players": count(hb.get("players")), "bots": count(hb.get("bots"))}
 
 
-def render(doc, now) -> str:
+def home_id():
+    v = os.environ.get("OV_LEYLINE_HOME", "").strip()
+    if not v:
+        try:
+            with open(HOME_FILE, encoding="utf-8") as f:
+                v = f.read(64).strip()
+        except OSError:
+            v = ""
+    return v if REALM_ID.match(v) else None
+
+
+def render(doc, now, home=None) -> str:
     recs = doc.get("realms") if isinstance(doc, dict) else None
     if not isinstance(recs, list):
         raise ValueError("not a listing")
@@ -60,7 +74,8 @@ def render(doc, now) -> str:
         if c and c["id"] not in seen:
             seen.add(c["id"])
             out.append(c)
-    out.sort(key=lambda r: (not r["live"], -(r["players"] or 0), r["name"].lower()))
+    # the Dalaran Hangout first (the network's meeting place), then live realms, busiest first
+    out.sort(key=lambda r: (r["id"] != home, not r["live"], -(r["players"] or 0), r["name"].lower()))
     lines = []
     for r in out[:MAX_REALMS]:
         f = [f'id = {lua_str(r["id"])}', f'name = {lua_str(r["name"])}', f'ruleset = {lua_str(r["ruleset"])}',
@@ -80,7 +95,7 @@ def main(argv):
             raw = r.read(MAX_BYTES + 1)
     if len(raw) > MAX_BYTES:
         raise ValueError("listing too large")
-    text = render(json.loads(raw.decode("utf-8")), time.time())
+    text = render(json.loads(raw.decode("utf-8")), time.time(), home_id())
     d = os.path.dirname(os.path.abspath(OUT))
     fd, tmp = tempfile.mkstemp(dir=d, prefix=".leyline-")
     try:

@@ -63,6 +63,8 @@ if /i "%STEP%"=="realm"   set "BAT=realm\Server pass - finder 10 and bug reports
 if /i "%STEP%"=="gm"      set "BAT=gmconsole\Install GM Console.bat"
 if /i "%STEP%"=="lean"    set "BAT=realm\Lean server.bat"
 if /i "%STEP%"=="relay"   set "BAT=hosting\relay\Deploy relay.bat"
+if /i "%STEP%"=="hangout" set "BAT=hosting\hangout\Deploy Dalaran hangout.bat"
+if /i "%STEP%"=="hangout-off" set "BAT=hosting\hangout\Take Dalaran hangout off Leyline.bat"
 if /i "%STEP%"=="foreverui" set "BAT=stream\Add Forever UI to the stream.bat"
 if /i "%STEP%"=="mods"    set "BAT=mods\Put mods on Wrath.bat"
 if /i "%STEP%"=="leyline" set "BAT=tools\leyline-repo\Update Leyline repo.bat"

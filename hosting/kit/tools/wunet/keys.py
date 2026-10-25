@@ -1,7 +1,8 @@
 """Realm keys, realm ids and signed JSON.
 
 Every hosted realm has one Ed25519 key, made at setup on the host's PC (state/realm.key, never
-leaves it). Everything public about the realm hangs off that key:
+leaves it; a realm started from the website's "+ Your server" page too: the website sends only a pairing
+token, see pair_hash). Everything public about the realm hangs off that key:
 
   realm id   = base32(sha256(public key))[:16], lower case      e.g. "k3x9q2m4p7w8r5t2"
   relay      : the agent proves the key by signing the relay's challenge (no account, no token)
@@ -106,3 +107,12 @@ def load_or_create(path: str) -> bytes:
 # Context strings (versioned): what a signature is for.
 CTX_RELAY_LOGIN = "wu-relay-login-v1"
 CTX_HEARTBEAT = "wu-listing-heartbeat-v1"
+PAIR_CTX = b"leyline-pair-v1\n"
+
+
+def pair_hash(token: str) -> str:
+    """What a realm made on the website (/wrath/host) shows the relay so the website can find its realm id:
+    sha256("leyline-pair-v1\\n" + the claim token from the website's download), hex. The key itself is made on
+    the host's PC; the website only knows the token, so only it (and the PC) can ask "which realm is mine?".
+    The same formula is in stream/hostflow.py (pair_hash)."""
+    return hashlib.sha256(PAIR_CTX + token.encode("utf-8")).hexdigest()

@@ -111,9 +111,10 @@ test('wrath-page.js: the Join cue, where a hop goes, the login message', async (
 
   assert.equal(m.hopUrl(RID, {}), `https://play.openvanilla.app/wrath?go=r:${RID}`);
   assert.equal(m.hopUrl(RID, { mode: 'own' }), `https://play.openvanilla.app/wrath/play?mode=own&go=r:${RID}`);
-  assert.equal(m.hopUrl('wrath', { home: 'https://play.example', hop: RID }), 'https://play.example/wrath');
-  assert.equal(m.hopUrl('wrath', { home: 'https://play.example', mode: 'own' }), 'https://play.example/wrath/play?mode=own');
-  assert.equal(m.hopUrl('wrath', { home: 'javascript:alert(1)//' }), 'https://play.openvanilla.app/wrath');
+  // "Back to Wrath" lands in Dalaran (the go intent, ov_go.lua h:dalaran)
+  assert.equal(m.hopUrl('wrath', { home: 'https://play.example', hop: RID }), 'https://play.example/wrath?go=h:dalaran');
+  assert.equal(m.hopUrl('wrath', { home: 'https://play.example', mode: 'own' }), 'https://play.example/wrath/play?mode=own&go=h:dalaran');
+  assert.equal(m.hopUrl('wrath', { home: 'javascript:alert(1)//' }), 'https://play.openvanilla.app/wrath?go=h:dalaran');
   assert.equal(m.hopUrl('nope', {}), null);
 
   assert.equal(m.hopEcho(['WULY', `H:${RID}`, 'WHISPER', 'Tester']), RID);
@@ -135,7 +136,7 @@ test('wrath-page.js watchHops: the global is the authority, the echo is the cue'
   const m = await import(pathToFileURL(path.join(WWW, 'wrath-page.js')).href);
   function fakeBridge() {
     const on = {};
-    return { lua_g: null, chunks: [], state: { session: { state: 'inworld' } },
+    return { lua_g: null, chunks: [], ready: true, state: { session: { state: 'inworld' } },
       on(name, cb) { (on[name] = on[name] || []).push(cb); },
       fire(name, p) { for (const cb of on[name] || []) cb(p); },
       async lua(chunk) { this.chunks.push(chunk); const v = this.lua_g; this.lua_g = null; return [v]; } };
@@ -163,5 +164,62 @@ test('wrath-page.js watchHops: the global is the authority, the echo is the cue'
   w.lua_g = 'wrath';
   await new Promise((r) => setTimeout(r, 80));
   clearInterval(h.timer);
-  assert.deepEqual(gone, ['https://play.example/wrath/play?mode=own']);
+  assert.deepEqual(gone, ['https://play.example/wrath/play?mode=own&go=h:dalaran']);
+  assert.ok(h.polls >= 1 && h.taken === 'wrath');
+  // the poll is the trigger (the web client never relays CHAT_MSG_ADDON to the page): no echo at all, at the glue
+  // screens too, and it waits for the bridge; a failing lua call is reported, not thrown
+  gone = []; w = fakeBridge(); w.state = { session: { state: 'charselect' } }; w.ready = false;
+  h = m.watchHops(w, { env: {}, go: (u) => gone.push(u), pollMs: 10 });
+  w.lua_g = RID;
+  await new Promise((r) => setTimeout(r, 40));
+  assert.deepEqual(gone, [], 'no bridge yet: no lua calls');
+  assert.equal(w.chunks.length, 0);
+  w.ready = true;
+  await new Promise((r) => setTimeout(r, 60));
+  clearInterval(h.timer);
+  assert.deepEqual(gone, [`https://play.openvanilla.app/wrath?go=r:${RID}`]);
+  w = fakeBridge(); w.lua = async () => { throw new Error('wenilla.lua: timed out'); };
+  h = m.watchHops(w, { env: {}, go: () => {}, pollMs: 0 });
+  assert.equal(await h.take(), null);
+  assert.match(h.error, /timed out/);
+});
+
+test('the Dalaran Hangout: the Wrath login stays (same realm, same account), never a stored one', () => {
+  const env = Object.assign(hopEnv(), { hop_name: 'Dalaran Hangout', hop_home: '1', user: 'WR000123', pass: 'Pa55word1234abcd' });
+  const store = storage({ ['wu.leyline.login.' + RID]: JSON.stringify({ user: 'other1', pass: 'hunter22' }) });
+  const { win, opened } = page(env, { store });
+  assert.equal(win.__wuHop.state.home, true);
+  assert.equal(win.__wuHop.state.login, true);
+  assert.equal(env.user, 'WR000123');
+  assert.equal(env.pass, 'Pa55word1234abcd');
+  new win.WebSocket('wss://wrath.example/ws/3724?host=relay.example');
+  assert.deepEqual(opened, [`wss://relay.example/ws/${RID}/auth`]);
+  // hop_home without a usable login, or a login without hop_home: the ordinary rule (drop it)
+  const e2 = Object.assign(hopEnv(), { hop_home: '1', user: 'WR000123', pass: 'has space' });
+  page(e2);
+  assert.equal(e2.user, undefined);
+  const e3 = Object.assign(hopEnv(), { user: 'WR000123', pass: 'Pa55word1234abcd' });
+  page(e3);
+  assert.equal(e3.pass, undefined);
+});
+
+test('__wuHop.status(): the hop, the rewritten sockets, the watcher; never a password', () => {
+  const env = Object.assign(hopEnv(), { hop_home: '1', user: 'WR000123', pass: 'Pa55word1234abcd' });
+  const { win } = page(env);
+  new win.WebSocket('wss://wrath.example/ws/3724?host=relay.example');
+  new win.WebSocket('wss://wrath.example/ws/8085?host=relay.example');
+  win.__wuHop.watch = { polls: 3, taken: null, gone: null, error: null };
+  const st = win.__wuHop.status();
+  assert.equal(st.page, 'wrath.example');
+  assert.deepEqual(JSON.parse(JSON.stringify(st.hop)), { id: RID, name: 'Frost Haven', base: `wss://relay.example/ws/${RID}`, login: true, home: true });
+  assert.equal(st.envHop, RID);
+  assert.equal(st.signedIn, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(st.sockets.map((x) => [x.from, x.to]))), [
+    ['wss://wrath.example/ws/3724', `wss://relay.example/ws/${RID}/auth`],
+    ['wss://wrath.example/ws/8085', `wss://relay.example/ws/${RID}/world`]]);
+  assert.equal(st.watch.polls, 3);
+  assert.ok(!JSON.stringify(st).includes('Pa55word'), 'no password in the status');
+  const plain = page({ user: 'WR000123', pass: 'x' }).win.__wuHop.status();
+  assert.equal(plain.hop, null);
+  assert.deepEqual(Array.from(plain.sockets), []);
 });

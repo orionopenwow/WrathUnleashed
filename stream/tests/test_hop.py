@@ -4,7 +4,7 @@ a fake SOAP server, a fake Open Vanilla realm service and a fake relay listing.
 
     python3 -I stream/tests/test_hop.py stream/wrath_portal.py
 """
-import http.client, importlib.util, json, os, sys, tempfile, threading, urllib.parse
+import http.client, importlib.util, json, os, re, sys, tempfile, threading, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from xml.sax.saxutils import escape
 
@@ -15,11 +15,13 @@ with open(os.path.join(slices, "mini.json"), "w") as f:
 os.environ.update(SOAP_USER="WUSOAP", SOAP_PASS="x", AC_SOAP_URL=f"http://127.0.0.1:{SOAP_PORT}/",
                   PORTAL_URL=f"http://127.0.0.1:{REALM_PORT}", WU_SLICE_DIR=slices, WU_STREAM="1", WU_OWNFILES="1",
                   STREAM_HOST="wrath.example", WU_RELAY_LISTING=f"http://127.0.0.1:{RELAY_PORT}/api/listing/realms.json",
-                  WU_JOIN_BASE="https://relay.example", WU_RELAY_WS="wss://relay.example")
+                  WU_JOIN_BASE="https://relay.example", WU_RELAY_WS="wss://relay.example",
+                  WU_HANGOUT_REALM="hangouthangout22")
 spec = importlib.util.spec_from_file_location("wp", sys.argv[1])
 wp = importlib.util.module_from_spec(spec); spec.loader.exec_module(wp)
 
-LIVE, OFF = "abcdefghijklmnop", "qrstuvwxyz234567"
+LIVE, OFF, HANG = "abcdefghijklmnop", "qrstuvwxyz234567", "hangouthangout22"
+SOAP_CMDS = []
 
 
 def rec(rid, name, live):
@@ -31,7 +33,9 @@ class Relay(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
 
     def do_GET(self):
-        body = json.dumps({"realms": [rec(LIVE, "Frost Haven", True), rec(OFF, "Quiet Corner", False)]}).encode()
+        hang = rec(HANG, "Dalaran Hangout", True)
+        hang["community"]["lastHeartbeat"]["players"] = 1
+        body = json.dumps({"realms": [rec(LIVE, "Frost Haven", True), rec(OFF, "Quiet Corner", False), hang]}).encode()
         self.send_response(200); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
 
 
@@ -39,9 +43,11 @@ class Soap(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
 
     def do_POST(self):
-        self.rfile.read(int(self.headers["Content-Length"]))
+        raw = self.rfile.read(int(self.headers["Content-Length"])).decode()
+        m = re.search(r"<command>(.*?)</command>", raw, re.S)
+        SOAP_CMDS.append(m.group(1) if m else raw)
         body = ('<?xml version="1.0"?><SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" '
-                f'xmlns:ns1="urn:AC"><SOAP-ENV:Body><ns1:executeCommandResponse><result>{escape("ovstream ok")}</result>'
+                f'xmlns:ns1="urn:AC"><SOAP-ENV:Body><ns1:executeCommandResponse><result>{escape("ovstream ok ovgo ok")}</result>'
                 '</ns1:executeCommandResponse></SOAP-ENV:Body></SOAP-ENV:Envelope>').encode()
         self.send_response(200); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
 
@@ -128,6 +134,54 @@ for go, why in ((f"r:{OFF}", "offline realm"), ("r:" + "a" * 16, "unknown realm"
 # --- Back to Wrath: plain /wrath/play gives a session without the hop
 _, land, env, _ = session_env("/wrath/play?mini=mini")
 check("back to Wrath: no hop, the Wrath login", land == "/" and "hop" not in env and env.get("user") == "WR000123")
+
+# --- the Dalaran Hangout: this realm through the relay. The player's own Wrath login (no join page, no second
+# account), the relay bridge for the sockets, and the arrival in Dalaran (the go intent on the realm).
+def gos():
+    return [c for c in SOAP_CMDS if c.startswith("ovgo ")]
+
+
+wp.modes._recent.clear()
+SOAP_CMDS.clear()
+gate, land, env, txt = session_env(f"/wrath/play?mini=mini&go=r:{HANG}")
+check("hangout: a hop session through the relay", env.get("hop") == HANG and env.get("hop_ws") == f"wss://relay.example/ws/{HANG}", env)
+check("hangout: the player's own Wrath login, marked as such", env.get("hop_home") == "1" and env.get("user") == "WR000123"
+      and env.get("pass") == "Pa55word1234abcd", env)
+check("hangout: lands in Dalaran (ovgo h:dalaran for the account)", gos() == ["ovgo set WR000123 h:dalaran"], gos())
+check("hangout: no account made or reset beyond the usual", not [c for c in SOAP_CMDS if "account create" in c.lower()
+                                                               and "WR000123" not in c], SOAP_CMDS)
+wp.modes._recent.clear()
+SOAP_CMDS.clear()
+_, _, env, _ = session_env(f"/wrath/play?mode=own&go=r:{HANG}")
+check("hangout with own files: the Wrath login too", env.get("hop_home") == "1" and env.get("mode") == "own" and env.get("user") == "WR000123")
+check("hangout with own files: Dalaran", "ovgo set WR000123 h:dalaran" in gos(), gos())
+# another Beacon: never the Wrath login, never a Dalaran intent
+wp.modes._recent.clear()
+SOAP_CMDS.clear()
+_, _, env, txt = session_env(f"/wrath/play?mini=mini&go=r:{LIVE}")
+check("a community Beacon: no hop_home, no Wrath login", "hop_home" not in env and "pass" not in env and "Pa55word" not in txt)
+check("a community Beacon: no go intent", gos() == [], gos())
+# Back to Wrath (wrath-page.js hopUrl('wrath')): /wrath?go=h:dalaran -> straight in, Dalaran on arrival
+wp.modes._recent.clear()
+SOAP_CMDS.clear()
+st, h, _ = get("/wrath?go=h:dalaran", cookie="wr_session=good")
+check("back to Wrath: straight in with the Dalaran go", st == 302 and h["location"] == "/wrath/play?mini=mini&go=h:dalaran", h.get("location"))
+_, land, env, _ = session_env("/wrath/play?mini=mini&go=h:dalaran")
+check("back to Wrath: a plain Wrath session", "hop" not in env and env.get("user") == "WR000123" and env.get("host") == "play.openvanilla.app")
+check("back to Wrath: lands in Dalaran", "ovgo set WR000123 h:dalaran" in gos(), gos())
+# the hangout first on the realm list, with its own button (straight to Dalaran, no join page)
+realms, _ok = wp.community_realms()
+check("hangout first in the community list", [r["id"] for r in realms][:1] == [HANG] and realms[0]["hangout"], [r["id"] for r in realms])
+page = wp.realms_page().decode()
+i_h, i_l = page.find("Dalaran Hangout"), page.find("Frost Haven")
+check("realms page: the hangout before the other Beacons", 0 < i_h < i_l, (i_h, i_l))
+check("realms page: Play in Dalaran, run by WrathUnleashed", 'href="/wrath?go=h:dalaran">Play in Dalaran</a>' in page
+      and "Run by WrathUnleashed" in page and f"/join/{HANG}" not in page)
+# no hangout configured (unset, or junk): nothing special
+saved = wp.HANGOUT_REALM
+wp.HANGOUT_REALM = "not-an-id"
+check("junk hangout id: none", wp.hangout_id() is None)
+wp.HANGOUT_REALM = saved
 
 print(f"\n{count - fails}/{count} passed")
 sys.exit(1 if fails else 0)

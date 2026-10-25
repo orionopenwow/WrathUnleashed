@@ -96,20 +96,26 @@ Tested end to end without game data: `tests/test_leyline_e2e.py`.
 The realm list, the Leyline page and the account page have a **+ Your server** button. It signs the
 player in (Google or Hero Key), asks for the realm name, preset (Dalaran hangout by default, or main,
 brawl, progression), house rules, public or private, their GM account name and a tagline, and **Start
-server** makes a pending realm for that account (`stream/hostflow.py`): a realm key and id, invite and
-host secrets made exactly as `setup.py` makes them, and a claim token. The realm's page
-(`/wrath/host/<id>`, owner only) shows the share link (`/wrath/r/<id>`), a per-realm download
-(`leyline-<id>.bat` for Windows, `leyline-<id>.sh` for Mac/Linux) and live status ("Waiting for your PC"
--> "Online, listed"). The realm runs on the player's own PC through the relay; nothing runs on our server.
+server** makes a pending realm for that account (`stream/hostflow.py`): a page id, invite and host secrets
+made exactly as `setup.py` makes them, and a claim token. **No realm key**: the key (and so the realm id) is
+made on the host's PC, as everywhere else. The realm's page (`/wrath/host/<page id>`, owner only) shows a
+per-realm download (`leyline-<page id>.bat` for Windows, `leyline-<page id>.sh` for Mac/Linux) and live status
+("Waiting for your PC" -> "Online, listed"); the share link (`/wrath/r/<realm id>`), the invite link and the
+host's own join link appear there as soon as the PC connects. The realm runs on the player's own PC through
+the relay; nothing runs on our server.
 
-The download goes in the unzipped host kit folder. It writes `state/seed.b64` (this realm's key, links,
-claim token and answers, nothing else) and runs `setup.py init --seed` (then `leyline host`, or
-`Host a Wrath realm.bat`); the seed is used once and deleted, and a kit that already hosts another realm
-refuses it. The website forgets the realm key the first time the realm connects. No accounts, no
-passwords: the host makes the GM account on their own join link. With `WU_LISTING_SITE_SECRET` (= the
-relay's `RELAY_LISTING_SITE_SECRET`) in `portal.env`, a listed public realm is claimed for its account.
-Pending realms live in `/srv/wrath/hosted` (mounted at `/hosted`). `WU_HOST_KIT_URL` points the page
-at the host kit zip. Tests: `stream/tests/test_hostflow.py`.
+The download goes in the unzipped host kit folder. It writes `state/seed.b64` (seed v2: the links' secrets,
+the claim token and the answers; no key) and runs `setup.py init --seed` (then `leyline host`, or
+`Host a Wrath realm.bat`), which makes the realm key on that PC; the seed is used once and deleted, and a
+kit that already hosts another realm refuses it. Pairing: the agent shows the relay
+`sha256("leyline-pair-v1\n" + claim token)` in its hello; the website asks `GET /api/pair/<that hash>` and
+learns the realm id (the first realm to show a hash keeps it, so a copied download can't take the realm
+over). Records made before this change (seed v1, a website-made key) keep working and the website forgets
+their key once they connect. No accounts, no passwords: the host makes the GM account on their own join
+link. With `WU_LISTING_SITE_SECRET` (= the relay's `RELAY_LISTING_SITE_SECRET`) in `portal.env`, a listed
+public realm is claimed for its account. Pending realms live in `/srv/wrath/hosted` (mounted at `/hosted`).
+`WU_HOST_KIT_URL` points the page at the host kit zip. Tests: `stream/tests/test_hostflow.py`, and the whole Windows path against the real
+relay: `hosting/tests/test_host_windows_e2e.py`.
 
 ## 4. Hosting (what players do)
 

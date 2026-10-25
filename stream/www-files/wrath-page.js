@@ -544,11 +544,13 @@ export function interfaceMenu(panel, current = window.__wuInterface?.choice || '
 
 // >>> leyline-hop (realm hopping, 2026-10-25) ------------------------------------------------------
 // The Leyline window's Join (WrathUnleashedUI/Leyline.lua) can't navigate, so it asks the page: it sets the
-// Lua global WUUI_LEYLINE_HOP to the realm id (or "wrath") and whispers WULY "H:<id>" to itself, which the
-// realm echoes (ov_leyline.lua). The page takes the global through the bridge (and clears it) when the echo
-// arrives as CHAT_MSG_ADDON, or on a slow poll in the world (a realm that doesn't echo), then reloads the game
-// on that realm: <home>/wrath?go=r:<id> (with own game files: /wrath/play?mode=own&go=r:<id>). The global is
-// the authority: a whisper from someone else can't make the page hop.
+// Lua global WUUI_LEYLINE_HOP to the realm id (or "wrath") and whispers WULY "H:<id>" to itself. The page
+// takes the global through the bridge (and clears it) on a 1 s poll whenever the bridge is up, then reloads the
+// game on that realm: <home>/wrath?go=r:<id> (with own game files: /wrath/play?mode=own&go=r:<id>). The poll is
+// the trigger: the 3.3.5a web client hands CHAT_MSG_ADDON to the addons but not to the page bridge's event tap
+// (benilla-ui addon_message.rs fires it past the tap), so the whisper's echo never reaches the page today; the
+// CHAT_MSG_ADDON listener stays as a shortcut for a client that relays it. The global is the authority: a whisper
+// from someone else can't make the page hop. "Back to Wrath" lands in Dalaran (?go=h:dalaran, ov_go.lua).
 // In a hop session (wrath-early.js set it up): a "Back to Wrath" bar, and the realm's join page over the game
 // when this browser has no login for that realm yet; the login it hands back is kept here (wrath-early.js).
 export const HOP_TAKE = 'local h = WUUI_LEYLINE_HOP; WUUI_LEYLINE_HOP = nil; return h';
@@ -565,7 +567,7 @@ export function hopUrl(target, env = window.__wenilla_env || {}) {
   if (!t) return null;
   const home = typeof env.home === 'string' && /^https:\/\/[a-z0-9.-]+$/i.test(env.home) ? env.home : CONFIG.homeUrl;
   const own = env.mode === 'own';
-  if (t === 'wrath') return home + (own ? '/wrath/play?mode=own' : '/wrath');
+  if (t === 'wrath') return home + (own ? '/wrath/play?mode=own&go=h:dalaran' : '/wrath?go=h:dalaran');
   return home + (own ? `/wrath/play?mode=own&go=r:${t}` : `/wrath?go=r:${t}`);
 }
 
@@ -578,15 +580,18 @@ export function hopEcho(payload) {
 }
 
 /** Watch for the Leyline window's Join. `go(url)` navigates (tests pass their own). Returns a small handle. */
-export function watchHops(wenilla, { env = window.__wenilla_env || {}, go = (u) => location.assign(u), pollMs = 2000 } = {}) {
-  const h = { taking: false, gone: null, take: null, timer: 0 };
+export function watchHops(wenilla, { env = window.__wenilla_env || {}, go = (u) => location.assign(u), pollMs = 1000 } = {}) {
+  const h = { taking: false, gone: null, take: null, timer: 0, polls: 0, taken: null, error: null };
   if (!wenilla || typeof wenilla.lua !== 'function') return h;
   h.take = async () => {
     if (h.taking || h.gone) return null;
     h.taking = true;
+    h.polls++;
     try {
-      const [v] = (await wenilla.lua(HOP_TAKE, 1500).catch(() => [null])) || [];
+      let v = null;
+      try { [v] = (await wenilla.lua(HOP_TAKE, 1500)) || []; h.error = null; } catch (e) { h.error = String(e?.message || e).slice(0, 120); }
       const t = hopTarget(v);
+      if (t) h.taken = t;
       if (!t || (t === 'wrath' && !env.hop)) return null;   // already home
       if (t === env.hop) return null;                       // already there
       h.gone = hopUrl(t, env);
@@ -597,8 +602,10 @@ export function watchHops(wenilla, { env = window.__wenilla_env || {}, go = (u) 
     }
   };
   try { wenilla.on?.('CHAT_MSG_ADDON', (p) => { if (hopEcho(p)) h.take(); }); } catch { /* old bridge */ }
-  const inWorldNow = () => { try { return wenilla.state?.session?.state === 'inworld'; } catch { return false; } };
-  if (pollMs > 0) h.timer = setInterval(() => { if (inWorldNow()) h.take().catch(() => {}); }, pollMs);
+  // Whenever the bridge has a VM (the Leyline window lives in the world, but a glue-screen menu may set it too).
+  const vmUp = () => { try { return !!wenilla.ready && !!wenilla.state; } catch { return false; } };
+  if (pollMs > 0) h.timer = setInterval(() => { if (vmUp()) h.take().catch(() => {}); }, pollMs);
+  try { if (window.__wuHop) window.__wuHop.watch = h; } catch { /* no hop layer */ }
   return h;
 }
 
@@ -639,6 +646,7 @@ export function hopUi(env = window.__wenilla_env || {}, hop = window.__wuHop) {
   document.head.append(css);
   const name = String(env.hop_name || 'a community realm').slice(0, 32);
   const home = () => location.assign(hopUrl('wrath', env));
+  const hangout = !!hop.state.home;   // the Dalaran Hangout: Wrath itself, the player's own login
   const bar = document.createElement('div');
   bar.id = 'wu-hop-bar';
   const label = document.createElement('span');
@@ -656,7 +664,8 @@ export function hopUi(env = window.__wenilla_env || {}, hop = window.__wuHop) {
   other.textContent = 'Use another account';
   other.title = 'Forget the login this browser keeps for ' + name;
   other.addEventListener('click', () => { hop.forgetLogin(localStorage, env.hop); location.reload(); });
-  bar.append(label, back, other);
+  bar.append(label, back);
+  if (!hangout) bar.append(other);   // the hangout uses the Wrath login: nothing to forget
   document.body.append(bar);
   if (hop.state.login) return { bar };
   // First hop here: the realm's own join page (make an account, or sign in to yours), framed.

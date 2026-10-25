@@ -8,6 +8,11 @@ reachable through the relay without opening any port at home.
   * answers the relay's status and "make an account" requests (accounts arrive as SRP6 salt +
     verifier computed in the player's browser: the host never sees players' passwords)
   * public realms: a signed heartbeat to the Beacons listing every 60 s
+  * a realm made on the website: its hello carries the pair hash of the website's token (wunet/keys.pair_hash),
+    so the website finds this realm's id; the key itself is made here, on the host's PC
+  * the operator's own realm as a Beacon (host.json "official": true, written by `setup.py official`): the realm
+    list row, accounts and GM rights are never touched (that realm has its own sign-in); players and bots come
+    from host.json "status_url" (the play page's /wrath/status.json) instead of the database
 
 Config: state/host.json (written by setup.py), key: state/realm.key. It writes
 state/relay-state.json for the self-check and the host's .bat.
@@ -197,6 +202,15 @@ class Agent:
         inv = self.cfg.get("invite_secret")
         return hashlib.sha256(inv.encode()).hexdigest() if inv else None
 
+    def pair_sha(self):
+        """The website's pairing (a realm made on /wrath/host): the hash of its token, never the token."""
+        c = self.cfg.get("claim")
+        return keys.pair_hash(c) if isinstance(c, str) and c else None
+
+    def official(self):
+        """The operator's own realm, reached through the relay: hands off its realm list, accounts and GM rights."""
+        return self.cfg.get("official") is True
+
     def host_sha(self):
         """sha256 of the host-only secret (in the host's own join link): the relay marks signups made
         with it, and only those may take the GM account's name."""
@@ -255,6 +269,8 @@ class Agent:
                  "version": VERSION, "ts": int(time.time())}
         if self.host_sha():
             hello["host_sha256"] = self.host_sha()
+        if self.pair_sha():
+            hello["pair_sha256"] = self.pair_sha()
         await self.ws.send(json.dumps({"hello": hello, "sig": keys.sign_doc(self.secret, hello, keys.CTX_RELAY_LOGIN)}))
         op, msg = await asyncio.wait_for(self.ws.recv(), 15)
         doc = json.loads(msg)
@@ -401,7 +417,7 @@ class Agent:
                 res = {"res": rid, "ok": True, "status": await self.status()}
             elif doc.get("op") == "create_account":
                 gm = (self.cfg.get("gm_name") or "").upper()
-                if self.cfg.get("signup", "invite") == "off" or not self.db:
+                if self.cfg.get("signup", "invite") == "off" or not self.db or self.official():
                     res["error"] = "off"
                 elif gm and str(doc.get("username", "")).upper() == gm and doc.get("host") is not True:
                     res["error"] = "reserved"   # the GM's name: only from the host's own link
@@ -416,6 +432,20 @@ class Agent:
         if self.ws and not self.ws.closed:
             self.ws.send_nowait(json.dumps(res))
 
+    @staticmethod
+    def status_from_url(url):
+        """players / bots / uptime_s from a status document (format openvanilla-status-1, e.g. the play page's
+        /wrath/status.json). Only plain counts are taken."""
+        req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": VERSION})
+        with urllib.request.urlopen(req, timeout=4) as r:
+            doc = json.loads(r.read(65536).decode("utf-8"))
+        out = {}
+        for k in ("players", "bots", "uptime_s"):
+            v = doc.get(k) if isinstance(doc, dict) else None
+            if isinstance(v, int) and not isinstance(v, bool) and 0 <= v < 1_000_000:
+                out[k] = v
+        return out
+
     async def world_up(self):
         host, port = self.services[8085]
         try:
@@ -428,11 +458,16 @@ class Agent:
     async def status(self):
         st = {"online": await self.world_up(), "players": None, "bots": None, "uptime_s": None,
               "profile": self.cfg.get("profile")}
-        if self.db:
+        if self.db and not self.cfg.get("status_url"):
             try:
                 st.update(await asyncio.to_thread(self.db.status))
             except Exception as e:
                 log.debug("status from db: %s", e)
+        elif self.cfg.get("status_url"):
+            try:
+                st.update(await asyncio.to_thread(self.status_from_url, self.cfg["status_url"]))
+            except Exception as e:  # the numbers are optional; online comes from the world port above
+                log.debug("status from %s: %s", self.cfg["status_url"], e)
         if self.cfg.get("claim"):
             st["claim"] = self.cfg["claim"]
         return st
@@ -446,7 +481,7 @@ class Agent:
             if m != self.cfg_mtime:
                 self.cfg_mtime = m
                 new = read_json(self.cfg_path) or self.cfg
-                changed = {k for k in ("name", "visibility", "invite_secret", "signup", "host_secret")
+                changed = {k for k in ("name", "visibility", "invite_secret", "signup", "host_secret", "claim")
                            if new.get(k) != self.cfg.get(k)}
                 self.cfg = new
                 if changed and self.ws and not self.ws.closed:
@@ -454,11 +489,13 @@ class Agent:
                            "signup": new.get("signup", "invite")}
                     if self.host_sha():
                         upd["host_sha256"] = self.host_sha()
+                    if self.pair_sha():
+                        upd["pair_sha256"] = self.pair_sha()
                     self.ws.send_nowait(json.dumps({"update": upd}))
                     log.info("told the relay: %s changed", ", ".join(sorted(changed)))
                 if "name" in changed:
                     self.address_done = None
-            if self.db and self.welcome and self.address_done is None:
+            if self.db and self.welcome and self.address_done is None and not self.official():
                 try:
                     addr = await asyncio.to_thread(resolve_ipv4, self.welcome["address"])
                     r = await asyncio.to_thread(self.db.set_realm_address, self.cfg["name"], addr,
@@ -470,7 +507,7 @@ class Agent:
                 except Exception as e:
                     self.save_state(realmlist_ok=False, realmlist_error=str(e)[:200])
                     log.info("realm list not set yet (database starting?): %s", e)
-            if self.db and not gm_done and self.cfg.get("gm"):
+            if self.db and not gm_done and self.cfg.get("gm") and not self.official():
                 try:
                     g = self.cfg["gm"]
                     r = await asyncio.to_thread(self.db.create_account, g["username"], g["salt"], g["verifier"], 3)
@@ -480,7 +517,7 @@ class Agent:
                 except Exception as e:
                     log.debug("host account later: %s", e)
             gm_name = self.cfg.get("gm_name")
-            if self.db and gm_name and self.gm_done != gm_name:
+            if self.db and gm_name and self.gm_done != gm_name and not self.official():
                 try:
                     r = await asyncio.to_thread(self.db.grant_gm, gm_name, 3)
                     if r in ("ok", "unchanged"):
@@ -514,7 +551,8 @@ class Agent:
 
     async def heartbeat_loop(self, every=60):
         while True:
-            if self.cfg.get("visibility") == "public" and self.welcome and self.ws and not self.ws.closed:
+            beat_now = self.cfg.get("visibility") == "public" and self.welcome and self.ws and not self.ws.closed
+            if beat_now:
                 try:
                     body = json.dumps(self.beat(await self.status())).encode()
                     code, reply = await asyncio.to_thread(self.http_post, self.cfg["listing_url"], body)
@@ -524,7 +562,8 @@ class Agent:
                 except Exception as e:
                     self.save_state(listing_status=None, listing_reply=str(e)[:200])
                     log.info("heartbeat failed: %s", e)
-            await asyncio.sleep(every)
+            # not connected yet: look again soon, so a new realm is listed seconds after it connects, not a minute
+            await asyncio.sleep(every if beat_now else min(every, 2))
 
 
 def main(argv=None):

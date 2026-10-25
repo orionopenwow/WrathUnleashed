@@ -121,6 +121,48 @@ class Setup(unittest.TestCase):
         self.assertIn("another realm", str(e.exception))
         self.assertEqual(json.load(open(os.path.join(st, "host.json")))["realm_id"], seed["realm_id"])
 
+    def write_seed_v2(self, **over):
+        import base64
+        doc = {"v": 2, "invite_secret": "ABCDEFGHJKMNPQRSTVWX", "host_secret": "ABCDEFGHJKMNPQRSTVWXYZ23",
+               "claim": "claimtoken-v2-0123456789", "name": "Web Realm", "profile": "dalaran", "visibility": "public",
+               "gm_name": "WEBGM", "tagline": "Made on the website", "rules": ["Rule one."]}
+        doc.update(over)
+        doc = {k: v for k, v in doc.items() if v is not None}
+        os.makedirs(os.path.join(self.kit, "state"), exist_ok=True)
+        with open(os.path.join(self.kit, "state", "seed.b64"), "w") as f:
+            f.write(base64.b64encode(json.dumps(doc).encode()).decode() + "\r\n")
+        return doc
+
+    def test_seed_v2_key_made_here(self):
+        seed = self.write_seed_v2()
+        out, _ = self.run_cmd("init", "--seed", "state/seed.b64")
+        st = os.path.join(self.kit, "state")
+        cfg = json.load(open(os.path.join(st, "host.json")))
+        sec = keys.load_or_create(os.path.join(st, "realm.key"))
+        self.assertEqual(cfg["realm_id"], keys.realm_id(keys.public_key(sec)))     # this PC's own key
+        self.assertEqual(json.loads(out)["realm_id"], cfg["realm_id"])
+        self.assertEqual((cfg["claim"], cfg["invite_secret"], cfg["host_secret"], cfg["gm_name"], cfg["signup"]),
+                         (seed["claim"], seed["invite_secret"], seed["host_secret"], "WEBGM", "open"))
+        self.assertEqual(stat.S_IMODE(os.stat(os.path.join(st, "realm.key")).st_mode), 0o600)
+        self.assertFalse(os.path.exists(os.path.join(st, "seed.b64")))
+        # the same download again: the same realm; another website realm's download: refused
+        self.write_seed_v2()
+        self.run_cmd("init", "--seed", "state/seed.b64")
+        self.assertEqual(json.load(open(os.path.join(st, "host.json")))["realm_id"], cfg["realm_id"])
+        self.write_seed_v2(claim="anotherclaim-0123456789")
+        with self.assertRaises(SystemExit) as e:
+            self.run_cmd("init", "--seed", "state/seed.b64")
+        self.assertIn("another realm", str(e.exception))
+
+    def test_seed_v2_is_checked(self):
+        key = keys.new_secret()
+        for bad in ({"realm_key": key.hex()}, {"realm_id": keys.realm_id(keys.public_key(key))}, {"claim": None},
+                    {"claim": "bad token!"}, {"v": 3}, {"invite_secret": "short"}):
+            self.write_seed_v2(**bad)
+            with self.assertRaises(SystemExit):
+                self.run_cmd("init", "--seed", "state/seed.b64")
+            self.assertFalse(os.path.exists(os.path.join(self.kit, "state", "host.json")))
+
     def test_seed_is_checked(self):
         for bad in ({"realm_id": "aaaaaaaaaaaaaaaa"}, {"gm_name": "x"}, {"profile": "everything"},
                     {"invite_secret": "short"}, {"claim": "bad token!"}, {"name": "<b>"}):

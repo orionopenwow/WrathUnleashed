@@ -116,3 +116,11 @@
 1033d ship  Save to GitHub (orionopenwow/WrathUnleashed): edit mode, the Leyline Launcher look
 1035a ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline Launcher 0.2.0 (mods: browse, install and remove per client, drag and drop; realms: play any Beacon, Back to Wrath; host: run the kit from the website's realm file; update check)
 1035b leyline  Update the public orionopenwow/Leyline repo
+1036a relay  Relay: pairing for PC-made realm keys, wrong-password limits per player address
+1036b hangout  Dalaran Hangout on Leyline: the realm as a Beacon through the relay (second login server, agent), checked and rolled back on failure
+1036c signin  Site: Dalaran Hangout first on the realm list (Play in Dalaran), hops into the hangout use your Wrath login, keys made on the host's PC
+1036d client  Play page: hop trigger that always works, Back to Wrath lands in Dalaran
+1036e scripts  Realm list in game: Dalaran Hangout first
+1036f foreverui  Leyline window wording
+1036g ship  Save to GitHub (orionopenwow/WrathUnleashed): hosting and hopping end to end
+1036h leyline  Update the public orionopenwow/Leyline repo

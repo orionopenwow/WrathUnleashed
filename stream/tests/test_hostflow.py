@@ -1,6 +1,8 @@
 """The host-a-realm flow (GET/POST /wrath/host, /wrath/host/<id> and its downloads; stream/hostflow.py):
 sign-in redirect, form validation, owner-only pages, downloads with no foreign secrets, the download really
-sets up the kit (leyline host --config-only, no Docker), live status, claims, escaping, no banned words.
+sets up the kit (leyline host --config-only, no Docker) with the realm key made on the PC (never on the site),
+pairing (the site finds the PC's realm id through the relay by the token's hash), live status, claims, escaping,
+an older record (a site-made key, seed v1) still working, no banned words.
 
     python3 -I stream/tests/test_hostflow.py stream/wrath_portal.py
 """
@@ -9,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 TMP = tempfile.mkdtemp(prefix="wu-hostflow-")
 SENTINELS = {"SOAP_PASS": "SOAPSECRET-sentinel-123", "WU_LISTING_SITE_SECRET": "SITESECRET-sentinel-456"}
-fake_relay = {"online": set(), "claims": [], "auth": []}
+fake_relay = {"online": set(), "claims": [], "auth": [], "pairs": {}, "pair_asks": []}
 
 
 class Relay(BaseHTTPRequestHandler):
@@ -25,6 +27,13 @@ class Relay(BaseHTTPRequestHandler):
             return self.reply(200, {"realm_id": m.group(1), "online": True})
         if self.path == "/api/listing/realms.json":
             return self.reply(200, {"realms": []})
+        m = re.match(r"^/api/pair/([0-9a-f]{64})$", self.path)
+        if m:
+            fake_relay["pair_asks"].append(m.group(1))
+            rid_ = fake_relay["pairs"].get(m.group(1))
+            if rid_:
+                return self.reply(200, {"realm_id": rid_, "online": rid_ in fake_relay["online"]})
+            return self.reply(404, {"error": "no realm has shown this pairing yet"})
         self.reply(404, {"error": "unknown realm"})
 
     def do_POST(self):
@@ -183,11 +192,12 @@ st, h, b = req("POST", "/wrath/host", "alice", form("alice"), headers={"Origin":
 loc = h.get("location", "")
 m = re.match(r"^/wrath/host/([a-z2-7]{16})$", loc)
 check("created: 303 to the start page", st == 303 and m, (st, loc))
-rid = m.group(1) if m else "x" * 16
-rec_path = os.path.join(TMP, "hosted", "realms", rid + ".json")
+pid = m.group(1) if m else "x" * 16
+rec_path = os.path.join(TMP, "hosted", "realms", pid + ".json")
 check("record file is 0600", os.path.exists(rec_path) and stat.S_IMODE(os.stat(rec_path).st_mode) == 0o600)
-rec = hf.load(rid)
-check("realm id comes from its key", rec and hf.realm_id(hf.ed25519.public_key(bytes.fromhex(rec["realm_key"]))) == rid)
+rec = hf.load(pid)
+check("the site makes no realm key (the PC does)", rec and "realm_key" not in rec and rec["realm_id"] is None
+      and rec["pending_id"] == pid)
 check("secrets made like setup.py", rec and re.fullmatch(r"[A-Z2-9]{20}", rec["invite_secret"])
       and re.fullmatch(r"[A-Z2-9]{24}", rec["host_secret"]) and re.fullmatch(r"[A-Za-z0-9_-]{24}", rec["claim"]))
 check("answers kept", rec and (rec["name"], rec["preset"], rec["visibility"], rec["gm"], rec["rules"])
@@ -199,48 +209,51 @@ check("no password stored", rec and "AlicePass" not in json.dumps(rec) and "pass
 st, h, b = req("GET", loc, "alice")
 page = b.decode()
 check("start page renders", st == 200 and "Violet Hangout" in page)
-check("share link", f"https://play.openvanilla.app/wrath/r/{rid}" in page)
+check("links wait for the PC (the realm id comes from its key)", "appear here as soon as your PC connects" in page
+      and "/wrath/r/" not in page and rec["host_secret"] not in page)
 check("waiting status", "Waiting for your PC" in page)
+check("asked the relay by the token's hash, never the token", fake_relay["pair_asks"]
+      and fake_relay["pair_asks"][-1] == hf.pair_hash(rec["claim"]) and rec["claim"] not in "".join(fake_relay["pair_asks"]))
 check("polls with a meta refresh", '<meta http-equiv="refresh" content="15">' in page)
-check("download links", f'/wrath/host/{rid}/leyline-{rid}.bat' in page and f'/wrath/host/{rid}/leyline-{rid}.sh' in page)
-check("host's own join link (GM account)", f"https://relay.test/join/{rid}#{rec['invite_secret']}~{rec['host_secret']}" in page)
+check("download links", f'/wrath/host/{pid}/leyline-{pid}.bat' in page and f'/wrath/host/{pid}/leyline-{pid}.sh' in page)
 check("start page: no instant-slot option", not re.search(r"(?i)instant|slot|coming soon", page))
 check("start page: no banned words", not BANNED.findall(visible(page)), BANNED.findall(visible(page)))
 check("start page: no script", "<script" not in page)
 st, h, b = req("GET", loc, "bob")
 check("other account: 404", st == 404 and rec["host_secret"].encode() not in b)
-st, h, b = req("GET", f"/wrath/host/{rid}/leyline-{rid}.sh", "bob")
-check("other account: no download", st == 404 and rec["realm_key"].encode() not in b)
+st, h, b = req("GET", f"/wrath/host/{pid}/leyline-{pid}.sh", "bob")
+check("other account: no download", st == 404 and rec["claim"].encode() not in b)
 st, h, b = req("GET", "/wrath/host/zzzzzzzzzzzzzzzz", "alice")
 check("unknown realm: 404", st == 404)
-st, h, b = req("GET", f"/wrath/host/{rid}/leyline-aaaaaaaaaaaaaaaa.sh", "alice")
+st, h, b = req("GET", f"/wrath/host/{pid}/leyline-aaaaaaaaaaaaaaaa.sh", "alice")
 check("mismatched file name: 404", st == 404)
 st, h, b = req("GET", "/wrath/host", "alice")
-check("form lists the account's realms", f'href="/wrath/host/{rid}"'.encode() in b)
+check("form lists the account's realms", f'href="/wrath/host/{pid}"'.encode() in b)
 
 # --- bob's realm (private), to check nothing crosses over
 st, h, b = req("POST", "/wrath/host", "bob", form("bob", name="Bobs Den", visibility="private", gm="bobgm", preset="main"))
-bob_rid = re.match(r"^/wrath/host/([a-z2-7]{16})$", h.get("location", "")).group(1)
-bob = hf.load(bob_rid)
+bob_pid = re.match(r"^/wrath/host/([a-z2-7]{16})$", h.get("location", "")).group(1)
+bob = hf.load(bob_pid)
 
 # --- the downloads
-st, h, sh = req("GET", f"/wrath/host/{rid}/leyline-{rid}.sh", "alice")
-check("sh: attachment", st == 200 and h.get("content-disposition") == f'attachment; filename="leyline-{rid}.sh"')
-st, h, bat = req("GET", f"/wrath/host/{rid}/leyline-{rid}.bat", "alice")
+st, h, sh = req("GET", f"/wrath/host/{pid}/leyline-{pid}.sh", "alice")
+check("sh: attachment", st == 200 and h.get("content-disposition") == f'attachment; filename="leyline-{pid}.sh"')
+st, h, bat = req("GET", f"/wrath/host/{pid}/leyline-{pid}.bat", "alice")
 check("bat: attachment, CRLF", st == 200 and h.get("content-disposition", "").endswith(f'.bat"') and b"\r\n" in bat
       and b"\n" not in bat.replace(b"\r\n", b""))
 for label, blob in (("sh", sh), ("bat", bat)):
     text = blob.decode()
     foreign = [v for v in list(SENTINELS.values()) + ["AlicePass1234567", "BobPass", "wr_session", "WUSOAP",
-                                                      bob["realm_key"], bob["invite_secret"], bob["host_secret"], bob["claim"]] if v in text]
+                                                      bob["invite_secret"], bob["host_secret"], bob["claim"]] if v in text]
     check(f"{label}: no foreign secrets", not foreign, foreign)
     check(f"{label}: never sets a password or makes accounts", not re.search(r"(?i)passw(or)?d\s*=|account create|friend ", text))
     seed = re.search(r"([A-Za-z0-9+/=]{200,})", text)
     doc = json.loads(base64.b64decode(seed.group(1))) if seed else {}
-    check(f"{label}: seed carries this realm only", doc.get("realm_id") == rid and doc.get("realm_key") == rec["realm_key"]
+    check(f"{label}: seed v2 carries this realm only, and no key", doc.get("v") == 2 and doc.get("claim") == rec["claim"]
           and doc.get("gm_name") == "BOSSMAN" and doc.get("rules") == rec["rules"] and set(doc) == {
-              "v", "realm_id", "realm_key", "invite_secret", "host_secret", "claim", "name", "profile",
+              "v", "invite_secret", "host_secret", "claim", "name", "profile",
               "visibility", "gm_name", "tagline", "rules"}, doc.keys())
+    check(f"{label}: says the key is made on the PC", "made on" in text and "never leaves it" in text)
     check(f"{label}: no banned words", not BANNED.findall(text), BANNED.findall(text))
 check("sh: runs leyline host", 'exec bash "$KIT/leyline" host "$@"' in sh.decode() and "LEYLINE_GM=BOSSMAN" in sh.decode())
 check("bat: runs the kit's host script", 'call "Host a Wrath realm.bat"' in bat.decode() and "--seed state/seed.b64" in bat.decode())
@@ -253,19 +266,24 @@ for f in ("leyline", "host-wrath-realm.sh"):
     shutil.copy(os.path.join(ROOT, "hosting", "kit", f), kit)
 shutil.copytree(os.path.join(ROOT, "hosting", "kit", "tools"), os.path.join(kit, "tools"),
                 ignore=shutil.ignore_patterns("__pycache__"))
-with open(os.path.join(kit, f"leyline-{rid}.sh"), "wb") as f:
+with open(os.path.join(kit, f"leyline-{pid}.sh"), "wb") as f:
     f.write(sh)
 env = dict(os.environ, LEYLINE_LOCAL_TOOLS="1")
 for k in SENTINELS:
     env.pop(k, None)
-p = subprocess.run(["bash", os.path.join(kit, f"leyline-{rid}.sh"), "--config-only"], env=env, cwd=TMP,
+p = subprocess.run(["bash", os.path.join(kit, f"leyline-{pid}.sh"), "--config-only"], env=env, cwd=TMP,
                    stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
 check("sh: leyline host --config-only works", p.returncode == 0, p.stdout[-600:] + p.stderr[-600:])
+sys.path.insert(0, os.path.join(kit, "tools"))
+from wunet import keys as wkeys  # noqa: E402
 try:
     cfg = json.load(open(os.path.join(kit, "state", "host.json")))
 except (OSError, ValueError):
     cfg = {}
-check("kit: the website's realm id", cfg.get("realm_id") == rid, cfg.get("realm_id"))
+rid = cfg.get("realm_id") or "y" * 16
+check("kit: the realm id comes from the key made on the PC", rid != pid and rid == wkeys.realm_id(wkeys.public_key(
+    bytes.fromhex(open(os.path.join(kit, "state", "realm.key")).read().strip()))), cfg.get("realm_id"))
+check("kit: the pair hash is the website's", wkeys.pair_hash(rec["claim"]) == hf.pair_hash(rec["claim"]))
 check("kit: the website's links and claim", (cfg.get("invite_secret"), cfg.get("host_secret"), cfg.get("claim"))
       == (rec["invite_secret"], rec["host_secret"], rec["claim"]))
 check("kit: answers", (cfg.get("name"), cfg.get("profile"), cfg.get("visibility"), cfg.get("gm_name"), cfg.get("relay"))
@@ -274,15 +292,14 @@ check("kit: tagline", (cfg.get("record") or {}).get("tagline") == "Duels by the 
 check("kit: house rules", (cfg.get("record") or {}).get("rules") == rec["rules"])
 check("kit: no generated GM login", not os.path.exists(os.path.join(kit, "state", "host-login.txt")) and "gm" not in cfg)
 check("kit: seed used and deleted", not os.path.exists(os.path.join(kit, "state", "seed.b64")))
-check("kit: realm.key is 0600 and the website's", stat.S_IMODE(os.stat(os.path.join(kit, "state", "realm.key")).st_mode) == 0o600
-      and open(os.path.join(kit, "state", "realm.key")).read().strip() == rec["realm_key"])
+check("kit: realm.key is 0600", stat.S_IMODE(os.stat(os.path.join(kit, "state", "realm.key")).st_mode) == 0o600)
 check("kit: host link", open(os.path.join(kit, "state", "host-link.txt")).read().strip()
       == f"https://relay.test/join/{rid}#{rec['invite_secret']}~{rec['host_secret']}")
-p = subprocess.run(["bash", os.path.join(kit, f"leyline-{rid}.sh"), "--config-only"], env=env, cwd=TMP,
+p = subprocess.run(["bash", os.path.join(kit, f"leyline-{pid}.sh"), "--config-only"], env=env, cwd=TMP,
                    stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
 check("sh: safe to run again", p.returncode == 0 and json.load(open(os.path.join(kit, "state", "host.json")))["realm_id"] == rid,
       p.stdout[-300:])
-st, h, bsh = req("GET", f"/wrath/host/{bob_rid}/leyline-{bob_rid}.sh", "bob")
+st, h, bsh = req("GET", f"/wrath/host/{bob_pid}/leyline-{bob_pid}.sh", "bob")
 with open(os.path.join(kit, "other.sh"), "wb") as f:
     f.write(bsh)
 p = subprocess.run(["bash", os.path.join(kit, "other.sh"), "--config-only"], env=env, cwd=TMP,
@@ -290,12 +307,17 @@ p = subprocess.run(["bash", os.path.join(kit, "other.sh"), "--config-only"], env
 check("another realm's file in the same kit is refused", p.returncode != 0 and "another realm" in (p.stdout + p.stderr)
       and json.load(open(os.path.join(kit, "state", "host.json")))["realm_id"] == rid, p.stdout[-300:] + p.stderr[-300:])
 
-# --- live status: the PC connects, then the realm is listed and claimed
+# --- live status: the PC connects (and shows the relay its pair hash), then the realm is listed and claimed
 hf._status.clear()
 fake_relay["online"].add(rid)
+fake_relay["pairs"][wkeys.pair_hash(cfg["claim"])] = rid
 st, h, b = req("GET", loc, "alice")
 check("online, not listed yet", b"joining the realm list" in b)
-check("site forgot the realm key", hf.load(rid)["realm_key"] is None)
+check("paired: the site learned the PC's realm id", hf.load(pid)["realm_id"] == rid and "realm_key" not in hf.load(pid))
+page = b.decode()
+check("share link once paired", f"https://play.openvanilla.app/wrath/r/{rid}" in page)
+check("host's own join link (GM account) once paired",
+      f"https://relay.test/join/{rid}#{rec['invite_secret']}~{rec['host_secret']}" in page)
 listing.append({"id": rid, "name": "Violet Hangout", "tagline": "", "type": "PvE", "ruleset": "dalaran", "live": True,
                 "players": 0, "bots": 0, "claimed": False, "rules": []})
 hf._status.clear()
@@ -307,16 +329,47 @@ n = len(fake_relay["claims"])
 hf._status.clear()
 req("GET", loc, "alice")
 check("claimed once", len(fake_relay["claims"]) == n)
-st, h, b = req("GET", f"/wrath/host/{rid}/leyline-{rid}.sh", "alice")
+st, h, b = req("GET", f"/wrath/host/{pid}/leyline-{pid}.sh", "alice")
 check("download gone once the PC holds the key", st == 410)
+st, h, b = req("GET", loc, "alice")
+check("still at its page address after pairing", st == 200 and b"Violet Hangout" in b)
 
-# --- private realm: invite link, never listed
-st, h, b = req("GET", f"/wrath/host/{bob_rid}", "bob")
-check("private: invite link with its secret", f"https://relay.test/join/{bob_rid}#{bob['invite_secret']}".encode() in b)
+# --- private realm: invite link once paired, never listed
+bob_rid = "bobrealmbobrealm"
+fake_relay["pairs"][hf.pair_hash(bob["claim"])] = bob_rid
 fake_relay["online"].add(bob_rid)
 hf._status.clear()
-st, h, b = req("GET", f"/wrath/host/{bob_rid}", "bob")
+st, h, b = req("GET", f"/wrath/host/{bob_pid}", "bob")
+check("private: invite link with its secret", f"https://relay.test/join/{bob_rid}#{bob['invite_secret']}".encode() in b)
 check("private: online without the list", b"Online, private" in b)
+# a realm id from the relay that isn't one is never taken
+weird = hf.new_realm_secrets()
+weird.update(owner="WR000009", owner_display="W", created=1, name="Weird", preset="main", visibility="public", gm="WGM",
+             tagline="", rules=[], claimed=False, first_online=None)
+hf.save(weird)
+fake_relay["pairs"][hf.pair_hash(weird["claim"])] = "../../etc/passwd"
+hf._status.clear()
+check("junk realm id from the relay ignored", hf.status_of(weird)[0] == "waiting" and hf.load(weird["pending_id"])["realm_id"] is None)
+
+# --- an older record (made before the key moved to the PC): a site-made key, seed v1, the key forgotten online
+old_key = os.urandom(32)
+old_rid = hf.realm_id(hf.ed25519.public_key(old_key))
+old = {"realm_key": old_key.hex(), "realm_id": old_rid, "invite_secret": hf.gen(20), "host_secret": hf.gen(24),
+       "claim": "oldclaimoldclaimoldclaim", "owner": "WR000002", "owner_display": "Bob", "created": 2, "name": "Old Den",
+       "preset": "main", "visibility": "public", "gm": "OLDGM", "tagline": "", "rules": [], "claimed": False,
+       "first_online": None}
+hf.save(old)
+st, h, b = req("GET", f"/wrath/host/{old_rid}", "bob")
+check("old record: page at its realm id, links shown", st == 200 and f"/wrath/r/{old_rid}".encode() in b)
+st, h, b = req("GET", f"/wrath/host/{old_rid}/leyline-{old_rid}.sh", "bob")
+seed = re.search(rb"([A-Za-z0-9+/=]{200,})", b)
+doc = json.loads(base64.b64decode(seed.group(1))) if seed else {}
+check("old record: seed v1 with its key", st == 200 and doc.get("v") == 1 and doc.get("realm_key") == old_key.hex()
+      and doc.get("realm_id") == old_rid)
+fake_relay["online"].add(old_rid)
+hf._status.clear()
+req("GET", f"/wrath/host/{old_rid}", "bob")
+check("old record: the site forgets its key once online", hf.load(old_rid)["realm_key"] is None)
 
 # --- per-account limit
 for i in range(2):

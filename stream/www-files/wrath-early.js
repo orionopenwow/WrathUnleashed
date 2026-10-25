@@ -313,7 +313,11 @@
 //     its realm list names) <hop_ws>/world. Nothing else is touched.
 //   * fills in that realm's own login, kept in this browser only (localStorage wu.leyline.login.<realm id>, put
 //     there by the realm's join page through wrath-page.js), never the Wrath one and never sent to our servers.
+//     One exception: the Dalaran Hangout (env.hop_home "1") is Wrath itself through the relay, so the env keeps
+//     the player's own Wrath login there (the same account; SRP only, the password never crosses the wire).
 // wrath-page.js shows "Back to Wrath" and, with no login kept yet, the realm's join page.
+// window.__wuHop.status(): what this page did (the hop, the rewritten sockets, the hop watcher), for live tests;
+// never a password.
 (function (root) {
   'use strict';
   var ID = /^[a-z2-7]{16}$/;
@@ -355,15 +359,23 @@
     if (!env || typeof env !== 'object' || !ID.test(env.hop || '')) return null;
     var base = hopBase(env, win.location.protocol);
     if (!base) { console.warn('leyline hop: no usable relay address; staying put'); return null; }
-    delete env.user; delete env.pass;   // only ever this realm's own login
+    var home = env.hop_home === '1' && USER.test(env.user || '') && PASS.test(env.pass || '');
     var login = null;
-    try { login = savedLogin(win.localStorage, env.hop); } catch (e) { login = null; }
-    if (login) { env.user = login.user; env.pass = login.pass; }
+    if (!home) {
+      delete env.user; delete env.pass;   // only ever this realm's own login
+      try { login = savedLogin(win.localStorage, env.hop); } catch (e) { login = null; }
+      if (login) { env.user = login.user; env.pass = login.pass; }
+    }
     var Orig = win.WebSocket;
     if (typeof Orig === 'function' && !Orig.__wuHop) {
       var host = win.location.host;
       var Hop = function WebSocket(url, protocols) {
         var to = rewrite(url, base, host);
+        try {
+          api.sockets.push({ at: Math.round((win.performance && win.performance.now()) || 0),
+                             from: String(url).split('?')[0], to: String(to).split('?')[0] });
+          if (api.sockets.length > 20) api.sockets.shift();
+        } catch (e) { /* the log is optional */ }
         return protocols === undefined ? new Orig(to) : new Orig(to, protocols);
       };
       Hop.prototype = Orig.prototype;
@@ -371,11 +383,26 @@
       Hop.__wuHop = true;
       win.WebSocket = Hop;
     }
-    return { id: env.hop, name: String(env.hop_name || ''), base: base, login: !!login };
+    return { id: env.hop, name: String(env.hop_name || ''), base: base, login: !!login || home, home: home };
+  }
+
+  /** For live tests: the hop (no secrets), the sockets the client opened and where they went, the hop watcher. */
+  function status() {
+    var w = api.watch || null;
+    var env = root.__wenilla_env || {};
+    return {
+      page: (root.location && root.location.host) || '',
+      hop: api.state ? { id: api.state.id, name: api.state.name, base: api.state.base, login: api.state.login,
+                         home: !!api.state.home } : null,
+      envHop: typeof env.hop === 'string' ? env.hop : null,
+      signedIn: !!(env.user && env.pass),
+      sockets: api.sockets.slice(),
+      watch: w ? { polls: w.polls || 0, taken: w.taken || null, gone: w.gone || null, error: w.error || null } : null,
+    };
   }
 
   var api = { KEY: KEY, hopBase: hopBase, rewrite: rewrite, savedLogin: savedLogin, saveLogin: saveLogin,
-              forgetLogin: forgetLogin, apply: apply, state: null };
+              forgetLogin: forgetLogin, apply: apply, state: null, sockets: [], watch: null, status: status };
   root.__wuHop = api;
   try { if (root.location) api.state = apply(root); } catch (e) { console.warn('wrath-early.js leyline hop', e); }
 })(typeof window !== 'undefined' ? window : globalThis);

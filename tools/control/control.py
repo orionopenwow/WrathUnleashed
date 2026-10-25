@@ -102,6 +102,8 @@ STEPS = {
     "gm":      ("gmconsole/Install GM Console.bat", "GM console update (game keeps running)", False),
     "lean":    ("realm/Lean server.bat", "Lean server: fewer bots, idle areas unload (5-min restart)", False),
     "relay": ("hosting/relay/Deploy relay.bat", "Beacons relay (relay.openvanilla.app)", False),
+    "hangout": ("hosting/hangout/Deploy Dalaran hangout.bat", "Dalaran Hangout on Leyline (the realm as a Beacon)", False),
+    "hangout-off": ("hosting/hangout/Take Dalaran hangout off Leyline.bat", "Take the Dalaran Hangout off Leyline", False),
     "leyline": ("tools/leyline-repo/Update Leyline repo.bat", "Leyline repo: copy and push (github.com/orionopenwow/Leyline)", False),
     "mods":  ("mods/Put mods on Wrath.bat", "Mods catalog: realm (live reload), streamed addons and /wrath/mods", False),
 }

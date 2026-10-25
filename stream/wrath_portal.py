@@ -86,6 +86,12 @@ Settings (environment, /srv/wrath/portal.env):
                          https://relay.openvanilla.app/api/listing/realms.json
   WU_JOIN_BASE           where a community realm's Join link goes (default https://relay.openvanilla.app,
                          which serves /join/<realm id> itself)
+  WU_HANGOUT_REALM       the relay realm id of the Dalaran Hangout: this realm itself, reached as a Leyline
+                         Beacon through the relay (hosting/hangout/hangout-up.sh). Unset: the id in
+                         /app/hangout-realm.id (WU_HANGOUT_FILE; the hangout step writes it), else none.
+                         It is listed first; a hop to it keeps the player's own Wrath login (the same realm,
+                         the same account: no join page, no second account) and lands in Dalaran, and so
+                         does "Back to Wrath" (?go=h:dalaran)
   WU_MODS_DIR            the published mods catalog for /wrath/mods (default /app/mods = /srv/wrath/portal/mods,
                          written by stream/server/mods-install.sh)
   WU_PORTAL_DATA         the Workshop's community links, projects.jsonl (default /data = /srv/wrath/portal-data,
@@ -442,7 +448,7 @@ class Sessions:
         """This session plays on a community realm (a Leyline hop): /__env.js gives that realm's addresses."""
         with self.lock:
             if sid in self.sessions:
-                self.sessions[sid]["hop"] = {"id": hop["id"], "name": hop["name"]}
+                self.sessions[sid]["hop"] = {"id": hop["id"], "name": hop["name"], "home": bool(hop.get("home"))}
 
     def end_user(self, user: str) -> int:
         with self.lock:
@@ -494,7 +500,7 @@ def hop_for(query: dict) -> dict | None:
         return None
     for r in community_realms()[0]:
         if r["id"] == got[1] and r["live"]:
-            return {"id": r["id"], "name": r["name"]}
+            return {"id": r["id"], "name": r["name"], "home": r["id"] == hangout_id()}
     return None
 
 
@@ -505,6 +511,11 @@ def hop_env(sess: dict) -> dict:
     env = {"hop": rid, "hop_name": sess["hop"]["name"], "hop_ws": f"{RELAY_WS}/ws/{rid}",
            "hop_join": f"{JOIN_BASE}/join/{rid}?hop=1", "host": urllib.parse.urlsplit(RELAY_WS).hostname or "",
            "home": f"https://{PUBLIC_HOST}"}
+    if sess["hop"].get("home") and rid == hangout_id():
+        # The Dalaran Hangout is this realm through the relay: the player's own Wrath login, as on a plain visit
+        # (the same account; the relay and the Beacon agent only carry SRP, never the password).
+        env.update(user=sess["user"], hop_home="1")
+        env["pass"] = sess["pass"]
     if sess.get("mode") == OWN:
         env["mode"] = OWN
     else:
@@ -863,6 +874,27 @@ RELAY_LISTING_FILE = os.environ.get("WU_RELAY_LISTING_FILE", "/app/relay-listing
 JOIN_BASE = os.environ.get("WU_JOIN_BASE", "https://relay.openvanilla.app").rstrip("/")
 # Realm hops: the relay's browser bridge (wss://<relay>/ws/<realm id>/auth and /world, hosting/relay/wurelay).
 RELAY_WS = os.environ.get("WU_RELAY_WS", "wss://relay.openvanilla.app").rstrip("/")
+HANGOUT_REALM = os.environ.get("WU_HANGOUT_REALM", "").strip()
+HANGOUT_FILE = os.environ.get("WU_HANGOUT_FILE", "/app/hangout-realm.id")
+_hangout = {"at": -1e9, "id": None}
+
+
+def hangout_id() -> str | None:
+    """The Dalaran Hangout's relay realm id (this realm as a Leyline Beacon), or None. Re-read once a minute."""
+    if HANGOUT_REALM:
+        return HANGOUT_REALM if REALM_ID_RE.match(HANGOUT_REALM) else None
+    now = time.monotonic()
+    if now - _hangout["at"] > 60:
+        _hangout["at"] = now
+        try:
+            with open(HANGOUT_FILE, encoding="utf-8") as f:
+                v = f.read(64).strip()
+            _hangout["id"] = v if REALM_ID_RE.match(v) else None
+        except OSError:
+            _hangout["id"] = None
+    return _hangout["id"]
+
+
 LISTING_TTL = 60          # seconds a good answer is used before it is refreshed (in the background)
 LISTING_RETRY = 30        # after a failure
 LISTING_WAIT = 2.5        # the longest a page request ever waits for the relay
@@ -932,7 +964,11 @@ def fetch_listing() -> list[dict]:
         if c and c["id"] not in seen:
             seen.add(c["id"])
             out.append(c)
-    out.sort(key=lambda r: (not r["live"], -(r["players"] or 0), r["name"].lower()))
+    home = hangout_id()
+    for r in out:
+        r["hangout"] = r["id"] == home
+    # the Dalaran Hangout first (the network's meeting place), then live realms, busiest first
+    out.sort(key=lambda r: (not r["hangout"], not r["live"], -(r["players"] or 0), r["name"].lower()))
     return out
 
 
@@ -996,12 +1032,19 @@ def realms_page() -> bytes:
                 + ('' if r["claimed"] else '<span class="tag">unclaimed</span>')
                 + _players_text(r["players"], r["bots"], r["live"]))
         join = f'{JOIN_BASE}/join/{r["id"]}'
+        if r.get("hangout"):
+            # this realm's own Dalaran through the relay: the player's Wrath characters, no new account
+            tags = (f'<span class="tag">Run by {html.escape(REALM_NAME)}</span>'
+                    '<span class="tag">Your Wrath characters</span>' + _players_text(r["players"], r["bots"], r["live"]))
+            button = '<a class="btn primary" href="/wrath?go=h:dalaran">Play in Dalaran</a>'
+        else:
+            button = f'<a class="btn" href="{html.escape(join)}" rel="noopener noreferrer">Join</a>'
         rows.append(
             f'<div class="realm"><h2>{name}</h2><div class="tags">{tags}</div>'
             + (f'<p>{html.escape(r["tagline"])}</p>' if r["tagline"] else '')
             + ('<details><summary>House rules</summary><ol>'
                + "".join(f'<li>{html.escape(x)}</li>' for x in r["rules"]) + '</ol></details>' if r["rules"] else '')
-            + f'<p><a class="btn" href="{html.escape(join)}" rel="noopener noreferrer">Join</a></p>'
+            + f'<p>{button}</p>'
             + share_box(f'/wrath/r/{r["id"]}') + '</div>')
     if rows:
         community = "".join(rows)
@@ -1462,6 +1505,8 @@ def remember_go(user: str, query: dict) -> None:
         return
     v = (query.get("go") or [""])[0][:40]
     got = links.check_go(v) if v else None
+    if got and got[0] == "r" and got[1] == hangout_id():
+        got = ("h", "dalaran")   # a hop into the Dalaran Hangout (this realm through the relay) lands in Dalaran
     if not got or got[0] not in ("h", "q", "b") or not gate_limit.hit("go:" + user.upper(), 20):
         return
     modes.go_intent(ac_soap, user, links.go_value(*got), log)

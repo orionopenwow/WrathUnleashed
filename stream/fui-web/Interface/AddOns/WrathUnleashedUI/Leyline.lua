@@ -168,7 +168,7 @@ function L.Hop(target, name)
         info("Back to Wrath... the game reloads there in a moment.")
     else
         info("Hopping to " .. (name or "that realm") .. "... the game reloads there in a moment. The first time, you "
-            .. "make an account on that realm (or sign in to yours).")
+            .. "make an account on that realm (or sign in to yours); the Dalaran Hangout uses your Wrath login.")
     end
     return true
 end

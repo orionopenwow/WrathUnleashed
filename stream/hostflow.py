@@ -10,11 +10,15 @@
     GET  /wrath/host/<id>/leyline-<id>.bat   owner only: Windows, runs "Host a Wrath realm.bat" the same way
 
 The realm runs on the host's own PC (free) and reaches players through the Leyline relay. A pending
-realm is what hosting/kit/tools/wuhost/setup.py would make on that PC: an Ed25519 realm key (the realm
-id is derived from it), an invite secret and a host secret (B32, the same lengths), plus a claim token
-that ties the realm to the Hero Key account that made it. The download carries them to the PC as one
-base64 "seed" (setup.py init --seed), used once and deleted there. The site forgets the realm key as
-soon as the realm first connects to the relay: from then on only the host's PC holds it.
+realm has a page id (16 base32 letters, the shape of a realm id but not one), an invite secret and a host
+secret (B32, the same lengths setup.py makes), and a claim token that ties the realm to the Hero Key account
+that made it. The download carries them to the PC as one base64 "seed" v2 (setup.py init --seed), used once
+and deleted there. The realm's Ed25519 key, and so its realm id, is made ON THE HOST'S PC (setup.py), as
+wunet/keys.py says: the website never holds a realm key. The PC's agent shows the relay
+pair_hash(claim token) = sha256("leyline-pair-v1\n" + token); the website asks the relay
+(GET /api/pair/<hash>) which realm that is, and from then on the page shows that realm id's links and status.
+Records made before this (seed v1) carried a website-made key: they still work, and the site still forgets
+such a key once the realm connects.
 
 Nothing here makes game accounts or sets passwords: the host makes the GM account on their own join
 page (the host link) with a password only their browser sees. The download holds only this realm's own
@@ -126,9 +130,26 @@ def gen(n: int) -> str:
 
 
 def new_realm_secrets() -> dict:
-    key = os.urandom(32)
-    return {"realm_key": key.hex(), "realm_id": realm_id(ed25519.public_key(key)),
-            "invite_secret": gen(20), "host_secret": gen(24), "claim": secrets.token_urlsafe(18)}
+    """A pending realm: a page id, the links' secrets and the claim (= pairing) token. No key: the PC makes it."""
+    while True:
+        pid = base64.b32encode(os.urandom(10)).decode().lower()
+        if not load(pid):
+            break
+    return {"pending_id": pid, "realm_id": None, "invite_secret": gen(20), "host_secret": gen(24),
+            "claim": secrets.token_urlsafe(18)}
+
+
+PAIR_CTX = b"leyline-pair-v1\n"
+
+
+def pair_hash(token: str) -> str:
+    """The same as hosting/kit/tools/wunet/keys.py pair_hash: what the realm's agent shows the relay."""
+    return hashlib.sha256(PAIR_CTX + token.encode("utf-8")).hexdigest()
+
+
+def page_id(rec: dict) -> str:
+    """The id in this realm's page and download addresses (the pending id; an older record's realm id)."""
+    return rec.get("pending_id") or rec["realm_id"]
 
 
 # ----------------------------------------------------------------------------------------------
@@ -147,18 +168,19 @@ def load(rid: str) -> dict | None:
     try:
         with open(os.path.join(_dir(), rid + ".json"), encoding="utf-8") as f:
             doc = json.load(f)
-        return doc if isinstance(doc, dict) and doc.get("realm_id") == rid else None
+        return doc if isinstance(doc, dict) and (doc.get("pending_id") or doc.get("realm_id")) == rid else None
     except (OSError, ValueError):
         return None
 
 
 def save(rec: dict) -> None:
     d = _dir()
-    tmp = os.path.join(d, rec["realm_id"] + ".json.tmp")
+    pid = page_id(rec)
+    tmp = os.path.join(d, pid + ".json.tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(rec, f, sort_keys=True)
-    os.replace(tmp, os.path.join(d, rec["realm_id"] + ".json"))
+    os.replace(tmp, os.path.join(d, pid + ".json"))
 
 
 def all_ids() -> list[str]:
@@ -272,6 +294,30 @@ def relay_online(rid: str) -> bool | None:
     return v
 
 
+def relay_pair(rec: dict) -> str | None:
+    """The realm id the host's PC registered with this record's token (GET /api/pair/<hash> on the relay), or None
+    (not yet, or the relay can't be reached). Cached like relay_online."""
+    h = pair_hash(rec["claim"])
+    now = time.monotonic()
+    with _lock:
+        hit = _status.get("pair:" + h)
+        if hit and now - hit[0] < STATUS_TTL:
+            return hit[1]
+    v = None
+    try:
+        req = urllib.request.Request(f"{relay_api()}/api/pair/{h}", headers={"Accept": "application/json",
+                                                                             "User-Agent": "wrath-portal"})
+        with urllib.request.urlopen(req, timeout=2.5) as r:
+            doc = json.loads(r.read(65536).decode("utf-8"))
+        rid = doc.get("realm_id") if isinstance(doc, dict) else None
+        v = rid if isinstance(rid, str) and RID_RE.match(rid) else None
+    except Exception:  # noqa: BLE001 - 404 (not yet) or unreachable: ask again on the next view
+        v = None
+    with _lock:
+        _status["pair:" + h] = (now, v)
+    return v
+
+
 def listed_entry(rid: str) -> dict | None:
     try:
         realms, _ok = P("community_realms")()
@@ -297,11 +343,19 @@ def try_claim(rec: dict) -> None:
 
 
 def status_of(rec: dict) -> tuple[str, str, bool]:
-    """(state, text, final). Also forgets the realm key once the PC has connected, and claims."""
+    """(state, text, final). Also learns the realm id from the relay (pairing), forgets an old record's realm key
+    once the PC has connected, and claims."""
+    changed = False
+    if not rec.get("realm_id"):
+        rid = relay_pair(rec) if rec.get("claim") else None
+        if not rid:
+            return ("waiting", "Waiting for your PC", False)
+        rec["realm_id"] = rid
+        rec["first_online"] = int(time.time())
+        changed = True
     rid = rec["realm_id"]
     online = relay_online(rid)
     entry = listed_entry(rid) if rec["visibility"] == "public" else None
-    changed = False
     if (online or entry) and rec.get("realm_key"):
         rec["realm_key"] = None            # the PC holds it now; the site keeps no copy
         rec["first_online"] = int(time.time())
@@ -333,23 +387,27 @@ def relay_host() -> str:
 
 
 def seed_b64(rec: dict) -> str:
-    doc = {"v": 1, "realm_id": rec["realm_id"], "realm_key": rec["realm_key"],
-           "invite_secret": rec["invite_secret"], "host_secret": rec["host_secret"], "claim": rec.get("claim"),
+    """v2: the links' secrets, the claim (pairing) token and the answers; no key (the PC makes it). An older record
+    that still holds a website-made key gets the v1 seed it was made for."""
+    doc = {"v": 2, "invite_secret": rec["invite_secret"], "host_secret": rec["host_secret"], "claim": rec["claim"],
            "name": rec["name"], "profile": rec["preset"], "visibility": rec["visibility"],
            "gm_name": rec["gm"], "tagline": rec.get("tagline", ""), "rules": rec.get("rules", [])}
+    if rec.get("realm_key"):
+        doc.update(v=1, realm_id=rec["realm_id"], realm_key=rec["realm_key"])
     return base64.b64encode(json.dumps(doc, sort_keys=True, separators=(",", ":")).encode("utf-8")).decode("ascii")
 
 
 def script_sh(rec: dict) -> bytes:
     q = shlex.quote
-    rid = rec["realm_id"]
+    rid = page_id(rec)
     return (
         "#!/usr/bin/env bash\n"
-        f"# Leyline: start your realm \"{rec['name']}\" (realm id {rid}) on this Mac or Linux PC.\n"
+        f"# Leyline: start your realm \"{rec['name']}\" on this Mac or Linux PC.\n"
         "# Put this file in your unzipped host kit folder (next to the `leyline` script), then run:\n"
         f"#   bash leyline-{rid}.sh\n"
         "# It sets up the realm with the answers you gave on the website and starts it with `leyline host`.\n"
-        "# It holds this realm's own key and links: yours, keep it private. No passwords, no accounts:\n"
+        "# It holds this realm's links and its claim token: yours, keep it private.\n"
+        "# The realm's key is made on this PC and never leaves it. No passwords, no accounts:\n"
         f"# you make your GM account {rec['gm']} yourself on your own join page (leyline status shows it).\n"
         "set -euo pipefail\n"
         'KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\n'
@@ -367,15 +425,15 @@ def script_sh(rec: dict) -> bytes:
 
 
 def script_bat(rec: dict) -> bytes:
-    rid = rec["realm_id"]
     lines = [
         "@echo off",
         "setlocal",
         f"title Leyline - start {rec['name']}",
-        f"rem Leyline: start your realm \"{rec['name']}\" (realm id {rid}) on this Windows PC. Needs Docker Desktop.",
+        f"rem Leyline: start your realm \"{rec['name']}\" on this Windows PC. Needs Docker Desktop.",
         "rem Put this file in your unzipped host kit folder (next to \"Host a Wrath realm.bat\") and double-click it.",
         "rem It sets up the realm with the answers you gave on the website, then starts it.",
-        "rem It holds this realm's own key and links: yours, keep it private. No passwords, no accounts:",
+        "rem It holds this realm's links and its claim token: yours, keep it private.",
+        "rem The realm's key is made on this PC and never leaves it. No passwords, no accounts:",
         f"rem you make your GM account {rec['gm']} yourself on your own join page (state\\host-link.txt).",
         'cd /d "%~dp0"',
         'if not exist "Host a Wrath realm.bat" (echo Put this file in your host kit folder, next to "Host a Wrath realm.bat", then run it again. & pause & exit /b 1)',
@@ -479,7 +537,7 @@ def form_page(owner: str, display: str, vals: dict | None = None, errs: dict | N
     mine_html = ""
     if mine:
         mine_html = ('<section class="ly-panel mine"><h2>Your realms</h2><ul>'
-                     + "".join(f'<li><a href="/wrath/host/{e(r["realm_id"])}">{e(r["name"])}</a> '
+                     + "".join(f'<li><a href="/wrath/host/{e(page_id(r))}">{e(r["name"])}</a> '
                                f'<span class="hint">{e(PRESETS[r["preset"]][0])}, {e(r["visibility"])}</span></li>'
                                for r in mine) + '</ul></section>')
     full = len(mine) >= PER_ACCOUNT
@@ -509,42 +567,57 @@ def form_page(owner: str, display: str, vals: dict | None = None, errs: dict | N
     return page("Your server", inner)
 
 
+def downloadable(rec: dict) -> bool:
+    """The setup file is offered until the PC has registered the realm (or, for an older record, while the site
+    still holds its key). Afterwards the PC holds everything: moving the realm = copying the kit folder."""
+    return bool(rec.get("realm_key")) or not rec.get("realm_id")
+
+
 def start_page(rec: dict) -> bytes:
     e = html.escape
-    rid = rec["realm_id"]
+    pid = page_id(rec)
     state, text, final = status_of(rec)
+    rid = rec.get("realm_id")
     host = P("PUBLIC_HOST")
     join = P("JOIN_BASE")
-    share = f"https://{host}/wrath/r/{rid}"
-    invite = f"{join}/join/{rid}" + (f"#{rec['invite_secret']}" if rec["visibility"] == "private" else "")
-    host_link = f"{join}/join/{rid}#{rec['invite_secret']}~{rec['host_secret']}"
     kit = KIT_URL or GUIDE_URL
-    if rec.get("realm_key"):
+    if downloadable(rec):
         dl = ('<div class="row">'
-              f'<a class="dl" href="/wrath/host/{rid}/leyline-{rid}.bat" download>Windows (.bat)</a>'
-              f'<a class="dl" href="/wrath/host/{rid}/leyline-{rid}.sh" download>Mac / Linux (.sh)</a></div>'
-              '<p class="hint">The file holds this realm\'s own key and links, so keep it to yourself. '
-              'Once your PC connects, the website forgets the key: only your PC holds it.</p>')
+              f'<a class="dl" href="/wrath/host/{pid}/leyline-{pid}.bat" download>Windows (.bat)</a>'
+              f'<a class="dl" href="/wrath/host/{pid}/leyline-{pid}.sh" download>Mac / Linux (.sh)</a></div>'
+              '<p class="hint">The file holds your realm\'s links and the token that ties it to your account, so keep '
+              'it to yourself. Your PC makes the realm\'s key itself: it never leaves your PC.</p>')
     else:
-        dl = ('<p>Your PC holds this realm\'s key now, so there is nothing more to download. To move the realm, '
+        dl = ('<p>Your PC holds this realm\'s key, so there is nothing more to download. To move the realm, '
               'copy the kit folder (with its <b>state</b> folder) to the new PC.</p>')
-    priv = (f'<p>It\'s private: friends need your invite link to join.</p><div class="link">{e(invite)}</div>'
-            if rec["visibility"] == "private" else
-            '<p>It\'s public: it shows on the realm list for everyone, on the site and in the game, once your PC is online.</p>')
+    if rid:
+        share = f"https://{host}/wrath/r/{rid}"
+        invite = f"{join}/join/{rid}" + (f"#{rec['invite_secret']}" if rec["visibility"] == "private" else "")
+        host_link = f"{join}/join/{rid}#{rec['invite_secret']}~{rec['host_secret']}"
+        priv = (f'<p>It\'s private: friends need your invite link to join.</p><div class="link">{e(invite)}</div>'
+                if rec["visibility"] == "private" else
+                '<p>It\'s public: it shows on the realm list for everyone, on the site and in the game, once your PC is online.</p>')
+        links = (f'<p>Share this link: it opens your realm\'s page with a preview card.</p>'
+                 f'<div class="link">{e(share)}</div>{priv}')
+        gm = (f'<li>Make your GM account <b>{e(rec["gm"])}</b> on your own join link (yours only: it can make the GM '
+              f'account), with a password you choose:<div class="link">{e(host_link)}</div></li>')
+    else:
+        links = ('<p>Your realm\'s links appear here as soon as your PC connects: the realm\'s address comes from the '
+                 'key your PC makes.</p>')
+        gm = (f'<li>Make your GM account <b>{e(rec["gm"])}</b> on your own join link, with a password you choose. The '
+              'link shows here (and in the setup window on your PC) once your PC is connected.</li>')
     inner = (
         f'<header class="ly-hero"><h1>{e(rec["name"])}</h1>'
         f'<p class="ly-lede">{e(PRESETS[rec["preset"]][0])} · {e(rec["visibility"])} · GM {e(rec["gm"])}</p>'
         f'<span class="pill {e(state)}" role="status">{"&#9679; " if state in ("online", "listed") else ""}{e(text)}</span></header>'
-        '<section class="ly-panel"><h2>Your link</h2>'
-        f'<p>Share this link: it opens your realm\'s page with a preview card.</p><div class="link">{e(share)}</div>{priv}</section>'
+        f'<section class="ly-panel"><h2>Your link</h2>{links}</section>'
         '<section class="ly-panel"><h2>Set up your PC</h2><ol>'
         f'<li>Install <a href="https://www.docker.com/products/docker-desktop/" rel="noopener noreferrer">Docker</a> '
         f'and unzip the <a href="{e(kit)}" rel="noopener noreferrer">host kit</a>. The server uses your own 3.3.5a game '
         'files, read on your PC; nothing is downloaded or shared.</li>'
         f'<li>Download your realm\'s file into the kit folder and run it.{dl}</li>'
         '<li>Leave it running. This page changes to <b>Online</b> when your PC connects to the relay.</li>'
-        f'<li>Make your GM account <b>{e(rec["gm"])}</b> on your own join link (yours only: it can make the GM account), '
-        f'with a password you choose:<div class="link">{e(host_link)}</div></li>'
+        + gm +
         '</ol></section>'
         '<p class="ly-fine">The first start imports the databases and can take 5 to 20 minutes. '
         f'<a href="{e(GUIDE_URL)}" rel="noopener noreferrer">Hosting guide</a> · <a href="/wrath/host">Your realms</a></p>')
@@ -619,7 +692,7 @@ def get(h, path: str) -> None:
     if m_start:
         h.send(200, start_page(rec))
         return
-    if not rec.get("realm_key"):
+    if not downloadable(rec):
         h.send(410, page(rec["name"], '<section class="ly-panel"><h2>Already set up</h2><p>Your PC holds this realm\'s '
                                       f'key now. <a href="/wrath/host/{rid}">Back</a></p></section>'))
         return
@@ -687,7 +760,7 @@ def post(h, path: str) -> None:
                    claimed=False, first_online=None)
         save(rec)
     h.send_response(303)
-    h.send_header("Location", f"/wrath/host/{rec['realm_id']}")
+    h.send_header("Location", f"/wrath/host/{rec['pending_id']}")
     h.send_header("Cache-Control", "no-store")
     h.send_header("Content-Length", "0")
     h.end_headers()

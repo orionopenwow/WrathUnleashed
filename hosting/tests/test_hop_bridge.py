@@ -131,6 +131,36 @@ class Limits(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(cm.exception.status, 503)
             a.abort()
 
+    async def test_wrong_passwords_lock_that_ip_out_of_that_realm(self):
+        # the realm sees every relay player from its agent's address, so the relay counts failed logons per player IP
+        async with rig(auth_fails_per_ip=2) as r:
+            r.realm.add_account("hopper", "rightpass")
+            bad = {"Origin": PLAY, "X-Forwarded-For": "198.51.100.60"}
+            for _ in range(2):
+                with self.assertRaises(wire335.WowError):
+                    await wire335.full_run("relay.test", 3724, "hopper", "wrongpass", opener=hop_opener(r.base, r.rid, bad))
+            await asyncio.sleep(0.1)
+            with self.assertRaises(ws.HandshakeError) as cm:   # even with the right password, for a while
+                await wire335.full_run("relay.test", 3724, "hopper", "rightpass", opener=hop_opener(r.base, r.rid, bad))
+            self.assertEqual(cm.exception.status, 429)
+            self.assertEqual(r.relay.metrics["auth_failed"], 2)
+            # another address is not held up; a good logon never counts
+            good = {"Origin": PLAY, "X-Forwarded-For": "198.51.100.61"}
+            for _ in range(3):
+                rep = await wire335.full_run("relay.test", 3724, "hopper", "rightpass", opener=hop_opener(r.base, r.rid, good))
+                self.assertEqual(rep["steps"][-1], "logout")
+            self.assertEqual(r.relay.metrics["auth_failed"], 2)
+            # unknown accounts count as failures (no account guessing either)
+            other = {"Origin": PLAY, "X-Forwarded-For": "198.51.100.62"}
+            for _ in range(2):
+                with self.assertRaises(wire335.WowError):
+                    await wire335.full_run("relay.test", 3724, "nobody", "x", opener=hop_opener(r.base, r.rid, other))
+            await asyncio.sleep(0.1)
+            self.assertTrue(r.relay.auth_locked("198.51.100.62", r.rid))
+            r.relay.cfg.auth_fail_window = 0   # the window passes
+            await asyncio.sleep(0.01)
+            self.assertFalse(r.relay.auth_locked("198.51.100.60", r.rid))
+
     async def test_total_streams_cap_counts_tcp_too(self):
         async with rig(max_streams_total=1) as r:
             rd, wr = await asyncio.open_connection("127.0.0.1", r.ports[0])

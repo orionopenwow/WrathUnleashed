@@ -13,9 +13,16 @@
   python -m wuhost.setup signup invite|open|off     who may make accounts from the join page
   python -m wuhost.setup rules                      re-read state/rules.txt and state/beacon.json (the
                                                     realm list text) after you edited them
-  python -m wuhost.setup init --seed state/seed.b64 a realm made on the website (/wrath/host): its key,
-                                                    links, claim token and answers, from the per-realm
-                                                    download (base64 JSON). Used once, then deleted.
+  python -m wuhost.setup init --seed state/seed.b64 a realm made on the website (/wrath/host): its links,
+                                                    claim token and answers, from the per-realm download
+                                                    (base64 JSON). Used once, then deleted. The realm key
+                                                    is made here, on this PC (seed v2); an older v1 seed
+                                                    carried a key made by the website.
+  python -m wuhost.setup official --name "Dalaran Hangout" --relay-url ws://... --listing-url http://...
+         --auth-service ov-ac-authserver:3724 --world-service ov-ac-worldserver:8085 [--status-url URL]
+                                                    the operator's OWN realm as a Beacon (hosting/hangout):
+                                                    public, no signup, its realm list, accounts and GM
+                                                    rights left alone. The key is made here, on that box.
 
 Re-running init keeps the realm key, passwords and invite (it only changes what you pass), so
 running "Host a Wrath realm" again is always safe.
@@ -63,8 +70,10 @@ CLAIM_RE = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
 
 def read_seed(rel):
     """The website's per-realm seed (base64 of a JSON object), checked field by field; None when the
-    file is not there (already used). It never holds a password or an account: only this realm's own
-    key, its invite and host links, the claim token for the host's Hero Key account and the answers."""
+    file is not there (already used). It never holds a password or an account: only this realm's invite
+    and host links, the claim token for the host's Hero Key account (also the pairing token: the website
+    finds this realm's id by its hash, wunet/keys.pair_hash) and the answers. v2 (current) has no key: the
+    realm key is made on this PC. v1 (the first website build) carried a key the website made."""
     p = rel if os.path.isabs(rel) else os.path.join(KIT, rel)
     try:
         with open(p, encoding="ascii") as f:
@@ -73,10 +82,13 @@ def read_seed(rel):
         return None
     except (ValueError, UnicodeDecodeError):
         sys.exit("The realm file from the website is damaged: download it again.")
-    ok = (isinstance(doc, dict) and doc.get("v") == 1 and isinstance(doc.get("realm_key"), str)
-          and re.fullmatch(r"[0-9a-f]{64}", doc["realm_key"])
+    v = doc.get("v") if isinstance(doc, dict) else None
+    ok = (isinstance(doc, dict) and v in (1, 2)
+          and (v == 2 or (isinstance(doc.get("realm_key"), str) and re.fullmatch(r"[0-9a-f]{64}", doc["realm_key"])))
+          and (v == 1 or ("realm_key" not in doc and "realm_id" not in doc))
           and all(isinstance(doc.get(k), str) and SECRET_RE.match(doc[k]) for k in ("invite_secret", "host_secret"))
           and (doc.get("claim") is None or (isinstance(doc["claim"], str) and CLAIM_RE.match(doc["claim"])))
+          and (v == 1 or isinstance(doc.get("claim"), str))
           and isinstance(doc.get("name"), str) and NAME_RE.match(doc["name"])
           and doc.get("profile") in PROFILES and doc.get("visibility") in ("public", "private")
           and isinstance(doc.get("gm_name"), str) and GM_RE.match(doc["gm_name"])
@@ -84,26 +96,35 @@ def read_seed(rel):
           and isinstance(doc.get("rules", []), list) and all(isinstance(r, str) for r in doc.get("rules", [])))
     if not ok:
         sys.exit("The realm file from the website is damaged: download it again.")
-    if keys.realm_id(keys.public_key(bytes.fromhex(doc["realm_key"]))) != doc.get("realm_id"):
+    if v == 1 and keys.realm_id(keys.public_key(bytes.fromhex(doc["realm_key"]))) != doc.get("realm_id"):
         sys.exit("The realm file from the website does not match its realm id: download it again.")
     doc["_path"] = p
     return doc
 
 
+ANOTHER = ("This kit folder already hosts another realm (state/realm.key). "
+           "Use a fresh copy of the host kit for this one.")
+
+
 def apply_seed(seed, a, cfg):
-    """Put the seed's realm key in state/realm.key (refused when this kit already holds another realm)
-    and use its answers wherever this run did not pass its own."""
+    """v2: the realm key is made on this PC (init does it); refused when this kit already hosts another realm
+    (another claim token). v1: put the website's key in state/realm.key (refused when this kit holds another).
+    Then use the seed's answers wherever this run did not pass its own."""
     kp = path("realm.key")
-    want = bytes.fromhex(seed["realm_key"])
-    if os.path.exists(kp):
-        if keys.load_or_create(kp) != want:
-            sys.exit("This kit folder already hosts another realm (state/realm.key). "
-                     "Use a fresh copy of the host kit for this one.")
+    if seed["v"] == 2:
+        if cfg.get("realm_id") and cfg.get("claim") != seed["claim"]:
+            sys.exit(ANOTHER)
+        cfg["claim"] = seed["claim"]
     else:
-        os.makedirs(STATE, exist_ok=True)
-        fd = os.open(kp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "w", encoding="ascii") as f:
-            f.write(want.hex() + "\n")
+        want = bytes.fromhex(seed["realm_key"])
+        if os.path.exists(kp):
+            if keys.load_or_create(kp) != want:
+                sys.exit(ANOTHER)
+        else:
+            os.makedirs(STATE, exist_ok=True)
+            fd = os.open(kp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w", encoding="ascii") as f:
+                f.write(want.hex() + "\n")
     for k in ("name", "profile", "visibility", "gm_name"):
         if getattr(a, k) is None and not cfg.get(k):
             setattr(a, k, seed[k])
@@ -237,11 +258,12 @@ def write_env(cfg, image, tag, tools_image):
 
 def cmd_init(a):
     cfg = load() or {}
+    if cfg.get("official"):
+        sys.exit("This folder runs the operator's own realm (setup.py official), not a host kit.")
     seed = read_seed(a.seed) if getattr(a, "seed", None) else None
     if seed:
-        if cfg.get("realm_id") and cfg["realm_id"] != seed["realm_id"]:
-            sys.exit("This kit folder already hosts another realm (state/host.json). "
-                     "Use a fresh copy of the host kit for this one.")
+        if seed["v"] == 1 and cfg.get("realm_id") and cfg["realm_id"] != seed["realm_id"]:
+            sys.exit(ANOTHER.replace("state/realm.key", "state/host.json"))
         apply_seed(seed, a, cfg)
     name = a.name if a.name is not None else cfg.get("name")
     if not name or not NAME_RE.match(name.strip()):
@@ -313,6 +335,49 @@ def cmd_init(a):
         except OSError:
             pass
     print(json.dumps({"realm_id": rid, "first_run": first, "invite": invite_link(cfg)}))
+
+
+def cmd_official(a):
+    """The operator's own realm as a Beacon (hosting/hangout/hangout-up.sh runs this on the realm's box): a
+    public Leyline record, its key made here, signup off (that realm makes its accounts itself, from the website's
+    sign-in), and "official" so the agent never touches its realm list, accounts or GM rights. Safe to run again:
+    the key and realm id stay; the text and addresses follow the arguments."""
+    cfg = load() or {}
+    if cfg and not cfg.get("official"):
+        sys.exit("This folder holds a host kit's realm, not the operator's own realm: use another folder.")
+    if not NAME_RE.match(a.name.strip()) or BRAND_RE.search(a.name):
+        sys.exit("Realm name: 1-32 letters, digits, spaces, _ ' or -, no game or publisher brand names")
+    for k in ("relay_url", "listing_url"):
+        v = getattr(a, k)
+        if v and not re.match(r"^(wss?|https?)://[A-Za-z0-9.:\-\[\]]+(/[A-Za-z0-9/._-]*)?$", v):
+            sys.exit(f"--{k.replace('_', '-')}: a plain URL")
+    os.makedirs(STATE, exist_ok=True)
+    secret = keys.load_or_create(path("realm.key"))
+    rid = keys.realm_id(keys.public_key(secret))
+    relay = a.relay or cfg.get("relay", domains.RELAY)
+    rules = []
+    if a.rules_file:
+        with open(a.rules_file, encoding="utf-8-sig") as f:
+            rules = [" ".join(ln.split())[:120] for ln in f if ln.strip() and not ln.lstrip().startswith("#")][:10]
+    text = " ".join([a.name, a.tagline or "", a.summary or ""] + rules)
+    if BRAND_RE.search(text):
+        sys.exit("Leave game and publisher brand names out of the realm list text.")
+    cfg.update(realm_id=rid, official=True, name=a.name.strip(), profile="dalaran", visibility="public", signup="off",
+               relay=relay, relay_url=a.relay_url or f"wss://{relay}/agent",
+               listing_url=a.listing_url or f"https://{relay}/api/listing/heartbeat",
+               join_base=(a.join_base or f"https://{relay}").rstrip("/"), site=(a.site or domains.SITE).rstrip("/"),
+               auth_service=a.auth_service, world_service=a.world_service, realmlist="keep",
+               status_url=a.status_url or None, warden=False, bots=0)
+    for k in ("invite_secret", "host_secret", "gm", "gm_name", "db_password", "claim"):
+        cfg.pop(k, None)   # nothing to invite to, no GM account to make, no database of its own
+    cfg["record"] = {"name": cfg["name"], "tagline": " ".join((a.tagline or "").split())[:80],
+                     "summary": " ".join((a.summary or "").split())[:400], "type": "PvE", "ruleset": "dalaran",
+                     "rules": rules, "discord": a.discord or None, "warden": None}
+    save(cfg)
+    print(json.dumps({"realm_id": rid, "name": cfg["name"]}))
+
+
+BRAND_RE = re.compile(r"(?i)world\s*of\s*warcraft|\bwow\b|warcraft|lich\s*king|blizzard")
 
 
 def write_beacon(cfg):
@@ -472,6 +537,21 @@ def main(argv=None):
     p = sub.add_parser("gm")
     p.add_argument("name")
     p.set_defaults(fn=cmd_gm)
+    p = sub.add_parser("official", help="the operator's own realm as a Beacon (hosting/hangout)")
+    p.add_argument("--name", required=True)
+    p.add_argument("--relay")
+    p.add_argument("--relay-url")
+    p.add_argument("--listing-url")
+    p.add_argument("--join-base")
+    p.add_argument("--site")
+    p.add_argument("--auth-service", required=True, help="host:port of the realm's authserver")
+    p.add_argument("--world-service", required=True, help="host:port of the realm's worldserver")
+    p.add_argument("--status-url", help="players and bots from this status document (openvanilla-status-1)")
+    p.add_argument("--tagline")
+    p.add_argument("--summary")
+    p.add_argument("--rules-file")
+    p.add_argument("--discord")
+    p.set_defaults(fn=cmd_official)
     sub.add_parser("realmlist").set_defaults(fn=cmd_realmlist)
     sub.add_parser("show").set_defaults(fn=cmd_show)
     sub.add_parser("get").set_defaults(fn=cmd_get)

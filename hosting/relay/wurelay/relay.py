@@ -18,10 +18,14 @@ IP hidden.
   multiplexed tunnel): the relay never dials a host, and nothing in the request names one (?host= is ignored).
   Limits on top of the per-realm and per-IP ones: WebSocket upgrades per IP per minute, browser streams in
   total, all streams in total, and an Origin allow-list (a page on another site can't use a player's browser).
+* Realms made on the website ("+ Your server", stream/hostflow.py): the key is made on the host's PC, and its
+  hello carries pair_sha256 = sha256("leyline-pair-v1\n" + the website's token). GET /api/pair/<that hash>
+  tells the website which realm id is its own (first realm to show a hash keeps it).
 * Private realms: only IPs that opened the invite link (knock with the secret) get in, or a
   WebSocket that carries the secret. The relay keeps only sha256(secret); the host sets it.
 * Abuse limits: per realm (streams, KB/s token bucket, GB/day), per IP (streams, connection
-  rate), idle timeouts, registration rate, port pool size. See Config.
+  rate, wrong passwords: the relay reads only the authserver's logon answers, as a realm can't tell its
+  relay players apart), idle timeouts, registration rate, port pool size. See Config.
 
 Privacy: the host never sees player IPs (every connection reaches the realm from the agent),
 players never see the host's IP. Logs carry IPs only as a salted daily hash; the knock table
@@ -97,6 +101,11 @@ class Config:
         self.max_streams_per_ip_total = _env_int("RELAY_MAX_STREAMS_PER_IP_TOTAL", 24)
         self.conn_rate_per_ip = _env_int("RELAY_CONN_PER_MIN_PER_IP", 40)
         self.ws_rate_per_ip = _env_int("RELAY_WS_PER_MIN_PER_IP", 30)          # browser upgrades (each hop: 2)
+        # wrong passwords (failed logons the realm's authserver answered), per player IP and realm: every player reaches
+        # a realm from its agent's address, so the realm can't tell players apart (an IP ban there would lock out
+        # everyone); the relay can. After this many in RELAY_AUTH_FAIL_WINDOW_SECS, that IP's logins to that realm wait.
+        self.auth_fails_per_ip = _env_int("RELAY_AUTH_FAILS_PER_IP", 10)
+        self.auth_fail_window = _env_int("RELAY_AUTH_FAIL_WINDOW_SECS", 600)
         # --- limits for the whole relay
         self.max_streams_total = _env_int("RELAY_MAX_STREAMS_TOTAL", 4096)   # every realm, TCP and browser
         self.max_ws_total = _env_int("RELAY_MAX_WS_TOTAL", 1024)             # browser streams (the bridge)
@@ -113,6 +122,8 @@ class Config:
         self.accounts_per_ip_hour = _env_int("RELAY_ACCOUNTS_PER_IP_HOUR", 3)
         self.accounts_per_realm_day = _env_int("RELAY_ACCOUNTS_PER_REALM_DAY", 50)
         self.knocks_per_ip_min = _env_int("RELAY_KNOCKS_PER_IP_MIN", 10)
+        self.pair_lookups_per_ip_min = _env_int("RELAY_PAIR_PER_MIN_PER_IP", 60)   # the website asks for its realms
+        self.max_pairs = _env_int("RELAY_MAX_PAIRS", 20000)
         self.status_ttl = _env_int("RELAY_STATUS_TTL_SECS", 30)
         for k, v in over.items():
             if not hasattr(self, k):
@@ -218,6 +229,7 @@ class Stream:
         self.last = time.monotonic()
         self.closed = False
         self.bytes = 0
+        self.auth_seen = 0     # logon answers looked at (service 3724 only: the challenge, then the proof)
 
 
 # ------------------------------------------------------------------------------ realm session
@@ -231,6 +243,7 @@ class Session:
         self.invite_sha = (hello.get("invite_sha256") or "").lower() or None
         self.signup = hello.get("signup", "invite")
         self.host_sha = (hello.get("host_sha256") or "").lower() or None
+        self.pair_sha = (hello.get("pair_sha256") or "").lower() or None
         self.version = str(hello.get("version", ""))[:40]
         self.alloc = alloc
         self.streams: dict[int, Stream] = {}
@@ -299,7 +312,9 @@ class Relay:
     def __init__(self, cfg: Config | None = None):
         self.cfg = cfg or Config()
         self.sessions: dict[str, Session] = {}
-        self.state = {"realms": {}, "usage": {}}   # realm_id -> {auth, world, first, last, name}
+        # realms: realm_id -> {auth, world, first, last, name}; pairs: pair hash -> realm id (a realm made on the
+        # website shows sha256("leyline-pair-v1\n" + its token) so the website can find it: first realm wins)
+        self.state = {"realms": {}, "usage": {}, "pairs": {}}
         self.port_owner: dict[int, tuple[str, int]] = {}   # relay port -> (realm_id, service port)
         self.listeners: dict[int, asyncio.base_events.Server] = {}
         self.knocks: dict[str, collections.OrderedDict] = {}  # ip -> realm_id -> expiry (memory only)
@@ -307,11 +322,13 @@ class Relay:
         self.ip_realm = collections.Counter()
         self.conn_rate = Window(60)
         self.ws_rate = Window(60)
+        self.auth_fails: dict[tuple, collections.deque] = {}   # (ip, realm id) -> failure times (memory only)
         self.ws_open = 0          # browser streams open now (WsConn), for max_ws_total
         self.reg_rate = Window(3600)
         self.acct_ip = Window(3600)
         self.acct_realm = Window(86400)
         self.knock_rate = Window(60)
+        self.pair_rate = Window(60)
         self.salt = secrets.token_bytes(16)
         self.metrics = collections.Counter()
         self.dirty = False
@@ -330,6 +347,7 @@ class Relay:
                 st = json.load(f)
             self.state["realms"] = st.get("realms", {})
             self.state["usage"] = st.get("usage", {})
+            self.state["pairs"] = st.get("pairs", {}) if isinstance(st.get("pairs"), dict) else {}
         except FileNotFoundError:
             pass
         except (OSError, ValueError) as e:
@@ -481,6 +499,62 @@ class Relay:
                 return rid
         return None
 
+    # ---------------------------------------------------------------- wrong passwords
+    def watch_logon(self, st, data):
+        """The realm's authserver answers in plain bytes: the logon challenge answer [0x00, 0x00, result, ...] and the
+        proof answer [0x01, error, ...]. A non-zero result is a failed logon (wrong password, unknown or banned account)
+        and counts against the player's IP for this realm. Nothing else of the stream is read."""
+        st.auth_seen += 1
+        if len(data) < 2:
+            return
+        failed = (data[0] == 0x01 and data[1] != 0) or (data[0] == 0x00 and len(data) >= 3 and data[2] != 0)
+        if data[0] == 0x01:
+            st.auth_seen = 2   # the proof answer: the logon is decided either way
+        if failed:
+            q = self.auth_fails.setdefault((st.ip, st.session.realm_id), collections.deque())
+            q.append(time.monotonic())
+            self.metrics["auth_failed"] += 1
+
+    def auth_locked(self, ip, realm_id):
+        q = self.auth_fails.get((ip, realm_id))
+        if not q:
+            return False
+        now = time.monotonic()
+        while q and now - q[0] > self.cfg.auth_fail_window:
+            q.popleft()
+        if not q:
+            del self.auth_fails[(ip, realm_id)]
+            return False
+        return len(q) >= self.cfg.auth_fails_per_ip
+
+    def remember_pair(self, s):
+        """Book the realm's pair hash (first realm to show it keeps it: a copied download can't take over a
+        realm the website already found)."""
+        if not s.pair_sha:
+            return
+        pairs = self.state["pairs"]
+        have = pairs.get(s.pair_sha)
+        if have == s.realm_id:
+            return
+        if have is not None:
+            log.info("pair hash already belongs to realm=%s; realm=%s ignored", have, s.realm_id)
+            return
+        while len(pairs) >= max(1, self.cfg.max_pairs):
+            pairs.pop(next(iter(pairs)))
+        pairs[s.pair_sha] = s.realm_id
+        self.dirty = True
+
+    def api_pair(self, req, pair):
+        """GET /api/pair/<sha256 hex>: the realm a website-made realm's PC registered (its id is known only to whoever
+        knows the token behind the hash: the website and the host's PC), and whether it is online now."""
+        h = self.cors(req, True)
+        if not self.pair_rate.hit(req.ip, self.cfg.pair_lookups_per_ip_min):
+            return httpd.response(429, {"error": "slow down"}, headers=h)
+        rid = self.state["pairs"].get(pair.lower())
+        if not rid:
+            return httpd.response(404, {"error": "no realm has shown this pairing yet"}, headers=h)
+        return httpd.response(200, {"realm_id": rid, "online": rid in self.sessions}, headers=h)
+
     def invite_ok(self, session, invite):
         if not invite or not session.invite_sha:
             return False
@@ -553,6 +627,8 @@ class Relay:
                 return
             realm_id, service = owner
         s, err = self.admit(realm_id, ip)
+        if not err and service == 3724 and self.auth_locked(ip, realm_id):
+            s, err = None, (429, "too many wrong passwords")
         if err:
             self.metrics[f"refused_{err[0]}"] += 1
             log.info("tcp refused realm=%s port=%d ip=%s why=%s", realm_id, port, self.iphash(ip), err[1])
@@ -601,6 +677,7 @@ class Relay:
             old.shutdown("replaced by a new connection")
         s = Session(self, sock, rid, hello, alloc, agent_ip)
         self.sessions[rid] = s
+        self.remember_pair(s)
         self.metrics["agent_logins"] += 1
         welcome = {"realm_id": rid, "address": self.cfg.name,
                    "auth_port": self.bound_port(alloc["auth"]) or alloc["auth"],
@@ -649,6 +726,9 @@ class Relay:
         hs = h.get("host_sha256")
         if hs is not None and not (isinstance(hs, str) and HEX64_RE.match(hs)):
             return ("bad host hash", 3600), None
+        ps = h.get("pair_sha256")
+        if ps is not None and not (isinstance(ps, str) and HEX64_RE.match(ps)):
+            return ("bad pair hash", 3600), None
         if h["visibility"] == "private" and not inv:
             return ("a private realm needs an invite secret", 3600), None
         if h.get("signup", "invite") not in SIGNUPS:
@@ -672,6 +752,8 @@ class Relay:
                 except ValueError:
                     continue
                 st = s.streams.get(sid)
+                if kind == DATA and st and st.port == 3724 and st.auth_seen < 2:
+                    self.watch_logon(st, payload)
                 if kind == DATA and st:
                     st.last = time.monotonic()
                     st.bytes += len(payload)
@@ -714,6 +796,9 @@ class Relay:
             s.signup = u["signup"]
         if isinstance(u.get("host_sha256"), str) and HEX64_RE.match(u["host_sha256"]):
             s.host_sha = u["host_sha256"].lower()
+        if isinstance(u.get("pair_sha256"), str) and HEX64_RE.match(u["pair_sha256"]):
+            s.pair_sha = u["pair_sha256"].lower()
+            self.remember_pair(s)
         if isinstance(u.get("name"), str) and NAME_RE.match(u["name"]):
             s.name = u["name"]
         if s.visibility == "private" and self.listing:
@@ -804,6 +889,8 @@ class Relay:
                 return self.api_knock(req, rid)
             if len(parts) == 4 and parts[3] == "accounts" and m == "POST":
                 return await self.api_account(req, rid)
+        if len(parts) == 3 and parts[:2] == ["api", "pair"] and HEX64_RE.match(parts[2]) and m == "GET":
+            return self.api_pair(req, parts[2])
         if parts[:2] == ["api", "listing"] and self.listing:
             return await self.listing.route(req, parts[2:])
         return httpd.response(404, {"error": "not found"})
@@ -831,6 +918,8 @@ class Relay:
             self.metrics["refused_503"] += 1
             return httpd.response(503, {"error": "the relay is full right now"})
         s, err = self.admit(rid, req.ip, invite)
+        if not err and service == 3724 and self.auth_locked(req.ip, rid):
+            s, err = None, (429, f"too many wrong passwords from your address: try again in {self.cfg.auth_fail_window // 60} minutes")
         if err:
             self.metrics[f"refused_{err[0]}"] += 1
             return httpd.response(err[0], {"error": err[1]})
@@ -986,10 +1075,13 @@ class Relay:
                         s.close_stream(st, why="idle")
             for ip in [ip for ip, t in self.knocks.items() if all(e <= now for e in t.values())]:
                 del self.knocks[ip]
+            for k in [k for k, q in self.auth_fails.items() if not q or now - q[-1] > self.cfg.auth_fail_window]:
+                del self.auth_fails[k]
             n += 1
             if n % 12 == 0:
                 self.load_blocklist()
-                for w in (self.conn_rate, self.ws_rate, self.reg_rate, self.acct_ip, self.acct_realm, self.knock_rate):
+                for w in (self.conn_rate, self.ws_rate, self.reg_rate, self.acct_ip, self.acct_realm, self.knock_rate,
+                          self.pair_rate):
                     w.sweep()
                 self.save()
                 if self.listing:
