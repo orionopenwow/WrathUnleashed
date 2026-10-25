@@ -1,12 +1,6 @@
 {
- "updated": "Sun 25 Oct, 00:14",
- "waiting_on_you": [
-  {
-   "tag": "github",
-   "text": "Give Claude GitHub push",
-   "detail": "Add Chumpton as a collaborator on orionopenwow/WrathUnleashed and OpenVanilla (or install the Claude GitHub app on orionopenwow)."
-  }
- ],
+ "updated": "Sun 25 Oct, 00:31",
+ "waiting_on_you": [],
  "now": [
   {
    "tag": "client",
@@ -20,6 +14,11 @@
   }
  ],
  "done": [
+  {
+   "tag": "ship",
+   "text": "Tonight saved to orionopenwow/WrathUnleashed",
+   "detail": "Autopilot ran the save step from your PC (commit 373ea33, 13 files)."
+  },
   {
    "tag": "auto",
    "text": "Autopilot is on",

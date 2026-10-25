@@ -77,8 +77,8 @@ ghcr.io/orionopenwow/openvanilla-realm:latest	529MB
 rust:1-bookworm	2.23GB
 ghcr.io/orionopenwow/openwow-realm:latest	534MB
 ghcr.io/orionopenwow/openwow-mangos:latest	829MB
-ghcr.io/chumpton/openwow-realm:latest	533MB
-ghcr.io/chumpton/openwow-mangos:latest	829MB
+(old Vanilla realm image)	533MB
+(old Vanilla mangos image)	829MB
 alpine/socat:latest	23.6MB
 caddy:2	93.1MB
 debian:bookworm-slim	116MB
