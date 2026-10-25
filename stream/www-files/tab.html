@@ -35,7 +35,19 @@ background:linear-gradient(#f0d389,#d8b25a);color:#1b1406}button:disabled{opacit
     var locks = navigator.locks;
     if (locks && typeof locks.request === 'function') {
       // Wait until the other tab has let go, then start here (the game page takes the lock itself).
-      locks.request('wu-game', function () { location.replace(r); return new Promise(function () {}); });
+      // A tab that never answers (frozen, crashed, discarded) would hold the lock forever: after 6 s take
+      // it anyway (steal), so a stuck tab can't lock a player out of the game.
+      var done = false, ac = typeof AbortController === 'function' ? new AbortController() : null;
+      var go2 = function () { if (done) return; done = true; location.replace(r); };
+      var opts = ac ? { signal: ac.signal } : {};
+      locks.request('wu-game', opts, function () { go2(); return new Promise(function () {}); }).catch(function () {});
+      setTimeout(function () {
+        if (done) return;
+        if (ac) ac.abort();
+        go.textContent = 'Taking over…';
+        locks.request('wu-game', { steal: true }, function () { go2(); return new Promise(function () {}); })
+          .catch(function () { go2(); });
+      }, 6000);
     } else {
       setTimeout(function () { location.replace(r); }, 1500);
     }

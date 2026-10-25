@@ -89,3 +89,5 @@
 1027w mods  Mods on Wrath: Pings, Emote Wheel and Dalaran Dice (new realm scripts load by a restart with a 5-minute warning)
 1027x ship  Save to GitHub (orionopenwow/WrathUnleashed)
 1027y leyline  Update the public orionopenwow/Leyline repo
+1027z client  One-tab guard: "Play here" takes over a frozen or crashed tab after 6 seconds instead of waiting forever
+1028a ship  Save to GitHub (orionopenwow/WrathUnleashed)
