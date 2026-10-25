@@ -47,3 +47,9 @@
 1026g ship  Save to GitHub (orionopenwow/WrathUnleashed)
 1026h realm  Instant spell learn on level up (.learnall), .respec, .xp off/on, .hearth, .summon, rested note: world server restart with a 5-minute warning
 1026i ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1026j signin  Wording: Wrath and Leyline only, no game-brand names on the site; new link card
+1026k client  Same wording in the own-files picker
+1026l foreverui  Same wording in Mods & Workshop
+1026m scripts  Same wording in .guide
+1026n relay  Same wording on the join page
+1026o ship  Save to GitHub (orionopenwow/WrathUnleashed)

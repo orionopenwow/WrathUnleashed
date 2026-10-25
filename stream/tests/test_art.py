@@ -90,8 +90,8 @@ for path, page in (("/wrath", get("/wrath")[2].decode()), ("/wrath/realms", get(
             f'<meta property="og:image" content="{img}">', '<meta property="og:image:width" content="1200">',
             '<meta property="og:image:height" content="630">', '<meta name="twitter:card" content="summary_large_image">',
             f'<meta name="twitter:image" content="{img}">', '<meta property="og:title" content="',
-            '<meta name="twitter:title" content="', '<meta property="og:description" content="Play Wrath of the Lich King 3.3.5a in your browser.',
-            '<meta name="twitter:description" content="Play Wrath of the Lich King 3.3.5a in your browser.']
+            '<meta name="twitter:title" content="', '<meta property="og:description" content="Play Wrath in your browser, on the Leyline network.',
+            '<meta name="twitter:description" content="Play Wrath in your browser, on the Leyline network.']
     missing = [w for w in want if w not in page]
     check(f"preview tags on {path}", not missing, missing)
     head = page.split("</head>", 1)[0]

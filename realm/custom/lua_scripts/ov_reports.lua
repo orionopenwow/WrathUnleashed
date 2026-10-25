@@ -203,7 +203,7 @@ end
 
 local GUIDE = {
     "|cffffd100Level 80: where to go from here|r",
-    "1. |cffffff00Dungeon Finder|r (I, or the eye on the minimap): Random Lich King Dungeon, then Heroic. Bots fill "
+    "1. |cffffff00Dungeon Finder|r (I, or the eye on the minimap): the random dungeon at the top, then its Heroic. Bots fill "
         .. "the group in seconds, and dungeons scale to your group (autobalance).",
     "2. |cffffff00Gear|r: heroics give Emblems of Triumph; the first random dungeon each day gives extra. Spend them "
         .. "in Dalaran (the emblem quartermasters in the Silver Enclave / Sunreaver's Sanctuary).",

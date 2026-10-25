@@ -491,7 +491,7 @@ def art_url(name: str) -> str:
     return "/wrath/art/" + name
 
 
-CARD_DESCRIPTION = ("Play Wrath of the Lich King 3.3.5a in your browser. "
+CARD_DESCRIPTION = ("Play Wrath in your browser, on the Leyline network. "
                     "Dalaran hangout, Dungeon Finder, host your own realm.")
 
 
@@ -505,7 +505,7 @@ def card_meta(path: str, title: str = "") -> str:
             ("property", "og:title", title), ("property", "og:description", CARD_DESCRIPTION),
             ("property", "og:url", url), ("property", "og:image", img),
             ("property", "og:image:type", "image/webp"), ("property", "og:image:width", "1200"),
-            ("property", "og:image:height", "630"), ("property", "og:image:alt", f"{REALM_NAME}: Wrath of the Lich King 3.3.5a"),
+            ("property", "og:image:height", "630"), ("property", "og:image:alt", f"{REALM_NAME}: Wrath on the Leyline network"),
             ("name", "twitter:card", "summary_large_image"), ("name", "twitter:title", title),
             ("name", "twitter:description", CARD_DESCRIPTION), ("name", "twitter:image", img)]
     return (f'<meta name="description" content="{e(CARD_DESCRIPTION)}"><link rel="canonical" href="{e(url)}">'
@@ -533,7 +533,7 @@ RULE = '<hr class="rule wu-divider">'
 
 def signed_out_page() -> bytes:
     return render(
-        f'{crest(REALM_NAME)}<p class="sub">Wrath of the Lich King 3.3.5a</p>{RULE}'
+        f'{crest(REALM_NAME)}<p class="sub">Wrath · on the Leyline network</p>{RULE}'
         '<p class="center"><a class="btn primary" href="/login?next=%2Fwrath">Sign in with Google or your Hero Key</a></p>'
         '<p class="fine center">Played on Open Vanilla before? Use the same sign-in. Your Wrath login appears here.</p>'
         '<p class="fine center"><a href="/wrath/realms">All realms</a>, including community realms hosted by players</p>',
@@ -672,7 +672,7 @@ def account_page(display: str, user: str, password: str, nonce: str) -> bytes:
         # 2. The whole world: own game files
         f'<div class="realm"><h2>{html.escape(REALM_NAME)}</h2>'
         f'<div class="tags"><span class="tag">The whole world</span><span class="tag">Your own 3.3.5a files</span>{live}</div>'
-        '<p>The full game, on the same realm and with the same characters. Uses your own World of Warcraft 3.3.5a '
+        '<p>The full game, on the same realm and with the same characters. Uses your own 3.3.5a '
         'game files, read on your computer and never uploaded.</p>'
         + ('<p><a class="btn" href="/wrath/play?mode=own">Play in the browser with my game folder</a></p>'
            if ownfiles_on() else '')
@@ -684,7 +684,7 @@ def account_page(display: str, user: str, password: str, nonce: str) -> bytes:
         f'<div class="field" id="pw" data-v="{html.escape(password)}">{dots}</div>'
         '<button class="ghost" id="show" type="button">Show</button>'
         '<button class="ghost" data-copy="pw" type="button">Copy</button></div>'
-        f'<ol>{pkg}<li>Run <b>Play WrathUnleashed.bat</b> and pick your own WoW 3.3.5a folder, '
+        f'<ol>{pkg}<li>Run <b>Play WrathUnleashed.bat</b> and pick your own 3.3.5a game folder, '
         f'or set <code>realmlist {html.escape(PUBLIC_HOST)}</code> in your own client.</li>'
         '<li>Log in with the account and password above.</li></ol>'
         '<p class="fine">This login is yours alone. Sign in here again any time to see it.</p></details></div>'
@@ -859,7 +859,7 @@ def realms_page() -> bytes:
     body = (f'<style>{REALM_CSS}</style>'
             f'<div class="top"><span class="eyebrow">{html.escape(REALM_NAME)}</span>'
             '<a class="keylink" href="/wrath">Back</a></div>'
-            f'{crest("Realms")}<p class="sub">Wrath of the Lich King 3.3.5a</p>{RULE}'
+            f'{crest("Realms")}<p class="sub">Wrath · on the Leyline network</p>{RULE}'
             + official +
             '<h2 class="eyebrow">Community realms</h2>'
             + community +

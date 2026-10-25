@@ -67,7 +67,7 @@ local function buildInterface(page)
         local k = W.ModernScale()
         W.ApplyScale(k); s:SetValue(k)
     end, "TOPLEFT", 20, -78)
-    label(page, "Modern size matches today's WoW: the UI is the same share of the screen at any window size.",
+    label(page, "Modern size matches today's games: the UI is the same share of the screen at any window size.",
         "GameFontHighlightSmall", "TOPLEFT", 20, -106):SetWidth(PANEL_W - 60)
 
     label(page, "Action bars", "GameFontNormal", "TOPLEFT", 16, -150)

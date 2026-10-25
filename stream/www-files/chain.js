@@ -249,7 +249,7 @@
     const report = { ok: false, errors: [], warnings: [], checks: [], locale: null, order: [], build: null, listing };
     const has = (rel) => listing.files.some((f) => eqi(f, rel));
     if (!listing.dataFound) {
-      report.errors.push('No common.MPQ found. Choose the "Data" folder inside your World of Warcraft 3.3.5a folder (or the World of Warcraft folder itself).');
+      report.errors.push('No common.MPQ found. Choose the "Data" folder inside your 3.3.5a game folder (or the game folder itself).');
       return report;
     }
     for (const want of ['common.MPQ', 'expansion.MPQ', 'lichking.MPQ']) report.checks.push({ name: want, ok: has(want) });
@@ -271,7 +271,7 @@
       report.warnings.push('expansion.MPQ or lichking.MPQ is missing: this does not look like a complete 3.3.5a install (Wrath content will be missing).');
     }
     report.build = await detectBuild(entries);
-    if (!report.build) report.warnings.push('Could not confirm the build number (no component.wow-*.txt or Wow.exe found). The client expects 3.3.5a (12340).');
+    if (!report.build) report.warnings.push('Could not confirm the build number (no build file found in the folder). The client expects 3.3.5a (12340).');
     else if (report.build.build !== 12340) report.warnings.push(`This folder is build ${report.build.build}; the client expects 3.3.5a (12340).`);
     report.ok = true;
     return report;

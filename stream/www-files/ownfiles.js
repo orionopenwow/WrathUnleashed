@@ -420,7 +420,7 @@ function createUi(opts) {
   const input = el('input', { type: 'file', class: 'hidden', webkitdirectory: '', multiple: '' });
   const chooseBtn = el('button', { class: 'primary', type: 'button', 'data-act': 'choose' }, 'Choose folder');
   const zone = el('div', { class: 'zone', 'data-zone': '' },
-    el('p', {}, 'Drop your World of Warcraft 3.3.5a ', el('b', {}, 'Data'), ' folder here'),
+    el('p', {}, 'Drop your 3.3.5a game ', el('b', {}, 'Data'), ' folder here'),
     el('div', {}, chooseBtn));
   const continueBtn = el('button', { class: 'primary hidden', type: 'button', 'data-act': 'continue' }, 'Continue');
   const forgetBtn = el('button', { class: 'link hidden', type: 'button', 'data-act': 'forget' }, 'Forget my folder');
@@ -429,7 +429,7 @@ function createUi(opts) {
   const msg = el('div', { class: 'msg hidden' });
   const card = el('div', { class: 'card', role: 'dialog', 'aria-labelledby': 'wu-ownfiles-title' },
     el('h1', { id: 'wu-ownfiles-title' }, 'Use my own game files'),
-    el('p', { class: 'sub' }, 'Play with the World of Warcraft 3.3.5a (12340) files already on this computer.'),
+    el('p', { class: 'sub' }, 'Play with the 3.3.5a (12340) game files already on this computer.'),
     zone,
     el('div', { class: 'privacy' }, el('span', {}, '🔒'),
       el('span', {}, 'Your game files stay on this computer. Nothing is uploaded: this browser tab reads the MPQ files straight from your disk.')),
