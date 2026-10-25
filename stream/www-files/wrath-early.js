@@ -12,6 +12,37 @@
 // out of that rush; the client fetches a sound itself when it plays it. ?slimboot=0 turns it off.
 (function () {
   'use strict';
+  // Missing-file and warning capture, from the first line of boot, for the smoke tests (the console
+  // keeps only its most recent lines). window.__wuMissing: each game file the client asked for and the
+  // slice does not have (Map name -> {t, what}); window.__wuWarn: the last 2000 warnings and errors;
+  // window.__wuMissingDump() lists the missing names, sorted. Only string tests on lines the client
+  // already prints, so it costs nothing in play.
+  try {
+    var missing = new Map();
+    var warn = [];
+    var notInChain = /file not in patch chain: ([^\s]+)/;
+    var notFound = /Path not found: ([^\s]+)/;
+    var bad = /WARN|ERROR|panicked|TIMED OUT/;
+    var keep = function (args) {
+      var s = args[0];
+      if (typeof s !== 'string' || !bad.test(s)) return;
+      var m = notInChain.exec(s) || notFound.exec(s);
+      if (m) {
+        var name = m[1].replace(/\//g, '\\').toLowerCase();
+        if (!missing.has(name)) missing.set(name, { t: Math.round(performance.now()), what: s.replace(/%c/g, '').slice(0, 160) });
+      }
+      warn.push({ t: Math.round(performance.now()), s: s.replace(/%c/g, '').slice(0, 300) });
+      if (warn.length > 2000) warn.splice(0, warn.length - 2000);
+    };
+    ['log', 'warn', 'error'].forEach(function (level) {
+      var orig = console[level];
+      if (typeof orig !== 'function') return;
+      console[level] = function () { try { keep(arguments); } catch (e) { /* never in the way */ } return orig.apply(console, arguments); };
+    });
+    window.__wuMissing = missing;
+    window.__wuWarn = warn;
+    window.__wuMissingDump = function () { return Array.from(missing.keys()).sort(); };
+  } catch (e) { /* the capture is optional */ }
   // One game per browser. Two tabs signed in to the same account knock each other off the realm
   // ("Disconnected", back to the login). The first tab holds a Web Lock for its whole life. A second tab
   // goes to tab.html?m=busy (a small note page: no game starts) with "Play here", which tells the first

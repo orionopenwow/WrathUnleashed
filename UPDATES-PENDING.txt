@@ -105,3 +105,5 @@
 1029g leyline  Update the public orionopenwow/Leyline repo (docs and the Leyline Launcher source)
 1029h ship  Save to GitHub (orionopenwow/WrathUnleashed): every save now also refreshes the public Leyline repo; Leyline tests skip the WrathUnleashed-only files
 1029i leyline  Update the public orionopenwow/Leyline repo
+1030a client  Play page: keep every missing game file and warning from boot, for the Dalaran smoke tests
+1030b ship  Save to GitHub (orionopenwow/WrathUnleashed)
