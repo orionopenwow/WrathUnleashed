@@ -428,6 +428,9 @@ ART_TYPES = {
     "Cinzel-SemiBold.woff2": "font/woff2", "Cinzel-OFL.txt": "text/plain; charset=utf-8",
     "wu-card.webp": "image/webp",   # the link-preview card (tools/art/wu-card.html, 1200 x 630)
     "leyline-emblem.webp": "image/webp", "leyline-bg.webp": "image/webp",   # the Leyline page (owner's art)
+    "leyline-display.woff2": "font/woff2", "leyline-display-OFL.txt": "text/plain; charset=utf-8",   # Big Shoulders Display 600 (SIL OFL 1.1, leyline-display-OFL.txt)
+    "leyline-corner-tl.webp": "image/webp", "leyline-corner-tr.webp": "image/webp",   # our gold frame art, hued blue
+    "leyline-corner-bl.webp": "image/webp", "leyline-corner-br.webp": "image/webp", "leyline-divider.webp": "image/webp",
 }
 ART_MAX_AGE = 7 * 86400
 _theme_ver = {"key": None, "v": ""}
@@ -880,6 +883,27 @@ LEYLINE_CSS = """
 body.ly{min-height:100vh;color:var(--ly-ink);font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
 background:#05060f url(ART_BG) center top/cover fixed no-repeat}
 @media (max-width:700px){body.ly{background-attachment:scroll}}
+body.ly::before,body.ly::after{content:"";position:fixed;inset:-50%;pointer-events:none;z-index:0;background-repeat:repeat}
+body.ly::before{background-image:
+radial-gradient(1px 1px at 20px 30px,#fff,transparent),radial-gradient(1px 1px at 120px 80px,#cfe8ff,transparent),
+radial-gradient(1.5px 1.5px at 210px 160px,#fff,transparent),radial-gradient(1px 1px at 300px 40px,#bfe9ff,transparent),
+radial-gradient(1px 1px at 380px 220px,#fff,transparent),radial-gradient(1.5px 1.5px at 60px 260px,#d9c8ff,transparent),
+radial-gradient(1px 1px at 260px 300px,#fff,transparent),radial-gradient(1px 1px at 160px 380px,#cfe8ff,transparent);
+background-size:420px 420px;opacity:.55}
+body.ly::after{background-image:
+radial-gradient(2px 2px at 90px 120px,#e9fbff,transparent),radial-gradient(1.5px 1.5px at 330px 60px,#e7dcff,transparent),
+radial-gradient(2px 2px at 520px 340px,#fff,transparent),radial-gradient(1.5px 1.5px at 240px 470px,#bff3ff,transparent),
+radial-gradient(2px 2px at 600px 180px,#fff,transparent);background-size:680px 680px;opacity:.7}
+.ly-glow{position:fixed;inset:0;pointer-events:none;z-index:0;
+background:radial-gradient(40% 30% at 50% 22%,rgba(140,90,255,.18),transparent 70%),radial-gradient(30% 25% at 78% 28%,rgba(60,200,255,.12),transparent 70%)}
+.ly-nav,.ly-wrap{position:relative;z-index:1}
+@media (prefers-reduced-motion:no-preference){
+body.ly::before{animation:ly-drift 180s linear infinite,ly-twinkle 5s ease-in-out infinite alternate}
+body.ly::after{animation:ly-drift 120s linear infinite reverse,ly-twinkle 7s ease-in-out infinite alternate-reverse}
+.ly-glow{animation:ly-pulse 9s ease-in-out infinite}}
+@keyframes ly-drift{to{transform:translate(-420px,-210px)}}
+@keyframes ly-twinkle{from{opacity:.35}to{opacity:.85}}
+@keyframes ly-pulse{50%{opacity:.6}}
 .ly a{color:var(--ly-cyan)}
 .ly-nav{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between;
 padding:10px 16px;background:rgba(6,8,22,.82);backdrop-filter:blur(6px);border-bottom:1px solid var(--ly-line)}
@@ -894,23 +918,30 @@ padding:8px 11px;border:1px solid var(--ly-line);border-radius:4px;background:rg
 -webkit-mask-image:radial-gradient(closest-side,#000 74%,transparent 100%);mask-image:radial-gradient(closest-side,#000 74%,transparent 100%)}
 @media (prefers-reduced-motion:no-preference){.ly-emblem{animation:ly-float 7s ease-in-out infinite}}
 @keyframes ly-float{50%{transform:translateY(-6px)}}
-.ly h1{font:600 clamp(40px,8vw,72px)/1 'OW Cinzel','Cinzel',Georgia,serif;letter-spacing:.14em;margin:6px 0 10px;
-background:linear-gradient(180deg,#e9fbff,var(--ly-cyan) 55%,#7aa2ff);-webkit-background-clip:text;background-clip:text;color:transparent;
-text-shadow:0 0 24px rgba(95,227,255,.25)}
+.ly h1{font:600 clamp(56px,11vw,104px)/1 'Leyline Display','OW Cinzel',Impact,sans-serif;letter-spacing:.08em;text-transform:uppercase;margin:6px 0 10px;
+background:linear-gradient(180deg,#bdfaff 0%,#8ff0ff 48%,#a9a6ff 78%,#c88cff 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
+filter:drop-shadow(0 0 6px rgba(120,225,255,.75)) drop-shadow(0 0 22px rgba(160,120,255,.45))}
 .ly-lede{max-width:640px;margin:0 auto 10px;color:var(--ly-ink)}
 .ly-ver{display:inline-block;font-size:12px;color:var(--ly-dim);border:1px solid var(--ly-line);border-radius:999px;padding:2px 10px}
 .ly-cta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:26px auto 30px;max-width:900px}
 @media (max-width:700px){.ly-cta{grid-template-columns:1fr}}
-.ly-btn{display:flex;align-items:center;justify-content:center;gap:10px;min-height:64px;padding:12px 16px;text-decoration:none;
-font:600 clamp(17px,2.2vw,21px)/1.1 'OW Cinzel','Cinzel',Georgia,serif;letter-spacing:.08em;color:var(--ly-ink)!important;
+.ly-btn{position:relative;display:flex;align-items:center;justify-content:center;gap:10px;min-height:64px;padding:12px 18px;text-decoration:none;
+font:600 clamp(20px,2.6vw,25px)/1.1 'Leyline Display','OW Cinzel',Impact,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--ly-ink)!important;
 background:linear-gradient(180deg,rgba(40,52,110,.92),rgba(16,20,52,.95));border:1px solid rgba(140,170,255,.45);border-radius:6px;
 box-shadow:inset 0 0 0 1px rgba(255,255,255,.05),0 6px 18px rgba(0,0,0,.45)}
 .ly-btn:hover,.ly-btn:focus-visible{border-color:var(--ly-cyan);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),var(--ly-glow)}
+.ly-btn::before{content:"";position:absolute;inset:-3px;pointer-events:none;background:
+url(ART_CTL) top left/26px 22px no-repeat,url(ART_CTR) top right/26px 22px no-repeat,
+url(ART_CBL) bottom left/26px 22px no-repeat,url(ART_CBR) bottom right/26px 22px no-repeat}
 .ly-btn.violet{background:linear-gradient(180deg,rgba(90,52,160,.92),rgba(36,18,80,.95));border-color:rgba(190,150,255,.55)}
 .ly-btn svg{width:26px;height:26px;flex:none}
-.ly-panel{background:var(--ly-panel);border:1px solid var(--ly-line);border-radius:8px;padding:18px;margin:18px 0;
-box-shadow:0 10px 30px rgba(0,0,0,.4)}
-.ly h2{font:600 22px/1.2 'OW Cinzel','Cinzel',Georgia,serif;letter-spacing:.12em;text-align:center;margin:0 0 14px;color:#dff7ff}
+.ly-panel{position:relative;background:
+url(ART_CTL) top left/44px 38px no-repeat,url(ART_CTR) top right/44px 38px no-repeat,
+url(ART_CBL) bottom left/44px 38px no-repeat,url(ART_CBR) bottom right/44px 38px no-repeat,var(--ly-panel);
+border:1px solid var(--ly-line);border-radius:8px;padding:22px 20px;margin:18px 0;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.ly-panel h2::after{content:"";display:block;width:min(300px,70%);height:18px;margin:6px auto 0;
+background:url(ART_DIV) center/contain no-repeat}
+.ly h2{font:600 28px/1.1 'Leyline Display','OW Cinzel',Impact,sans-serif;letter-spacing:.14em;text-transform:uppercase;text-align:center;margin:0 0 14px;color:#bff6ff;text-shadow:0 0 12px rgba(95,227,255,.45)}
 .ly-table{width:100%;border-collapse:collapse;font-size:15px}
 .ly-table th{font:600 11px/1 system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--ly-dim);text-align:left;
 padding:10px;border-bottom:1px solid var(--ly-line)}
@@ -925,12 +956,13 @@ padding:10px 0;border-bottom:1px solid rgba(120,150,255,.12)}.ly-table td{border
 @media (max-width:860px){.ly-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:560px){.ly-grid{grid-template-columns:1fr}}
 .ly-feat{background:rgba(18,22,54,.7);border:1px solid var(--ly-line);border-radius:6px;padding:16px}
-.ly-feat h3{margin:0 0 6px;font:600 17px/1.2 'OW Cinzel','Cinzel',Georgia,serif;letter-spacing:.06em;color:var(--ly-cyan)}
+.ly-feat h3{margin:0 0 6px;font:600 21px/1.15 'Leyline Display','OW Cinzel',Impact,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--ly-cyan)}
 .ly-feat p{margin:0;color:var(--ly-ink)}
 .ly-feat .soon{display:inline-block;margin-left:6px;font:600 10px/1 system-ui;letter-spacing:.1em;text-transform:uppercase;
 color:var(--ly-violet);border:1px solid rgba(180,140,255,.5);border-radius:999px;padding:3px 7px;vertical-align:middle}
 .ly-fine{color:var(--ly-dim);font-size:14px;text-align:center;margin-top:22px}
 @font-face{font-family:'OW Cinzel';src:url(ART_FONT) format('woff2');font-display:swap}
+@font-face{font-family:'Leyline Display';src:url(ART_LYF) format('woff2');font-display:swap}
 """
 
 
@@ -959,7 +991,11 @@ def leyline_page() -> bytes:
     def feat(title, text, soon=False):
         return (f'<div class="ly-feat"><h3>{e(title)}{"<span class=soon>planned</span>" if soon else ""}</h3>'
                 f'<p>{text}</p></div>')
-    css = (LEYLINE_CSS.replace("ART_BG", art_url("leyline-bg.webp")).replace("ART_FONT", art_url("Cinzel-SemiBold.woff2")))
+    css = LEYLINE_CSS
+    for k, f in (("ART_BG", "leyline-bg.webp"), ("ART_LYF", "leyline-display.woff2"), ("ART_FONT", "Cinzel-SemiBold.woff2"), ("ART_CTL", "leyline-corner-tl.webp"),
+                 ("ART_CTR", "leyline-corner-tr.webp"), ("ART_CBL", "leyline-corner-bl.webp"),
+                 ("ART_CBR", "leyline-corner-br.webp"), ("ART_DIV", "leyline-divider.webp")):
+        css = css.replace(k, art_url(f))
     body = (
         '<nav class="ly-nav" aria-label="Leyline"><div class="grp">'
         '<a href="/wrath/leyline">Hub</a><a href="/wrath/realms">Realms</a>'
@@ -1008,7 +1044,7 @@ def leyline_page() -> bytes:
     meta = card_meta("/wrath/leyline", "Leyline · an open-source, community-built MMO project")
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">'
-            f'<title>Leyline</title>{meta}<style>{css}</style></head><body class="ly">{body}</body></html>').encode("utf-8")
+            f'<title>Leyline</title>{meta}<style>{css}</style></head><body class="ly"><div class="ly-glow"></div>{body}</body></html>').encode("utf-8")
 
 
 class _Window:

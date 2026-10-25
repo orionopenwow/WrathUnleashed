@@ -57,3 +57,5 @@
 1026q ship  Save to GitHub (orionopenwow/WrathUnleashed)
 1026r signin  The Leyline page in its own look (your emblem and nebula art): hub nav, Play / Client launcher / Host realm, live realm list, features and aims
 1026s ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1026t signin  Leyline page: blue frame corners and dividers, a slow starfield, and the Leyline display font
+1026u ship  Save to GitHub (orionopenwow/WrathUnleashed)
