@@ -33,7 +33,7 @@ import os
 import re
 import time
 
-from wunet import keys
+from wunet import domains, keys
 
 from . import httpd
 
@@ -112,6 +112,17 @@ class Listing:
             return 400, {"error": "realm id does not match the key"}
         if not keys.verify_doc(pub, beat, keys.CTX_HEARTBEAT, sig):
             return 403, {"error": "bad signature"}
+        if self.relay is not None:
+            # Only Beacons that hold a tunnel to this relay get listed (no join link to nowhere),
+            # and never a private one (a host who switched to private must not linger on the list).
+            if rid in self.relay.blocked:
+                return 403, {"error": "this realm is blocked on this relay"}
+            s = self.relay.sessions.get(rid)
+            if s is None:
+                return 409, {"error": "connect this realm to the relay first"}
+            if s.visibility != "public":
+                self.delist(rid)
+                return 403, {"error": "private realms are not listed"}
         ts, seq = beat.get("ts"), beat.get("seq")
         if not isinstance(ts, (int, float)) or abs(now - ts) > SKEW:
             return 400, {"error": "clock is off by more than 5 minutes"}
@@ -152,6 +163,10 @@ class Listing:
         self.dirty = True
         return 200, {"ok": True, "listed": True, "next_in": 60, "claimed": bool(e.get("claimed_by"))}
 
+    def delist(self, rid):
+        if self.entries.pop(rid, None) is not None:
+            self.dirty = True
+
     def forget(self, now=None):
         now = time.time() if now is None else now
         for rid in [r for r, e in self.entries.items() if now - e["last_seen"] > FORGET_AFTER]:
@@ -174,8 +189,8 @@ class Listing:
     # ------------------------------------------------------------------ records
     def record(self, e, now):
         rid, rec = e["realm_id"], e["record"]
-        relay = e.get("relay") or "relay.openvanilla.app"
-        site = getattr(self.cfg, "site_url", "https://openvanilla.app")
+        relay = e.get("relay") or domains.RELAY
+        join = getattr(self.cfg, "join_base", None) or f"https://{relay}"
         online = now - e["last_seen"] <= OFFLINE_AFTER and e["status"]["online"]
         auth_port = None
         if self.relay:
@@ -192,10 +207,10 @@ class Listing:
             "tagline": rec["tagline"],
             "summary": rec["summary"],
             "type": rec["type"],
-            "profile": {"game": "Wrath of the Lich King", "version": "3.3.5a", "build": 12340,
+            "profile": {"game": "wrath-3.3.5a", "version": "3.3.5a", "build": 12340,
                         "address": relay, "port": auth_port, "warden": rec["warden"],
                         "ruleset": rec["ruleset"], "patches": None, "clientFiles": "own"},
-            "connect": {"kind": "web-signin", "url": f"{site}/join/{rid}", "label": "Join this realm",
+            "connect": {"kind": "web-signin", "url": f"{join}/join/{rid}", "label": "Join this realm",
                         "note": "Opens the realm's join page: make a game account there, then set your realmlist."},
             "rules": rec["rules"],
             "features": [],
@@ -217,7 +232,8 @@ class Listing:
         now = time.time() if now is None else now
         self.forget(now)
         blocked = self.relay.blocked if self.relay else set()
-        recs = [self.record(e, now) for rid, e in self.entries.items() if rid not in blocked]
+        private = {rid for rid, s in self.relay.sessions.items() if s.visibility != "public"} if self.relay else set()
+        recs = [self.record(e, now) for rid, e in self.entries.items() if rid not in blocked and rid not in private]
         recs.sort(key=lambda r: (r["state"] != "live", r["name"].lower(), r["community"]["realmId"]))
         return {"schema": 1, "kind": "community", "updated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
                 "realms": recs}

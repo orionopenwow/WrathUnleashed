@@ -108,6 +108,27 @@ class RealmDB:
         finally:
             c.close()
 
+    def grant_gm(self, username, gmlevel=3):
+        """Give an EXISTING account GM rights on this realm. Never makes an account or touches a
+        password: the operator makes their own account (join page or server console) first.
+        'missing' until it exists, then 'ok' / 'unchanged'."""
+        c = self._conn("acore_auth")
+        try:
+            with c.cursor() as cur:
+                cur.execute("SELECT id FROM account WHERE username = %s", (username.upper(),))
+                row = cur.fetchone()
+                if not row:
+                    return "missing"
+                cur.execute("SELECT gmlevel FROM account_access WHERE id = %s AND RealmID = -1", (row[0],))
+                have = cur.fetchone()
+                if have and int(have[0]) == gmlevel:
+                    return "unchanged"
+                cur.execute("INSERT INTO account_access (id, gmlevel, RealmID) VALUES (%s, %s, -1) "
+                            "ON DUPLICATE KEY UPDATE gmlevel = VALUES(gmlevel)", (row[0], gmlevel))
+                return "ok"
+        finally:
+            c.close()
+
     def status(self):
         c = self._conn("acore_characters")
         try:
@@ -159,7 +180,8 @@ class Agent:
         self.stop_ev = asyncio.Event()
         self.relay_state = {"connected": False}
         self.address_done = None
-        self.seq = int(time.time() * 1000)
+        self.gm_done = None
+        self.seq =int(time.time() * 1000)
         self.last_pong = time.monotonic()
         self.tick = 5          # housekeeping interval (tests shorten it)
         self.ping_every = 20
@@ -174,6 +196,12 @@ class Agent:
     def invite_sha(self):
         inv = self.cfg.get("invite_secret")
         return hashlib.sha256(inv.encode()).hexdigest() if inv else None
+
+    def host_sha(self):
+        """sha256 of the host-only secret (in the host's own join link): the relay marks signups made
+        with it, and only those may take the GM account's name."""
+        hs = self.cfg.get("host_secret")
+        return hashlib.sha256(hs.encode()).hexdigest() if hs else None
 
     def save_state(self, **kw):
         self.relay_state.update(kw, updated=int(time.time()))
@@ -225,6 +253,8 @@ class Agent:
                  "relay": ch["relay"], "name": self.cfg["name"], "visibility": self.cfg["visibility"],
                  "invite_sha256": self.invite_sha(), "signup": self.cfg.get("signup", "invite"),
                  "version": VERSION, "ts": int(time.time())}
+        if self.host_sha():
+            hello["host_sha256"] = self.host_sha()
         await self.ws.send(json.dumps({"hello": hello, "sig": keys.sign_doc(self.secret, hello, keys.CTX_RELAY_LOGIN)}))
         op, msg = await asyncio.wait_for(self.ws.recv(), 15)
         doc = json.loads(msg)
@@ -370,8 +400,12 @@ class Agent:
             if doc.get("op") == "status":
                 res = {"res": rid, "ok": True, "status": await self.status()}
             elif doc.get("op") == "create_account":
+                gm = (self.cfg.get("gm_name") or "").upper()
                 if self.cfg.get("signup", "invite") == "off" or not self.db:
                     res["error"] = "off"
+                elif gm and str(doc.get("username", "")).upper() == gm and doc.get("host") is not True:
+                    res["error"] = "reserved"   # the GM's name: only from the host's own link
+                    log.info("refused a signup for the GM account name %s (not from the host's link)", gm)
                 else:
                     r = await asyncio.to_thread(self.db.create_account, doc["username"], doc["salt"], doc["verifier"])
                     res = {"res": rid, "ok": r == "ok", "error": None if r == "ok" else r}
@@ -412,12 +446,15 @@ class Agent:
             if m != self.cfg_mtime:
                 self.cfg_mtime = m
                 new = read_json(self.cfg_path) or self.cfg
-                changed = {k for k in ("name", "visibility", "invite_secret", "signup") if new.get(k) != self.cfg.get(k)}
+                changed = {k for k in ("name", "visibility", "invite_secret", "signup", "host_secret")
+                           if new.get(k) != self.cfg.get(k)}
                 self.cfg = new
                 if changed and self.ws and not self.ws.closed:
-                    self.ws.send_nowait(json.dumps({"update": {"name": new["name"], "visibility": new["visibility"],
-                                                               "invite_sha256": self.invite_sha(),
-                                                               "signup": new.get("signup", "invite")}}))
+                    upd = {"name": new["name"], "visibility": new["visibility"], "invite_sha256": self.invite_sha(),
+                           "signup": new.get("signup", "invite")}
+                    if self.host_sha():
+                        upd["host_sha256"] = self.host_sha()
+                    self.ws.send_nowait(json.dumps({"update": upd}))
                     log.info("told the relay: %s changed", ", ".join(sorted(changed)))
                 if "name" in changed:
                     self.address_done = None
@@ -442,6 +479,16 @@ class Agent:
                         log.info("host account %s created (GM)", g["username"])
                 except Exception as e:
                     log.debug("host account later: %s", e)
+            gm_name = self.cfg.get("gm_name")
+            if self.db and gm_name and self.gm_done != gm_name:
+                try:
+                    r = await asyncio.to_thread(self.db.grant_gm, gm_name, 3)
+                    if r in ("ok", "unchanged"):
+                        self.gm_done = gm_name
+                        log.info("%s is the GM of this realm (%s)", gm_name.upper(), r)
+                    self.save_state(gm_account=gm_name.upper(), gm_ok=r in ("ok", "unchanged"))
+                except Exception as e:
+                    log.debug("GM rights later: %s", e)
             if self.address_done and time.time() - self.address_done > 300:
                 self.address_done = None   # re-check every 5 minutes (someone may have reset it)
             await asyncio.sleep(self.tick)

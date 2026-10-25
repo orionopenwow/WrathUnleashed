@@ -45,6 +45,7 @@ copy /y server\displays.py "%W%\kit\" >nul || goto fail
 copy /y server\www-patch.py "%W%\kit\" >nul || goto fail
 copy /y www-files\*.js "%W%\kit\www-files\" >nul || goto fail
 copy /y wrath_portal.py "%W%\kit\" >nul || goto fail
+copy /y demo.py "%W%\kit\" >nul || goto fail
 copy /y bin\wenilla-host "%W%\kit\bin\" >nul || goto fail
 copy /y lua\ov_slices.lua "%W%\kit\lua\" >nul || goto fail
 copy /y lua\lfg_ids.py "%W%\kit\lua\" >nul || goto fail

@@ -67,6 +67,30 @@ This is also the first real-client check of the one thing the sandbox could not 
 7. **Open or closed beta**: by default anyone may host. For a closed start, put realm ids (one per
    line) in a file and set `RELAY_ALLOW_FILE` to it.
 
+## 4a. One command on Linux/macOS: `leyline host`
+
+```
+bash leyline host            # name, ruleset (dalaran by default), public/private, house rules, your GM account NAME
+```
+
+It writes the config (`state/host.json`, `state/rules.txt`, `.env`), starts the realm through
+`host-wrath-realm.sh`, and the agent registers the Beacon with the relay (public: on the Leyline
+realm list within a minute). It **never makes accounts or sets passwords**: it asks for the name of
+your GM account, then you open **your own link** (`state/host-link.txt`, the invite plus a host key:
+keep it to yourself) and make that account on the join page with your own password. The agent gives
+it GM rights by itself. Nobody else can take that name: the relay only accepts it from the host key.
+Friends get `state/invite.txt`. Public Beacons default to signup `open` (strangers from the list can
+make accounts); private ones to `invite`.
+
+`leyline status`, `leyline gm NAME`, `leyline rules` (`--edit` to retype them), `leyline public|private`,
+`leyline check|stop|logs|new-invite|claim TOKEN|signup MODE`. Answers can come from the environment
+(`LEYLINE_NAME`, `LEYLINE_RULESET`, `LEYLINE_VISIBILITY`, `LEYLINE_GM`, `LEYLINE_TAGLINE`,
+`LEYLINE_RULES_FILE`); `--config-only` writes the config without starting anything.
+
+Addresses live in one line: `kit/tools/wunet/leyline.env` (`LEYLINE_DOMAIN`). Join links are the
+relay's own page (`https://relay.<domain>/join/<id>`), so they work without the website.
+Tested end to end without game data: `tests/test_leyline_e2e.py`.
+
 ## 4. Hosting (what players do)
 
 Windows: unzip the kit, double-click `Host a Wrath realm.bat`. macOS/Linux: `bash host-wrath-realm.sh`.

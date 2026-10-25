@@ -65,3 +65,7 @@
 1026y foreverui  In-game Leyline window: Esc > Mods & Workshop > Leyline realms, or /leyline
 1026z client  Client 20261025c: minimal blue (Alliance) / red (Horde) backdrop at character select and create, faster first load behind the loading screen
 1027a ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1027b foreverui  Action bars: the Shift and Ctrl bars side by side in one row above the main bar
+1027c signin  Portal: Goldshire Inn guest pass code (switched off until the owner says), share links kept
+1027d relay  Leyline relay: private realms leave the list at once, only connected realms listed, join page wording, open signup for public realms
+1027e ship  Save to GitHub (orionopenwow/WrathUnleashed): also leyline host, the Discord bridge (off until you add a token), the Goldshire demo

@@ -2,7 +2,7 @@
  "slice": "mini",
  "title": "WrathUnleashed in the browser",
  "comment": "The one streamed slice. Each tier has a stable \"key\"; \"order\" lists the keys in priority order and a tier's number is its position there (move a key to reorder, delete it to drop the tier). Tiers are exported in that order until budgetMB; maxTier is the highest tier number the server actually holds (\"Make mini slice.bat\" lowers it to what fit; the gate passes it to the realm). The realm rule reads the same file (lua/tiers_lua.py makes ov_slices_tiers.lua from it), so nothing is listed twice. A map entry is the whole map, or a \"zone\" (AreaTable id, tiles from its world-map rect), or a world \"box\" [x min, x max, y min, y max]; marginTiles widens the streamed tiles, the realm rule uses the zone or box itself. Tier 0 (base) and Dalaran are always first.",
- "maxTier": 55,
+ "maxTier": 56,
  "budgetMB": 6144,
  "lite": {
   "comment": "Item models and textures are worn by everyone (spec kits, free Armory gear) and there are too many to pick from, so all of them ship, with textures cut to their mips of at most maxPx on the long side. --export reports what that saved.",
@@ -22,6 +22,7 @@
     "stormwind",
     "orgrimmar",
     "northshire",
+    "goldshire-inn",
     "valley-of-trials",
     "ebon-hold",
     "naxx-os-voa",
@@ -302,6 +303,37 @@
    ],
    "capture": [
     "Make a human character and log in (Northshire Abbey). Walk the valley: the abbey, the vineyards, Echo Ridge Mine (inside), the wolf meadows, the gate to Elwynn."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "goldshire-inn",
+   "kind": "base",
+   "name": "Goldshire Inn (guest pass)",
+   "notes": "The Leyline guest pass (\"Try it\" on the website, stream/demo.py + realm ov_demo.lua): the Lion's Pride Inn in Goldshire (Elwynn Forest, zone 12, map 0) and the village around it. Kind \"base\" on purpose: it adds files only and opens no place to anyone in the realm rule (ov_slices.lua never lets a stream player into a base tier); guest characters are held in the inn by ov_demo.lua instead. The ground under the box is ADT Azeroth_31_49 and Azeroth_32_49 (x from world y, y from world x), which Northshire's margin already streams, so this tier's own cost is the inn's WMO and doodads (walked from those tiles) and the village's creature and object displays (spawnBox). Next to Northshire in \"order\" so it is exported early.",
+   "maps": [
+    {
+     "id": 0,
+     "box": [
+      -9560,
+      -9360,
+      -100,
+      160
+     ],
+     "marginTiles": 0,
+     "spawnBox": [
+      -9560,
+      -9360,
+      -100,
+      160
+     ],
+     "spawnBoxNote": "x min, x max, y min, y max: Goldshire village (the inn, the smithy, the guards, the regulars)"
+    }
+   ],
+   "capture": [
+    "Log in a guest-pass character (or GM: .tele Goldshire, then walk into the Lion's Pride Inn).",
+    "Walk the inn's ground floor and upstairs rooms, step out onto the porch, turn the camera all the way round.",
+    "With ?boottrace=1 this capture is the guest pass's world-entry read-set (see stream/README-stream.md, Guest pass)."
    ],
    "measuredMB": null
   },

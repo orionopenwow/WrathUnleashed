@@ -240,9 +240,16 @@ export function pageSignedIn(env = window.__wenilla_env) {
   return !!(env && typeof env === 'object' && env.user && env.pass);
 }
 
+/** A Leyline guest pass (/wrath?demo=1, stream/demo.py): /__env.js names the character, so the
+ *  client seats it without the character list (webenv "char"). Read only. */
+export function guestPass(env = window.__wenilla_env) {
+  return pageSignedIn(env) && env.demo === '1';
+}
+
 export function signingIn(wenilla) {
   if (!pageSignedIn()) return;
-  const GIVE_UP_MS = 12000;     // a failed sign-in: the client's own form comes back
+  const guest = guestPass();    // the cover stays up through the character list, into the inn
+  const GIVE_UP_MS = guest ? 30000 : 12000;     // a failed sign-in: the client's own form comes back
   const NO_BRIDGE_MS = 5000;    // without bridge states: about a sign-in's length
   let cover = null, done = false, timer = 0;
   status.signin = 'waiting';
@@ -262,7 +269,8 @@ export function signingIn(wenilla) {
     cover = document.createElement('div');
     cover.id = 'ow-signin';
     cover.setAttribute('role', 'status');
-    cover.innerHTML = '<div><div class="wu-spin" aria-hidden="true"></div>Signing in…</div>';
+    cover.innerHTML = '<div><div class="wu-spin" aria-hidden="true"></div>'
+      + (guest ? 'Opening the Goldshire Inn…' : 'Signing in…') + '</div>';
     document.body.append(cover);
     status.signin = 'shown';
     timer = setTimeout(() => hide(wenilla?.ready ? 'gave up' : 'timer'), wenilla?.ready ? GIVE_UP_MS : NO_BRIDGE_MS);
@@ -276,6 +284,7 @@ export function signingIn(wenilla) {
   wenilla?.on?.('state', (s) => {
     const name = s?.state;
     if (name === 'login' && !done) show();
+    if (guest && name === 'charselect') return;   // the client goes on into the world by itself
     if (name === 'charselect' || name === 'charcreate' || name === 'inworld' || /realm/i.test(name || '')) hide(name);
   });
 }

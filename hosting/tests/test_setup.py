@@ -35,7 +35,7 @@ class Setup(unittest.TestCase):
         self.assertEqual(keys.realm_id(keys.public_key(sec)), cfg["realm_id"])
         self.assertEqual(stat.S_IMODE(os.stat(os.path.join(st, "realm.key")).st_mode), 0o600)
         self.assertEqual(stat.S_IMODE(os.stat(os.path.join(self.kit, ".env")).st_mode), 0o600)
-        self.assertEqual(res["invite"], f"https://openvanilla.app/join/{cfg['realm_id']}#{cfg['invite_secret']}")
+        self.assertEqual(res["invite"], f"https://relay.openvanilla.app/join/{cfg['realm_id']}#{cfg['invite_secret']}")
         self.assertFalse(cfg["warden"])                      # private: browser client friendly
         env = open(os.path.join(self.kit, ".env")).read()
         self.assertIn(f"DB_ROOT_PASSWORD={cfg['db_password']}", env)
@@ -56,7 +56,7 @@ class Setup(unittest.TestCase):
             self.assertEqual(cfg[k], cfg2[k])
         self.assertEqual((cfg2["profile"], cfg2["visibility"], cfg2["warden"], cfg2["name"]),
                          ("brawl", "public", True, "Frost Haven"))
-        self.assertEqual(json.loads(out2)["invite"], f"https://openvanilla.app/join/{cfg['realm_id']}")
+        self.assertEqual(json.loads(out2)["invite"], f"https://relay.openvanilla.app/join/{cfg['realm_id']}")
         rec = json.load(open(os.path.join(st, "beacon.json")))
         self.assertEqual((rec["name"], rec["ruleset"], rec["warden"]), ("Frost Haven", "brawl", True))
         self.assertIn("WU_IMAGE=ov/ac-wotlk", open(os.path.join(self.kit, ".env")).read())

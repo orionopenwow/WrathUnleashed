@@ -25,11 +25,12 @@ import secrets
 import string
 import sys
 
-from wunet import keys, srp6
+from wunet import domains, keys, srp6
 
 KIT = os.environ.get("WU_KIT", "/kit")
 STATE = os.path.join(KIT, "state")
 NAME_RE = re.compile(r"^[A-Za-z0-9 _'-]{1,32}$")
+GM_RE = re.compile(r"^[A-Za-z0-9]{3,16}$")
 PROFILES = {"main": "WrathUnleashed main: normal Wrath from level 1, or a one-time boost to 80",
             "brawl": "Brawl: everyone starts at 80 in Dalaran with everything unlocked",
             "progression": "Progression: blizzlike 1x, Vanilla then TBC then Wrath per character",
@@ -84,8 +85,21 @@ def write_private(name, text):
 
 
 def invite_link(cfg):
-    base = f"{cfg['site']}/join/{cfg['realm_id']}"
+    base = f"{cfg.get('join_base') or cfg['site']}/join/{cfg['realm_id']}"
     return base + (f"#{cfg['invite_secret']}" if cfg["visibility"] == "private" else "")
+
+
+def host_link(cfg):
+    """The host's own join link: the invite plus the host key, so the host (only) can make the GM
+    account from the join page. Never shared."""
+    return f"{cfg.get('join_base') or cfg['site']}/join/{cfg['realm_id']}#{cfg['invite_secret']}~{cfg['host_secret']}"
+
+
+def write_links(cfg):
+    with open(path("invite.txt"), "w", encoding="utf-8") as f:
+        f.write(invite_link(cfg) + "\n")
+    if cfg.get("host_secret"):
+        write_private("host-link.txt", host_link(cfg) + "\n")
 
 
 def read_rules():
@@ -171,10 +185,13 @@ def cmd_init(a):
     secret = keys.load_or_create(path("realm.key"))
     rid = keys.realm_id(keys.public_key(secret))
     first = not cfg
-    relay = a.relay or cfg.get("relay", "relay.openvanilla.app")
+    relay = a.relay or cfg.get("relay", domains.RELAY)
     cfg.update(
         realm_id=rid, name=name.strip(), profile=profile, visibility=vis,
-        relay=relay, site=(a.site or cfg.get("site", "https://openvanilla.app")).rstrip("/"),
+        relay=relay, site=(a.site or cfg.get("site", domains.SITE)).rstrip("/"),
+        # Join pages are served by the relay itself (https://<relay>/join/<id>): no website needed.
+        join_base=(a.join_base or (f"https://{a.relay}" if a.relay else None) or cfg.get("join_base")
+                   or (domains.JOIN if relay == domains.RELAY else f"https://{relay}")).rstrip("/"),
         relay_url=a.relay_url or f"wss://{relay}/agent",
         listing_url=a.listing_url or f"https://{relay}/api/listing/heartbeat",
         auth_service="ac-authserver:3724", world_service="ac-worldserver:8085",
@@ -184,11 +201,28 @@ def cmd_init(a):
         bots=(a.bots if a.bots is not None
               else cfg["bots"] if cfg.get("profile") == profile and "bots" in cfg
               else PROFILE_BOTS.get(profile, 40)),
-        signup=cfg.get("signup", "invite"),
+        # A listed realm is for strangers, so its join page makes accounts ("open"); a friends' realm
+        # only from the invite link. An explicit --signup (or an earlier choice) wins.
+        signup=a.signup or cfg.get("signup") or ("open" if vis == "public" else "invite"),
     )
     cfg.setdefault("invite_secret", gen(20, B32))
+    cfg.setdefault("host_secret", gen(24, B32))   # only in the host's own link (state/host-link.txt)
     cfg.setdefault("db_password", gen(24))
-    if "gm" not in cfg:
+    if a.gm_name is not None:
+        if not GM_RE.match(a.gm_name):
+            sys.exit("GM account name: 3-16 letters or digits")
+        cfg["gm_name"] = a.gm_name.upper()
+    if a.tagline is not None:
+        cfg.setdefault("record", {})["tagline"] = " ".join(a.tagline.split())[:80]
+        b = read_beacon_edits()
+        if b:   # beacon.json is the host's copy of the text: keep it in step
+            b_full = json.load(open(path("beacon.json"), encoding="utf-8-sig"))
+            b_full["tagline"] = cfg["record"]["tagline"]
+            with open(path("beacon.json"), "w", encoding="utf-8") as f:
+                json.dump(b_full, f, indent=1)
+    if "gm" not in cfg and not cfg.get("gm_name"):
+        # Legacy kit flow (Host a Wrath realm.bat): a generated GM login. The leyline command never
+        # does this: it asks for the operator's account name and they make the account themselves.
         user, pw = "HOST" + gen(4), gen(12)
         salt, ver = srp6.make_verifier(user, pw)
         cfg["gm"] = {"username": user, "salt": salt.hex(), "verifier": ver.hex()}
@@ -201,8 +235,7 @@ def cmd_init(a):
     save(cfg)
     write_beacon(cfg)
     write_env(cfg, a.image, a.tag, a.tools_image)
-    with open(path("invite.txt"), "w", encoding="utf-8") as f:
-        f.write(invite_link(cfg) + "\n")
+    write_links(cfg)
     print(json.dumps({"realm_id": rid, "first_run": first, "invite": invite_link(cfg)}))
 
 
@@ -231,14 +264,55 @@ def cmd_show(a):
     else:
         print("            Public: listed in Beacons (unclaimed until you claim it with your Hero Key).")
     if rs.get("connected"):
-        print(f"Relay:      connected. Players' realmlist: {cfg['relay']}   (or {cfg['relay']}:{rs.get('auth_port')})")
+        print(f"Relay:      connected. Players' realmlist: {realmlist_line(cfg, rs)}")
     else:
         print(f"Relay:      not connected yet{(' (' + rs['last_error'] + ')') if rs.get('last_error') else ''}")
+    if cfg.get("gm_name"):
+        ok = rs.get("gm_ok") and rs.get("gm_account") == cfg["gm_name"]
+        print(f"GM account: {cfg['gm_name']}  " + (
+            "(has GM rights on this realm)" if ok else
+            "(not made yet: open your own link below and make this account with your own password; "
+            "it gets GM rights by itself)"))
+        if cfg.get("host_secret"):
+            print(f"Your link:  {host_link(cfg)}")
+            print("            Yours only (it can make the GM account). Friends get the invite link above.")
+        return
     try:
         with open(path("host-login.txt"), encoding="utf-8") as f:
             print(f.read().rstrip())
     except OSError:
         pass
+
+
+def read_relay_state():
+    try:
+        with open(path("relay-state.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def realmlist_line(cfg, rs):
+    """What players type. The shared port 3724 works only where the relay runs it (off on a box whose
+    own authserver has 3724); otherwise the realm's own relay port."""
+    if rs.get("shared_auth_port") == 3724:
+        return f"set realmlist {cfg['relay']}   (or {cfg['relay']}:{rs.get('auth_port')})"
+    if rs.get("auth_port"):
+        return f"set realmlist {cfg['relay']}:{rs['auth_port']}"
+    return "(shown once the realm is connected to the relay)"
+
+
+def cmd_realmlist(a):
+    cfg = load()
+    if cfg:
+        print(realmlist_line(cfg, read_relay_state()).split("   ")[0])
+
+
+def cmd_gm(a):
+    """Name the account that gets GM rights. The operator makes that account; nothing is created here."""
+    if not GM_RE.match(a.name):
+        sys.exit("GM account name: 3-16 letters or digits")
+    _edit(lambda c: c.update(gm_name=a.name.upper()))
 
 
 def cmd_get(a):
@@ -268,8 +342,7 @@ def _edit(fn):
     cfg["record"] = beacon_record(cfg)
     save(cfg)
     write_beacon(cfg)
-    with open(path("invite.txt"), "w", encoding="utf-8") as f:
-        f.write(invite_link(cfg) + "\n")
+    write_links(cfg)
     print(invite_link(cfg))
 
 
@@ -314,7 +387,15 @@ def main(argv=None):
     p.add_argument("--relay-url", help="override wss://<relay>/agent (tests, self-hosted relays)")
     p.add_argument("--listing-url", help="override https://<relay>/api/listing/heartbeat")
     p.add_argument("--warden", choices=["on", "off"])
+    p.add_argument("--join-base", help="where join pages live (default https://<relay>)")
+    p.add_argument("--gm-name", help="the operator's own account name that gets GM rights (they make it)")
+    p.add_argument("--tagline", help="one line for the realm list")
+    p.add_argument("--signup", choices=["invite", "open", "off"])
     p.set_defaults(fn=cmd_init)
+    p = sub.add_parser("gm")
+    p.add_argument("name")
+    p.set_defaults(fn=cmd_gm)
+    sub.add_parser("realmlist").set_defaults(fn=cmd_realmlist)
     sub.add_parser("show").set_defaults(fn=cmd_show)
     sub.add_parser("get").set_defaults(fn=cmd_get)
     p = sub.add_parser("friend")

@@ -34,7 +34,7 @@ import signal
 import sys
 import time
 
-from wunet import keys, mux, ws
+from wunet import domains, keys, mux, ws
 from wunet.mux import CLOSE, DATA, OPEN
 
 from . import httpd, listing
@@ -57,7 +57,7 @@ def _env_int(name, default):
 class Config:
     def __init__(self, **over):
         e = os.environ.get
-        self.name = e("RELAY_NAME", "relay.openvanilla.app")   # public DNS name (A record only!)
+        self.name = e("RELAY_NAME", domains.RELAY)   # public DNS name (A record only!)
         self.http_bind = e("RELAY_HTTP_BIND", "127.0.0.1:8080")  # Caddy proxies https here
         self.game_bind = e("RELAY_GAME_BIND", "0.0.0.0")         # raw TCP game ports
         self.shared_auth_port = _env_int("RELAY_SHARED_AUTH_PORT", 3724)  # 0 = off
@@ -70,8 +70,11 @@ class Config:
         self.trusted_proxies = e("RELAY_TRUSTED_PROXIES", "127.0.0.1/32,::1/128")
         self.allow_file = e("RELAY_ALLOW_FILE", "")             # realm ids; empty = open registration
         self.block_file = e("RELAY_BLOCK_FILE", "")             # realm ids refused and delisted (re-read every minute)
-        self.site_origins = [o for o in e("RELAY_SITE_ORIGINS", "https://openvanilla.app").split(",") if o]
-        self.site_url = e("RELAY_SITE_URL", "https://openvanilla.app")
+        self.site_origins = [o for o in e("RELAY_SITE_ORIGINS", domains.SITE).split(",") if o]
+        self.site_url = e("RELAY_SITE_URL", domains.SITE)
+        # Join pages: the relay serves /join/<id> itself, so links work without the website.
+        self.join_base = e("RELAY_JOIN_BASE", "")   # empty = https://<name>
+
         self.listing = e("RELAY_LISTING", "1") == "1"
         self.listing_site_secret = e("RELAY_LISTING_SITE_SECRET", "")
         # --- limits per realm
@@ -100,6 +103,7 @@ class Config:
             if not hasattr(self, k):
                 raise AttributeError(k)
             setattr(self, k, v)
+        self.join_base = (self.join_base or f"https://{self.name}").rstrip("/")
         nets = self.trusted_proxies if isinstance(self.trusted_proxies, (list, tuple)) else self.trusted_proxies.split(",")
         self.trusted_proxies = [ipaddress.ip_network(str(n).strip(), strict=False) for n in nets if str(n).strip()]
 
@@ -211,6 +215,7 @@ class Session:
         self.visibility = hello["visibility"]
         self.invite_sha = (hello.get("invite_sha256") or "").lower() or None
         self.signup = hello.get("signup", "invite")
+        self.host_sha = (hello.get("host_sha256") or "").lower() or None
         self.version = str(hello.get("version", ""))[:40]
         self.alloc = alloc
         self.streams: dict[int, Stream] = {}
@@ -577,7 +582,7 @@ class Relay:
                               "daily_gb": self.cfg.daily_gb, "stream_idle_secs": self.cfg.stream_idle,
                               "ping_secs": 20, "ctrl_idle_secs": self.cfg.ctrl_idle},
                    "visibility": s.visibility,
-                   "join_url": f"{self.cfg.site_url}/join/{rid}",
+                   "join_url": f"{self.cfg.join_base}/join/{rid}",
                    "status_url": f"https://{self.cfg.name}/r/{rid}/status.json"}
         sock.send_nowait(json.dumps({"welcome": welcome}))
         log.info("realm online realm=%s name=%r vis=%s ports=%d/%d", rid, s.name, s.visibility,
@@ -613,6 +618,9 @@ class Relay:
         inv = h.get("invite_sha256")
         if inv is not None and not (isinstance(inv, str) and HEX64_RE.match(inv)):
             return ("bad invite hash", 3600), None
+        hs = h.get("host_sha256")
+        if hs is not None and not (isinstance(hs, str) and HEX64_RE.match(hs)):
+            return ("bad host hash", 3600), None
         if h["visibility"] == "private" and not inv:
             return ("a private realm needs an invite secret", 3600), None
         if h.get("signup", "invite") not in SIGNUPS:
@@ -676,8 +684,12 @@ class Relay:
             s.invite_sha = (u["invite_sha256"] or "").lower() or None
         if u.get("signup") in SIGNUPS:
             s.signup = u["signup"]
+        if isinstance(u.get("host_sha256"), str) and HEX64_RE.match(u["host_sha256"]):
+            s.host_sha = u["host_sha256"].lower()
         if isinstance(u.get("name"), str) and NAME_RE.match(u["name"]):
             s.name = u["name"]
+        if s.visibility == "private" and self.listing:
+            self.listing.delist(s.realm_id)   # gone from the public list at once, not after 24 h
         log.info("realm updated realm=%s vis=%s", s.realm_id, s.visibility)
 
     # ---------------------------------------------------------------- HTTP
@@ -833,6 +845,9 @@ class Relay:
         if not s:
             return httpd.response(404, {"error": "realm offline"}, headers=h)
         invited = self.invite_ok(s, doc.get("invite"))
+        hk = doc.get("host")
+        is_host = bool(isinstance(hk, str) and hk and s.host_sha
+                       and hmac.compare_digest(hashlib.sha256(hk.encode()).hexdigest(), s.host_sha))
         if s.signup == "off" or (s.signup == "invite" and not invited) or (s.visibility == "private" and not invited):
             return httpd.response(403, {"error": "this realm makes accounts only from its invite link"
                                         if s.signup != "off" else "the host makes accounts on this realm"}, headers=h)
@@ -845,9 +860,12 @@ class Relay:
         if not self.acct_realm.hit(rid, self.cfg.accounts_per_realm_day):
             return httpd.response(429, {"error": "this realm made enough accounts today"}, headers=h)
         try:
-            res = await s.request("create_account", username=user.upper(), salt=salt.lower(), verifier=ver.lower())
+            res = await s.request("create_account", username=user.upper(), salt=salt.lower(), verifier=ver.lower(),
+                                  host=is_host)
         except (asyncio.TimeoutError, ConnectionError, ws.WSClosed):
             return httpd.response(504, {"error": "the realm did not answer"}, headers=h)
+        if res.get("error") == "reserved":
+            return httpd.response(403, {"error": "that account name is kept for the realm's host"}, headers=h)
         if not res.get("ok"):
             return httpd.response(409 if res.get("error") == "taken" else 502,
                                   {"error": "that account name is taken" if res.get("error") == "taken"

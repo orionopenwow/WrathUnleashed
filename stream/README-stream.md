@@ -218,6 +218,34 @@ with synchronous XHR, which Chromium does not send through service workers, and 
 be evicted at any time. `sections.js` answers those reads from the cache through a worker and a
 SharedArrayBuffer (the design `ownfiles.js` uses).
 
+## Guest pass: "Try Leyline in the Goldshire Inn" (off by default)
+
+A visitor with no account clicks **Try it** (the section in `demo.py`, `section_html()` +
+`SECTION_CSS`, for the bottom of the main page; preview at `/wrath/demo`) and lands in the Goldshire
+Inn. `/wrath?demo=1` takes a free pass from the operator's pool, gives its account a fresh random
+password over SOAP, opens it on the realm (`ovdemo begin`, `realm/custom/lua_scripts/ov_demo.lua`) and
+sends the visitor through the usual one-time-code gate to `/?demo=1`. `/__env.js` then carries
+`char` (the pass's character) and `demo: "1"`, so the client seats the character with no character
+list. One visitor per pass, at most `WU_DEMO_PER_HOUR` (3) new passes per IP per hour, a pass lasts
+`WU_DEMO_MINUTES` (20); then the guest is logged out, the password changed again, and after a minute's
+rest the pass is free. ov_demo.lua keeps guests inside the inn and turns off trade, mail, groups,
+whispers, channels and yells. Guest accounts are not stream-marked (ov_slices.lua ignores them).
+
+Note: a guest pass is a session without a sign-in, so it opens the same gated slice to visitors
+without an account. Turning it on is the owner's decision; the data served is the same slice.
+
+Operator, once (`server/demo-pool.sh` explains each step):
+1. Deploy `ov_demo.lua` with the realm's other scripts, then `soap-cmd.sh "reload ale"`.
+2. Re-export and upload the slice ("Make mini slice.bat") so the `goldshire-inn` tier is in it, then
+   `bash stream-up.sh` (it also installs `demo.py` beside `wrath_portal.py`).
+3. In the game, make a plain level-1 human, walk it into the Lion's Pride Inn and log out there. Check
+   the arrival spot with `.gps` against `INN` in ov_demo.lua.
+4. `bash /srv/wrath/stream/demo-pool.sh make 12 <ThatCharacter>`: LYDEMO01..12 with a copy of it each,
+   listed in `/srv/wrath/portal/demo-pool.txt` (names only, no passwords).
+5. `bash /srv/wrath/stream/demo-pool.sh on` (`off` closes it and logs every guest out).
+6. Optional, for a faster first visit: with a guest pass open, capture the world-entry read-set
+   (`?boottrace=1`, the inn walk in the tier's `capture`) into `slices/world-manifest.json`.
+
 ## Things to know
 
 - **One source address**: all browser players reach the authserver and worldserver from the server

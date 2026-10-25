@@ -18,12 +18,15 @@ echo "== 1/2 sign-in page (wu-portal)"
 cp -p "$WU/portal/wrath_portal.py" "$BK/wrath_portal.py"
 had_links=""
 if [ -f "$WU/portal/links.py" ]; then cp -p "$WU/portal/links.py" "$BK/links.py"; had_links=1; fi
+had_demo=""
+if [ -f "$WU/portal/demo.py" ]; then cp -p "$WU/portal/demo.py" "$BK/demo.py"; had_demo=1; fi
 had_art=""
 rm -rf "$BK/art"
 if [ -d "$WU/portal/art" ]; then cp -a "$WU/portal/art" "$BK/art"; had_art=1; fi
 put_back() {
   cp -p "$BK/wrath_portal.py" "$WU/portal/wrath_portal.py"
   if [ -n "$had_links" ]; then cp -p "$BK/links.py" "$WU/portal/links.py"; else rm -f "$WU/portal/links.py"; fi
+  if [ -n "$had_demo" ]; then cp -p "$BK/demo.py" "$WU/portal/demo.py"; else rm -f "$WU/portal/demo.py"; fi
   rm -rf "$WU/portal/art"
   if [ -n "$had_art" ]; then cp -a "$BK/art" "$WU/portal/art"; fi
 }
@@ -31,6 +34,8 @@ python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' wrath_portal.
 install -m 644 wrath_portal.py "$WU/portal/wrath_portal.py"
 # the share links (/wrath/r/<id> and friends): optional, the portal runs without them
 if [ -f links.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' links.py && install -m 644 links.py "$WU/portal/links.py"; fi
+# the guest pass (demo.py): off unless portal.env has WU_GUEST_DEMO=1
+if [ -f demo.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' demo.py && install -m 644 demo.py "$WU/portal/demo.py"; fi
 if [ -d www-files/art ] && [ -f www-files/art/wu-theme.css ]; then
   install -d -m 755 "$WU/portal/art"
   install -m 644 www-files/art/* "$WU/portal/art/"

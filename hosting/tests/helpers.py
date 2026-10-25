@@ -55,6 +55,7 @@ class FakeDB:
         self.realm = realm
         self.address_calls = []
         self.fail_address = 0
+        self.gm = {}          # USER -> gmlevel (account_access)
 
     def set_realm_address(self, name, address, port):
         if self.fail_address:
@@ -72,6 +73,17 @@ class FakeDB:
         if username.upper() in self.realm.accounts:
             return "taken"
         self.realm.add_account_raw(username, bytes.fromhex(salt), bytes.fromhex(verifier))
+        if gmlevel:
+            self.gm[username.upper()] = gmlevel
+        return "ok"
+
+    def grant_gm(self, username, gmlevel=3):
+        u = username.upper()
+        if u not in self.realm.accounts:
+            return "missing"
+        if self.gm.get(u) == gmlevel:
+            return "unchanged"
+        self.gm[u] = gmlevel
         return "ok"
 
     def status(self):

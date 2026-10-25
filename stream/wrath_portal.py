@@ -90,6 +90,7 @@ import base64
 import collections
 import hashlib
 import html
+import importlib.util
 import json
 import logging
 import os
@@ -422,6 +423,8 @@ def env_js(sess: dict) -> bytes:
                "slice": sess["slice"], "slice_tier": str(sess["tier"])}
     env["moderncombos"] = "1"   # character create offers the realm's 83 retail race/class pairs
     env["foreverui"] = FOREVERUI  # Forever UI on (the client reads this before its query string)
+    if guest and sess.get("mode") == "demo":
+        env.update(guest.env_extra(sess))  # the guest pass's character: no character select
     body = json.dumps(env, separators=(",", ":")).replace("<", "\\u003c")
     out = f"window.__wenilla_env = {body};\n"
     # The env object outranks the query string in the client, so ?foreverui=0 (or 1) is copied in.
@@ -1388,7 +1391,7 @@ class PageHandler(BaseHTTPRequestHandler):
             self.redirect(f"https://{PUBLIC_HOST}/wrath")
             return
         sess = sessions.get(sid) or {}
-        land = "/?ownfiles=1" if sess.get("mode") == OWN else "/"
+        land = "/?ownfiles=1" if sess.get("mode") == OWN else ("/?demo=1" if sess.get("mode") == "demo" else "/")
         go = go_param(query)
         if go:
             land += ("&" if "?" in land else "?") + go[1:]
@@ -1435,6 +1438,27 @@ class PageHandler(BaseHTTPRequestHandler):
             self.send(401, body, "application/javascript; charset=utf-8", same_origin=True)
             return
         self.send(200, env_js(sess), "application/javascript; charset=utf-8", same_origin=True)
+
+    def demo(self, path: str) -> None:
+        """GET /wrath?demo=1 (a guest pass) and /wrath/demo (the "Try it" section): stream/demo.py."""
+        ip = self.ip()
+        if not page_limit.hit(ip, 120) or not gate_limit.hit("demo:" + ip, 20):
+            self.send(429, busy_page())
+            return
+        if not guest:
+            self.send(404, error_page("Guest passes aren't set up here."))
+            return
+        if path == "/wrath/demo":
+            self.send(200, guest.preview())
+            return
+        if self.command == "HEAD":
+            self.send(200, b"")
+            return
+        kind, *rest = guest.start(ip)
+        if kind == "redirect":
+            self.redirect(rest[0])
+        else:
+            self.send(rest[0], rest[1])
 
     def do_HEAD(self):  # noqa: N802
         self.do_GET()
@@ -1498,6 +1522,9 @@ class PageHandler(BaseHTTPRequestHandler):
                 self.send(429, busy_page())
                 return
             self.send(200, realms_page())
+            return
+        if path == "/wrath/demo" or (path == "/wrath" and (query.get("demo") or [""])[0] == "1"):
+            self.demo(path)
             return
         if path not in ("/wrath", "/wrath/account"):
             self.send(404, b"not found\n", "text/plain")
@@ -1610,6 +1637,25 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self.reply(500 if e.kind == "fault" else 503, soap_reply(False, e.detail or e.kind))
 
 
+def _load_guest():
+    """The guest pass (stream/demo.py, beside this file; optional: without it the routes answer 404)."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "demo.py")
+    if not os.path.isfile(path):
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location("wu_demo", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        css = lambda: LEYLINE_CSS.replace("ART_BG", art_url("leyline-bg.webp")).replace("ART_FONT", art_url("Cinzel-SemiBold.woff2"))
+        return mod.Demo(mod.SoapBackend(ac_soap, SoapError), sessions, slice_info, stream_on, lambda: STREAM_HOST, css)
+    except Exception:  # noqa: BLE001: the rest of the page must still start
+        log.exception("demo.py did not load: guest passes are off")
+        return None
+
+
+guest = _load_guest()
+
+
 def main() -> int:
     logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     if not SOAP_USER or not SOAP_PASS:
@@ -1621,6 +1667,8 @@ def main() -> int:
     page = ThreadingHTTPServer(("0.0.0.0", PAGE_PORT), PageHandler)
     page.daemon_threads = True
     log.info("page :%d, bridge :%d, ac soap %s, portal %s", PAGE_PORT, BRIDGE_PORT, AC_SOAP_URL, PORTAL_URL)
+    if guest:
+        guest.start_thread()
     try:
         page.serve_forever()
     except KeyboardInterrupt:

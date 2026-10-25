@@ -429,7 +429,7 @@ def render(body: str, nonce: str = "", script: str = "") -> bytes:
 
 def signed_out_page() -> bytes:
     return render(
-        f'<h1>{html.escape(REALM_NAME)}</h1><p class="sub">Wrath of the Lich King 3.3.5a</p>'
+        f'<h1>{html.escape(REALM_NAME)}</h1><p class="sub">Wrath 3.3.5a</p>'
         '<p><a class="btn" href="/login?next=%2Fwrath">Sign in with Google or your Hero Key</a></p>'
         '<p class="fine">Already played on Open Vanilla? Use the same sign-in. Your Wrath login appears here.</p>')
 

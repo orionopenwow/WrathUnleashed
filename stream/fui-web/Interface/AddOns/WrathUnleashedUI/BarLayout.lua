@@ -1,15 +1,17 @@
 -- Bar layout fixes on top of Forever UI (3.3.5a API), from live screenshots (2026-10-25 01:15):
 --  * Bottom left / bottom right bars: Forever UI puts them side by side with offsets from a fixed
---    main-bar width, which drift right of our main bar. Here they stack straight above the main
---    bar's 12 buttons, like today's default layout (bar 2 above bar 1, bar 3 above bar 2), and the
---    stance, pet and totem bars rise above both rows (MultiBars.Lift).
+--    main-bar width, which drift right of our main bar. Here they sit side by side in ONE row just
+--    above the main bar (owner, 03:27: "next to each other", not stacked): the Shift bar starts at
+--    the main bar's left edge, the Ctrl bar right after it, both measured from the real frames.
+--    The stance, pet and totem bars rise above that one row (MultiBars.Lift).
 --  * Right bars: 9 units further in, so their key labels stay on screen.
 --  * Totem bar: only for a shaman from level 30 (Call of the Elements); before that it showed as
 --    a stray "Fire" button.
 -- A bar the player moved in edit mode keeps its place (Layout.IsDefault). Secure frames: out of
 -- combat only.
 
-local ROW_Y, ROW_STEP = 84, 45 + 4
+local ROW_Y, ROW_STEP, COL_GAP = 70, 45 + 4, 6
+local BUTTONS, PITCH = 12, 47   -- fallback width when a bar frame can't be measured yet
 local RIGHT_X, RIGHT_GAP = -14, 5
 
 local function F() return ForeverUI end
@@ -23,8 +25,14 @@ local function stacked()
     if not left or not width or width <= 0 then return end
     local x = left * (holder:GetEffectiveScale() / UIParent:GetEffectiveScale()) - width / 2
     local b1, b2, r1, r2 = M.bars[1], M.bars[2], M.bars[3], M.bars[4]
+    -- bar 1's width in UIParent units (its own frame when it has one, else 12 buttons)
+    local w1 = BUTTONS * PITCH
+    local fr = b1 and b1.frame
+    if fr and fr.GetWidth and fr:GetWidth() and fr:GetWidth() > 0 then
+        w1 = fr:GetWidth() * (fr:GetEffectiveScale() / UIParent:GetEffectiveScale())
+    end
     if b1 then b1.x, b1.y = x, ROW_Y end
-    if b2 then b2.x, b2.y = x, ROW_Y + ROW_STEP end
+    if b2 then b2.x, b2.y = x + w1 + COL_GAP, ROW_Y end
     if r1 then r1.x = RIGHT_X end
     if r2 then r2.x = RIGHT_X - 45 - RIGHT_GAP end
     local L = F().Layout
@@ -36,7 +44,7 @@ local function stacked()
     return true
 end
 
--- Both bottom bars shown: the bars above them rise two rows, not one.
+-- The bottom bars share one row: the bars above them rise one row when either is shown.
 local function patchLift()
     local M = F() and F().MultiBars
     if not M or M.wuLift then return end
@@ -49,7 +57,7 @@ local function patchLift()
                 n = n + 1
             end
         end
-        return n * ROW_STEP
+        return n > 0 and ROW_STEP or 0
     end
 end
 

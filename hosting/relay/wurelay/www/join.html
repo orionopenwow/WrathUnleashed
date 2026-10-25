@@ -34,7 +34,7 @@
 <body>
 <main>
   <h1 id="name">Joining a realm…</h1>
-  <p class="sub" id="sub">A WrathUnleashed (3.3.5a) realm hosted by a player, reached through the Open Vanilla relay.</p>
+  <p class="sub" id="sub">A Beacon: a 3.3.5a realm hosted by a player, reached through the Leyline relay.</p>
 
   <div class="card" id="state-card">
     <h2>1. This computer is let in</h2>
@@ -53,11 +53,12 @@
       <div id="acct-msg" class="msg"></div>
     </form>
     <p class="small">Already have an account on this realm? Skip this step.</p>
+    <p class="small" id="host-note" hidden>This is the host's own link: make your account with the GM account name you chose when you set up the realm. It gets GM rights by itself within a few seconds. Don't share this link; send friends the invite link instead.</p>
   </div>
 
   <div class="card" id="play-card" hidden>
     <h2>3. Play</h2>
-    <p>Use your own World of Warcraft 3.3.5a game files. In the game folder, open <code>Data\enUS\realmlist.wtf</code> (or your language's folder) and make it this one line:</p>
+    <p>Use your own 3.3.5a game files. In the game folder, open <code>Data\enUS\realmlist.wtf</code> (or your language's folder) and make it this one line:</p>
     <div class="line"><code id="realmlist">set realmlist …</code><button class="ghost" data-copy="realmlist">Copy</button></div>
     <ol class="small">
       <li>Start the game and log in with the account from step 2.</li>
@@ -66,7 +67,7 @@
     </ol>
   </div>
 
-  <p class="small">Open Vanilla never sends game files. Your IP address is not shown to the host, and the host's is not shown to you.</p>
+  <p class="small">Leyline never sends game files. Your IP address is not shown to the host, and the host's is not shown to you.</p>
 </main>
 <script>
 "use strict";
@@ -75,7 +76,9 @@
   const parts = location.pathname.split("/").filter(Boolean);
   const qs = new URLSearchParams(location.search);
   const realmId = (parts[0] === "join" && parts[1]) || qs.get("r") || "";
-  const invite = decodeURIComponent((location.hash || "").slice(1));
+  // #<invite secret>, or the host's own link: #<invite secret>~<host key> (lets the host make the GM account)
+  const frag = decodeURIComponent((location.hash || "").slice(1)).split("~");
+  const invite = frag[0] || "", hostKey = frag[1] || "";
   const relay = (qs.get("relay") && /^https:\/\/[a-z0-9.-]+$/i.test(qs.get("relay"))) ? qs.get("relay")
               : (location.hostname.startsWith("relay.") ? location.origin : RELAY_DEFAULT);
   const $ = (id) => document.getElementById(id);
@@ -119,6 +122,7 @@
     $("hours").textContent = k.doc.valid_hours || 24;
     $("play-card").hidden = false;
     if (k.doc.signup !== "off" && (k.doc.signup === "open" || invite)) $("account-card").hidden = false;
+    if (hostKey) { $("account-card").hidden = false; $("host-note").hidden = false; }
   }
 
   $("acct").addEventListener("submit", async (ev) => {
@@ -130,7 +134,9 @@
     try {
       const salt = crypto.getRandomValues(new Uint8Array(32));
       const v = await verifier(user, pass, salt);
-      const r = await api("/api/realms/" + realmId + "/accounts", { invite, username: user, salt: hex(salt), verifier: hex(v) });
+      const body = { invite, username: user, salt: hex(salt), verifier: hex(v) };
+      if (hostKey) body.host = hostKey;
+      const r = await api("/api/realms/" + realmId + "/accounts", body);
       if (r.status === 201) say($("acct-msg"), "Account " + r.doc.username + " is ready. Log in with it in the game.", "ok");
       else { say($("acct-msg"), r.doc.error || ("The realm said no (" + r.status + ")."), "bad"); $("mk").disabled = false; }
     } catch (e) { say($("acct-msg"), "Something went wrong: " + e.message, "bad"); $("mk").disabled = false; }

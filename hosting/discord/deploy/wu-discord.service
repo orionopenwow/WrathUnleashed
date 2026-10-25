@@ -1,0 +1,33 @@
+# Leyline Discord bridge: the Wrath realm's World chat <-> one Discord channel, plus the .bug feed.
+# Installed by discord-up.sh (code in /opt/wu-discord/app, settings in /opt/wu-discord/discord.env).
+# The install never enables it: the owner turns it on with  systemctl enable --now wu-discord
+[Unit]
+Description=Leyline Discord bridge (World chat and bug feed)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=wu-discord
+EnvironmentFile=/opt/wu-discord/discord.env
+Environment=PYTHONPATH=/opt/wu-discord/app PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m wudiscord.bridge
+Restart=always
+RestartSec=10
+# exit 2 = settings missing, 3 = token or SOAP login refused: no restart loop against Discord with a bad token
+RestartPreventExitStatus=2 3
+StateDirectory=wu-discord
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+MemoryMax=128M
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

@@ -29,7 +29,10 @@ WU_LOCAL_TAG="${WU_LOCAL_TAG:-custom}"
 WU_TOOLS_PREBUILT="${WU_TOOLS_PREBUILT:-ghcr.io/orionopenwow/wu-host-tools:1}"
 WU_TOOLS_IMAGE="${WU_TOOLS_IMAGE:-wu-host-tools:1}"
 WU_EXTRACT_IMAGE="${WU_EXTRACT_IMAGE:-acore/ac-wotlk-tools:master}"
-WU_RELAY="${WU_RELAY:-relay.openvanilla.app}"
+# Leyline's addresses live in one file (tools/wunet/leyline.env: LEYLINE_DOMAIN=...).
+LEYLINE_DOMAIN="${LEYLINE_DOMAIN:-$(sed -n 's/^LEYLINE_DOMAIN=\([^ #]*\).*/\1/p' "$KIT/tools/wunet/leyline.env" 2>/dev/null | head -1)}"
+LEYLINE_DOMAIN="${LEYLINE_DOMAIN:-openvanilla.app}"
+WU_RELAY="${WU_RELAY:-${LEYLINE_RELAY:-relay.$LEYLINE_DOMAIN}}"
 ARAC_REPO="https://github.com/heyitsbench/mod-arac"
 ARAC_COMMIT="3f605e09c656eb3b620ef2d70c7ef61808c1cfb0"      # = realm/custom/sources.lock
 COMPOSE=(docker compose -f "$KIT/docker-compose.host.yml" --project-directory "$KIT")
@@ -41,13 +44,20 @@ step() { printf '\n%s== %s%s\n' "$B" "$*" "$N"; }
 die()  { printf '%sProblem: %s%s\n' "$R" "$*" "$N" >&2; exit 1; }
 run()  { if [ "$DRY" = 1 ]; then printf 'DRY: %s\n' "$*"; else "$@"; fi; }
 export WU_UID="$(id -u)" WU_GID="$(id -g)"   # state/ files stay yours; the agent runs as you
-tools() { run docker run --rm --user "$WU_UID:$WU_GID" -v "$KIT:/kit" -e WU_KIT=/kit -e WU_UID -e WU_GID "$WU_TOOLS_IMAGE" python -m wuhost.setup "$@"; }
+tools() {
+  if [ "${LEYLINE_LOCAL_TOOLS:-0}" = 1 ]; then   # this PC's python3 instead of the tools image (tests, no Docker)
+    PYTHONPATH="$KIT/tools" WU_KIT="$KIT" python3 -m wuhost.setup "$@"; return
+  fi
+  run docker run --rm --user "$WU_UID:$WU_GID" -v "$KIT:/kit" -e WU_KIT=/kit -e WU_UID -e WU_GID "$WU_TOOLS_IMAGE" python -m wuhost.setup "$@"
+}
 
 need_docker() {
   command -v docker >/dev/null 2>&1 || die "Docker is not installed. Get Docker Desktop (Mac) or Docker Engine (Linux), then run this again."
   docker info >/dev/null 2>&1 || die "Docker is installed but not running. Start it, then run this again."
   docker compose version >/dev/null 2>&1 || die "This Docker has no 'docker compose'. Update Docker."
 }
+
+need_tools() { [ "${LEYLINE_LOCAL_TOOLS:-0}" = 1 ] || need_docker; }
 
 ask() {  # ask VAR "question" default [choices...]
   local var="$1" q="$2" def="$3"; shift 3
@@ -84,6 +94,11 @@ pick_images() {
     say "  WrathUnleashed's modules (bots, boost, transmog...). Ask for the prebuilt images, or build them"
     say "  with realm/'Build custom realm.bat'.${N}"
   fi
+  ensure_tools
+}
+
+ensure_tools() {
+  [ "${LEYLINE_LOCAL_TOOLS:-0}" = 1 ] && return 0
   if [ "$WU_TOOLS_IMAGE" = "wu-host-tools:1" ]; then
     if run docker pull -q "$WU_TOOLS_PREBUILT" >/dev/null 2>&1; then
       run docker tag "$WU_TOOLS_PREBUILT" "$WU_TOOLS_IMAGE"
@@ -102,7 +117,7 @@ find_wow() {
     [ -n "$d" ] && [ -f "$d/Data/lichking.MPQ" -o -f "$d/Data/lichking.mpq" ] && { printf '%s' "$d"; return; }
   done
   if [ -t 0 ]; then
-    read -r -p "Where is your World of Warcraft 3.3.5a folder? " d || true
+    read -r -p "Where is your 3.3.5a game folder (the one with Data/ in it)? " d || true
     [ -f "$d/Data/lichking.MPQ" -o -f "$d/Data/lichking.mpq" ] && { printf '%s' "$d"; return; }
   fi
   return 1
@@ -115,7 +130,7 @@ client_data() {
     say "  Already extracted."
   else
     local wow
-    wow="$(find_wow)" || die "No 3.3.5a game folder found. Run again with WU_WOW_DIR=/path/to/your/WoW folder."
+    wow="$(find_wow)" || die "No 3.3.5a game folder found. Run again with WU_WOW_DIR=/path/to/your/3.3.5a/game/folder."
     say "  Extracting dbc + maps from $wow (a few minutes)..."
     run docker run --rm --user root -v "$wow:/wow:ro" -v ov-client-data:/out -w /out "$WU_EXTRACT_IMAGE" \
       /azerothcore/env/dist/bin/map_extractor -i /wow -o /out || die "Extracting the game data failed."
@@ -166,8 +181,8 @@ profile_sql() {
 }
 
 cmd_up() {
-  need_docker
-  [ -f "$KIT/realm-files/profiles/main.env" ] || die "This kit has no realm-files/ (run make-kit first, or download the full kit)."
+  [ "${WU_CONFIG_ONLY:-0}" = 1 ] && [ "${LEYLINE_LOCAL_TOOLS:-0}" = 1 ] || need_docker
+  [ "${WU_CONFIG_ONLY:-0}" = 1 ] || [ -f "$KIT/realm-files/profiles/main.env" ] || die "This kit has no realm-files/ (run make-kit first, or download the full kit)."
   WU_NAME="${WU_NAME:-$(state_get name)}"
   WU_PROFILE="${WU_PROFILE:-$(state_get profile)}"
   WU_VISIBILITY="${WU_VISIBILITY:-$(state_get visibility)}"
@@ -175,9 +190,25 @@ cmd_up() {
   ask WU_NAME "Realm name" "My Wrath Realm"
   ask WU_PROFILE "Profile: main (level 1 or boost to 80), brawl (everyone 80), progression (Vanilla->TBC->Wrath), dalaran (light hangout, no bots)" "main" main brawl progression dalaran
   ask WU_VISIBILITY "Private (friends with your link) or public (listed in Beacons)" "private" private public
-  pick_images
+  local extra=()
+  [ -n "${WU_GM_NAME:-}" ] && extra+=(--gm-name "$WU_GM_NAME")
+  [ -n "${WU_TAGLINE:-}" ] && extra+=(--tagline "$WU_TAGLINE")
+  [ -n "${WU_SIGNUP:-}" ] && extra+=(--signup "$WU_SIGNUP")
+  [ -n "${WU_RELAY_URL:-}" ] && extra+=(--relay-url "$WU_RELAY_URL")         # a self-hosted or test relay
+  [ -n "${WU_LISTING_URL:-}" ] && extra+=(--listing-url "$WU_LISTING_URL")
+  [ -n "${WU_JOIN_BASE:-}" ] && extra+=(--join-base "$WU_JOIN_BASE")
+  if [ "${WU_CONFIG_ONLY:-0}" = 1 ]; then
+    IMG="${WU_IMAGE}"; TAG="${WU_TAG}"
+    ensure_tools
+  else
+    pick_images
+  fi
   tools init --name "$WU_NAME" --profile "$WU_PROFILE" --visibility "$WU_VISIBILITY" --image "$IMG" --tag "$TAG" \
-        --tools-image "$WU_TOOLS_IMAGE" --relay "$WU_RELAY" >/dev/null || die "Setup failed (see above)."
+        --tools-image "$WU_TOOLS_IMAGE" --relay "$WU_RELAY" ${extra[@]+"${extra[@]}"} >/dev/null || die "Setup failed (see above)."
+  if [ "${WU_CONFIG_ONLY:-0}" = 1 ]; then
+    say "  Config written (state/host.json, state/rules.txt, .env). Not starting (WU_CONFIG_ONLY=1)."
+    return 0
+  fi
   client_data
   step "Starting the realm (the first start imports the databases: 5-20 minutes)"
   local t0; t0=$(date -u +%Y-%m-%dT%H:%M:%S)
@@ -202,9 +233,13 @@ cmd_up() {
   tools show || true
   say ""
   say "Send your friends the invite link above. They open it once, make an account there, then play with"
-  say "  set realmlist $WU_RELAY"
+  say "  $(tools realmlist 2>/dev/null || echo "set realmlist $WU_RELAY")   (the join page shows the same line)"
   say "Check everything with: bash host-wrath-realm.sh check"
-  say "Your realm's rules: state/rules.txt (then: bash host-wrath-realm.sh rules). Your GM login: state/host-login.txt"
+  if [ -n "$(state_get gm_name)" ]; then
+    say "Your realm's rules: state/rules.txt (then: bash host-wrath-realm.sh rules)."
+  else
+    say "Your realm's rules: state/rules.txt (then: bash host-wrath-realm.sh rules). Your GM login: state/host-login.txt"
+  fi
 }
 
 cmd_check() {
@@ -222,14 +257,14 @@ cmd_friend() {
 case "${1:-up}" in
   up|start|setup) shift || true; cmd_up "$@" ;;
   check) shift; cmd_check "$@" ;;
-  show) need_docker; tools show ;;
+  show) need_tools; tools show ;;
   stop) need_docker; run "${COMPOSE[@]}" stop; say "Stopped. Characters and accounts are kept; start again any time." ;;
   friend) shift; cmd_friend "$@" ;;
-  new-invite) need_docker; tools new-invite ;;
-  public|private) need_docker; tools visibility "$1"; say "Restart for the anti-cheat setting: bash host-wrath-realm.sh" ;;
-  signup) need_docker; [ $# -ge 2 ] || die "Usage: bash host-wrath-realm.sh signup invite|open|off"; tools signup "$2" ;;
-  rules) need_docker; tools rules ;;
-  claim) need_docker; [ $# -ge 2 ] || die "Usage: bash host-wrath-realm.sh claim TOKEN"; tools claim "$2" ;;
+  new-invite) need_tools; tools new-invite ;;
+  public|private) need_tools; tools visibility "$1"; say "Restart for the anti-cheat setting: bash host-wrath-realm.sh" ;;
+  signup) need_tools; [ $# -ge 2 ] || die "Usage: bash host-wrath-realm.sh signup invite|open|off"; tools signup "$2" ;;
+  rules) need_tools; tools rules ;;
+  claim) need_tools; [ $# -ge 2 ] || die "Usage: bash host-wrath-realm.sh claim TOKEN"; tools claim "$2" ;;
   logs) need_docker; shift; "${COMPOSE[@]}" logs --tail 200 "$@" ;;
   -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;
   *) die "Unknown command '$1'. Try: bash host-wrath-realm.sh help" ;;

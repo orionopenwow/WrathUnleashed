@@ -124,6 +124,22 @@ salted daily hash; the knock table is memory-only. Caddy runs without an access 
   if the realm's latest **signed** heartbeat carries that token. Implemented and tested on the
   listing side; the site side (Hero Key sign-in page, token issue) is the website's to build.
 
+## Discord bridge (`discord/`)
+
+The realm's World chat channel and one Discord channel, both ways, plus a feed of `.bug` reports to a second
+channel. Game side: `realm/custom/lua_scripts/ov_discord.lua` (ships with the realm scripts; it does nothing until
+the daemon pulls). Daemon: `discord/wudiscord/bridge.py` (Python stdlib only), a systemd unit on the realm box
+that talks to the realm only over SOAP (`wudiscord pull` / `wudiscord say`) and to Discord over its REST API.
+Players see `[Discord] Name: text`; Discord sees `[Name]: text`; `.discord off` hides the Discord lines for a player.
+
+Install: `discord/Deploy Discord bridge.bat` (or `bash discord/deploy/discord-up.sh <src>` as root). It never turns
+the bridge on. The owner fills `/opt/wu-discord/discord.env` (`DISCORD_BOT_TOKEN`, `DISCORD_CHAT_CHANNEL_ID`,
+`DISCORD_BUG_CHANNEL_ID`; the SOAP login is copied from `/srv/wrath/signup.env`), turns on the bot's Message Content
+intent, then `systemctl enable --now wu-discord`. `WU_DISCORD_DRY_RUN=1` logs instead of posting. Every setting is
+in `discord/deploy/discord.env.example` and the docstring of `bridge.py`.
+Tests (offline: fake Discord, fake SOAP, the Lua under a fake mod-ale, the install against a stub systemctl):
+`python3 -I tests/test_discord_bridge.py`.
+
 ## Testing (H4)
 
 | | What | Where it runs |

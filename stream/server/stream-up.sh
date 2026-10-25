@@ -75,6 +75,8 @@ log "4/6 Sign-in gate (wu-portal)"
 [ -f "$WU/portal/wrath_portal.py.before-stream" ] || cp -p "$WU/portal/wrath_portal.py" "$WU/portal/wrath_portal.py.before-stream"
 install -m 644 "$ST/wrath_portal.py" "$WU/portal/wrath_portal.py"
 [ -f "$ST/links.py" ] && install -m 644 "$ST/links.py" "$WU/portal/links.py"   # the /r /h /q /m /u share links (optional)
+# The guest pass (stream/demo.py) sits beside it; off unless portal.env has WU_GUEST_DEMO=1 (demo-pool.sh).
+if [ -f "$ST/demo.py" ]; then install -m 644 "$ST/demo.py" "$WU/portal/demo.py"; fi
 install -d -m 755 "$WU/portal/slices"
 install -m 644 "$ST/slices/$SLICE.json" "$WU/portal/slices/$SLICE.json"
 [ -f "$WU/portal.env.before-stream" ] || cp -p "$WU/portal.env" "$WU/portal.env.before-stream"
