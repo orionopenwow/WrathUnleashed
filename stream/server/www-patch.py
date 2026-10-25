@@ -5,8 +5,8 @@ boot.js by anchors (the same edits as www-files/web.patch), so it works on the b
 whatever small differences its page has. Safe to run again (already-edited files are left alone).
 
 It also adds the page layer (touch controls, the account dock, the "Signing in" cover, stage
-timings, fetch-ahead, the service worker switch, the busy-realm note: wrath-page.js and the files
-it loads) when www-files/ has it: those files are copied and index.html gets one classic
+timings, fetch-ahead, the service worker switch, the busy-realm note, "Your addons" (drop an addon
+on the page): wrath-page.js and the files it loads) when www-files/ has it: those files are copied and index.html gets one classic
 <script src="./wrath-early.js"> before its module script. That part never stops the rest: a
 missing file or anchor is a warning, and the page then runs without the page layer.
 
@@ -20,7 +20,8 @@ SCRIPTS = ["ownfiles.js", "ownfiles-worker.js", "mpq.js", "chain.js", "sections.
 
 # The page layer (wrath-page.js): optional, copied when www-files/ has them all.
 PAGE_LAYER = ["wrath-early.js", "wrath-page.js", "stages.js", "input.js", "touch.js", "touch-driver.js",
-              "ahead.js", "sw-register.js", "wrath-sw.js", "wu-diag.js", "wu-loading.js", "wu-loading.css", "tab.html"]
+              "ahead.js", "sw-register.js", "wrath-sw.js", "wu-diag.js", "wu-loading.js", "wu-loading.css", "tab.html",
+              "wu-addons.js", "wu-addons-core.js"]
 # the loading screens' art and font (www-files/art/ -> www/art/), the 1.12 boot screen's
 PAGE_ART = ["wu-load-bg.webp", "wu-load-orion.webp", "wu-corner-tl.webp", "wu-corner-tr.webp", "wu-corner-bl.webp",
             "wu-corner-br.webp", "wu-divider.webp", "wu-dragon-l.webp", "wu-dragon-r.webp",

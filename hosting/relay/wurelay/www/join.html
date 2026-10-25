@@ -32,7 +32,7 @@
 </style>
 </head>
 <body>
-<main>
+<main data-hop-origins="">
   <h1 id="name">Joining a realm…</h1>
   <p class="sub" id="sub">A Beacon: a 3.3.5a realm hosted by a player, reached through the Leyline relay.</p>
 
@@ -54,6 +54,19 @@
     </form>
     <p class="small">Already have an account on this realm? Skip this step.</p>
     <p class="small" id="host-note" hidden>This is the host's own link: make your account with the GM account name you chose when you set up the realm. It gets GM rights by itself within a few seconds. Don't share this link; send friends the invite link instead.</p>
+  </div>
+
+  <div class="card" id="signin-card" hidden>
+    <h2>Already have an account on this realm?</h2>
+    <p class="small">Sign in once: the game keeps this login in this browser, for this realm only, and uses it each time you hop here. It is never sent to Leyline's servers (the game proves it to the realm with SRP, so even the realm never sees the password).</p>
+    <form id="signin" autocomplete="off">
+      <label for="su">Account name</label>
+      <input id="su" maxlength="16" pattern="[A-Za-z0-9]{3,16}" required autocapitalize="characters" spellcheck="false">
+      <label for="sp">Password</label>
+      <input id="sp" type="password" minlength="1" maxlength="16" required>
+      <div style="margin-top:14px"><button id="si" type="submit">Use this account</button></div>
+      <div id="signin-msg" class="msg"></div>
+    </form>
   </div>
 
   <div class="card" id="play-card" hidden>
@@ -83,6 +96,20 @@
               : (location.hostname.startsWith("relay.") ? location.origin : RELAY_DEFAULT);
   const $ = (id) => document.getElementById(id);
   const say = (el, text, cls) => { el.textContent = text; el.className = "msg " + (cls || ""); };
+
+  // ---- Hop mode (?hop=1&from=<origin>): framed by the browser game on the first hop to this realm. The login
+  // made or typed here goes to the game page only (postMessage to `from`, which must be one of the relay's play
+  // origins: data-hop-origins, and the relay's frame-ancestors lets only those frame this page). Nothing else
+  // leaves the page; the game keeps it in its own localStorage for this realm.
+  const hopOrigins = (document.querySelector("main").getAttribute("data-hop-origins") || "").split(/\s+/).filter(Boolean);
+  const hopFrom = qs.get("from") || "";
+  const hop = qs.get("hop") === "1" && window.parent !== window && hopOrigins.indexOf(hopFrom) >= 0;
+  function handBack(user, pass) {
+    if (!hop) return false;
+    window.parent.postMessage({ type: "leyline-login", realm: realmId, user: user.toUpperCase(), pass }, hopFrom);
+    return true;
+  }
+  window.__wuHop = { hop, hopOrigins, handBack }; // for tests
 
   // ---- SRP6 verifier, as AzerothCore stores it: x = SHA1(salt | SHA1(UPPER(user) ":" UPPER(pass))), v = 7^x mod N, little endian
   const N = BigInt("0x894B645E89E1535BBDAD5B8B290650530801B18EBFBF5E8FAB3C82872A3E9BB7");
@@ -120,7 +147,8 @@
     $("realmlist").textContent = "set realmlist " + k.doc.realmlist;
     $("realmlist-port").textContent = "set realmlist " + k.doc.realmlist_port;
     $("hours").textContent = k.doc.valid_hours || 24;
-    $("play-card").hidden = false;
+    $("play-card").hidden = hop;   // in the browser game the realm list is already set
+    if (hop) { $("signin-card").hidden = false; $("sub").textContent = "Make an account on this realm, or sign in with one you have. Then you're in."; }
     if (k.doc.signup !== "off" && (k.doc.signup === "open" || invite)) $("account-card").hidden = false;
     if (hostKey) { $("account-card").hidden = false; $("host-note").hidden = false; }
   }
@@ -137,10 +165,22 @@
       const body = { invite, username: user, salt: hex(salt), verifier: hex(v) };
       if (hostKey) body.host = hostKey;
       const r = await api("/api/realms/" + realmId + "/accounts", body);
-      if (r.status === 201) say($("acct-msg"), "Account " + r.doc.username + " is ready. Log in with it in the game.", "ok");
+      if (r.status === 201) {
+        say($("acct-msg"), "Account " + r.doc.username + " is ready. " + (hop ? "Taking you in…" : "Log in with it in the game."), "ok");
+        handBack(user, pass);
+      }
       else { say($("acct-msg"), r.doc.error || ("The realm said no (" + r.status + ")."), "bad"); $("mk").disabled = false; }
     } catch (e) { say($("acct-msg"), "Something went wrong: " + e.message, "bad"); $("mk").disabled = false; }
     $("p").value = "";
+  });
+
+  $("signin").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const user = $("su").value.trim(), pass = $("sp").value;
+    if (!/^[A-Za-z0-9]{3,16}$/.test(user)) return say($("signin-msg"), "Account names are 3–16 letters or digits.", "bad");
+    if (!/^[\x21-\x7e]{1,16}$/.test(pass)) return say($("signin-msg"), "That doesn't look like a 3.3.5a password (1–16 plain characters).", "bad");
+    say($("signin-msg"), handBack(user, pass) ? "Taking you in…" : "Open this from the game to sign in there.", "ok");
+    $("sp").value = "";
   });
 
   document.addEventListener("click", (ev) => {

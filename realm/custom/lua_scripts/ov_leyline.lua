@@ -15,6 +15,10 @@
 --                                                                    (id "this" = this realm, always first)
 --                      E:<count>                                     the list is complete
 --                      U:Realm list unavailable                      the file is missing or unreadable
+--   client -> server   H:<id|wrath>                                  hop there (the window's Join / Back to Wrath)
+--   server -> client   H:<id|wrath>                                  the same, echoed: the browser page sees this
+--                                                                    CHAT_MSG_ADDON and reloads the game on that
+--                                                                    realm (stream/www-files/wrath-page.js)
 -- One request per player every REQUEST_COOLDOWN seconds. The hook returns false: WULY is never relayed.
 -- mod-ale events used: server 30 ADDON_EVENT_ON_MESSAGE, player 4 ON_LOGOUT.
 
@@ -147,6 +151,15 @@ local function sendList(player)
 end
 
 local askedAt = {} -- char guid -> os.time() of the last request
+local hopAt = {}   -- char guid -> os.time() of the last hop echo
+local HOP_COOLDOWN = 2
+
+-- "wrath" (back home) or a relay realm id. The page checks it again and the portal only hops to a live listed realm.
+local function hopTarget(msg)
+    local t = msg:match("^H:([%w]+)$")
+    if t and (t == "wrath" or (#t == 16 and t:match("^[a-z2-7]+$"))) then return t end
+    return nil
+end
 
 local function onAddonMessage(event, sender, msgType, prefix, msg, target)
     if prefix ~= PREFIX then return end
@@ -156,15 +169,21 @@ local function onAddonMessage(event, sender, msgType, prefix, msg, target)
         if askedAt[guid] and t - askedAt[guid] < REQUEST_COOLDOWN then return false end
         askedAt[guid] = t
         sendList(sender)
+    elseif msg:sub(1, 2) == "H:" then
+        local target, guid, t = hopTarget(msg), sender:GetGUIDLow(), os.time()
+        if target and not (hopAt[guid] and t - hopAt[guid] < HOP_COOLDOWN) then
+            hopAt[guid] = t
+            send(sender, "H:" .. target)
+        end
     end
     return false
 end
 
-local function onLogout(event, player) askedAt[player:GetGUIDLow()] = nil end
+local function onLogout(event, player) askedAt[player:GetGUIDLow()] = nil; hopAt[player:GetGUIDLow()] = nil end
 
 RegisterServerEvent(30, onAddonMessage) -- ADDON_EVENT_ON_MESSAGE
 RegisterPlayerEvent(4, onLogout)        -- PLAYER_EVENT_ON_LOGOUT
 
 -- for tests
 OV_LEYLINE_TEST = { cleanName = cleanName, readFile = readFile, sendList = sendList, onAddonMessage = onAddonMessage,
-    cache = cache }
+    cache = cache, hopTarget = hopTarget }

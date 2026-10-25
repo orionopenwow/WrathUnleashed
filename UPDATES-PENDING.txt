@@ -96,3 +96,10 @@
 1028d ship  Save to GitHub (orionopenwow/WrathUnleashed)
 1028e signin  Site: one nav and footer on every page (phone menu), "Right now" strip on the Leyline page, share boxes, styled 404, a next step on every page
 1028f ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1029a relay  Relay: browser realm hopping bridge (wss /ws/<id>/auth and /world), join page can open over the game
+1029b signin  Site: + Your server (/wrath/host, player-hosted through the relay), Leyline docs at /wrath/docs, Workshop link submissions with credits, realm hop sign-in
+1029c client  Play page: drag and drop addons (.zip) into the game, Back to Wrath bar for realm hops
+1029d foreverui  Leyline window: Join a realm from in game, Back to Wrath
+1029e realm  ov_leyline: realm hop echo (reload, no restart)
+1029f ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1029g leyline  Update the public orionopenwow/Leyline repo (docs and the Leyline Launcher source)

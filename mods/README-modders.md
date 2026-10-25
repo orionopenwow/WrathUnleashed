@@ -115,6 +115,14 @@ python3 wu-mod.py pack my-mod -o dist
 
 The template's tests show the fake-ALE style: stub the few mod-ale functions your script calls, load it with `dofile`, then call its event handlers with fake players.
 
+## Try it in the browser before you submit
+
+Drop your addon's zip (or its folder) anywhere on the Wrath game page: it is checked with the same UI
+rules as `wu-mod.py check` (`.toc` with `## Interface: 30300`, files the TOC lists, addon file types only,
+no game data, size limits) and kept in your browser only, never uploaded. It loads the next time the page
+loads; the page menu's "Your addons" turns it off or removes it. A packed mod zip works too: only its `ui/`
+half is installed (the realm half needs the realm).
+
 ## What happens next
 
 Send the zip and its sha256 to the WrathUnleashed team. Realm mods get a human review first. An approved mod goes into

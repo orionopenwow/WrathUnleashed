@@ -11,6 +11,22 @@
     GET /wrath/mods/<id>/shot/<n>       screenshot n (0-based) of the mod
     GET /wrath/mods/catalog.json        the catalog itself, for tools (CORS *)
 
+Community projects (stream/projects.py): links people add, listed at once beside the packaged mods (no review
+queue; nothing is hosted, links only). Every card has a Credits line: author, licence, repo.
+
+    GET  /wrath/mods?build=3.3.5a|1.12&source=packaged|community   more filters, with the ones above
+    GET  /wrath/mods/p/<pid>             one community project: its credits, the link, Report (Hide for admins)
+    GET  /wrath/mods/submit              signed in: the form to add a link;  POST it to add one
+    POST /wrath/mods/p/<pid>/report      signed in: report a link;  .../hide, .../unhide: WU_MODS_ADMINS only
+    GET  /wrath/mods/credits             every author and project, thanked
+    GET  /wrath/mods/all.json            packaged + community in one schema (mods/all-json.md), for the Leyline
+                                         Launcher and the in-game window (CORS *):
+        {"format": 1, "generated_at", "categories": [{id, name, line, icon}], "builds": ["3.3.5a", "1.12", "any"],
+         "projects": [{id ("mod:<id>" | "link:<12 hex>"), source ("packaged" | "community"), name, description,
+                       category, builds, author, author_url, licence, repo, page, credits, stars, last_push,
+                       submitted_by, submitted_at, last_checked, version, kind, permissions, on_wrath, download,
+                       sha256}]}   (packaged-only fields are null for community links; sorted by name)
+
 The data is what "mods/Put mods on Wrath.bat" (stream/server/mods-install.sh) publishes into
 $WU/portal/mods, which wu-portal sees as /app/mods (WU_MODS_DIR):
 
@@ -29,11 +45,16 @@ loads this file from beside itself and runs without it (the routes then answer 4
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import html
+import importlib.util
 import json
 import os
 import re
+import secrets
 import threading
+import time
 import urllib.parse
 
 MODS_DIR = os.environ.get("WU_MODS_DIR", "/app/mods")
@@ -47,6 +68,14 @@ MAX_MODS = 500
 MAX_ZIP = 60 * 1024 * 1024
 MAX_SHOT = 10 * 1024 * 1024
 MAX_QUERY = 60
+MAX_FORM = 4096
+RESERVED_IDS = {"submit", "credits"}       # Workshop pages: a mod by these names would be shadowed
+SOURCES = ("packaged", "community")
+SOURCE_LABEL = {"packaged": "Packaged", "community": "Community link"}
+BUILD_FILTERS = ("3.3.5a", "1.12")
+REPO_BASE = "https://github.com/orionopenwow/WrathUnleashed/tree/main/mods/catalog/"
+PUBLIC_BASE = "https://" + os.environ.get("PUBLIC_HOST", "play.openvanilla.app")
+EXT_REL = 'rel="noopener noreferrer nofollow ugc"'
 GUIDE_URL = "https://github.com/orionopenwow/WrathUnleashed/blob/main/mods/README-modders.md"
 CATEGORIES_FALLBACK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "mods", "categories.json")
 # Line icons by the "icon" name in categories.json (24x24, stroke currentColor). Unknown names get the initial.
@@ -86,6 +115,21 @@ PERM_WORDS = {
 
 _CAT_PATH_RE = re.compile(r"^/wrath/mods/c/([^/]{1,40})$")
 _PATH_RE = re.compile(r"^/wrath/mods(?:/(catalog\.json|[^/]{1,40})(?:/(download|shot)(?:/(\d{1,2}))?)?)?$")
+_PROJ_RE = re.compile(r"^/wrath/mods/p/([0-9a-f]{12})(?:/(report|hide|unhide))?$")
+
+
+def _load_projects():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "projects.py")
+    try:
+        spec = importlib.util.spec_from_file_location("wu_projects", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:   # noqa: BLE001: the Workshop still shows the packaged mods
+        return None
+
+
+projects_mod = _load_projects()
 
 WORKSHOP_CSS = """
 .wk-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;margin:0 0 14px}
@@ -97,13 +141,34 @@ padding:7px 10px;border:1px solid var(--ly-line);border-radius:999px;background:
 .wk-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 @media (max-width:860px){.wk-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:560px){.wk-grid{grid-template-columns:1fr}}
-.wk-card{display:flex;flex-direction:column;background:rgba(18,22,54,.78);border:1px solid var(--ly-line);border-radius:6px;
-overflow:hidden;text-decoration:none;color:var(--ly-ink)!important;min-width:0}
-.wk-card:hover,.wk-card:focus-visible{border-color:var(--ly-cyan);box-shadow:var(--ly-glow)}
+.wk-item{display:flex;flex-direction:column;min-width:0;background:rgba(18,22,54,.78);border:1px solid var(--ly-line);border-radius:6px;overflow:hidden}
+.wk-item:hover,.wk-item:focus-within{border-color:var(--ly-cyan);box-shadow:var(--ly-glow)}
+.wk-card{display:flex;flex-direction:column;flex:1;text-decoration:none;color:var(--ly-ink)!important;min-width:0}
+.wk-credit{margin:0;padding:8px 14px 12px;border-top:1px solid var(--ly-line);font-size:12px;color:var(--ly-dim);overflow-wrap:anywhere}
+.wk-credit a{color:var(--ly-ink)}
+.wk-card .noimg.link{background:linear-gradient(135deg,#0b1030,#1a0f3a)}
+.wk-tag.comm{color:#ffd27a;border-color:rgba(255,210,122,.55)}
+.wk-actions form{margin:0}
+.wk-btn.quiet{font:600 13px/1 system-ui,sans-serif;min-height:36px;padding:8px 12px;cursor:pointer}
+.wk-form{display:grid;gap:14px;max-width:560px}
+.wk-form label{display:grid;gap:6px;font-weight:600}
+.wk-form .hint{font-weight:400;font-size:13px;color:var(--ly-dim)}
+.wk-form fieldset{border:1px solid var(--ly-line);border-radius:6px;padding:10px 12px;display:flex;flex-wrap:wrap;gap:12px}
+.wk-form fieldset label{display:flex;gap:6px;align-items:center;font-weight:400}
+.wk-form legend{font-weight:600;padding:0 4px}
+.wk-form input[type=url],.wk-form input[type=text],.wk-form select{font:15px/1.3 system-ui,sans-serif;color:var(--ly-ink);
+background:#0b0f2a;border:1px solid var(--ly-line);border-radius:6px;padding:10px 12px;min-height:44px;max-width:100%}
+.wk-form button.wk-btn{cursor:pointer}
+.wk-msg{padding:10px 14px;border-radius:6px;border:1px solid rgba(255,140,140,.6);color:#ffc0c0;margin:0 0 14px}
+.wk-msg.ok{border-color:rgba(94,240,160,.55);color:#9ff5c4}
+.wk-thanks{columns:2 260px;column-gap:24px;padding:0;list-style:none}
+.wk-thanks li{break-inside:avoid;margin:0 0 14px}
+.wk-thanks b{color:var(--ly-cyan)}
+.wk-thanks span{display:block;font-size:13px;color:var(--ly-dim)}
 .wk-card img{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;background:#070918}
 .wk-card .noimg{aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background:#070918;color:var(--ly-dim);
 font:600 28px/1 'Leyline Display','OW Cinzel',Impact,sans-serif;letter-spacing:.1em;text-transform:uppercase}
-.wk-card .body{padding:12px 14px 14px;display:flex;flex-direction:column;gap:6px}
+.wk-card .body{padding:12px 14px 10px;display:flex;flex-direction:column;gap:6px}
 .wk-card h3{margin:0;font:600 21px/1.15 'Leyline Display','OW Cinzel',Impact,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--ly-cyan);overflow-wrap:anywhere}
 .wk-card p{margin:0;font-size:14px;overflow-wrap:anywhere}
 .wk-tags{display:flex;flex-wrap:wrap;gap:5px}
@@ -167,7 +232,7 @@ def _clean(m) -> dict | None:
     if not isinstance(m, dict):
         return None
     mid = m.get("id")
-    if not isinstance(mid, str) or not (3 <= len(mid) <= 32) or not ID_RE.fullmatch(mid):
+    if not isinstance(mid, str) or not (3 <= len(mid) <= 32) or not ID_RE.fullmatch(mid) or mid in RESERVED_IDS:
         return None
     ver = m.get("version")
     if not isinstance(ver, str) or not VERSION_RE.fullmatch(ver):
@@ -196,14 +261,42 @@ def _clean(m) -> dict | None:
     size = m.get("size") if isinstance(m.get("size"), int) and m.get("size") >= 0 else None
     cat = m.get("category") if isinstance(m.get("category"), str) and len(m.get("category")) <= 32 \
         and ID_RE.fullmatch(m.get("category")) else ""
+    repo = ""
+    for ln in m.get("links") or [] if isinstance(m.get("links"), list) else []:
+        repo = _https_link(ln.get("url") if isinstance(ln, dict) else ln)
+        if repo:
+            break
     return {"id": mid, "category": cat, "version": ver, "kind": kind, "name": text("name", 48) or mid,
             "author": text("author", 80), "licence": text("licence", 80), "description": text("description", 300),
             "permissions": sorted(set(perms), key=PERMISSIONS.index), "screenshots": shots[:8],
-            "addons": addons[:8], "zip": zname, "sha256": sha, "size": size}
+            "addons": addons[:8], "zip": zname, "sha256": sha, "size": size,
+            "repo": repo or REPO_BASE + mid, "builds": ["3.3.5a"]}
+
+
+def _https_link(v) -> str:
+    """v when it is a plain https URL with a normal host name, else ''."""
+    if not isinstance(v, str) or len(v) > 300 or not v.startswith("https://") or re.search(r"[\s\x00-\x1f\x7f]", v):
+        return ""
+    try:
+        host = urllib.parse.urlsplit(v).hostname or ""
+    except ValueError:
+        return ""
+    return v if re.fullmatch(r"(?:[a-z0-9-]+\.)+[a-z]{2,63}", host.lower()) else ""
+
+
+def _short_url(u: str) -> str:
+    """The site a link goes to (github.com), for a credit line. Only the site: a path is someone else's
+    naming, and the link itself carries it."""
+    try:
+        h = (urllib.parse.urlsplit(u).hostname or "").lower()
+    except ValueError:
+        h = ""
+    return re.sub(r"^www\.", "", h) or "link"
 
 
 class Workshop:
-    def __init__(self, mods_dir: str = MODS_DIR, css=None, card_meta=None, realm_name: str = "WrathUnleashed"):
+    def __init__(self, mods_dir: str = MODS_DIR, css=None, card_meta=None, realm_name: str = "WrathUnleashed",
+                 projects=None):
         self.dir = mods_dir
         self.css = css or (lambda: "")
         self.card_meta = card_meta or (lambda path, title="": "")
@@ -211,6 +304,14 @@ class Workshop:
         self._cache = {"key": None, "mods": [], "installed": {}}
         self._cats = {"key": None, "list": [], "defaults": {}}
         self._lock = threading.Lock()
+        if projects is None and projects_mod is not None:
+            try:   # its category choices are always this Workshop's categories.json
+                projects = projects_mod.Projects(categories=lambda: [c["id"] for c in self.categories()[0]])
+            except Exception:   # noqa: BLE001
+                projects = None
+        self.projects = projects
+        self._secret = os.environ.get("WU_FORM_SECRET", "").encode() or secrets.token_bytes(32)
+        self._who_cache: dict[str, tuple[float, object]] = {}
 
     # ---------------------------------------------------------------- data
     def _stat(self, name):
@@ -326,16 +427,107 @@ class Workshop:
                 f'<title>{e(title)}</title>{meta}<style>{self.css()}{WORKSHOP_CSS}</style></head>'
                 f'<body class="ly"><div class="ly-glow"></div>{nav}<div class="ly-wrap">{body}</div></body></html>').encode("utf-8")
 
+    # ---------------------------------------------------------------- community projects, one list
+    def community(self) -> list[dict]:
+        """The visible community projects, each checked again for what the pages need. Never raises."""
+        if self.projects is None:
+            return []
+        try:
+            recs = self.projects.visible()
+            self.projects.maybe_refresh()
+        except Exception:   # noqa: BLE001
+            return []
+        known = {c["id"] for c in self.categories()[0]}
+        out = []
+        for r in recs:
+            url = _https_link(r.get("url"))
+            if not url:
+                continue
+
+            def t(k, n=120):
+                v = r.get(k)
+                return v.strip()[:n] if isinstance(v, str) else ""
+            builds = [b for b in r.get("builds") or [] if b in ("3.3.5a", "1.12", "any")] \
+                if isinstance(r.get("builds"), list) else []
+            stars = r.get("stars") if isinstance(r.get("stars"), int) and not isinstance(r.get("stars"), bool) else None
+            out.append({"pid": r["id"], "url": url, "host": t("host", 80), "name": t("title", 80) or t("host", 80),
+                        "author": t("author", 60), "author_url": _https_link(r.get("author_url")),
+                        "licence": t("licence", 60), "description": t("description", 160),
+                        "repo_description": t("repo_description", 300),
+                        "category": r.get("category") if r.get("category") in known else "",
+                        "builds": builds or ["any"], "stars": stars, "last_push": t("last_push", 25),
+                        "submitted_by": t("submitted_by", 40), "submitted_at": t("submitted_at", 25),
+                        "last_checked": t("last_checked", 25),
+                        "reports": len(r["reports"]) if isinstance(r.get("reports"), list) else 0})
+        return out
+
+    def everything(self) -> list[dict]:
+        """Packaged mods and community projects in one shape for the pages and all.json, sorted by name."""
+        mods, installed = self.load()
+        items = []
+        for m in mods:
+            items.append({"source": "packaged", "id": "mod:" + m["id"], "href": f"/wrath/mods/{m['id']}", "m": m,
+                          "name": m["name"], "description": m["description"], "category": m["category"],
+                          "builds": m["builds"], "author": m["author"], "author_url": "", "licence": m["licence"],
+                          "repo": m["repo"], "on_wrath": installed.get(m["id"]) == m["version"]})
+        for p in self.community():
+            items.append({"source": "community", "id": "link:" + p["pid"], "href": f"/wrath/mods/p/{p['pid']}", "p": p,
+                          "name": p["name"], "description": p["description"], "category": p["category"],
+                          "builds": p["builds"], "author": p["author"], "author_url": p["author_url"],
+                          "licence": p["licence"], "repo": p["url"], "on_wrath": False})
+        items.sort(key=lambda x: (x["name"].lower(), x["source"]))
+        return items
+
+    # ---------------------------------------------------------------- sign-in (through the portal's /api/me)
+    def _me(self, req):
+        """The signed-in user's /api/me answer, None when signed out, "down" when the website did not answer."""
+        if not req or "wr_session=" not in (req.get("cookie") or "") or not callable(req.get("who")):
+            return None
+        key = hashlib.sha256(req["cookie"].encode("utf-8", "replace")).hexdigest()
+        now = time.time()
+        hit = self._who_cache.get(key)
+        if hit and hit[0] > now:
+            return hit[1]
+        try:
+            me = req["who"](req["cookie"], req.get("ip", ""), req.get("ua", ""))
+        except Exception:   # noqa: BLE001
+            return "down"
+        if len(self._who_cache) > 2000:
+            self._who_cache.clear()
+        self._who_cache[key] = (now + 60, me)
+        return me
+
     @staticmethod
-    def _filters(query: dict) -> tuple[str, str, str]:
+    def _session(req) -> str:
+        for part in (req or {}).get("cookie", "").split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == "wr_session":
+                return v
+        return ""
+
+    def _token(self, req, action: str) -> str:
+        """A form token for this session and action (no cookie of our own, no state)."""
+        return hmac.new(self._secret, (self._session(req) + "|" + action).encode(), hashlib.sha256).hexdigest()[:32]
+
+    def _token_ok(self, req, action: str) -> bool:
+        got = ((req or {}).get("form") or {}).get("t", "")
+        return bool(self._session(req)) and isinstance(got, str) and hmac.compare_digest(got, self._token(req, action))
+
+    # ---------------------------------------------------------------- the list
+    @staticmethod
+    def _filters(query: dict) -> tuple[str, str, str, str, str]:
         kind = (query.get("kind") or [""])[0]
         perm = (query.get("perm") or [""])[0]
         q = " ".join(str((query.get("q") or [""])[0]).split())[:MAX_QUERY]
-        return (kind if kind in KINDS else ""), (perm if perm in PERMISSIONS or perm == "none" else ""), q
+        build = (query.get("build") or [""])[0]
+        source = (query.get("source") or [""])[0]
+        return ((kind if kind in KINDS else ""), (perm if perm in PERMISSIONS or perm == "none" else ""), q,
+                (build if build in BUILD_FILTERS else ""), (source if source in SOURCES else ""))
 
     @staticmethod
-    def _href(kind: str, perm: str, q: str = "", cat: str = "") -> str:
-        qs = urllib.parse.urlencode([(k, v) for k, v in (("kind", kind), ("perm", perm), ("q", q)) if v])
+    def _href(kind: str = "", perm: str = "", q: str = "", cat: str = "", build: str = "", source: str = "") -> str:
+        qs = urllib.parse.urlencode([(k, v) for k, v in (("kind", kind), ("perm", perm), ("q", q), ("build", build),
+                                                         ("source", source)) if v])
         return ("/wrath/mods/c/" + cat if cat else "/wrath/mods") + ("?" + qs if qs else "")
 
     @staticmethod
@@ -347,32 +539,90 @@ class Workshop:
 
     @staticmethod
     def _matches(m: dict, q: str, cat_names: dict) -> bool:
-        """Every word of q appears in the name, the description or the category (name or id)."""
-        hay = " ".join((m["name"], m["description"], m["category"], cat_names.get(m["category"], ""))).lower()
+        """Every word of q appears in the name, the description, the category (name or id) or the author."""
+        hay = " ".join((m["name"], m["description"], m["category"], cat_names.get(m["category"], ""),
+                        m.get("author", ""))).lower()
         return all(w in hay for w in q.lower().split())
+
+    def _credit_html(self, it: dict) -> str:
+        e = html.escape
+        who = e(it["author"] or "Unknown author")
+        if it.get("author_url"):
+            who = f'<a href="{e(it["author_url"])}" {EXT_REL}>{who}</a>'
+        lic = e(it["licence"]) if it["licence"] else "Licence not stated"
+        return (f'<p class="wk-credit">Credits: {who} &middot; {lic} &middot; '
+                f'<a href="{e(it["repo"])}" {EXT_REL}>{e(_short_url(it["repo"]))}</a></p>')
+
+    @staticmethod
+    def credit_text(it: dict) -> str:
+        return (f'{it["name"]} by {it["author"] or "unknown author"} · {it["licence"] or "licence not stated"} · '
+                f'{_short_url(it["repo"])}')
+
+    def _card(self, it: dict, installed: dict, cat_names: dict, cid: str) -> str:
+        e = html.escape
+        builds = " · ".join("Any build" if b == "any" else b for b in it["builds"])
+        tags = []
+        if it["category"] in cat_names and not cid:
+            tags.append(f'<span class="wk-tag cat">{e(cat_names[it["category"]])}</span>')
+        if it["source"] == "packaged":
+            m = it["m"]
+            img = (f'<img src="/wrath/mods/{e(m["id"])}/shot/0" alt="" loading="lazy" width="640" height="360">'
+                   if m["screenshots"] else f'<div class="noimg" aria-hidden="true">{e(m["name"][:1])}</div>')
+            tags.append(f'<span class="wk-tag kind">{e(KIND_LABEL[m["kind"]])}</span>')
+            if installed.get(m["id"]) == m["version"]:
+                tags.append('<span class="wk-tag live">On Wrath</span>')
+            tags += [f'<span class="wk-tag">{e(PERM_LABEL[p])}</span>' for p in m["permissions"]]
+            line = f'v{e(m["version"])}{" · " + e(m["author"]) if m["author"] else ""}'
+        else:
+            p = it["p"]
+            img = f'<div class="noimg link" aria-hidden="true">{e(it["name"][:1])}</div>'
+            tags.append('<span class="wk-tag comm">Community link</span>')
+            line = f'{e(p["host"])} · {e(builds)}' + (f' · &#9733; {p["stars"]}' if p["stars"] is not None else "")
+        return (f'<div class="wk-item"><a class="wk-card" href="{e(it["href"])}">{img}<div class="body">'
+                f'<h3>{e(it["name"])}</h3><span class="wk-ver">{line}</span>'
+                f'<p>{e(it["description"])}</p><div class="wk-tags">{"".join(tags)}</div></div></a>'
+                f'{self._credit_html(it)}</div>')
 
     def list_page(self, query: dict, cat: dict | None = None) -> bytes:
         e = html.escape
         mods, installed = self.load()
         cats, _ = self.categories()
         cat_names = {c["id"]: c["name"] for c in cats}
-        kind, perm, q = self._filters(query)
+        kind, perm, q, build, source = self._filters(query)
         cid = cat["id"] if cat else ""
-        in_cat = [m for m in mods if not cid or m["category"] == cid]
-        shown = [m for m in in_cat if (not kind or m["kind"] == kind)
-                 and (not perm or (perm == "none" and not m["permissions"]) or perm in m["permissions"])
-                 and (not q or self._matches(m, q, cat_names))]
+        items = self.everything()
+        in_cat = [it for it in items if not cid or it["category"] == cid]
 
-        def chip(label, k, p, on):
-            return f'<a class="wk-chip{" on" if on else ""}" href="{e(self._href(k, p, q, cid))}">{e(label)}</a>'
-        kinds = chip("All", "", perm, not kind) + "".join(chip(KIND_LABEL[k], k, perm, kind == k) for k in KINDS)
-        perms = chip("Any", kind, "", not perm) + chip("None", kind, "none", perm == "none") \
-            + "".join(chip(PERM_LABEL[p], kind, p, perm == p) for p in PERMISSIONS)
+        def keep(it):
+            if build and build not in it["builds"] and "any" not in it["builds"]:
+                return False
+            if source and it["source"] != source:
+                return False
+            if kind or perm:   # mod kinds and realm permissions are packaged-mod facts
+                if it["source"] != "packaged":
+                    return False
+                m = it["m"]
+                if kind and m["kind"] != kind:
+                    return False
+                if perm and not ((perm == "none" and not m["permissions"]) or perm in m["permissions"]):
+                    return False
+            return not q or self._matches(it, q, cat_names)
+        shown = [it for it in in_cat if keep(it)]
+
+        def chip(label, on, **change):
+            f = dict(kind=kind, perm=perm, q=q, cat=cid, build=build, source=source)
+            f.update(change)
+            return f'<a class="wk-chip{" on" if on else ""}" href="{e(self._href(**f))}">{e(label)}</a>'
+        kinds = chip("All", not kind, kind="") + "".join(chip(KIND_LABEL[k], kind == k, kind=k) for k in KINDS)
+        perms = chip("Any", not perm, perm="") + chip("None", perm == "none", perm="none") \
+            + "".join(chip(PERM_LABEL[p], perm == p, perm=p) for p in PERMISSIONS)
+        builds = chip("Any", not build, build="") + "".join(chip(b, build == b, build=b) for b in BUILD_FILTERS)
+        sources = chip("All", not source, source="") + "".join(chip(SOURCE_LABEL[s], source == s, source=s) for s in SOURCES)
 
         counts = {c["id"]: 0 for c in cats}
-        for m in mods:
-            if m["category"] in counts:
-                counts[m["category"]] += 1
+        for it in items:
+            if it["category"] in counts:
+                counts[it["category"]] += 1
         cat_grid = ""
         if cats:
             tiles = []
@@ -382,52 +632,44 @@ class Workshop:
                 cur = ' aria-current="page"' if c["id"] == cid else ""
                 tiles.append(f'<a class="{cls}" href="/wrath/mods/c/{e(c["id"])}" title="{e(c["line"])}"{cur}>'
                              f'{self.icon(c)}<span class="nm">{e(c["name"])}</span>'
-                             f'<span class="n" aria-label="{n} mod{"" if n == 1 else "s"}">{n}</span></a>')
+                             f'<span class="n" aria-label="{n} project{"" if n == 1 else "s"}">{n}</span></a>')
             cat_grid = ('<section class="ly-panel" aria-labelledby="wk-cats"><h2 id="wk-cats">Categories</h2>'
                         f'<nav class="wk-cats" aria-label="Categories">{"".join(tiles)}</nav></section>')
 
-        cards = []
-        for m in shown:
-            img = (f'<img src="/wrath/mods/{e(m["id"])}/shot/0" alt="" loading="lazy" width="640" height="360">'
-                   if m["screenshots"] else f'<div class="noimg" aria-hidden="true">{e(m["name"][:1])}</div>')
-            tags = []
-            if m["category"] in cat_names and not cid:
-                tags.append(f'<span class="wk-tag cat">{e(cat_names[m["category"]])}</span>')
-            tags.append(f'<span class="wk-tag kind">{e(KIND_LABEL[m["kind"]])}</span>')
-            if installed.get(m["id"]) == m["version"]:
-                tags.append('<span class="wk-tag live">On Wrath</span>')
-            tags += [f'<span class="wk-tag">{e(PERM_LABEL[p])}</span>' for p in m["permissions"]]
-            cards.append(f'<a class="wk-card" href="/wrath/mods/{e(m["id"])}">{img}<div class="body">'
-                         f'<h3>{e(m["name"])}</h3><span class="wk-ver">v{e(m["version"])}'
-                         f'{" · " + e(m["author"]) if m["author"] else ""}</span>'
-                         f'<p>{e(m["description"])}</p><div class="wk-tags">{"".join(tags)}</div></div></a>')
-        here = self._href("", "", "", cid)
+        cards = [self._card(it, installed, cat_names, cid) for it in shown]
+        here = self._href(cat=cid)
         if cards:
             grid = f'<div class="wk-grid">{"".join(cards)}</div>'
         elif cat and not in_cat:
             grid = ('<div class="wk-first"><h3>Publish the first one</h3>'
                     f'<p>Nothing in {e(cat["name"])} yet. Make a mod in the open format, check it with wu-mod.py '
-                    'and send it in: it shows up here once it is on the realm.</p>'
+                    'and send it in: it shows up here once it is on the realm. Or add a link to your own project.</p>'
                     f'<div class="wk-actions"><a class="wk-btn violet" href="{GUIDE_URL}" rel="noopener noreferrer">'
-                    'Read the modder guide</a></div></div>')
+                    'Read the modder guide</a><a class="wk-btn" href="/wrath/mods/submit">Add your project</a></div></div>')
         elif in_cat:
             grid = f'<p class="wk-empty">No mods match these filters. <a href="{e(here)}">Show all</a></p>'
         else:
             grid = '<p class="wk-empty">The Workshop is empty right now. Mods appear here once they are on the realm.</p>'
 
         search = (f'<form class="wk-search" method="get" action="{e(here)}" role="search">'
-                  + (f'<input type="hidden" name="kind" value="{e(kind)}">' if kind else "")
-                  + (f'<input type="hidden" name="perm" value="{e(perm)}">' if perm else "")
+                  + "".join(f'<input type="hidden" name="{k}" value="{e(v)}">'
+                            for k, v in (("kind", kind), ("perm", perm), ("build", build), ("source", source)) if v)
                   + f'<input type="search" name="q" value="{e(q)}" maxlength="{MAX_QUERY}" '
                   'placeholder="Search names, descriptions, categories" aria-label="Search mods">'
                   '<button type="submit">Search</button></form>')
         filters = (search
+                   + f'<div class="wk-bar" role="group" aria-label="Source"><span class="lbl">Source</span>{sources}</div>'
+                   + f'<div class="wk-bar" role="group" aria-label="Build"><span class="lbl">Build</span>{builds}</div>'
                    + f'<div class="wk-bar" role="group" aria-label="Kind"><span class="lbl">Kind</span>{kinds}</div>'
                    + f'<div class="wk-bar" role="group" aria-label="Permissions"><span class="lbl">Permissions</span>{perms}</div>')
         fine = ('<p class="ly-fine">In the game: Esc &rarr; Mods &amp; Workshop turns the addons on and off. '
                 f'Make your own: <a href="{GUIDE_URL}" rel="noopener noreferrer">the modder guide</a> and '
                 '<a href="https://github.com/orionopenwow/WrathUnleashed/tree/main/mods" '
-                'rel="noopener noreferrer">the mod format and a template</a>.</p>')
+                'rel="noopener noreferrer">the mod format and a template</a>. '
+                '<a href="/wrath/mods/credits">Credits</a> thanks every author; tools read '
+                '<a href="/wrath/mods/all.json">all.json</a>.</p>')
+        add = ('<p class="wk-actions" style="justify-content:center"><a class="wk-btn violet" href="/wrath/mods/submit">'
+               'Add your project</a><a class="wk-btn" href="/wrath/mods/credits">Credits</a></p>')
         if cat:
             n = len(in_cat)
             body = (
@@ -440,18 +682,20 @@ class Workshop:
                               f"{cat['name']} · Leyline Workshop", body,
                               cat["line"] or "Community mods for Wrath on the Leyline network.")
         n_live = sum(1 for m in mods if installed.get(m["id"]) == m["version"])
+        n_comm = sum(1 for it in items if it["source"] == "community")
         body = (
             '<header class="ly-hero"><h1 class="wk-h1">Workshop</h1>'
             '<p class="wk-lede">The whole Leyline catalog for Wrath: addons, graphics, game modes, maps, builds, '
-            'encounters, models, realm scripts, presets, sounds, tools and total conversions, in one open format. '
-            f'{n_live} of {len(mods)} are on {e(self.realm_name)} now.</p></header>'
+            'encounters, models, realm scripts, presets, sounds, tools and total conversions, in one open format, '
+            'plus community projects, credited to the people who made them. '
+            f'{n_live} of {len(mods)} are on {e(self.realm_name)} now; {n_comm} community '
+            f'link{"" if n_comm == 1 else "s"}.</p>{add}</header>'
             f'{cat_grid}'
             '<section class="ly-panel" aria-labelledby="wk-mods"><h2 id="wk-mods">Mods</h2>'
             f'{filters}{grid}</section>{fine}')
         return self._page(f"Workshop · {self.realm_name}", "/wrath/mods", f"Workshop · {self.realm_name}", body,
                           "Community mods for Wrath on the Leyline network: addons, game modes, maps, realm scripts "
-                          "and more, free and open.")
-
+                          "and more, free, open and credited.")
 
     def detail_page(self, m: dict) -> bytes:
         e = html.escape
@@ -485,15 +729,216 @@ class Workshop:
             f'<p>{e(m["description"])}</p><p>{e(KIND_WORDS[m["kind"]])}</p>{addons}</div>'
             f'<div>{status}<dl class="wk-facts">'
             + "".join(f'<dt>{e(k)}</dt><dd>{e(v)}</dd>' for k, v in facts if v) + cat_dd
+            + f'<dt>Builds</dt><dd>{e(", ".join(m["builds"]))}</dd>'
+            f'<dt>Repo</dt><dd><a href="{e(m["repo"])}" {EXT_REL}>{e(_short_url(m["repo"]))}</a></dd>'
             + '</dl><h3 class="wk-sub">What it can do on the realm</h3>' + perm_html
             + f'<div class="wk-actions">{download}'
             f'<a class="wk-btn violet" href="/wrath/m/{e(m["id"])}">Share link</a>'
             f'<a class="wk-btn" href="/wrath?go=m:{e(m["id"])}">Play</a></div>'
             + (f'<p class="wk-sum">sha256 {e(m["sha256"])}</p>' if m["sha256"] and m["zip"] else "")
             + f'<p class="ly-fine" style="text-align:left">Share: <a href="/wrath/m/{e(m["id"])}">'
-            f'play.openvanilla.app/wrath/m/{e(m["id"])}</a></p></div></div></section>')
+            f'play.openvanilla.app/wrath/m/{e(m["id"])}</a></p></div></div>'
+            + self._credit_html({"author": m["author"], "author_url": "", "licence": m["licence"], "repo": m["repo"]})
+            + '</section>')
         return self._page(f"{m['name']} · Workshop", f"/wrath/mods/{m['id']}", f"Mod: {m['name']} · Leyline", body,
                           m["description"] or "A community mod for Wrath on the Leyline network.")
+
+    def project_page(self, pid: str, req=None, note: str = "", status: int = 200) -> tuple[int, bytes]:
+        e = html.escape
+        me = self._me(req)
+        admin = isinstance(me, dict) and self.projects is not None and self.projects.is_admin(me)
+        p = next((x for x in self.community() if x["pid"] == pid), None)
+        hidden = False
+        if p is None and admin:
+            rec = self.projects.get(pid)
+            if rec and rec.get("hidden"):
+                hidden = True
+                known = {c["id"] for c in self.categories()[0]}
+                p = {"pid": pid, "url": _https_link(rec.get("url")) or "https://invalid.example/",
+                     "host": str(rec.get("host", ""))[:80], "name": str(rec.get("title", ""))[:80] or "Hidden link",
+                     "author": str(rec.get("author", ""))[:60], "author_url": _https_link(rec.get("author_url")),
+                     "licence": str(rec.get("licence", ""))[:60], "description": str(rec.get("description", ""))[:160],
+                     "repo_description": "", "category": rec.get("category") if rec.get("category") in known else "",
+                     "builds": ["any"], "stars": None, "last_push": "", "submitted_by": str(rec.get("submitted_by", ""))[:40],
+                     "submitted_at": str(rec.get("submitted_at", ""))[:25], "last_checked": "",
+                     "reports": len(rec.get("reports") or [])}
+        if p is None:
+            return 404, self.not_found("Project not found", "No project by that link is in the Workshop.")
+        builds = ", ".join("Any build" if b == "any" else b for b in p["builds"])
+        author = e(p["author"] or "Unknown")
+        if p["author_url"]:
+            author = f'<a href="{e(p["author_url"])}" {EXT_REL}>{author}</a>'
+        c = self.category(p["category"]) if p["category"] else None
+        facts = [("Author", author),
+                 ("Licence", e(p["licence"]) if p["licence"] else "Not stated: ask the author before you reuse it"),
+                 ("Category", f'<a href="/wrath/mods/c/{e(c["id"])}">{e(c["name"])}</a>' if c else ""),
+                 ("Builds", e(builds)), ("Stars", str(p["stars"]) if p["stars"] is not None else ""),
+                 ("Last update", e(p["last_push"][:10])), ("Added by", e(p["submitted_by"])),
+                 ("Added", e(p["submitted_at"][:10])), ("Checked", e(p["last_checked"][:10]))]
+        if admin:
+            facts.append(("Reports", str(p["reports"])))
+        actions = f'<a class="wk-btn violet" href="{e(p["url"])}" {EXT_REL}>Open the project</a>'
+        if isinstance(me, dict) and me and not hidden:
+            actions += (f'<form method="post" action="/wrath/mods/p/{pid}/report">'
+                        f'<input type="hidden" name="t" value="{self._token(req, "report:" + pid)}">'
+                        '<button class="wk-btn quiet" type="submit">Report</button></form>')
+        elif not hidden:
+            actions += (f'<a class="wk-btn quiet" href="/login?next={urllib.parse.quote("/wrath/mods/p/" + pid, safe="")}">'
+                        'Sign in to report</a>')
+        if admin:
+            act = "unhide" if hidden else "hide"
+            actions += (f'<form method="post" action="/wrath/mods/p/{pid}/{act}">'
+                        f'<input type="hidden" name="t" value="{self._token(req, act + ":" + pid)}">'
+                        f'<button class="wk-btn quiet" type="submit">{"Show again" if hidden else "Hide"}</button></form>')
+        msg = f'<p class="wk-msg ok" role="status">{e(note)}</p>' if note else ""
+        if hidden:
+            msg += '<p class="wk-msg" role="status">Hidden: only admins see this page.</p>'
+        it = {"author": p["author"], "author_url": p["author_url"], "licence": p["licence"], "repo": p["url"]}
+        body = (
+            '<p><a href="/wrath/mods">&larr; All mods</a></p>'
+            f'<section class="ly-panel" aria-labelledby="wk-name"><h2 id="wk-name">{e(p["name"])}</h2>{msg}'
+            f'<div class="wk-detail"><div><p>{e(p["description"])}</p>'
+            + (f'<p class="ly-fine" style="text-align:left">From the repo: {e(p["repo_description"])}</p>'
+               if p["repo_description"] else "")
+            + f'<p class="ly-fine" style="text-align:left">A community project, linked from the Workshop. '
+            f'Nothing is hosted here: the link goes to {e(p["host"])}, where its author keeps it.</p></div>'
+            '<div><dl class="wk-facts">' + "".join(f'<dt>{e(k)}</dt><dd>{v}</dd>' for k, v in facts if v)
+            + f'</dl><div class="wk-actions">{actions}</div></div></div>{self._credit_html(it)}</section>')
+        return status, self._page(f"{p['name']} · Workshop", f"/wrath/mods/p/{pid}", f"Project: {p['name']} · Leyline",
+                                  body, p["description"] or "A community project on the Leyline network.")
+
+    def submit_page(self, req=None, error: str = "", form=None, status: int = 200) -> tuple[int, bytes]:
+        e = html.escape
+        me = self._me(req)
+        form = form or {}
+        if me == "down":
+            inner = '<p class="wk-msg" role="alert">The website isn\'t answering right now. Please try again shortly.</p>'
+            status = 503
+        elif not isinstance(me, dict) or not me:
+            inner = ('<p>Sign in with your Hero Key (or Google) to add a link. Each link shows its author, licence and '
+                     'repo, and lists straight away.</p><p class="wk-actions"><a class="wk-btn violet" '
+                     'href="/login?next=%2Fwrath%2Fmods%2Fsubmit">Sign in to add a link</a></p>')
+        elif self.projects is None or not self.projects.writable():
+            inner = '<p class="wk-msg" role="alert">Adding links is closed right now. Please try again later.</p>'
+        else:
+            cats = "".join(f'<option value="{e(c["id"])}"{" selected" if form.get("category") == c["id"] else ""}>'
+                           f'{e(c["name"])}</option>' for c in self.categories()[0])
+            pick = form.get("builds") or "3.3.5a"
+            builds = "".join(f'<label><input type="radio" name="builds" value="{v}"{" checked" if pick == v else ""}> {lbl}</label>'
+                             for v, lbl in (("3.3.5a", "3.3.5a"), ("1.12", "1.12"), ("both", "Both"), ("any", "Any build")))
+            err = f'<p class="wk-msg" role="alert">{e(error)}</p>' if error else ""
+            inner = (
+                f'{err}<form class="wk-form" method="post" action="/wrath/mods/submit">'
+                f'<input type="hidden" name="t" value="{self._token(req, "submit")}">'
+                '<label>Project link <span class="hint">A public repo on GitHub, GitLab or Codeberg, or the project\'s '
+                'page (https only). We read the repo\'s name, author and licence from it.</span>'
+                f'<input type="url" name="url" required maxlength="300" placeholder="https://github.com/you/your-project" '
+                f'value="{e(form.get("url", ""))}"></label>'
+                f'<label>Category<select name="category" required><option value="">Pick one</option>{cats}</select></label>'
+                f'<fieldset><legend>Client builds</legend>{builds}</fieldset>'
+                '<label>One-line description <span class="hint">What it does, in up to 140 characters.</span>'
+                f'<input type="text" name="description" required minlength="10" maxlength="140" '
+                f'value="{e(form.get("description", ""))}"></label>'
+                '<p class="ly-fine" style="text-align:left;margin:0">It lists straight away, credited to its author. '
+                'Links only: nothing is uploaded or hosted here. Anyone signed in can report a link.</p>'
+                '<p class="wk-actions" style="margin:0"><button class="wk-btn violet" type="submit">Add the link</button></p></form>')
+        body = ('<p><a href="/wrath/mods">&larr; All mods</a></p>'
+                '<section class="ly-panel" aria-labelledby="wk-sub"><h2 id="wk-sub">Add your project</h2>'
+                f'{inner}</section>')
+        return status, self._page("Add a project · Workshop", "/wrath/mods/submit", "Add your project · Leyline Workshop",
+                                  body, "Share a link to your mod, tool or server project on the Leyline Workshop.")
+
+    def credits_page(self) -> bytes:
+        e = html.escape
+        by: dict[str, list[dict]] = {}
+        for it in self.everything():
+            by.setdefault(it["author"] or "Unknown author", []).append(it)
+        rows = []
+        for author in sorted(by, key=str.lower):
+            its = by[author]
+            url = next((i["author_url"] for i in its if i["author_url"]), "")
+            name = f'<a href="{e(url)}" {EXT_REL}>{e(author)}</a>' if url else e(author)
+            projs = "".join(f'<span><a href="{e(i["href"])}">{e(i["name"])}</a> &middot; '
+                            f'{e(i["licence"]) if i["licence"] else "licence not stated"} &middot; '
+                            f'<a href="{e(i["repo"])}" {EXT_REL}>{e(_short_url(i["repo"]))}</a></span>' for i in its)
+            rows.append(f'<li><b>{name}</b>{projs}</li>')
+        n = sum(len(v) for v in by.values())
+        inner = (f'<ul class="wk-thanks">{"".join(rows)}</ul>' if rows
+                 else '<p class="wk-empty">No projects yet. <a href="/wrath/mods/submit">Add the first one</a></p>')
+        body = ('<p><a href="/wrath/mods">&larr; All mods</a></p>'
+                '<header class="ly-hero"><h1 class="wk-h1">Credits</h1>'
+                f'<p class="wk-lede">Thank you to every author: {len(by)} people and teams, {n} projects. '
+                'Everything here is theirs, shared under the licence each one chose.</p></header>'
+                f'<section class="ly-panel" aria-labelledby="wk-cr"><h2 id="wk-cr">Authors and projects</h2>{inner}</section>')
+        return self._page("Credits · Workshop", "/wrath/mods/credits", "Credits · Leyline Workshop", body,
+                          "Every author and project in the Leyline Workshop, thanked.")
+
+    def all_json(self) -> bytes:
+        out = []
+        for it in self.everything():
+            m, p = it.get("m"), it.get("p")
+            out.append({
+                "id": it["id"], "source": it["source"], "name": it["name"], "description": it["description"],
+                "category": it["category"], "builds": it["builds"], "author": it["author"],
+                "author_url": it["author_url"], "licence": it["licence"], "repo": it["repo"],
+                "page": PUBLIC_BASE + it["href"], "credits": self.credit_text(it),
+                "stars": p["stars"] if p else None, "last_push": p["last_push"] if p else "",
+                "submitted_by": p["submitted_by"] if p else "", "submitted_at": p["submitted_at"] if p else "",
+                "last_checked": p["last_checked"] if p else "",
+                "version": m["version"] if m else None, "kind": m["kind"] if m else None,
+                "permissions": m["permissions"] if m else None, "on_wrath": it["on_wrath"] if m else None,
+                "download": (PUBLIC_BASE + f"/wrath/mods/{m['id']}/download") if m and m["zip"] else None,
+                "sha256": m["sha256"] if m and m["zip"] else None,
+            })
+        doc = {"format": 1, "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+               "categories": self.categories()[0], "builds": ["3.3.5a", "1.12", "any"], "projects": out}
+        return (json.dumps(doc, indent=1, ensure_ascii=False) + "\n").encode("utf-8")
+
+    # ---------------------------------------------------------------- posts
+    def _post(self, path: str, req: dict) -> tuple[int, bytes, str, dict]:
+        HTML = "text/html; charset=utf-8"
+        form = req.get("form") or {}
+        if path == "/wrath/mods/submit":
+            me = self._me(req)
+            if me == "down" or not isinstance(me, dict) or not me:
+                st, body = self.submit_page(req)
+                return (503 if me == "down" else 403), body, HTML, {}
+            if not self._token_ok(req, "submit"):
+                st, body = self.submit_page(req, "That form was out of date. Please try again.", form, 400)
+                return 400, body, HTML, {}
+            if self.projects is None:
+                st, body = self.submit_page(req)
+                return 503, body, HTML, {}
+            ok, res = self.projects.submit(me, form)
+            if ok:
+                return 303, b"", "text/plain", {"Location": f"/wrath/mods/p/{res['id']}?added=1"}
+            msg, _, existing = str(res).partition("|")
+            rec = self.projects.get(existing) if existing else None
+            if rec and not rec.get("hidden"):
+                return 303, b"", "text/plain", {"Location": f"/wrath/mods/p/{existing}?dup=1"}
+            st, body = self.submit_page(req, msg, form, 400)
+            return 400, body, HTML, {}
+        m = _PROJ_RE.fullmatch(path)
+        if not m or not m.group(2) or self.projects is None:
+            return 404, self.not_found(), HTML, {}
+        pid, act = m.group(1), m.group(2)
+        me = self._me(req)
+        if me == "down":
+            return 503, self.not_found("Try again shortly", "The website isn't answering right now."), HTML, {}
+        if not isinstance(me, dict) or not me or not self._token_ok(req, f"{act}:{pid}"):
+            st, body = self.project_page(pid, req, "", 403)
+            return st, body, HTML, {}
+        if act == "report":
+            ok, msg = self.projects.report(pid, me)
+        else:
+            ok, msg = self.projects.set_hidden(pid, me, act == "hide")
+        if ok:
+            return 303, b"", "text/plain", {"Location": f"/wrath/mods/p/{pid}?done={act}"}
+        st, body = self.project_page(pid, req, "", 403)
+        if st == 404:
+            return 404, body, HTML, {}
+        return 403, body.replace(b'<div class="wk-detail">', ('<p class="wk-msg" role="alert">' + html.escape(msg)
+                                                              + '</p><div class="wk-detail">').encode(), 1), HTML, {}
 
     def not_found(self, title: str = "Mod not found", text: str = "No mod by that name is in the Workshop.") -> bytes:
         e = html.escape
@@ -510,9 +955,34 @@ class Workshop:
             return None
 
     # ---------------------------------------------------------------- routing
-    def serve(self, path: str, query: dict) -> tuple[int, bytes, str, dict]:
-        """(status, body, content type, extra headers) for a path match() owns."""
+    def serve(self, path: str, query: dict, req: dict | None = None) -> tuple[int, bytes, str, dict]:
+        """(status, body, content type, extra headers) for a path match() owns.
+
+        req (optional, from the portal): {"method", "cookie", "ip", "ua", "form": {name: value},
+        "who": callable(cookie, ip, ua) -> the /api/me dict, None when signed out; raises when the site is down}.
+        Without it every page is the signed-out page and POSTs are refused."""
         HTML = "text/html; charset=utf-8"
+        if req and req.get("method") == "POST":
+            return self._post(path or "", req)
+        if path == "/wrath/mods/all.json":
+            return 200, self.all_json(), "application/json; charset=utf-8", {"Access-Control-Allow-Origin": "*"}
+        if path == "/wrath/mods/credits":
+            return 200, self.credits_page(), HTML, {}
+        if path == "/wrath/mods/submit":
+            st, body = self.submit_page(req)
+            return st, body, HTML, {}
+        pm = _PROJ_RE.fullmatch(path or "")
+        if pm:
+            if pm.group(2):
+                return 405, b"use the button on the page\n", "text/plain", {"Allow": "POST"}
+            notes = {"added": "Added: it's in the Workshop now. Thank you for sharing it.",
+                     "dup": "That project is already listed: here it is."}
+            note = next((v for k, v in notes.items() if query.get(k)), "")
+            done = (query.get("done") or [""])[0]
+            note = note or {"report": "Thanks: the admins will take a look.", "hide": "Hidden.",
+                            "unhide": "Shown again."}.get(done, "")
+            st, body = self.project_page(pm.group(1), req, note)
+            return st, body, HTML, {}
         cm = _CAT_PATH_RE.fullmatch(path or "")
         if cm:
             cat = self.category(cm.group(1)) if ID_RE.fullmatch(cm.group(1)) else None
@@ -548,3 +1018,15 @@ class Workshop:
             if b is not None:
                 return 200, b, SHOT_TYPES[name.rsplit(".", 1)[1].lower()], {}
         return 404, b"not found\n", "text/plain", {}
+
+
+def parse_form(body: bytes) -> dict:
+    """An application/x-www-form-urlencoded body (at most MAX_FORM bytes) as {name: first value}."""
+    try:
+        pairs = urllib.parse.parse_qsl(body[:MAX_FORM].decode("utf-8"), keep_blank_values=True, max_num_fields=20)
+    except (UnicodeDecodeError, ValueError):
+        return {}
+    out = {}
+    for k, v in pairs:
+        out.setdefault(k, v)
+    return out

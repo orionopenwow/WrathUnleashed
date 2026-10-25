@@ -21,9 +21,11 @@ kv_set() { local f=$1 k=$2 v=$3; touch "$f"; if grep -q "^$k=" "$f"; then sed -i
 recreate_portal() {
   docker image inspect python:3.12-alpine >/dev/null 2>&1 || docker pull -q python:3.12-alpine >/dev/null
   docker rm -f wu-portal >/dev/null 2>&1 || true
+  mkdir -p "$WU/hosted" && chmod 700 "$WU/hosted"   # /wrath/host's pending realms (stream/hostflow.py)
+  mkdir -p "$WU/portal-data"   # the Workshop's community links (stream/projects.py)
   docker run -d --name wu-portal --restart unless-stopped --memory 128m \
     --network "$NET" --network-alias mangosd \
-    --env-file "$WU/portal.env" -v "$WU/portal:/app:ro" \
+    --env-file "$WU/portal.env" -v "$WU/portal:/app:ro" -v "$WU/hosted:/hosted" -v "$WU/portal-data:/data" \
     python:3.12-alpine python3 -I /app/wrath_portal.py >/dev/null
   docker network connect ov-wotlk_edge wu-portal
   local _

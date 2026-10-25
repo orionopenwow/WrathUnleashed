@@ -10,7 +10,14 @@ IP hidden.
   "<relay name>:<world_port>" in its realm list, so stock clients go back to the relay.
 * Players set `realmlist <relay name>` (shared port 3724: routed by the player's IP to the realm
   whose join page they last opened, "a knock") or `realmlist <relay name>:<auth_port>`.
-* Browser client: wss://<relay>/r/<realm id>/ws/<port> (port 3724/8085, or the realm's own pair).
+* Browser client: wss://<relay>/r/<realm id>/ws/<port> (port 3724/8085, or the realm's own pair), or the
+  realm hop bridge wss://<relay>/ws/<realm id>/auth and /ws/<realm id>/world (the in-game Leyline window's
+  Join: the page rewrites the client's /ws/<port> to these). Same framing as wu-play's /ws/<port>: binary
+  messages, one TCP read per message, the bytes reassembled as a stream on both sides; either side's close
+  closes the other. The bridge only ever reaches a realm whose agent is connected and signed in (its
+  multiplexed tunnel): the relay never dials a host, and nothing in the request names one (?host= is ignored).
+  Limits on top of the per-realm and per-IP ones: WebSocket upgrades per IP per minute, browser streams in
+  total, all streams in total, and an Origin allow-list (a page on another site can't use a player's browser).
 * Private realms: only IPs that opened the invite link (knock with the secret) get in, or a
   WebSocket that carries the secret. The relay keeps only sha256(secret); the host sets it.
 * Abuse limits: per realm (streams, KB/s token bucket, GB/day), per IP (streams, connection
@@ -74,6 +81,10 @@ class Config:
         self.site_url = e("RELAY_SITE_URL", domains.SITE)
         # Join pages: the relay serves /join/<id> itself, so links work without the website.
         self.join_base = e("RELAY_JOIN_BASE", "")   # empty = https://<name>
+        # The browser game's own sites: they may frame /join/<id>?hop=1 and open the hop bridge. A WebSocket
+        # whose Origin is neither one of these nor a site origin is refused (no Origin: a native tool, allowed
+        # as raw TCP is).
+        self.play_origins = [o for o in e("RELAY_PLAY_ORIGINS", f"https://wrath.{domains.DOMAIN},https://play.{domains.DOMAIN}").split(",") if o]
 
         self.listing = e("RELAY_LISTING", "1") == "1"
         self.listing_site_secret = e("RELAY_LISTING_SITE_SECRET", "")
@@ -85,6 +96,10 @@ class Config:
         self.max_streams_per_ip = _env_int("RELAY_MAX_STREAMS_PER_IP", 8)       # in one realm
         self.max_streams_per_ip_total = _env_int("RELAY_MAX_STREAMS_PER_IP_TOTAL", 24)
         self.conn_rate_per_ip = _env_int("RELAY_CONN_PER_MIN_PER_IP", 40)
+        self.ws_rate_per_ip = _env_int("RELAY_WS_PER_MIN_PER_IP", 30)          # browser upgrades (each hop: 2)
+        # --- limits for the whole relay
+        self.max_streams_total = _env_int("RELAY_MAX_STREAMS_TOTAL", 4096)   # every realm, TCP and browser
+        self.max_ws_total = _env_int("RELAY_MAX_WS_TOTAL", 1024)             # browser streams (the bridge)
         # --- timeouts
         self.stream_idle = _env_int("RELAY_STREAM_IDLE_SECS", 900)
         self.ctrl_idle = _env_int("RELAY_CTRL_IDLE_SECS", 90)
@@ -254,6 +269,8 @@ class Session:
         st.closed = True
         self.streams.pop(st.sid, None)
         self.relay.ip_streams_dec(st.ip, self.realm_id)
+        if st.conn.kind == "ws":
+            self.relay.ws_open -= 1
         st.conn.close()
         if tell_agent and not self.closed:
             try:
@@ -289,6 +306,8 @@ class Relay:
         self.ip_total = collections.Counter()
         self.ip_realm = collections.Counter()
         self.conn_rate = Window(60)
+        self.ws_rate = Window(60)
+        self.ws_open = 0          # browser streams open now (WsConn), for max_ws_total
         self.reg_rate = Window(3600)
         self.acct_ip = Window(3600)
         self.acct_realm = Window(86400)
@@ -478,6 +497,8 @@ class Relay:
             return None, (429, "realm used its traffic for today")
         if len(s.streams) >= self.cfg.max_streams:
             return None, (503, "realm is full")
+        if self.streams_total() >= self.cfg.max_streams_total:
+            return None, (503, "the relay is full right now")
         if self.ip_realm[(ip, realm_id)] >= self.cfg.max_streams_per_ip:
             return None, (429, "too many connections from your address")
         if self.ip_total[ip] >= self.cfg.max_streams_per_ip_total:
@@ -485,6 +506,13 @@ class Relay:
         if not self.conn_rate.hit(ip, self.cfg.conn_rate_per_ip):
             return None, (429, "connecting too fast")
         return s, None
+
+    def streams_total(self):
+        return sum(len(s.streams) for s in self.sessions.values())
+
+    def ws_origin_ok(self, req):
+        origin = req.headers.get("origin")
+        return origin is None or origin in self.cfg.play_origins or origin in self.cfg.site_origins
 
     # ---------------------------------------------------------------- player pump
     async def pump(self, session: Session, st: Stream):
@@ -759,12 +787,15 @@ class Relay:
             elif len(parts) != 4:
                 return httpd.response(404, {"error": "not found"})
             return await self.player_ws(req, reader, writer, parts[1], parts[-1], invite)
+        if len(parts) == 3 and parts[0] == "ws" and SID_RE.match(parts[1]) and m == "GET":
+            service = {"auth": 3724, "world": 8085}.get(parts[2])
+            if not service:
+                return httpd.response(404, {"error": "only /ws/<realm>/auth and /ws/<realm>/world"})
+            return await self.player_ws(req, reader, writer, parts[1], str(service), req.query.get("invite"))
         if len(parts) == 3 and parts[0] == "r" and SID_RE.match(parts[1]) and parts[2] == "status.json":
             return await self.status(req, parts[1])
         if len(parts) == 2 and parts[0] == "join" and SID_RE.match(parts[1]):
-            with open(os.path.join(HERE, "www", "join.html"), "rb") as f:
-                return httpd.response(200, f.read(), "text/html; charset=utf-8",
-                                      {"Cache-Control": "no-cache", "Referrer-Policy": "no-referrer"})
+            return self.join_page()
         if len(parts) >= 3 and parts[:2] == ["api", "realms"] and SID_RE.match(parts[2]):
             rid = parts[2]
             if len(parts) == 3 and m == "GET":
@@ -790,6 +821,15 @@ class Relay:
             service = 8085
         else:
             return httpd.response(404, {"error": "only the realm's auth and world ports"})
+        if not self.ws_origin_ok(req):
+            self.metrics["refused_ws_origin"] += 1
+            return httpd.response(403, {"error": "this page may not connect to Leyline realms"})
+        if not self.ws_rate.hit(req.ip, self.cfg.ws_rate_per_ip):
+            self.metrics["refused_429"] += 1
+            return httpd.response(429, {"error": "connecting too fast"})
+        if self.ws_open >= self.cfg.max_ws_total:
+            self.metrics["refused_503"] += 1
+            return httpd.response(503, {"error": "the relay is full right now"})
         s, err = self.admit(rid, req.ip, invite)
         if err:
             self.metrics[f"refused_{err[0]}"] += 1
@@ -798,13 +838,31 @@ class Relay:
             sock = await ws.server_upgrade(req, reader, writer, max_message=mux.MAX_CHUNK * 2)
         except ws.HandshakeError as e:
             return httpd.response(e.status, {"error": str(e)})
+        if s.closed or self.sessions.get(rid) is not s:   # the realm went away during the handshake
+            sock.abort()
+            return None
         if invite and self.invite_ok(s, invite):
             self.knock(req.ip, rid)
         self.ip_streams_inc(req.ip, rid)
+        self.ws_open += 1
         st = s.open_stream(service, WsConn(sock), req.ip)
         self.metrics["streams_opened"] += 1
         await self.pump(s, st)
         return None
+
+    def join_page(self):
+        """/join/<id>: the join page. The browser game may frame it (?hop=1, the first hop to a realm), so it is
+        served cross-origin-isolation friendly (COEP + CORP) and only the play origins may frame it; the page
+        hands a login back only to an origin in data-hop-origins."""
+        with open(os.path.join(HERE, "www", "join.html"), "rb") as f:
+            page = f.read()
+        origins = [o for o in self.cfg.play_origins if re.match(r"^https?://[A-Za-z0-9.:-]+$", o)]
+        page = page.replace(b'data-hop-origins=""', b'data-hop-origins="' + " ".join(origins).encode() + b'"', 1)
+        return httpd.response(200, page, "text/html; charset=utf-8",
+                              {"Cache-Control": "no-cache", "Referrer-Policy": "no-referrer",
+                               "Content-Security-Policy": "frame-ancestors " + (" ".join(origins) or "'none'"),
+                               "Cross-Origin-Embedder-Policy": "require-corp",
+                               "Cross-Origin-Resource-Policy": "cross-origin"})
 
     def realm_info(self, req, rid):
         s = self.sessions.get(rid)
@@ -901,7 +959,8 @@ class Relay:
     def metrics_text(self):
         lines = [f"wu_relay_realms_online {len(self.sessions)}",
                  f"wu_relay_realms_known {len(self.state['realms'])}",
-                 f"wu_relay_streams_open {sum(len(s.streams) for s in self.sessions.values())}"]
+                 f"wu_relay_streams_open {self.streams_total()}",
+                 f"wu_relay_ws_streams_open {self.ws_open}"]
         for k, v in sorted(self.metrics.items()):
             lines.append(f"wu_relay_{k}_total {v}")
         return "\n".join(lines) + "\n"
@@ -930,7 +989,7 @@ class Relay:
             n += 1
             if n % 12 == 0:
                 self.load_blocklist()
-                for w in (self.conn_rate, self.reg_rate, self.acct_ip, self.acct_realm, self.knock_rate):
+                for w in (self.conn_rate, self.ws_rate, self.reg_rate, self.acct_ip, self.acct_realm, self.knock_rate):
                     w.sweep()
                 self.save()
                 if self.listing:

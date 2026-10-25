@@ -1,7 +1,8 @@
 -- lua5.1 stream/tests/test_wuui_leyline.lua [addon dir] [ov_leyline.lua]
 -- Fake 3.3.5a API: loads every file of WrathUnleashedUI in .toc order, opens the Leyline window from
 -- Esc > Mods & Workshop, and runs a real round trip through ov_leyline.lua (fake mod-ale): the WULY request,
--- the chunked answer, the rows, Copy link, Join (coming soon), the friends placeholder, "Realm list unavailable",
+-- the chunked answer, the rows, Copy link, Join (the hop: H:<id> to the realm, echoed back, and the
+-- WUUI_LEYLINE_HOP global the page reads), Back to Wrath, the friends placeholder, "Realm list unavailable",
 -- and no game-brand names in anything the window shows.
 local dir = arg[1] or "stream/fui-web/Interface/AddOns/WrathUnleashedUI"
 local server = arg[2] or "realm/custom/lua_scripts/ov_leyline.lua"
@@ -79,6 +80,8 @@ function HasAction() return false end
 function UnitLevel() return 80 end
 function UnitClass() return "Mage", "MAGE" end
 function UnitName() return "Tester" end
+local realmName = "WrathUnleashed"
+function GetRealmName() return realmName end
 function PlaySound() end
 function HideUIPanel(f) f:Hide() end
 local clock = 100
@@ -161,9 +164,11 @@ rows[2].copyBtn:Fire("OnClick")
 check("Copy link fills the box with /r/<id>", win.copy:GetText() == "https://play.openvanilla.app/r/abcdefghijklmnop")
 win.copy:SetText("typed over"); win.copy:Fire("OnTextChanged")
 check("the box can't be typed over", win.copy:GetText() == "https://play.openvanilla.app/r/abcdefghijklmnop")
+local before = #sent
 rows[3].join:Fire("OnClick")
-check("Join: hopping is coming soon, the link to open", win.info:GetText():find("coming soon") and win.info:GetText():find("Quiet Corner")
-    and win.copy:GetText() == "https://play.openvanilla.app/r/qrstuvwxyz234567")
+check("Join on an offline realm: says so, no hop", win.info:GetText():find("^Quiet Corner is offline")
+    and win.copy:GetText() == "https://play.openvanilla.app/r/qrstuvwxyz234567" and #sent == before and WUUI_LEYLINE_HOP == nil
+    and L.hopping == nil)
 rows[1].join:Fire("OnClick")
 check("Join on this realm: you're here", win.info:GetText():find("^You're on WrathUnleashed")
     and win.copy:GetText() == "https://play.openvanilla.app/wrath")
@@ -181,6 +186,54 @@ win:Hide(); win:Show()
 check("reopening within 30 s doesn't ask again", #sent == 1)
 win.refresh:Fire("OnClick")
 check("Refresh asks again (the realm rate-limits to 5 s)", #sent == 2)
+
+-- ---------------------------------------------------------------- the hop
+local echoes = {}
+local listener
+for _, f in ipairs(frames) do if f.events.CHAT_MSG_ADDON then listener = f end end
+local realOnEvent = listener:GetScript("OnEvent")
+listener:SetScript("OnEvent", function(self, ev, prefix, msg, ...)    -- what the page sees (CHAT_MSG_ADDON)
+    if prefix == "WULY" and msg:sub(1, 2) == "H:" then echoes[#echoes + 1] = msg end
+    return realOnEvent(self, ev, prefix, msg, ...)
+end)
+rows = shown()
+rows[2].join:Fire("OnClick")
+local last = sent[#sent]
+check("Join on a live realm: H:<id> whispered to self", last[1] == "WULY" and last[2] == "H:abcdefghijklmnop"
+    and last[3] == "WHISPER" and last[4] == "Tester")
+check("Join: the realm echoes it back (the page's cue)", echoes[1] == "H:abcdefghijklmnop" and L.hopping and L.hopping.echoed)
+check("Join: the page's fallback global is set", WUUI_LEYLINE_HOP == "abcdefghijklmnop")
+check("Join: says it's hopping, and the account step", win.info:GetText():find("^Hopping to Frost Haven")
+    and win.info:GetText():find("make an account"))
+check("Join still puts the link in the box", win.copy:GetText() == "https://play.openvanilla.app/r/abcdefghijklmnop")
+check("the realm drops a malformed hop", (function()
+    local n = #echoes
+    serverClock = serverClock + 5
+    SendAddonMessage("WULY", "H:../../etc", "WHISPER", "Tester")
+    SendAddonMessage("WULY", "H:ABCDEFGHIJKLMNOP", "WHISPER", "Tester")
+    return #echoes == n end)())
+check("the addon refuses a malformed hop", L.Hop("not-a-realm") == false and L.Hop("ABCDEFGHIJKLMNOP") == false
+    and WUUI_LEYLINE_HOP == "abcdefghijklmnop")
+
+-- no page took it (the desktop client): after HOP_WAIT the window says so and clears the request
+clock = clock + L.HOP_WAIT + 1
+win:Fire("OnUpdate", 0.1)
+check("no page: the hop is dropped and the window says why", L.hopping == nil and WUUI_LEYLINE_HOP == nil
+    and win.info:GetText():find("^Hopping works in the browser game"))
+
+-- Back to Wrath: always there; on Wrath it says so, on a community realm it hops home
+check("Back to Wrath button", win.back and win.back.text == "Back to Wrath")
+before = #sent
+win.back:Fire("OnClick")
+check("Back to Wrath on Wrath: you're here, no hop", win.info:GetText() == "You're on Wrath now." and #sent == before
+    and WUUI_LEYLINE_HOP == nil)
+realmName = "Frost Haven"
+serverClock = serverClock + 5
+win.back:Fire("OnClick")
+check("Back to Wrath on a community realm: H:wrath", sent[#sent][2] == "H:wrath" and WUUI_LEYLINE_HOP == "wrath"
+    and echoes[#echoes] == "H:wrath" and win.info:GetText():find("^Back to Wrath"))
+WUUI_LEYLINE_HOP, L.hopping, realmName = nil, nil, "WrathUnleashed"
+listener:SetScript("OnEvent", realOnEvent)
 
 -- the client ignores messages that aren't the realm's answer to us
 fireClient("WULY", "B:1:0", "WHISPER", "Someone")

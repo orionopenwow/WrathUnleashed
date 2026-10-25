@@ -91,6 +91,26 @@ Addresses live in one line: `kit/tools/wunet/leyline.env` (`LEYLINE_DOMAIN`). Jo
 relay's own page (`https://relay.<domain>/join/<id>`), so they work without the website.
 Tested end to end without game data: `tests/test_leyline_e2e.py`.
 
+## 4b. From the website: "+ Your server" (`/wrath/host`)
+
+The realm list, the Leyline page and the account page have a **+ Your server** button. It signs the
+player in (Google or Hero Key), asks for the realm name, preset (Dalaran hangout by default, or main,
+brawl, progression), house rules, public or private, their GM account name and a tagline, and **Start
+server** makes a pending realm for that account (`stream/hostflow.py`): a realm key and id, invite and
+host secrets made exactly as `setup.py` makes them, and a claim token. The realm's page
+(`/wrath/host/<id>`, owner only) shows the share link (`/wrath/r/<id>`), a per-realm download
+(`leyline-<id>.bat` for Windows, `leyline-<id>.sh` for Mac/Linux) and live status ("Waiting for your PC"
+-> "Online, listed"). The realm runs on the player's own PC through the relay; nothing runs on our server.
+
+The download goes in the unzipped host kit folder. It writes `state/seed.b64` (this realm's key, links,
+claim token and answers, nothing else) and runs `setup.py init --seed` (then `leyline host`, or
+`Host a Wrath realm.bat`); the seed is used once and deleted, and a kit that already hosts another realm
+refuses it. The website forgets the realm key the first time the realm connects. No accounts, no
+passwords: the host makes the GM account on their own join link. With `WU_LISTING_SITE_SECRET` (= the
+relay's `RELAY_LISTING_SITE_SECRET`) in `portal.env`, a listed public realm is claimed for its account.
+Pending realms live in `/srv/wrath/hosted` (mounted at `/hosted`). `WU_HOST_KIT_URL` points the page
+at the host kit zip. Tests: `stream/tests/test_hostflow.py`.
+
 ## 4. Hosting (what players do)
 
 Windows: unzip the kit, double-click `Host a Wrath realm.bat`. macOS/Linux: `bash host-wrath-realm.sh`.

@@ -26,6 +26,15 @@ had_modes=""
 if [ -f "$WU/portal/modes.py" ]; then cp -p "$WU/portal/modes.py" "$BK/"; [ ! -f "$WU/portal/modes_data.py" ] || cp -p "$WU/portal/modes_data.py" "$BK/"; had_modes=1; fi
 had_workshop=""
 if [ -f "$WU/portal/workshop.py" ]; then cp -p "$WU/portal/workshop.py" "$BK/workshop.py"; had_workshop=1; fi
+had_docs=""
+if [ -f "$WU/portal/docs.py" ]; then cp -p "$WU/portal/docs.py" "$BK/docs.py"; had_docs=1; fi
+had_docdir=""
+rm -rf "$BK/docs"
+if [ -d "$WU/portal/docs" ]; then cp -a "$WU/portal/docs" "$BK/docs"; had_docdir=1; fi
+had_host=""
+if [ -f "$WU/portal/hostflow.py" ]; then cp -p "$WU/portal/hostflow.py" "$BK/"; [ ! -f "$WU/portal/ed25519_pure.py" ] || cp -p "$WU/portal/ed25519_pure.py" "$BK/"; had_host=1; fi
+had_projects=""
+if [ -f "$WU/portal/projects.py" ]; then cp -p "$WU/portal/projects.py" "$BK/projects.py"; had_projects=1; fi
 had_art=""
 rm -rf "$BK/art"
 if [ -d "$WU/portal/art" ]; then cp -a "$WU/portal/art" "$BK/art"; had_art=1; fi
@@ -37,6 +46,12 @@ put_back() {
   if [ -n "$had_modes" ]; then cp -p "$BK/modes.py" "$WU/portal/modes.py"; [ ! -f "$BK/modes_data.py" ] || cp -p "$BK/modes_data.py" "$WU/portal/modes_data.py"
   else rm -f "$WU/portal/modes.py" "$WU/portal/modes_data.py"; fi
   if [ -n "$had_workshop" ]; then cp -p "$BK/workshop.py" "$WU/portal/workshop.py"; else rm -f "$WU/portal/workshop.py"; fi
+  if [ -n "$had_docs" ]; then cp -p "$BK/docs.py" "$WU/portal/docs.py"; else rm -f "$WU/portal/docs.py"; fi
+  rm -rf "$WU/portal/docs"
+  if [ -n "$had_docdir" ]; then cp -a "$BK/docs" "$WU/portal/docs"; fi
+  if [ -n "$had_host" ]; then cp -p "$BK/hostflow.py" "$WU/portal/hostflow.py"; [ ! -f "$BK/ed25519_pure.py" ] || cp -p "$BK/ed25519_pure.py" "$WU/portal/"
+  else rm -f "$WU/portal/hostflow.py"; fi
+  if [ -n "$had_projects" ]; then cp -p "$BK/projects.py" "$WU/portal/projects.py"; else rm -f "$WU/portal/projects.py"; fi
   rm -rf "$WU/portal/art"
   if [ -n "$had_art" ]; then cp -a "$BK/art" "$WU/portal/art"; fi
 }
@@ -55,6 +70,24 @@ if [ -f demo.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]
 if [ -f armory.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' armory.py && install -m 644 armory.py "$WU/portal/armory.py"; fi
 # the mods Workshop (/wrath/mods): optional; its data comes from the "mods" step ($WU/portal/mods)
 if [ -f workshop.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' workshop.py && install -m 644 workshop.py "$WU/portal/workshop.py"; fi
+# the Leyline docs (/wrath/docs): docs.py and its pages (docs/leyline/*.md), optional, always as a pair
+if [ -f docs.py ] && [ -f docs/leyline/index.md ]; then
+  python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' docs.py && {
+    install -m 644 docs.py "$WU/portal/docs.py"
+    rm -rf "$WU/portal/docs/leyline"; install -d -m 755 "$WU/portal/docs/leyline"
+    install -m 644 docs/leyline/*.md "$WU/portal/docs/leyline/"
+    echo "  docs: $(ls docs/leyline/*.md | wc -l) pages -> $WU/portal/docs/leyline"
+  }
+fi
+# "+ Your server" (/wrath/host): hostflow.py and the kit's Ed25519, optional, always as a pair. Its pending
+# realms live in $WU/hosted, mounted writable at /hosted: a portal made before that mount is made again once.
+if [ -f hostflow.py ] && [ -f ed25519_pure.py ]; then
+  python3 -I -c 'import ast,sys;[ast.parse(open(f).read()) for f in sys.argv[1:]]' hostflow.py ed25519_pure.py \
+    && install -m 644 hostflow.py ed25519_pure.py "$WU/portal/"
+  install -d -m 700 "$WU/hosted"
+fi
+# its community links (stream/projects.py): stored in $WU/portal-data (wu-portal's /data, mounted by stream-lib.sh/deploy.sh)
+if [ -f projects.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' projects.py && install -m 644 projects.py "$WU/portal/projects.py"; fi
 if [ -d www-files/art ] && [ -f www-files/art/wu-theme.css ]; then
   install -d -m 755 "$WU/portal/art"
   install -m 644 www-files/art/* "$WU/portal/art/"
@@ -62,7 +95,33 @@ if [ -d www-files/art ] && [ -f www-files/art/wu-theme.css ]; then
 else
   echo "  WARNING: no www-files/art in the upload: the pages keep the art they had (or plain CSS without it)"
 fi
-docker restart wu-portal >/dev/null
+# The host flow's pending realms live in $WU/hosted (/hosted) and the Workshop's community links in $WU/portal-data, mounted writable at /data (the only writable
+# mount; /app stays read-only). A wu-portal from before that mount is recreated once, exactly as deploy.sh and
+# stream-lib.sh's recreate_portal make it, plus the mount; the old container is kept, stopped, until the new
+# one answers, and comes back if it doesn't.
+install -d -m 755 "$WU/portal-data"; install -d -m 700 "$WU/hosted"
+PORTAL_NET="${NET:-wenilla-realm_default}"
+recreated=""
+mounts=$(docker inspect -f '{{range .Mounts}}{{println .Destination}}{{end}}' wu-portal 2>/dev/null || true)
+if printf '%s\n' "$mounts" | grep -qx /data && printf '%s\n' "$mounts" | grep -qx /hosted; then
+  docker restart wu-portal >/dev/null
+else
+  echo "  wu-portal is missing its /data or /hosted mount: recreating it with $WU/portal-data at /data and $WU/hosted at /hosted (the old one is kept until the new one answers)"
+  docker rm -f wu-portal-before-data >/dev/null 2>&1 || true
+  if docker inspect wu-portal >/dev/null 2>&1; then
+    docker stop wu-portal >/dev/null
+    docker rename wu-portal wu-portal-before-data
+    recreated=1
+  else
+    recreated=new
+  fi
+  docker image inspect python:3.12-alpine >/dev/null 2>&1 || docker pull -q python:3.12-alpine >/dev/null
+  docker run -d --name wu-portal --restart unless-stopped --memory 128m \
+    --network "$PORTAL_NET" --network-alias mangosd \
+    --env-file "$WU/portal.env" -v "$WU/portal:/app:ro" -v "$WU/hosted:/hosted" -v "$WU/portal-data:/data" \
+    python:3.12-alpine python3 -I /app/wrath_portal.py >/dev/null \
+    && docker network connect ov-wotlk_edge wu-portal || true
+fi
 ok=""
 for _ in $(seq 1 15); do
   if docker exec wu-portal python3 -c 'import urllib.request;urllib.request.urlopen("http://127.0.0.1:8091/wrath/status.json",timeout=5)' >/dev/null 2>&1; then ok=1; break; fi
@@ -70,8 +129,19 @@ for _ in $(seq 1 15); do
 done
 if [ -z "$ok" ]; then
   docker logs --tail 20 wu-portal >&2 || true
-  put_back; docker restart wu-portal >/dev/null
+  put_back
+  if [ "$recreated" = 1 ]; then
+    docker rm -f wu-portal >/dev/null 2>&1 || true
+    docker rename wu-portal-before-data wu-portal
+    docker start wu-portal >/dev/null
+    echo "ERROR: the new sign-in page didn't start; the old container, its page and its art are back." >&2; exit 1
+  fi
+  docker restart wu-portal >/dev/null
   echo "ERROR: the new sign-in page didn't start; the old one (and its art) is back." >&2; exit 1
+fi
+if [ -n "$recreated" ]; then
+  docker rm -f wu-portal-before-data >/dev/null 2>&1 || true
+  echo "  wu-portal recreated with the /data and /hosted mounts"
 fi
 echo "  wu-portal is up with the new page"
 if [ -f "$WU/portal/art/wu-theme.css" ] && ! docker exec wu-portal python3 -c 'import urllib.request;urllib.request.urlopen("http://127.0.0.1:8091/wrath/art/wu-theme.css",timeout=5)' >/dev/null 2>&1; then
@@ -122,6 +192,10 @@ c6=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/w
 echo "  /wrath/armory (200 = the armory is on): $c6"
 c7=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/mods || true)
 echo "  /wrath/mods Workshop (200 = on): $c7"
+c8=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/docs || true)
+echo "  /wrath/docs Leyline docs (200 = on): $c8"
+c9=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/host || true)
+echo "  /wrath/host + Your server (302 to sign-in = on): $c9"
 echo "  warm.html (public): $c1   /data (must stay gated, 302/401/403): $c2   /wrath signed out (200 = saved-key page): $c3"
 echo "  /wrath/art/wu-card.webp (200 = the art is served): $c4"
 echo "  backups: $BK"

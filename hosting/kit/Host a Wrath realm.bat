@@ -116,7 +116,8 @@ echo.
 echo Send your friends the invite link above. They open it once, make an account there, then play with
 echo   set realmlist %WU_RELAY%
 echo "Check my realm.bat" tests everything the way a player would.
-echo Your realm's rules: state\rules.txt ^(then "Realm tools.bat rules"^). Your GM login: state\host-login.txt
+echo Your realm's rules: state\rules.txt ^(then "Realm tools.bat rules"^).
+if exist "state\host-login.txt" (echo Your GM login: state\host-login.txt) else (echo Your GM account: make it yourself on your own link in state\host-link.txt ^(keep that link to yourself^).)
 pause
 exit /b 0
 

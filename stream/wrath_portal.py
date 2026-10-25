@@ -16,7 +16,8 @@ Two listeners, both inside Docker networks only (never published on the host):
          GET /wrath/armory[/<Name>]  public: the web armory (stream/armory.py), read from the files that
                                realm/custom/armory-export.py writes to /app/armory every 5 minutes
          GET /wrath/mods       public: the mods Workshop (stream/workshop.py, optional): the catalog the
-                               "mods" step publishes into /app/mods, one page per mod, the zips
+                               "mods" step publishes into /app/mods, one page per mod, the zips, and the
+                               community links (stream/projects.py; signed in: POST to add, report, hide)
          GET /wrath/status.json  public realm status for the website's Beacons page, the launcher
                                and the GM console (CORS *, cached 30 s, at most one SOAP call per
                                30 s however many visitors ask)
@@ -56,7 +57,11 @@ Play in the browser, streamed (a small "mini" slice of the game, never the full 
                                while streaming is off). An own-files session: the page and /ws
                                always, /data never (403: they read their own files)
          GET /__env.js         window.__wenilla_env = {user, pass, host, ...} for that session only
-                               (no-store, same-origin only); the client logs in with it
+                               (no-store, same-origin only); the client logs in with it. A realm hop
+                               (?go=r:<community realm id> through the gate, the Leyline window's Join)
+                               gives that realm's relay addresses instead and NO Wrath login: hop,
+                               hop_name, hop_ws, hop_join, home (wrath-early.js rewrites /ws/<port> to
+                               hop_ws and fills in the realm's own login from this browser's storage)
   The off switch: WU_STREAM=0 (the default until stream-up.sh sets 1). /wrath/play then says
   streaming is off and /__auth refuses the game data. Sessions are in memory: a restart of this
   service signs stream players out of the stream site (they click Play again).
@@ -83,6 +88,8 @@ Settings (environment, /srv/wrath/portal.env):
                          which serves /join/<realm id> itself)
   WU_MODS_DIR            the published mods catalog for /wrath/mods (default /app/mods = /srv/wrath/portal/mods,
                          written by stream/server/mods-install.sh)
+  WU_PORTAL_DATA         the Workshop's community links, projects.jsonl (default /data = /srv/wrath/portal-data,
+                         the one writable mount); WU_MODS_ADMINS, WU_GITHUB_TOKEN etc.: stream/projects.py
   WU_ART_DIR             the site art and theme (default /app/art = /srv/wrath/portal/art on the host,
                          installed from stream/www-files/art by fastloop.sh), served at /wrath/art/<name>
                          from a fixed list. Missing: the pages fall back to plain CSS.
@@ -171,6 +178,15 @@ def _load_modes():
 armory = _load_armory()
 modes = _load_modes()
 workshop_mod = _load_module("wu_workshop", "workshop.py")   # /wrath/mods (stream/workshop.py); set up below
+docs = _load_module("wu_docs", "docs.py")   # /wrath/docs (stream/docs.py: the Leyline docs, from docs/leyline)
+hostflow = _load_module("wu_hostflow", "hostflow.py")   # /wrath/host: "+ Your server" (stream/hostflow.py)
+if hostflow is not None:
+    hostflow.bind(lambda name: globals()[name])
+
+
+def host_plus(where: str) -> str:
+    """The "+ Your server" button (stream/hostflow.py), or nothing when that module is missing."""
+    return hostflow.plus_button(where) if hostflow is not None else ""
 
 
 def go_param(query: dict) -> str:
@@ -422,6 +438,12 @@ class Sessions:
                 return None
             return dict(s)
 
+    def set_hop(self, sid: str, hop: dict) -> None:
+        """This session plays on a community realm (a Leyline hop): /__env.js gives that realm's addresses."""
+        with self.lock:
+            if sid in self.sessions:
+                self.sessions[sid]["hop"] = {"id": hop["id"], "name": hop["name"]}
+
     def end_user(self, user: str) -> int:
         with self.lock:
             gone = [k for k, v in self.sessions.items() if v["user"] == user.upper()]
@@ -462,9 +484,39 @@ def cookie_value(header: str, name: str) -> str:
     return ""
 
 
+def hop_for(query: dict) -> dict | None:
+    """?go=r:<id> naming a live community realm on the relay's listing: {"id", "name"}, else None (the official
+    realm, an unknown or offline realm: no hop, the player lands on Wrath)."""
+    if links is None:
+        return None
+    got = links.check_go((query.get("go") or [""])[0][:40])
+    if not got or got[0] != "r" or not REALM_ID_RE.match(got[1]):
+        return None
+    for r in community_realms()[0]:
+        if r["id"] == got[1] and r["live"]:
+            return {"id": r["id"], "name": r["name"]}
+    return None
+
+
+def hop_env(sess: dict) -> dict:
+    """The env of a hop session: the relay's addresses for that realm and no Wrath login (the realm has its
+    own accounts; the page fills in the one this browser keeps for it)."""
+    rid = sess["hop"]["id"]
+    env = {"hop": rid, "hop_name": sess["hop"]["name"], "hop_ws": f"{RELAY_WS}/ws/{rid}",
+           "hop_join": f"{JOIN_BASE}/join/{rid}?hop=1", "host": urllib.parse.urlsplit(RELAY_WS).hostname or "",
+           "home": f"https://{PUBLIC_HOST}"}
+    if sess.get("mode") == OWN:
+        env["mode"] = OWN
+    else:
+        env.update(slice=sess["slice"], slice_tier=str(sess["tier"]))
+    return env
+
+
 def env_js(sess: dict) -> bytes:
     """The page env the web client reads before its query string (benilla_app::webenv)."""
-    if sess.get("mode") == OWN:
+    if sess.get("hop"):
+        env = hop_env(sess)
+    elif sess.get("mode") == OWN:
         env = {"user": sess["user"], "pass": sess["pass"], "host": PUBLIC_HOST, "mode": OWN}
     else:
         env = {"user": sess["user"], "pass": sess["pass"], "host": PUBLIC_HOST,
@@ -787,6 +839,7 @@ def account_page(display: str, user: str, password: str, nonce: str) -> bytes:
         '<p class="fine">This login is yours alone. Sign in here again any time to see it.</p></details></div>'
         f'<p class="fine foot">No game files? Dalaran needs none. For the whole world: '
         f'{html.escape(DISCORD_HELP.split(DISCORD_URL)[0])}<a href="{DISCORD_URL}">{html.escape(DISCORD_URL.split("//")[-1])}</a></p>'
+        + host_plus("account") +
         '<p class="fine"><a href="/wrath/realms">Community realms</a>: Dalaran hangouts and realms hosted by players</p>'
         '<p class="fine"><a href="/wrath/modes">Modes</a>: duels, boss fights, dungeons and hangouts, one click each</p>')
     return render(body, nonce, COPY_JS, wide=True, title="Choose a realm", current="play", signed_in=True)
@@ -808,6 +861,8 @@ RELAY_LISTING_DEFAULT = "https://relay.openvanilla.app/api/listing/realms.json"
 # the relay's address on the Docker network, so the list works before DNS and without a container restart.
 RELAY_LISTING_FILE = os.environ.get("WU_RELAY_LISTING_FILE", "/app/relay-listing.url")
 JOIN_BASE = os.environ.get("WU_JOIN_BASE", "https://relay.openvanilla.app").rstrip("/")
+# Realm hops: the relay's browser bridge (wss://<relay>/ws/<realm id>/auth and /world, hosting/relay/wurelay).
+RELAY_WS = os.environ.get("WU_RELAY_WS", "wss://relay.openvanilla.app").rstrip("/")
 LISTING_TTL = 60          # seconds a good answer is used before it is refreshed (in the background)
 LISTING_RETRY = 30        # after a failure
 LISTING_WAIT = 2.5        # the longest a page request ever waits for the relay
@@ -965,6 +1020,7 @@ def realms_page() -> bytes:
             f'{crest("Realms")}<p class="sub">Wrath · on the Leyline network</p>{RULE}'
             + official +
             '<h2 class="eyebrow">Community realms</h2>'
+            + host_plus("realms")
             + community +
             '<p class="fine foot">Community realms are run by players on their own PCs, through the Leyline relay '
             '(nobody sees anyone\'s home address). Each host sets their own house rules and is the GM there. '
@@ -1082,10 +1138,10 @@ def leyline_css() -> str:
 # ----------------------------------------------------------------------------------------------
 #
 # Every page, in either look (the gold render() pages and the Leyline ones), carries the same nav: Leyline (the
-# hub), Play, Realms, Modes, Mods, Armory, Server (host guide), Discord, then Sign in and Play now. The item for
+# hub), Play, Realms, Modes, Mods, Armory, Docs, Server (host guide), Discord, then Sign in and Play now. The item for
 # the page is marked (class "on", aria-current="page"). On a phone the links fold behind a Menu button: a
 # checkbox and its label, so it works with no script (the public pages allow none: script-src 'none').
-# The pages of the modules beside this file (modes.py, armory.py, workshop.py, demo.py) get the nav and footer
+# The pages of the modules beside this file (modes.py, armory.py, workshop.py, demo.py, docs.py) get the nav and footer
 # from site_chrome() as they are sent, so they stay one place without each module knowing the site's links.
 
 HOST_URL = f"{LEYLINE_REPO}/blob/main/hosting/INSTALL-OPERATE.md"
@@ -1173,7 +1229,7 @@ def _nav_item(key: str, label: str, href: str, current: str, cls: str = "", exte
 
 
 def site_nav(current: str = "", signed_in: bool = False) -> str:
-    """The one nav (see above). current: leyline, play, realms, modes, mods or armory ("" marks nothing)."""
+    """The one nav (see above). current: leyline, play, realms, modes, mods, armory or docs ("" marks nothing)."""
     items = [("play", "Play", "/wrath/account"), ("realms", "Realms", "/wrath/realms")]
     if modes is not None:
         items.append(("modes", "Modes", "/wrath/modes"))
@@ -1181,6 +1237,8 @@ def site_nav(current: str = "", signed_in: bool = False) -> str:
         items.append(("mods", "Mods", "/wrath/mods"))
     if armory is not None:
         items.append(("armory", "Armory", "/wrath/armory"))
+    if docs is not None:
+        items.append(("docs", "Docs", "/wrath/docs"))
     links_html = "".join(_nav_item(k, label, href, current) for k, label, href in items)
     links_html += _nav_item("server", "Server", HOST_URL, current, external=True)
     links_html += _nav_item("discord", "Discord", DISCORD_URL, current, external=True)
@@ -1249,7 +1307,8 @@ def nav_key(path: str) -> str:
     if p == "/wrath/leyline":
         return "leyline"
     for key, roots in (("realms", ("/wrath/realms", "/wrath/r", "/r")), ("modes", ("/wrath/modes", "/wrath/h", "/wrath/q", "/wrath/b", "/h", "/q", "/b")),
-                       ("mods", ("/wrath/mods", "/wrath/m", "/m")), ("armory", ("/wrath/armory", "/wrath/u", "/u"))):
+                       ("mods", ("/wrath/mods", "/wrath/m", "/m")), ("armory", ("/wrath/armory", "/wrath/u", "/u")),
+                       ("docs", ("/wrath/docs",))):
         if any(p == r or p.startswith(r + "/") for r in roots):
             return key
     return ""
@@ -1458,6 +1517,7 @@ def leyline_page() -> bytes:
         '<section class="ly-panel" aria-labelledby="ly-realms"><h2 id="ly-realms">Realm list</h2>'
         '<table class="ly-table"><thead><tr><th>Realm</th><th>Type</th><th>Players</th><th>Status</th></tr></thead>'
         f'<tbody>{"".join(trs)}</tbody></table>'
+        + host_plus("leyline") +
         '<p class="ly-fine">Community realms run on their hosts\' own PCs and join through the Leyline relay. '
         '<a href="/wrath/realms">All realms and house rules</a>'
         + (f'<br>{" · ".join(stamps)}' if stamps else '') + '</p></section>'
@@ -1529,6 +1589,18 @@ def not_found_page() -> bytes:
             '</header><section class="ly-panel" aria-labelledby="nf-go"><h2 id="nf-go">Where to next</h2>'
             f'<div class="ly-grid">{"".join(cards)}</div></section>')
     return ly_shell(f"Not found · {REALM_NAME}", body, "/wrath/leyline", "", "play", NOT_FOUND_CSS, noindex=True)
+
+
+def mods_who(cookie: str, ip: str, ua: str):
+    """The Workshop's sign-in check: the /api/me answer, None when signed out; raises when the site is down."""
+    if "wr_session=" not in cookie:
+        return None
+    status, me = portal_get("/api/me", cookie, ip, ua)
+    if status in (401, 403) or 300 <= status < 400:
+        return None
+    if status != 200 or not me:
+        raise OSError(f"api/me answered {status}")
+    return me
 
 
 workshop = None
@@ -1797,7 +1869,7 @@ class PageHandler(BaseHTTPRequestHandler):
                 return
         code = sessions.create(user, password, OWN, 0, mode=OWN)
         log.info("own-files session for %s", user.upper())
-        self.redirect(f"https://{STREAM_HOST}/__gate?code={urllib.parse.quote(code)}")
+        self.redirect(f"https://{STREAM_HOST}/__gate?code={urllib.parse.quote(code)}{go_param(query or {})}")
 
     def stream_play(self, query: dict) -> None:
         """GET /wrath/play?mini=<slug> on play.openvanilla.app (?mode=own: own_play)."""
@@ -1862,6 +1934,9 @@ class PageHandler(BaseHTTPRequestHandler):
             self.redirect(f"https://{PUBLIC_HOST}/wrath")
             return
         sess = sessions.get(sid) or {}
+        hop = hop_for(query) if sess.get("mode") in ("stream", OWN) else None
+        if hop:
+            sessions.set_hop(sid, hop)
         land = "/?ownfiles=1" if sess.get("mode") == OWN else ("/?demo=1" if sess.get("mode") == "demo" else "/")
         go = go_param(query)
         if go:
@@ -1934,6 +2009,36 @@ class PageHandler(BaseHTTPRequestHandler):
 
     def do_HEAD(self):  # noqa: N802
         self.do_GET()
+
+    def mods_req(self, method: str, form: dict | None = None) -> dict:
+        """What the Workshop needs to know who is signed in (stream/workshop.py serve)."""
+        return {"method": method, "cookie": self.headers.get("Cookie", ""), "ip": self.ip(),
+                "ua": self.headers.get("User-Agent", ""), "form": form or {}, "who": mods_who}
+
+    def do_POST(self):  # noqa: N802
+        # Only the Workshop takes posts: add a link, report one, hide one (stream/workshop.py).
+        path = urllib.parse.urlsplit(self.path).path.rstrip("/") or "/"
+        if hostflow is not None and hostflow.match(path):   # POST /wrath/host: make a realm (stream/hostflow.py)
+            hostflow.post(self, path)
+            return
+        if workshop is None or not workshop_mod.match(path):
+            self.send(405, b"method not allowed\n", "text/plain")
+            return
+        if not browse_limit.hit(self.ip() + "|post", 30):
+            self.send(429, busy_page(back="/wrath/mods"))
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = -1
+        if length < 0 or length > workshop_mod.MAX_FORM:
+            self.send(413, b"too large\n", "text/plain")
+            return
+        form = workshop_mod.parse_form(self.rfile.read(length))
+        status, body, ctype, extra = workshop.serve(path, {}, self.mods_req("POST", form))
+        if ctype.startswith("text/html"):
+            body = site_chrome(body, path)
+        self.send(status, body, ctype, headers=extra)
 
     def do_OPTIONS(self):  # noqa: N802
         # A plain GET needs no preflight; answer one anyway so a caller adding headers still works.
@@ -2013,10 +2118,20 @@ class PageHandler(BaseHTTPRequestHandler):
             if not browse_limit.hit(self.ip() + ("|dl" if dl else ""), 30 if dl else 600):
                 self.send(429, busy_page(back=path))
                 return
-            status, body, ctype, extra = workshop.serve(path, query)
+            status, body, ctype, extra = workshop.serve(path, query, self.mods_req("GET"))
             if ctype.startswith("text/html"):
                 body = site_chrome(body, path)
             self.send(status, body, ctype, headers=extra)
+            return
+        if docs is not None and docs.match(path):   # the Leyline docs (stream/docs.py)
+            if not browse_limit.hit(self.ip(), 600):
+                self.send(429, busy_page(back=path))
+                return
+            status, body = docs.page(path, leyline_css(), card_meta, REALM_NAME)
+            self.send(status, site_chrome(body, path))
+            return
+        if hostflow is not None and hostflow.match(path):   # "+ Your server" (stream/hostflow.py)
+            hostflow.get(self, path)
             return
         if path == "/wrath/realms":
             if not browse_limit.hit(self.ip(), 600):

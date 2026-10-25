@@ -143,10 +143,10 @@ def get(path, ip="203.0.113.5"):
     return r.status, {k.lower(): v for k, v in r.getheaders()}, r.read().decode("utf-8", "replace")
 
 NAV_ITEMS = [("Leyline", "/wrath/leyline"), ("Play", "/wrath/account"), ("Realms", "/wrath/realms"), ("Modes", "/wrath/modes"),
-             ("Mods", "/wrath/mods"), ("Armory", "/wrath/armory"), ("Server", wp.HOST_URL), ("Discord", wp.DISCORD_URL),
+             ("Mods", "/wrath/mods"), ("Armory", "/wrath/armory"), ("Docs", "/wrath/docs"), ("Server", wp.HOST_URL), ("Discord", wp.DISCORD_URL),
              ("Sign in", "/login?next=%2Fwrath"), ("Play now", "/wrath")]
 CURRENT_HREF = {"leyline": "/wrath/leyline", "play": "/wrath/account", "realms": "/wrath/realms", "modes": "/wrath/modes",
-                "mods": "/wrath/mods", "armory": "/wrath/armory"}
+                "mods": "/wrath/mods", "armory": "/wrath/armory", "docs": "/wrath/docs"}
 
 def nav_of(page):
     m = re.search(r'<nav class="ly-nav" id="ly-site-nav".*?</nav>', page, re.S)
@@ -189,7 +189,7 @@ PAGES = [("/wrath/leyline", "leyline", 200), ("/wrath/realms", "realms", 200), (
          ("/wrath/mods", "mods", 200), ("/wrath/mods/new-mod", "mods", 200), ("/wrath/armory", "armory", 200),
          ("/wrath/armory/Arthas", "armory", 200), ("/wrath/armory/Nobody", "armory", 404), ("/wrath/q/258", "modes", 200),
          ("/wrath/u/Arthas", "armory", 200), ("/wrath/r/wrath", "realms", 200), ("/wrath/m/new-mod", "mods", 200),
-         ("/wrath/demo", "", 200)]
+         ("/wrath/demo", "", 200), ("/wrath/docs", "docs", 200), ("/wrath/docs/mods", "docs", 200)]
 for path, cur, code in PAGES:
     st, hd, page = get(path)
     check(f"{path}: {code}", st == code, st)
@@ -246,8 +246,8 @@ check("updated_text: junk is nothing", wp.updated_text("<b>") == "" and wp.updat
 
 # ---------------------------------------------------------------- 6. the pieces
 check("nav_key", [wp.nav_key(p) for p in ("/wrath/leyline", "/wrath", "/wrath/account", "/wrath/realms", "/wrath/r/x",
-      "/wrath/modes", "/wrath/q/258", "/wrath/mods/x", "/m/x", "/wrath/armory/A", "/u/A", "/wrath/x")]
-      == ["leyline", "play", "play", "realms", "realms", "modes", "modes", "mods", "mods", "armory", "armory", ""])
+      "/wrath/modes", "/wrath/q/258", "/wrath/mods/x", "/m/x", "/wrath/armory/A", "/u/A", "/wrath/x", "/wrath/docs", "/wrath/docs/mods")]
+      == ["leyline", "play", "play", "realms", "realms", "modes", "modes", "mods", "mods", "armory", "armory", "", "docs", "docs"])
 once = wp.site_chrome(get("/wrath/modes")[2].encode(), "/wrath/modes")
 check("site_chrome: never twice", once.decode().count('id="ly-site-nav"') == 1)
 check("site_chrome: leaves non-pages alone", wp.site_chrome(b"plain", "/x") == b"plain" and wp.site_chrome(b"\xff\xfe", "/x") == b"\xff\xfe")

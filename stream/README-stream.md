@@ -272,10 +272,10 @@ Operator, once (`server/demo-pool.sh` explains each step):
 | `sql/ov_stream_accounts.sql` | the mark table (acore_auth) |
 | `slices/mini.json` (+ boot manifests) | the slice description, tiers, capture lists |
 | `server/stream-up.sh`, `stream-down.sh`, `stream-switch.sh`, `slice-install.sh`, `patch-index.sh`, `displays.py`, `www-patch.py`, `stream-lib.sh` | server side, in `/srv/wrath/stream` |
-| `www-files/` | the browser additions: `ownfiles.js` (+ worker, `mpq.js`, `chain.js`), `sections.js` (+ worker), and the edited `index.html`/`boot.js` for reference; `www-patch.py` applies the same edits to the uploaded client build. `web.patch` is the same change for the source tree (`web/` + `scripts/web-build.sh`) |
+| `www-files/` | the browser additions: `ownfiles.js` (+ worker, `mpq.js`, `chain.js`), `sections.js` (+ worker), `wu-addons.js` + `wu-addons-core.js` ("Your addons": drop an addon's zip or folder on the page; kept in the browser's private storage per account and handed to the client through the layer in `wrath-early.js`), and the edited `index.html`/`boot.js` for reference; `www-patch.py` applies the same edits to the uploaded client build. `web.patch` is the same change for the source tree (`web/` + `scripts/web-build.sh`) |
 | `Size report.bat`, `Make mini slice.bat`, `Upload a mini slice.bat`, `Record a capture.bat` | your PC |
 | `wenilla-host-stream.patch` | the Rust changes (`--record`, `--export`, `--only-listed`, `--deps`, lite BLP, `--size-report`, tier lists, `/data/__tier`) |
-| `tests/` | `python3 -I tests/test_stream.py wrath_portal.py`, `python3 -I tests/test_realms.py wrath_portal.py` (the /wrath/realms list), `python3 -I tests/test_lua.py`, `bash tests/test_server_scripts.sh <linux host>`, `node --test tests/sections.browser.test.cjs` |
+| `tests/` | `python3 -I tests/test_stream.py wrath_portal.py`, `python3 -I tests/test_realms.py wrath_portal.py` (the /wrath/realms list), `python3 -I tests/test_lua.py`, `bash tests/test_server_scripts.sh <linux host>`, `node --test tests/sections.browser.test.cjs`, `node --test tests/wu-addons.test.cjs`, `node --test tests/wu-addons.browser.test.cjs` |
 
 ## wenilla-host switches
 

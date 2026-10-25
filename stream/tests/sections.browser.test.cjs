@@ -19,7 +19,7 @@ const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..', 'www-files');
 const SITE = fs.mkdtempSync(path.join(os.tmpdir(), 'sections-site-'));
-for (const f of fs.readdirSync(ROOT)) fs.copyFileSync(path.join(ROOT, f), path.join(SITE, f));
+for (const f of fs.readdirSync(ROOT)) if (fs.statSync(path.join(ROOT, f)).isFile()) fs.copyFileSync(path.join(ROOT, f), path.join(SITE, f));
 
 // The slice: tier 2 has three files, one of them 9 MiB (bigger than the 8 MiB arena) with every byte value.
 const big = Buffer.alloc(9 * 1024 * 1024);

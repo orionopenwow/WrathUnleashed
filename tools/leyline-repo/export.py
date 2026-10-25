@@ -12,7 +12,7 @@ Safety, in this order, before anything is written:
     *.example, keys, *.pem, tokens, private-key text), logs and decompiled code are refused. Machine-local folders
     (state/, cache/, logs/, realm-files/, __pycache__/, .git/) are never entered. A refused file that ALLOW names
     on its own stops the export; one found inside an allowed folder is left out and listed as REFUSED.
-  * the brand check: the README and every user-facing .html must not name the game or its maker. A hit stops the
+  * the brand check: the README, every user-facing .html and every page under docs/ must not name the game or its maker. A hit stops the
     export (exit 1) and nothing is written.
 Then the sync: a file is rewritten only when its bytes changed, and files that are no longer exported are deleted,
 but only inside the folders the export manages (MANAGED, the top folders of ALLOW), never in .git and never
@@ -48,13 +48,16 @@ ALLOW = [
     "stream/links.py",                            # short share links (/r /h /q /m /u)
     "stream/www-files/art/leyline-*",             # the Leyline art, leyline-display-OFL.txt included
     "mods/SPEC.md",                               # the mod package format
+    "docs/leyline",                               # the Leyline docs (also served at /wrath/docs)
+    "launcher",                                   # the Leyline desktop launcher (Tauri 2: web UI over a Rust core)
 ]
 # The top folders the export owns in the target: it deletes stale files only below these.
 MANAGED = sorted({p.split("/", 1)[0] for p in ALLOW})
 GENERATED = ["README.md", "LICENSE", "THIRD-PARTY-NOTICES.md", ".gitignore"]
 
 # Folders never entered (machine-local, build output, caches, version control).
-SKIP_DIRS = {"state", "cache", "logs", "realm-files", "__pycache__", ".git", "node_modules", ".pytest_cache"}
+SKIP_DIRS = {"state", "cache", "logs", "realm-files", "__pycache__", ".git", "node_modules", ".pytest_cache",
+             "target", "gen"}                    # target/, gen/: the launcher's Rust and Tauri build output
 JUNK = re.compile(r"(\.pyc|\.pyo|~|\.swp|\.DS_Store|Thumbs\.db|desktop\.ini)$", re.I)
 
 GAME_DATA = re.compile(r"\.(mpq|m2|wmo|adt|wdt|wdl|blp|dbc|db2|skin|anim|bls|phys|bone|lit|mdx|wlw|wlq|zmp)$"
@@ -164,6 +167,7 @@ Leyline is an open, peer-to-peer network for playing, hosting and modding commun
 - **Stay private**: your realm talks out to the Leyline relay, players connect to the relay, and nobody
   sees your home address. No port forwarding.
 - **Share** invite links, list your realm on the Leyline realm list (Beacons), and share mods.
+- **Launch** your own installed client (3.3.5a or 1.12.1) from the Leyline desktop app (`launcher/`).
 - **Open source**, MIT licensed. No game data is in this repo: hosts extract it from their own install,
   on their own PC.
 
@@ -205,6 +209,8 @@ panel); run those there.
 | `stream/links.py` | short share links for realms, hangouts, queues, mods and players |
 | `stream/www-files/art/` | the Leyline art and display font (SIL OFL 1.1) |
 | `mods/SPEC.md` | the mod package format |
+| `docs/leyline/` | the Leyline docs: play, mods, publishing, hosting, launcher, Hero Key, other servers, commands |
+| `launcher/` | the Leyline desktop app (Windows, macOS, Linux): pick a client, point it at a realm, play. Build steps in `launcher/README.md` |
 
 The Mods & Workshop panel (`ModsPanel.lua`) uses the rest of the WrathUnleashed UI addon, so it stays in
 WrathUnleashed; the in-game window here opens from it.
@@ -233,6 +239,8 @@ Leyline's own code is MIT licensed (`LICENSE`). These parts come from elsewhere 
 - **SRP6 test vectors** (`hosting/tests/test_crypto.py`): from a public MIT-licensed SRP test corpus.
 - **AzerothCore** (AGPL-3.0): the realm images the host kit runs are built from AzerothCore and its modules.
   No AzerothCore source is in this repo; its sources are at https://github.com/azerothcore.
+- **Tauri** (MIT or Apache-2.0) and the Rust crates in `launcher/src-tauri/Cargo.lock`, each under its own
+  license (mostly MIT or Apache-2.0): the launcher is built with them; none of their source is in this repo.
 - **Game data**: none here. Hosts extract dbc and map files from their own 3.3.5a install, on their own PC,
   and they never leave it.
 """
@@ -251,6 +259,9 @@ GITIGNORE = """# Leyline: our own code and docs only. Never game data, secrets o
 *.log
 __pycache__/
 *.pyc
+node_modules/
+launcher/src-tauri/target/
+launcher/src-tauri/gen/
 *.mpq
 *.MPQ
 *.m2
@@ -292,7 +303,8 @@ def brand_hits(rel: str, data: bytes) -> list[str]:
 
 def user_facing(rel: str) -> bool:
     name = rel.rsplit("/", 1)[-1].lower()
-    return name.endswith((".html", ".htm")) or (name.startswith("readme") and "/tests/" not in f"/{rel}")
+    return (name.endswith((".html", ".htm")) or (name.startswith("readme") and "/tests/" not in f"/{rel}")
+            or (rel.startswith("docs/") and name.endswith(".md")))
 
 
 # ------------------------------------------------------------------------------------------------------- sync

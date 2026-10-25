@@ -13,11 +13,15 @@
   python -m wuhost.setup signup invite|open|off     who may make accounts from the join page
   python -m wuhost.setup rules                      re-read state/rules.txt and state/beacon.json (the
                                                     realm list text) after you edited them
+  python -m wuhost.setup init --seed state/seed.b64 a realm made on the website (/wrath/host): its key,
+                                                    links, claim token and answers, from the per-realm
+                                                    download (base64 JSON). Used once, then deleted.
 
 Re-running init keeps the realm key, passwords and invite (it only changes what you pass), so
 running "Host a Wrath realm" again is always safe.
 """
 import argparse
+import base64
 import json
 import os
 import re
@@ -51,6 +55,67 @@ RULES_HELP = ("# Your realm's rules: one per line (up to 10, 120 characters each
               "# ignored. Shown on the realm list and your join page. After editing: Realm tools > rules.\n")
 ALNUM = string.ascii_uppercase + string.digits
 B32 = "ABCDEFGHJKMNPQRSTVWXYZ23456789"
+
+
+SECRET_RE = re.compile(r"^[A-Z2-9]{16,40}$")
+CLAIM_RE = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
+
+
+def read_seed(rel):
+    """The website's per-realm seed (base64 of a JSON object), checked field by field; None when the
+    file is not there (already used). It never holds a password or an account: only this realm's own
+    key, its invite and host links, the claim token for the host's Hero Key account and the answers."""
+    p = rel if os.path.isabs(rel) else os.path.join(KIT, rel)
+    try:
+        with open(p, encoding="ascii") as f:
+            doc = json.loads(base64.b64decode("".join(f.read().split()), validate=True).decode("utf-8"))
+    except OSError:
+        return None
+    except (ValueError, UnicodeDecodeError):
+        sys.exit("The realm file from the website is damaged: download it again.")
+    ok = (isinstance(doc, dict) and doc.get("v") == 1 and isinstance(doc.get("realm_key"), str)
+          and re.fullmatch(r"[0-9a-f]{64}", doc["realm_key"])
+          and all(isinstance(doc.get(k), str) and SECRET_RE.match(doc[k]) for k in ("invite_secret", "host_secret"))
+          and (doc.get("claim") is None or (isinstance(doc["claim"], str) and CLAIM_RE.match(doc["claim"])))
+          and isinstance(doc.get("name"), str) and NAME_RE.match(doc["name"])
+          and doc.get("profile") in PROFILES and doc.get("visibility") in ("public", "private")
+          and isinstance(doc.get("gm_name"), str) and GM_RE.match(doc["gm_name"])
+          and isinstance(doc.get("tagline", ""), str)
+          and isinstance(doc.get("rules", []), list) and all(isinstance(r, str) for r in doc.get("rules", [])))
+    if not ok:
+        sys.exit("The realm file from the website is damaged: download it again.")
+    if keys.realm_id(keys.public_key(bytes.fromhex(doc["realm_key"]))) != doc.get("realm_id"):
+        sys.exit("The realm file from the website does not match its realm id: download it again.")
+    doc["_path"] = p
+    return doc
+
+
+def apply_seed(seed, a, cfg):
+    """Put the seed's realm key in state/realm.key (refused when this kit already holds another realm)
+    and use its answers wherever this run did not pass its own."""
+    kp = path("realm.key")
+    want = bytes.fromhex(seed["realm_key"])
+    if os.path.exists(kp):
+        if keys.load_or_create(kp) != want:
+            sys.exit("This kit folder already hosts another realm (state/realm.key). "
+                     "Use a fresh copy of the host kit for this one.")
+    else:
+        os.makedirs(STATE, exist_ok=True)
+        fd = os.open(kp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="ascii") as f:
+            f.write(want.hex() + "\n")
+    for k in ("name", "profile", "visibility", "gm_name"):
+        if getattr(a, k) is None and not cfg.get(k):
+            setattr(a, k, seed[k])
+    if a.tagline is None and seed.get("tagline") and not (cfg.get("record") or {}).get("tagline"):
+        a.tagline = seed["tagline"]
+    cfg.setdefault("invite_secret", seed["invite_secret"])
+    cfg.setdefault("host_secret", seed["host_secret"])
+    if seed.get("claim") and not cfg.get("claim"):
+        cfg["claim"] = seed["claim"]
+    if not os.path.exists(path("rules.txt")) and seed.get("rules"):
+        with open(path("rules.txt"), "w", encoding="utf-8") as f:
+            f.write(RULES_HELP + "".join(" ".join(r.split())[:120] + "\n" for r in seed["rules"][:10] if r.strip()))
 
 
 def gen(n, alphabet=ALNUM):
@@ -172,6 +237,12 @@ def write_env(cfg, image, tag, tools_image):
 
 def cmd_init(a):
     cfg = load() or {}
+    seed = read_seed(a.seed) if getattr(a, "seed", None) else None
+    if seed:
+        if cfg.get("realm_id") and cfg["realm_id"] != seed["realm_id"]:
+            sys.exit("This kit folder already hosts another realm (state/host.json). "
+                     "Use a fresh copy of the host kit for this one.")
+        apply_seed(seed, a, cfg)
     name = a.name if a.name is not None else cfg.get("name")
     if not name or not NAME_RE.match(name.strip()):
         sys.exit("Realm name: 1-32 letters, digits, spaces, _ ' or -")
@@ -236,6 +307,11 @@ def cmd_init(a):
     write_beacon(cfg)
     write_env(cfg, a.image, a.tag, a.tools_image)
     write_links(cfg)
+    if seed:   # used: the key and links live in state/ now
+        try:
+            os.remove(seed["_path"])
+        except OSError:
+            pass
     print(json.dumps({"realm_id": rid, "first_run": first, "invite": invite_link(cfg)}))
 
 
@@ -391,6 +467,7 @@ def main(argv=None):
     p.add_argument("--gm-name", help="the operator's own account name that gets GM rights (they make it)")
     p.add_argument("--tagline", help="one line for the realm list")
     p.add_argument("--signup", choices=["invite", "open", "off"])
+    p.add_argument("--seed", help="the per-realm file from the website's host page (state/seed.b64)")
     p.set_defaults(fn=cmd_init)
     p = sub.add_parser("gm")
     p.add_argument("name")

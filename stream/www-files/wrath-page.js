@@ -50,6 +50,8 @@ export const CONFIG = {
   loadingArt: '',
   // the realm's public status (wrath_portal.py GET /wrath/status.json, CORS *)
   statusUrl: 'https://play.openvanilla.app/wrath/status.json',
+  // where a realm hop and "Back to Wrath" go (a hop session's env.home wins: wrath_portal.py hop_env)
+  homeUrl: 'https://play.openvanilla.app',
 };
 
 const STYLE_ID = 'wu-page-style';
@@ -540,6 +542,151 @@ export function interfaceMenu(panel, current = window.__wuInterface?.choice || '
 })();
 // <<< wu-interface ---------------------------------------------------------------------------------
 
+// >>> leyline-hop (realm hopping, 2026-10-25) ------------------------------------------------------
+// The Leyline window's Join (WrathUnleashedUI/Leyline.lua) can't navigate, so it asks the page: it sets the
+// Lua global WUUI_LEYLINE_HOP to the realm id (or "wrath") and whispers WULY "H:<id>" to itself, which the
+// realm echoes (ov_leyline.lua). The page takes the global through the bridge (and clears it) when the echo
+// arrives as CHAT_MSG_ADDON, or on a slow poll in the world (a realm that doesn't echo), then reloads the game
+// on that realm: <home>/wrath?go=r:<id> (with own game files: /wrath/play?mode=own&go=r:<id>). The global is
+// the authority: a whisper from someone else can't make the page hop.
+// In a hop session (wrath-early.js set it up): a "Back to Wrath" bar, and the realm's join page over the game
+// when this browser has no login for that realm yet; the login it hands back is kept here (wrath-early.js).
+export const HOP_TAKE = 'local h = WUUI_LEYLINE_HOP; WUUI_LEYLINE_HOP = nil; return h';
+const HOP_ID = /^[a-z2-7]{16}$/;
+
+/** "wrath" or a realm id, else null. */
+export function hopTarget(v) {
+  return v === 'wrath' || (typeof v === 'string' && HOP_ID.test(v)) ? v : null;
+}
+
+/** Where a hop (or "Back to Wrath") goes. */
+export function hopUrl(target, env = window.__wenilla_env || {}) {
+  const t = hopTarget(target);
+  if (!t) return null;
+  const home = typeof env.home === 'string' && /^https:\/\/[a-z0-9.-]+$/i.test(env.home) ? env.home : CONFIG.homeUrl;
+  const own = env.mode === 'own';
+  if (t === 'wrath') return home + (own ? '/wrath/play?mode=own' : '/wrath');
+  return home + (own ? `/wrath/play?mode=own&go=r:${t}` : `/wrath?go=r:${t}`);
+}
+
+/** CHAT_MSG_ADDON args ([prefix, msg, channel, sender] or {args}) that ask for a hop: the target, else null. */
+export function hopEcho(payload) {
+  const a = Array.isArray(payload) ? payload : (payload && Array.isArray(payload.args) ? payload.args : []);
+  if (a[0] !== 'WULY' || a[2] !== 'WHISPER' || typeof a[1] !== 'string') return null;
+  const m = /^H:([a-z2-7]{16}|wrath)$/.exec(a[1]);
+  return m ? m[1] : null;
+}
+
+/** Watch for the Leyline window's Join. `go(url)` navigates (tests pass their own). Returns a small handle. */
+export function watchHops(wenilla, { env = window.__wenilla_env || {}, go = (u) => location.assign(u), pollMs = 2000 } = {}) {
+  const h = { taking: false, gone: null, take: null, timer: 0 };
+  if (!wenilla || typeof wenilla.lua !== 'function') return h;
+  h.take = async () => {
+    if (h.taking || h.gone) return null;
+    h.taking = true;
+    try {
+      const [v] = (await wenilla.lua(HOP_TAKE, 1500).catch(() => [null])) || [];
+      const t = hopTarget(v);
+      if (!t || (t === 'wrath' && !env.hop)) return null;   // already home
+      if (t === env.hop) return null;                       // already there
+      h.gone = hopUrl(t, env);
+      go(h.gone);
+      return h.gone;
+    } finally {
+      h.taking = false;
+    }
+  };
+  try { wenilla.on?.('CHAT_MSG_ADDON', (p) => { if (hopEcho(p)) h.take(); }); } catch { /* old bridge */ }
+  const inWorldNow = () => { try { return wenilla.state?.session?.state === 'inworld'; } catch { return false; } };
+  if (pollMs > 0) h.timer = setInterval(() => { if (inWorldNow()) h.take().catch(() => {}); }, pollMs);
+  return h;
+}
+
+/** A login handed back by the realm's join page (framed below), checked: {user, pass} or null. */
+export function hopLoginMessage(ev, env = window.__wenilla_env || {}) {
+  let origin = '';
+  try { origin = new URL(env.hop_join).origin; } catch { return null; }
+  const d = ev && ev.data;
+  if (!ev || ev.origin !== origin || !d || d.type !== 'leyline-login' || d.realm !== env.hop) return null;
+  if (!/^[A-Za-z0-9]{3,16}$/.test(d.user || '') || !/^[\x21-\x7e]{1,16}$/.test(d.pass || '')) return null;
+  return { user: d.user, pass: d.pass };
+}
+
+const HOP_CSS = `
+  #wu-hop-bar { position: fixed; left: 50%; bottom: 8px; transform: translateX(-50%); z-index: 32; display: flex;
+    gap: 6px; align-items: center; padding: 4px 6px 4px 12px; border-radius: 8px; font: 12px system-ui, sans-serif;
+    background: linear-gradient(#101a2c, #070b14); border: 1px solid rgba(201,162,39,.6); color: #d8e6f5;
+    box-shadow: 0 4px 16px rgba(0,0,0,.6); }
+  #wu-hop-bar b { color: #f0d389; font: 600 13px Georgia, serif; letter-spacing: .04em; }
+  #wu-hop-bar button, #wu-hop-join button { cursor: pointer; border-radius: 6px; padding: 4px 10px; font: 12px system-ui, sans-serif;
+    border: 1px solid rgba(201,162,39,.6); background: #151a28; color: #e9e4d4; }
+  #wu-hop-bar button.home, #wu-hop-join button.home { border: 0; background: linear-gradient(#f0d389, #d8b25a); color: #1b1406; font-weight: 600; }
+  #wu-hop-join { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center;
+    background: radial-gradient(120% 90% at 50% 45%, rgba(20,34,58,.92) 0%, rgba(2,3,6,.96) 100%); }
+  #wu-hop-join .panel { width: min(640px, 94vw); height: min(720px, 90vh); display: flex; flex-direction: column;
+    border: 1px solid rgba(201,162,39,.6); border-radius: 10px; background: #0d111c; overflow: hidden; }
+  #wu-hop-join .head { display: flex; gap: 8px; align-items: center; padding: 8px 10px; color: #f0d389;
+    font: 600 15px Georgia, serif; border-bottom: 1px solid rgba(201,162,39,.35); }
+  #wu-hop-join .head span { flex: 1; }
+  #wu-hop-join iframe { flex: 1; border: 0; width: 100%; background: #15171a; }
+`;
+
+/** In a hop session: the "Back to Wrath" bar, and the join page when no login is kept for this realm. */
+export function hopUi(env = window.__wenilla_env || {}, hop = window.__wuHop) {
+  if (!hop?.state || !env.hop || document.getElementById('wu-hop-bar')) return null;
+  const css = document.createElement('style');
+  css.textContent = HOP_CSS;
+  document.head.append(css);
+  const name = String(env.hop_name || 'a community realm').slice(0, 32);
+  const home = () => location.assign(hopUrl('wrath', env));
+  const bar = document.createElement('div');
+  bar.id = 'wu-hop-bar';
+  const label = document.createElement('span');
+  label.append('On ');
+  const b = document.createElement('b');
+  b.textContent = name;
+  label.append(b, ' · Leyline');
+  const back = document.createElement('button');
+  back.className = 'home';
+  back.type = 'button';
+  back.textContent = 'Back to Wrath';
+  back.addEventListener('click', home);
+  const other = document.createElement('button');
+  other.type = 'button';
+  other.textContent = 'Use another account';
+  other.title = 'Forget the login this browser keeps for ' + name;
+  other.addEventListener('click', () => { hop.forgetLogin(localStorage, env.hop); location.reload(); });
+  bar.append(label, back, other);
+  document.body.append(bar);
+  if (hop.state.login) return { bar };
+  // First hop here: the realm's own join page (make an account, or sign in to yours), framed.
+  const join = document.createElement('div');
+  join.id = 'wu-hop-join';
+  join.setAttribute('role', 'dialog');
+  join.innerHTML = '<div class="panel"><div class="head"><span></span>'
+    + '<button type="button" data-x="later">Type my login in the game</button>'
+    + '<button type="button" class="home" data-x="home">Back to Wrath</button></div></div>';
+  join.querySelector('.head span').textContent = 'Join ' + name;
+  const frame = document.createElement('iframe');
+  frame.title = 'Join ' + name;
+  frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-same-origin');
+  frame.src = env.hop_join + '&from=' + encodeURIComponent(location.origin);
+  join.querySelector('.panel').append(frame);
+  join.querySelector('[data-x="home"]').addEventListener('click', home);
+  join.querySelector('[data-x="later"]').addEventListener('click', () => join.remove());
+  // keys typed in the join page are not for the game
+  join.addEventListener('keydown', (e) => e.stopPropagation(), true);
+  join.addEventListener('keyup', (e) => e.stopPropagation(), true);
+  addEventListener('message', (ev) => {
+    if (ev.source !== frame.contentWindow) return;
+    const got = hopLoginMessage(ev, env);
+    if (got && hop.saveLogin(localStorage, env.hop, got.user, got.pass)) location.reload();
+  });
+  document.body.append(join);
+  return { bar, join };
+}
+// <<< leyline-hop -----------------------------------------------------------------------------------
+
 let installed = null;
 
 /** The page layer, once. `wenilla` defaults to bridge.js's (the same module the page imports). */
@@ -567,6 +714,10 @@ export async function install(wenilla) {
   step('loading', () => loading(wenilla));
   step('busy banner', busyBanner);
   step('go link', () => { status.go = goLink(); if (status.go) window.wuGo = status.go; });
+  step('leyline hop', () => { status.hop = watchHops(wenilla); });
+  const ui = () => step('leyline hop page', () => { hopUi(); });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ui, { once: true });
+  else ui();
   // Touch controls only where they can be used (a touch screen, ?touch=, a saved choice); elsewhere
   // a connected controller still starts the bridge's gamepad mapper, which touch.js otherwise does.
   if (touchMaybe()) {

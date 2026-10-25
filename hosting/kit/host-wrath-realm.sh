@@ -197,6 +197,7 @@ cmd_up() {
   [ -n "${WU_RELAY_URL:-}" ] && extra+=(--relay-url "$WU_RELAY_URL")         # a self-hosted or test relay
   [ -n "${WU_LISTING_URL:-}" ] && extra+=(--listing-url "$WU_LISTING_URL")
   [ -n "${WU_JOIN_BASE:-}" ] && extra+=(--join-base "$WU_JOIN_BASE")
+  [ -n "${WU_SEED:-}" ] && [ -f "$KIT/$WU_SEED" ] && extra+=(--seed "$WU_SEED")   # a realm made on the website (used once)
   if [ "${WU_CONFIG_ONLY:-0}" = 1 ]; then
     IMG="${WU_IMAGE}"; TAG="${WU_TAG}"
     ensure_tools

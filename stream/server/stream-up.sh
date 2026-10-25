@@ -81,6 +81,10 @@ if [ -f "$ST/modes.py" ] && [ -f "$ST/modes_data.py" ]; then install -m 644 "$ST
 if [ -f "$ST/demo.py" ]; then install -m 644 "$ST/demo.py" "$WU/portal/demo.py"; fi
 # The web armory (stream/armory.py, /wrath/armory) too; its data comes from realm/serverpass.sh's export.
 if [ -f "$ST/armory.py" ]; then install -m 644 "$ST/armory.py" "$WU/portal/armory.py"; fi
+# "+ Your server" (stream/hostflow.py, /wrath/host) with the kit's Ed25519; its pending realms live in
+# $WU/hosted (0700, mounted writable at /hosted by recreate_portal: the rest of /app is read-only).
+if [ -f "$ST/hostflow.py" ] && [ -f "$ST/ed25519_pure.py" ]; then install -m 644 "$ST/hostflow.py" "$ST/ed25519_pure.py" "$WU/portal/"; fi
+install -d -m 700 "$WU/hosted"
 install -d -m 755 "$WU/portal/slices"
 install -m 644 "$ST/slices/$SLICE.json" "$WU/portal/slices/$SLICE.json"
 [ -f "$WU/portal.env.before-stream" ] || cp -p "$WU/portal.env" "$WU/portal.env.before-stream"

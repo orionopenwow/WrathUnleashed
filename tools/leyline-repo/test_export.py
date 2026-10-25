@@ -75,15 +75,24 @@ try:
             "hosting/INSTALL-OPERATE.md", f"{ex.ADDON}/Leyline.lua", "realm/custom/lua_scripts/ov_leyline.lua",
             "stream/links.py", "stream/www-files/art/leyline-display-OFL.txt",
             "stream/www-files/art/leyline-display.woff2", "stream/www-files/art/leyline-emblem.webp",
+            "docs/leyline/index.md", "docs/leyline/mods.md", "docs/leyline/cross-server.md",
+            "launcher/README.md", "launcher/ui/index.html", "launcher/src-tauri/Cargo.toml",
+            "launcher/src-tauri/src/clients.rs", "launcher/ui/art/leyline-emblem.webp",
             "README.md", "LICENSE", "THIRD-PARTY-NOTICES.md", ".gitignore"]
     missing = [w for w in want if w not in got]
     check("allow-list: the relay, kit, tools, bridge, tests, addon, links, art and top files are there", not missing, missing)
     art = sorted(n for n in os.listdir(REPO / "stream/www-files/art") if n.startswith("leyline-"))
+    docs = sorted(n for n in os.listdir(REPO / "docs/leyline") if n.endswith(".md"))
+    check("allow-list: every docs/leyline page", docs and all(f"docs/leyline/{n}" in got for n in docs), docs)
+    check("brand check covers the docs pages", ex.user_facing("docs/leyline/index.md")
+          and ex.brand_hits("docs/leyline/index.md", b"Play WoW") and not ex.user_facing("docs/other.txt"))
     check("allow-list: every leyline-* art file", all(f"stream/www-files/art/{n}" in got for n in art), len(art))
     outside = [g for g in got if g not in ex.GENERATED and g.split("/")[0] not in ex.MANAGED]
     check("allow-list: nothing outside the managed folders but the top files", not outside, outside)
     check("allow-list: no ModsPanel.lua, control.py or other addon files",
           not any(g.endswith(("ModsPanel.lua", "control.py", "WrathUnleashedUI.lua", "Collections.lua")) for g in got))
+    check("allow-list: the launcher without its build output (target/, gen/, node_modules/)",
+          not any(g.startswith("launcher/") and any(f"/{d}/" in g for d in ("target", "gen", "node_modules")) for g in got))
     check("allow-list: no __pycache__ / .pyc", not any("__pycache__" in g or g.endswith(".pyc") for g in got))
     lic = (out1 / "LICENSE").read_text()
     check("LICENSE: the repo's MIT license", lic.startswith("MIT License") and "WrathUnleashed contributors" in lic)
@@ -214,7 +223,7 @@ try:
     put(tgt, ".git/config", "[core]\n")                       # never touched
     put(tgt, ".git/objects/ab/cdef")
     put(tgt, "hosting/.git/HEAD", "ref\n")                    # a .git inside a managed folder: never touched
-    put(tgt, "docs/notes.md")                                 # not managed: kept
+    put(tgt, "notes/notes.md")                                # not managed: kept
     put(tgt, "CONTRIBUTING.md")                               # not managed: kept
     put(tgt, ".github/workflows/ci.yml")                      # not managed: kept
     res5, _ = run(REPO, tgt)
@@ -225,7 +234,7 @@ try:
     check("deletion: .git (top and nested) is never touched",
           {".git/config", ".git/objects/ab/cdef", "hosting/.git/HEAD"} <= g5)
     check("deletion: files outside the managed folders are kept",
-          {"docs/notes.md", "CONTRIBUTING.md", ".github/workflows/ci.yml"} <= g5)
+          {"notes/notes.md", "CONTRIBUTING.md", ".github/workflows/ci.yml"} <= g5)
     check("deletion: exactly the three stale files", sorted(res5["deleted"]) ==
           ["hosting/gone/deep/file.txt", "hosting/relay/wurelay/old_module.py", "stream/old-page.html"], res5["deleted"])
     src_e = tmp / "src_e"

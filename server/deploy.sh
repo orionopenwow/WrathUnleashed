@@ -146,11 +146,13 @@ if grep -q '^QUEUE_ENABLED=' "$RE"; then sed -i 's/^QUEUE_ENABLED=.*/QUEUE_ENABL
 docker network inspect wenilla-realm_default >/dev/null 2>&1 || die "network wenilla-realm_default not found (is the website stack running?)"
 docker image inspect python:3.12-alpine >/dev/null 2>&1 || docker pull -q python:3.12-alpine >/dev/null
 docker rm -f wu-portal >/dev/null 2>&1 || true
+mkdir -p /srv/wrath/hosted && chmod 700 /srv/wrath/hosted   # /wrath/host's pending realms (stream/hostflow.py)
+mkdir -p /srv/wrath/portal-data   # the Workshop's community links (stream/projects.py): the only writable mount
 # On the website's network as "wu-portal" (Caddy) and "mangosd" (the realm service's SOAP, now a
 # bridge to AzerothCore while the vanilla mangosd is stopped); on ov-wotlk_edge to reach the worldserver.
 docker run -d --name wu-portal --restart unless-stopped --memory 128m \
   --network wenilla-realm_default --network-alias mangosd \
-  --env-file /srv/wrath/portal.env -v /srv/wrath/portal:/app:ro \
+  --env-file /srv/wrath/portal.env -v /srv/wrath/portal:/app:ro -v /srv/wrath/hosted:/hosted -v /srv/wrath/portal-data:/data \
   python:3.12-alpine python3 -I /app/wrath_portal.py >/dev/null
 docker network connect ov-wotlk_edge wu-portal
 CF=/opt/openvanilla-classicplus/Caddyfile

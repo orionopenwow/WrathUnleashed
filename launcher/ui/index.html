@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leyline</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="ly">
+<div class="ly-glow" aria-hidden="true"></div>
+
+<aside class="side">
+  <div class="brand">
+    <img class="emblem" src="art/leyline-emblem.webp" alt="">
+    <div class="word">Leyline</div>
+  </div>
+  <nav aria-label="Pages">
+    <button class="nav" data-page="play">Play</button>
+    <button class="nav" data-page="clients">Clients</button>
+    <button class="nav" data-page="mods">Mods <span class="soon">next</span></button>
+    <button class="nav" data-page="realms">Realms <span class="soon">next</span></button>
+    <button class="nav" data-page="host">Host <span class="soon">next</span></button>
+    <button class="nav" data-page="settings">Settings</button>
+  </nav>
+  <div class="ver" id="ver"></div>
+</aside>
+
+<main>
+  <!-- PLAY -->
+  <section class="page" id="page-play">
+    <div class="panel">
+      <h2>Play</h2>
+      <div id="play-empty" class="empty" hidden>
+        <p>Add your game client first. Leyline uses the client already on your PC; it never downloads game files.</p>
+        <button class="btn" data-goto="clients">Add a client</button>
+      </div>
+      <form id="play-form" class="form">
+        <label>Client
+          <select id="play-client"></select>
+        </label>
+        <label>Realm
+          <select id="play-realm">
+            <option value="official">Wrath official (play.openvanilla.app)</option>
+            <option value="custom">Another realm address…</option>
+          </select>
+        </label>
+        <label id="play-custom-wrap" hidden>Realm address
+          <input id="play-custom" placeholder="realm.example.org or 1.2.3.4:3724" autocomplete="off" spellcheck="false">
+        </label>
+        <p class="hint" id="play-hint"></p>
+        <div class="cta">
+          <button type="submit" class="big" id="play-go">Play</button>
+          <button type="button" class="big violet" id="play-browser">Play in the browser</button>
+        </div>
+        <p class="status" id="play-status" role="status"></p>
+      </form>
+    </div>
+  </section>
+
+  <!-- CLIENTS -->
+  <section class="page" id="page-clients">
+    <div class="panel">
+      <h2>Clients</h2>
+      <p class="lede">Point Leyline at a game folder you already have: 3.3.5a (build 12340) or 1.12.1 (build 5875).
+        It reads the build from the executable and the data files, and checks the install looks complete.</p>
+      <div class="row">
+        <button class="btn" id="cl-pick">Choose a folder…</button>
+        <input id="cl-path" placeholder="or paste a folder path" autocomplete="off" spellcheck="false">
+        <button class="btn ghost" id="cl-add">Add</button>
+      </div>
+      <p class="status" id="cl-status" role="status"></p>
+      <div id="cl-list" class="cards"></div>
+    </div>
+  </section>
+
+  <!-- MODS -->
+  <section class="page" id="page-mods">
+    <div class="panel">
+      <h2>Mods</h2>
+      <p class="soon-big">Coming in the next phase</p>
+      <p class="lede">Installing, updating and publishing mods for each client arrives in the next Leyline release.
+        For now, here is what the catalog holds.</p>
+      <div class="stat"><span class="n" id="mods-count">…</span><span class="l">mods in the catalog</span></div>
+      <p class="status" id="mods-status"></p>
+      <ul class="names" id="mods-names"></ul>
+    </div>
+  </section>
+
+  <!-- REALMS -->
+  <section class="page" id="page-realms">
+    <div class="panel">
+      <h2>Realms</h2>
+      <p class="soon-big">Coming in the next phase</p>
+      <p class="lede">Browsing and joining community realms from inside Leyline arrives in the next release.
+        This is the live count from the Leyline realm list.</p>
+      <div class="stat"><span class="n" id="realms-count">…</span><span class="l">community realms listed</span></div>
+      <p class="status" id="realms-status"></p>
+      <ul class="names" id="realms-names"></ul>
+    </div>
+  </section>
+
+  <!-- HOST -->
+  <section class="page" id="page-host">
+    <div class="panel">
+      <h2>Host</h2>
+      <p class="soon-big">Coming in the next phase</p>
+      <p class="lede">Hosting a realm from your own PC, with no port forwarding, is planned for a later Leyline release.
+        Until then the host kit (<code>leyline host</code>) does it from a terminal.</p>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="page" id="page-settings">
+    <div class="panel">
+      <h2>Settings</h2>
+      <form id="set-form" class="form">
+        <fieldset id="wine-set">
+          <legend>Wine (macOS and Linux)</legend>
+          <p class="hint" id="wine-note"></p>
+          <label class="check"><input type="checkbox" id="wine-on"> Launch clients through Wine</label>
+          <label>Wine command
+            <input id="wine-cmd" placeholder="wine" autocomplete="off" spellcheck="false">
+          </label>
+          <label>Wine prefix (optional)
+            <input id="wine-prefix" placeholder="leave empty for the default" autocomplete="off" spellcheck="false">
+          </label>
+        </fieldset>
+        <div class="row"><button class="btn" type="submit">Save</button></div>
+        <p class="status" id="set-status" role="status"></p>
+      </form>
+      <div class="about">
+        <h3>Privacy</h3>
+        <p>No telemetry and no accounts. Leyline only fetches two public lists (the mod catalog and the realm list)
+          and keeps copies so it works offline.</p>
+        <h3>Your data</h3>
+        <p>Settings and caches live in <code id="data-dir"></code>.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

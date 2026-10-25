@@ -1,6 +1,7 @@
 -- Leyline (3.3.5a API): the in-game window of the Leyline network, in the Mods & Workshop panel's look.
 --   Realms:  every Leyline realm (name, ruleset, players, online/offline), this one first. "Copy link" puts the
---            realm's link (PUBLIC_BASE/r/<id>) in the box to copy; "Join" says how to hop (in-game hopping: coming).
+--            realm's link (PUBLIC_BASE/r/<id>) in the box to copy; "Join" hops there: the browser game reloads
+--            on that realm. "Back to Wrath" (always at the bottom) hops home.
 --   Friends across realms: the place for the global friends list (coming).
 -- Opened by Esc > Mods & Workshop > Leyline realms, /leyline and /realms.
 --
@@ -11,12 +12,22 @@
 --                      R:<id>:<live 0|1>:<players|->:<bots|->:<ruleset>:<name>   one realm (id "this" = this realm)
 --                      E:<count>                                     the list is complete
 --                      U:<text>                                      no list (e.g. "Realm list unavailable")
+--   client -> server   H:<id|wrath>                                  hop there
+--   server -> client   H:<id|wrath>                                  echoed back
+--
+-- Hopping: the addon can't navigate, so it asks the page. Join sends H:<id> to the realm, which echoes it; the
+-- browser page (stream/www-files/wrath-page.js) watches CHAT_MSG_ADDON through the game bridge and reloads the
+-- game at /wrath?go=r:<id>. It also sets the global WUUI_LEYLINE_HOP, which the page reads (and clears) through
+-- the bridge, so a hop works on a realm whose server doesn't echo (a Beacon without ov_leyline.lua). The desktop
+-- client has no page: after HOP_WAIT seconds the window says to open the link instead.
 
 local W = WrathUnleashedUI
 -- The public site. Links are PUBLIC_BASE .. "/r/<id>"; a future Leyline domain is this one line.
 local PUBLIC_BASE = "https://play.openvanilla.app"
 local THIS_REALM_PATH = "/wrath"
 local PREFIX = "WULY"
+local HOME_REALM = "WrathUnleashed"       -- GetRealmName() on Wrath itself
+local HOP_WAIT = 8                        -- seconds: still here after this = no page took the hop
 local WIN_W, WIN_H, ROW_H, ROWS = 560, 540, 34, 7
 local ASK_EVERY, ANSWER_WAIT = 30, 6     -- seconds: refresh at most this often; no answer after this = unavailable
 local UNAVAILABLE = "Realm list unavailable"
@@ -94,6 +105,8 @@ function L.OnMessage(prefix, msg, channel, sender)
         local age = L.age and L.age >= 120 and string.format(" (updated %d min ago)", math.floor(L.age / 60)) or ""
         setStatus((n == 0 and "No other realms are open right now." or (n == 1 and "1 other realm" or (n .. " other realms")) .. " on Leyline.") .. age)
         L.Refresh()
+    elseif kind == "H" and L.hopping and rest == L.hopping.target then
+        L.hopping.echoed = true   -- the page reloads the game on it now
     elseif kind == "U" then
         L.incoming, L.waiting, L.failed = nil, nil, true
         L.realms = {}
@@ -135,13 +148,44 @@ function L.Refresh()
     win.count:SetText(n > ROWS and string.format("%d-%d of %d", L.offset + 1, math.min(n, L.offset + ROWS), n) or "")
 end
 
+local function info(text) if win then win.info:SetText(text) end end
+
+function L.OnWrath()
+    if not GetRealmName then return true end
+    local ok, name = pcall(GetRealmName)
+    return not ok or name == nil or name == HOME_REALM
+end
+
+-- Ask the page to reload the game on target ("wrath" or a relay realm id). False for anything else.
+function L.Hop(target, name)
+    if type(target) ~= "string" or not (target == "wrath" or (#target == 16 and target:match("^[a-z2-7]+$"))) then
+        return false
+    end
+    WUUI_LEYLINE_HOP = target
+    L.hopping = { target = target, name = name or "Wrath", at = now() }
+    if SendAddonMessage and UnitName then pcall(SendAddonMessage, PREFIX, "H:" .. target, "WHISPER", UnitName("player")) end
+    if target == "wrath" then
+        info("Back to Wrath... the game reloads there in a moment.")
+    else
+        info("Hopping to " .. (name or "that realm") .. "... the game reloads there in a moment. The first time, you "
+            .. "make an account on that realm (or sign in to yours).")
+    end
+    return true
+end
+
+function L.Back()
+    if L.OnWrath() then info("You're on Wrath now."); return false end
+    return L.Hop("wrath", "Wrath")
+end
+
 function L.Join(r)
     local link = L.Link(r.id)
     if r.id == "this" then
-        win.info:SetText("You're on " .. r.name .. " now. Share the link above to bring friends here.")
+        info("You're on " .. r.name .. " now. Share the link above to bring friends here.")
+    elseif not r.live then
+        info(r.name .. " is offline right now. Its link is above: try again later.")
     else
-        win.info:SetText("Hopping to another realm from here is coming soon. For now, open the link above in a "
-            .. "new browser tab to play on " .. r.name .. ".")
+        L.Hop(r.id, r.name)
     end
     copy(link)
 end
@@ -208,6 +252,7 @@ local function build()
     local close = CreateFrame("Button", nil, win, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", -6, -6)
     button(win, "Done", 90, function() win:Hide() end, "BOTTOMRIGHT", -16, 14)
+    win.back = button(win, "Back to Wrath", 120, function() L.Back() end, "BOTTOMLEFT", 16, 14)
     tinsert(UISpecialFrames, "WrathUnleashedLeylineFrame")   -- Esc closes it
 
     label(win, "Realms", "GameFontNormal", "TOPLEFT", 20, -46)
@@ -249,6 +294,12 @@ local function build()
             L.waiting, L.failed, L.incoming = nil, true, nil
             setStatus(UNAVAILABLE)
         end
+        if L.hopping and now() - L.hopping.at > HOP_WAIT then   -- no page took it (the desktop client)
+            local h = L.hopping
+            L.hopping, WUUI_LEYLINE_HOP = nil, nil
+            info(h.target == "wrath" and "Hopping works in the browser game. Open " .. L.Link("this") .. " to play on Wrath."
+                or "Hopping works in the browser game. Open the link above to play on " .. h.name .. ".")
+        end
     end)
     win:SetScript("OnShow", function()
         if PlaySound then pcall(PlaySound, "igCharacterInfoOpen") end
@@ -271,4 +322,4 @@ SLASH_WULEYLINE1, SLASH_WULEYLINE2 = "/leyline", "/realms"
 SlashCmdList["WULEYLINE"] = function() W.ToggleLeyline() end
 
 W.Leyline = L
-L.Window, L.PUBLIC_BASE, L.PREFIX = function() return win end, PUBLIC_BASE, PREFIX
+L.Window, L.PUBLIC_BASE, L.PREFIX, L.HOP_WAIT = function() return win end, PUBLIC_BASE, PREFIX, HOP_WAIT
