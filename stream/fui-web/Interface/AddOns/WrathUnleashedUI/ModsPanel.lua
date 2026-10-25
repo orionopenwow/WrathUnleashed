@@ -75,12 +75,21 @@ local function buildInterface(page)
     button(page, "Fill my bars", 140, function() W.BarsOn(); W.FillBars(false) end, "LEFT", page, "TOPLEFT", 170, -185)
     label(page, "Fill my bars puts every spell you know that isn't on a bar into the empty buttons. Nothing is moved.",
         "GameFontHighlightSmall", "TOPLEFT", 20, -204):SetWidth(PANEL_W - 60)
+    local qa = CreateFrame("CheckButton", nil, page, "UICheckButtonTemplate")
+    qa:SetPoint("TOPLEFT", 16, -336)
+    label(page, "Instant quests: accept and hand in for me (hold Shift to read; a reward choice always waits for you)",
+        "GameFontHighlightSmall", "LEFT", qa, "RIGHT", 2, 0):SetWidth(PANEL_W - 80)
+    qa:SetScript("OnShow", function(self) self:SetChecked(not (WrathUnleashedUIDB and WrathUnleashedUIDB.questsOff)) end)
+    qa:SetScript("OnClick", function(self)
+        WrathUnleashedUIDB = WrathUnleashedUIDB or {}
+        WrathUnleashedUIDB.questsOff = not self:GetChecked() or nil
+    end)
     label(page, "Keys", "GameFontNormal", "TOPLEFT", 16, -248)
     button(page, "Default keys", 140, function() W.DefaultKeys(false) end, "TOPLEFT", 20, -272)
     label(page, "Main bar 1-7 and F G T Z X (8 9 0 - = are left free). The bar above it: Shift + those keys. "
         .. "The next bar: Ctrl +. The right bar: Alt +.", "GameFontHighlightSmall", "TOPLEFT", 20, -300):SetWidth(PANEL_W - 60)
     page:SetScript("OnShow", function()
-        s:SetValue((WrathUnleashedUIDB and WrathUnleashedUIDB.scale) or UIParent:GetScale())
+        s:SetValue((WrathUnleashedUIDB and WrathUnleashedUIDB.uiScale) or tonumber(GetCVar and GetCVar("uiScale") or "") or 1)
     end)
 end
 

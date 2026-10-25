@@ -28,12 +28,15 @@ function W.ModernScale()
     if k < W.SCALE_MIN then k = W.SCALE_MIN elseif k > W.SCALE_MAX then k = W.SCALE_MAX end
     return math.floor(k * 100 + 0.5) / 100
 end
+-- Through the game's own setting (Esc > Interface > Use UI Scale), never UIParent:SetScale: the browser
+-- client draws a SetScale on UIParent only partly (sizes, not positions), which pushed the left edge off
+-- screen (live 2026-10-25 01:10). The client applies the uiScale CVar itself.
 function W.ApplyScale(k)
     if InCombatLockdown and InCombatLockdown() then return false end
     if k < W.SCALE_MIN then k = W.SCALE_MIN elseif k > W.SCALE_MAX then k = W.SCALE_MAX end
-    UIParent:SetScale(k)
+    if SetCVar then pcall(SetCVar, "useUiScale", "1"); pcall(SetCVar, "uiScale", string.format("%.2f", k)) end
     WrathUnleashedUIDB = WrathUnleashedUIDB or {}
-    WrathUnleashedUIDB.scale = k
+    WrathUnleashedUIDB.uiScale = k
     return true
 end
 
@@ -43,9 +46,9 @@ end
 
 local function barsOn()
     -- (also W.BarsOn for the Mods panel)
-    if SetActionBarToggles then SetActionBarToggles(1, 1, 1, 1, 1) end
+    if SetActionBarToggles then SetActionBarToggles(1, 1, 1, 1, nil) end
     SHOW_MULTI_ACTIONBAR_1, SHOW_MULTI_ACTIONBAR_2, SHOW_MULTI_ACTIONBAR_3, SHOW_MULTI_ACTIONBAR_4 = 1, 1, 1, 1
-    ALWAYS_SHOW_MULTI_ACTIONBAR = 1
+    ALWAYS_SHOW_MULTI_ACTIONBAR = nil   -- empty buttons stay hidden (shown while dragging a spell)
     if MultiActionBar_Update then MultiActionBar_Update() end
     if UIParent_ManageFramePositions then UIParent_ManageFramePositions() end
 end
@@ -156,10 +159,23 @@ f:SetScript("OnEvent", function(_, event, level)
     if event == "PLAYER_ENTERING_WORLD" then
         f:UnregisterEvent("PLAYER_ENTERING_WORLD")
         WrathUnleashedUIDB = WrathUnleashedUIDB or {}
+        -- Defaults everyone wants (once per character, so a player's own change sticks):
+        -- the farthest camera (and start zoomed out), auto loot.
+        if not c.defaults then
+            c.defaults = true
+            if SetCVar then
+                pcall(SetCVar, "cameraDistanceMax", "50")
+                pcall(SetCVar, "cameraDistanceMaxFactor", "4")
+                pcall(SetCVar, "autoLootDefault", "1")
+            end
+            if CameraZoomOut then pcall(CameraZoomOut, 50) end
+        end
         -- Talent planner: 3.3.5's own preview mode (plan points, then Learn), on for everyone.
         if SetCVar then pcall(SetCVar, "previewTalents", "1"); pcall(SetCVar, "previewPetTalents", "1") end
-        -- The first time on this account: the modern size. After that: the player's own choice.
-        W.ApplyScale(WrathUnleashedUIDB.scale or W.ModernScale())
+        -- Undo the first version's UIParent:SetScale (it cut off the left edge); the default size now
+        -- comes from the client, and the slider sets the game's own UI scale.
+        if UIParent:GetScale() ~= 1 and not WrathUnleashedUIDB.uiScale then UIParent:SetScale(1) end
+        WrathUnleashedUIDB.scale = nil
         if not c.barsOn then
             barsOn()
             c.barsOn = true
@@ -185,6 +201,26 @@ f:SetScript("OnEvent", function(_, event, level)
 end)
 
 W.BarsOn, W.FillBars, W.DefaultKeys = barsOn, fillBars, defaultKeys
+
+-- Instant quests: accept, hand in and take the reward when there is nothing to choose. Shift skips it
+-- (to read the text); a reward choice and a quest that needs gold or items handed over always wait.
+local q = CreateFrame("Frame")
+for _, e in ipairs({ "QUEST_DETAIL", "QUEST_PROGRESS", "QUEST_COMPLETE", "QUEST_ACCEPT_CONFIRM" }) do q:RegisterEvent(e) end
+q:SetScript("OnEvent", function(_, event)
+    if (WrathUnleashedUIDB and WrathUnleashedUIDB.questsOff) or (IsShiftKeyDown and IsShiftKeyDown()) then return end
+    if event == "QUEST_DETAIL" then
+        if AcceptQuest then AcceptQuest() end
+    elseif event == "QUEST_ACCEPT_CONFIRM" then
+        if ConfirmAcceptQuest then ConfirmAcceptQuest() end
+        if StaticPopup_Hide then StaticPopup_Hide("QUEST_ACCEPT") end
+    elseif event == "QUEST_PROGRESS" then
+        if IsQuestCompletable and IsQuestCompletable() and (not GetQuestMoneyToGet or GetQuestMoneyToGet() == 0) then
+            CompleteQuest()
+        end
+    elseif event == "QUEST_COMPLETE" then
+        if (GetNumQuestChoices and GetNumQuestChoices() or 0) <= 1 and GetQuestReward then GetQuestReward(1) end
+    end
+end)
 
 SLASH_WUBARS1 = "/wubars"
 SlashCmdList["WUBARS"] = function()

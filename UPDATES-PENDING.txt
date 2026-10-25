@@ -27,3 +27,8 @@
 1025m ship  Save to GitHub (orionopenwow/WrathUnleashed)
 1025n client  Report a bug in the page menu (same queue as .bug, with browser and place added)
 1025o ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1025p foreverui  Fix: nothing cut off on the left (the UI scale goes through the game setting now), empty bar buttons hidden; farthest camera, auto loot, instant quest accept and hand-in (Shift to read)
+1025q ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1025r scripts  Every mount for level 80s (on reaching 80, the boost, or first login at 80; .mounts re-runs it)
+1025s foreverui  Collections window (Shift-P, /collections, micro-menu button): Mounts and Pets with search, preview and summon
+1025t ship  Save to GitHub (orionopenwow/WrathUnleashed)
