@@ -1,0 +1,13 @@
+# Nightly database dump (backup.sh). Run by wu-backup.timer; by hand: systemctl start wu-backup
+[Unit]
+Description=WrathUnleashed database backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/srv/wrath/backup.sh
+# Dumps are a background job: never let them starve the worldserver.
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

@@ -1,0 +1,48 @@
+# WrathUnleashed repo: our own code, scripts and docs only.
+# Never: Blizzard game data, game-file slices, Forever UI art, build outputs, secrets.
+
+# game data / slices / patch files (from players' own installs)
+/patch/
+/stream/work/
+/stream/www/
+/stream/slices/*/
+**/*.MPQ
+**/*.mpq
+**/*.blp
+**/*.m2
+**/*.wmo
+**/*.adt
+**/*.dbc
+addons/AzerothAdmin_Models/
+addons/ForeverUI/
+fui-src.tgz
+
+# build outputs and binaries (rebuilt from the client patch)
+/play/dist/
+/play/*.part*
+/play/*.tgz
+/play/*.br
+/play/*.exe
+/stream/bin/
+/tools/wenilla-host-linux
+*.exe
+*.tgz
+*.part00
+*.part01
+
+# secrets and machine-local files
+.env
+*.secret
+signup.env
+portal.env
+gmconsole.env
+wow-folder.txt
+foreverui-installed.txt
+players/wow-folder.txt
+
+# logs and diagnostics
+*.log
+logs.txt
+charfix-diagnose.txt
+dev/merge-help/
+__pycache__/

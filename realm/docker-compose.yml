@@ -1,0 +1,108 @@
+# Open Vanilla private test realm: AzerothCore 3.3.5a for the browser client (benilla-wotlk web
+# port). Local only: every port binds to 127.0.0.1. Game data comes from your own install
+# (1-extract.bat); nothing is downloaded but AzerothCore's own images.
+#
+# realm\.env picks the images and the profile (written by "Build custom realm.bat" and
+# "Switch profile.bat"; no .env = AzerothCore's stock images + the brawl profile):
+#   OV_IMAGE=ov/ac-wotlk  OV_TAG=custom   the custom build with modules (custom\sources.lock)
+#   OV_PROFILE=brawl | progression | casual   (profiles\*.env)
+name: ov-wotlk
+
+x-db: &db
+  AC_LOGIN_DATABASE_INFO: "ac-database;3306;root;${DB_ROOT_PASSWORD:-ov-local-test};acore_auth"
+  AC_WORLD_DATABASE_INFO: "ac-database;3306;root;${DB_ROOT_PASSWORD:-ov-local-test};acore_world"
+  AC_CHARACTER_DATABASE_INFO: "ac-database;3306;root;${DB_ROOT_PASSWORD:-ov-local-test};acore_characters"
+
+services:
+  ac-database:
+    container_name: ov-ac-database
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-ov-local-test}
+    volumes:
+      - ac-database:/var/lib/mysql
+    healthcheck:
+      # Over TCP: the entrypoint's temporary first-run server answers on the socket only, and
+      # the importer must not connect until the real server listens on 3306.
+      test: '/usr/bin/mysql --protocol=TCP --host=127.0.0.1 --user=root --password=$$MYSQL_ROOT_PASSWORD --execute "SHOW DATABASES;"'
+      interval: 3s
+      timeout: 40s
+      retries: 40
+      start_period: 20s
+
+  ac-db-import:
+    image: ${OV_IMAGE:-acore/ac-wotlk}-db-import:${OV_TAG:-master}
+    working_dir: /azerothcore
+    environment:
+      <<: *db
+      AC_DISABLE_INTERACTIVE: "1"
+      AC_DATA_DIR: /azerothcore/env/dist/data
+      AC_LOGS_DIR: /azerothcore/env/dist/logs
+      AC_CLOSE_IDLE_CONNECTIONS: "0"
+    depends_on:
+      ac-database:
+        condition: service_healthy
+
+  ac-authserver:
+    container_name: ov-ac-authserver
+    image: ${OV_IMAGE:-acore/ac-wotlk}-authserver:${OV_TAG:-master}
+    working_dir: /azerothcore
+    tty: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3724:3724"
+    environment:
+      AC_LOGIN_DATABASE_INFO: "ac-database;3306;root;${DB_ROOT_PASSWORD:-ov-local-test};acore_auth"
+      AC_LOGS_DIR: /azerothcore/env/dist/logs
+      AC_TEMP_DIR: /azerothcore/env/dist/temp
+    depends_on:
+      ac-database:
+        condition: service_healthy
+      ac-db-import:
+        condition: service_completed_successfully
+
+  ac-worldserver:
+    container_name: ov-ac-worldserver
+    image: ${OV_IMAGE:-acore/ac-wotlk}-worldserver:${OV_TAG:-master}
+    working_dir: /azerothcore
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8085:8085"
+    volumes:
+      - ov-client-data:/azerothcore/env/dist/data:ro
+      # Lua scripts for mod-ale (custom image only; the stock image ignores them).
+      - ./custom/lua_scripts:/azerothcore/lua_scripts:ro
+    # Settings: the profile first, then the module settings, then the auction bot's character
+    # (set-ahbot.bat). The stock image has no modules and ignores their AC_* settings.
+    env_file:
+      - path: profiles/${OV_PROFILE:-brawl}.env
+      - path: modules.env
+      - path: ahbot.env
+        required: false
+    environment:
+      <<: *db
+      AC_DATA_DIR: /azerothcore/env/dist/data
+      AC_LOGS_DIR: /azerothcore/env/dist/logs
+      AC_CLOSE_IDLE_CONNECTIONS: "0"
+      # 1-extract.bat extracts only dbc + maps (minutes): line-of-sight and pathing are off by default.
+      # "3-extract-pathing.bat" adds vmaps + mmaps (hours, once) and sets OV_PATHING=1; bots
+      # (mod-playerbots) walk far better with it.
+      AC_VMAP_ENABLE_LOS: "${OV_PATHING:-0}"
+      AC_VMAP_ENABLE_HEIGHT: "${OV_PATHING:-0}"
+      AC_VMAP_PET_LOS: "${OV_PATHING:-0}"
+      AC_MOVE_MAPS_ENABLE: "${OV_PATHING:-0}"
+      # The browser client (benilla-wotlk) runs no Warden module; AzerothCore turns Warden on by default.
+      AC_WARDEN_ENABLED: "0"
+    depends_on:
+      ac-database:
+        condition: service_healthy
+      ac-db-import:
+        condition: service_completed_successfully
+
+volumes:
+  ac-database:
+  ov-client-data:
+    external: true

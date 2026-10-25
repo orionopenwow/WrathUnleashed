@@ -1,0 +1,34 @@
+# WrathUnleashed client build: copy to .github/workflows/web-build.yml in YOUR fork of
+# benilla-wotlk (branch wrathunleashed, made by get-source.sh). Every push builds the browser
+# client and the Windows host and attaches them as artifacts; download "client-dist" and unzip it
+# into WrathUnleashed\play\dist. No game data is built or uploaded: players use their own files.
+name: web-build
+on:
+  push:
+    branches: [wrathunleashed]
+  workflow_dispatch:
+jobs:
+  client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - name: Toolchain, wasm-bindgen, wasi-sdk, binaryen
+        run: bash scripts/web-setup.sh
+      - name: Build the browser client (release, WebGPU)
+        run: bash scripts/web-build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-dist
+          path: web/dist
+  host:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - name: Build wenilla-host.exe
+        run: cargo build --release -p wenilla-host
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wenilla-host
+          path: target/release/wenilla-host.exe

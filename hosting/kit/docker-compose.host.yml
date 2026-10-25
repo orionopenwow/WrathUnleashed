@@ -1,0 +1,157 @@
+# WrathUnleashed: host a realm from your own PC. Started by "Host a Wrath realm.bat" /
+# host-wrath-realm.sh, which write .env next to this file. Don't run it by hand the first time.
+#
+# Nothing is published on your PC's network: no port forwarding, no open ports. The realm
+# (database, authserver, worldserver) sits on an internal Docker network with no internet access;
+# only wu-agent talks out, to the relay, over one outbound HTTPS connection. Players connect to the
+# relay, so they never see your IP address and you never see theirs.
+#
+#   .env (written by setup):  WU_IMAGE / WU_TAG      realm images (prebuilt, else ov/ac-wotlk:custom)
+#                              DB_ROOT_PASSWORD       generated, never leaves this PC
+#                              WU_PROFILE             main | brawl | progression
+#                              WU_WARDEN, WU_BOTS     anti-cheat on/off, number of random bots
+#                              WU_TOOLS_IMAGE         the agent/tools image
+name: wu-host
+
+x-db: &db
+  AC_LOGIN_DATABASE_INFO: "ac-database;3306;root;${DB_ROOT_PASSWORD:?run Host a Wrath realm first};acore_auth"
+  AC_WORLD_DATABASE_INFO: "ac-database;3306;root;${DB_ROOT_PASSWORD:?run Host a Wrath realm first};acore_world"
+  AC_CHARACTER_DATABASE_INFO: "ac-database;3306;root;${DB_ROOT_PASSWORD:?run Host a Wrath realm first};acore_characters"
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "20m", max-file: "3" }
+
+networks:
+  realm:
+    internal: true      # the game servers and the database: no route out, nothing published
+  egress: {}            # the agent's way out to the relay
+
+services:
+  ac-database:
+    container_name: wu-host-database
+    image: mysql:8.4
+    restart: unless-stopped
+    logging: *logging
+    networks: [realm]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?run Host a Wrath realm first}
+    command: ["--innodb-buffer-pool-size=${WU_DB_BUFFER:-512M}", "--binlog-expire-logs-seconds=86400"]
+    volumes:
+      - wu-database:/var/lib/mysql
+    healthcheck:
+      test: '/usr/bin/mysql --protocol=TCP --host=127.0.0.1 --user=root --password=$$MYSQL_ROOT_PASSWORD --execute "SHOW DATABASES;"'
+      interval: 5s
+      timeout: 40s
+      retries: 60
+      start_period: 30s
+
+  ac-db-import:
+    image: ${WU_IMAGE:-ov/ac-wotlk}-db-import:${WU_TAG:-custom}
+    working_dir: /azerothcore
+    logging: *logging
+    networks: [realm]
+    environment:
+      <<: *db
+      AC_DISABLE_INTERACTIVE: "1"
+      AC_DATA_DIR: /azerothcore/env/dist/data
+      AC_LOGS_DIR: /azerothcore/env/dist/logs
+      AC_CLOSE_IDLE_CONNECTIONS: "0"
+    depends_on:
+      ac-database: { condition: service_healthy }
+
+  ac-authserver:
+    container_name: wu-host-authserver
+    image: ${WU_IMAGE:-ov/ac-wotlk}-authserver:${WU_TAG:-custom}
+    working_dir: /azerothcore
+    tty: true
+    restart: unless-stopped
+    logging: *logging
+    networks: [realm]
+    environment:
+      AC_LOGIN_DATABASE_INFO: "ac-database;3306;root;${DB_ROOT_PASSWORD:?run Host a Wrath realm first};acore_auth"
+      AC_LOGS_DIR: /azerothcore/env/dist/logs
+      AC_TEMP_DIR: /azerothcore/env/dist/temp
+      # Every player arrives from the agent's address (the relay hides their IPs from you), so an
+      # IP ban would lock everyone out: wrong passwords ban the ACCOUNT for 10 minutes instead.
+      # The relay does the per-IP limits.
+      AC_WRONG_PASS_MAX_COUNT: "10"
+      AC_WRONG_PASS_BAN_TIME: "600"
+      AC_WRONG_PASS_BAN_TYPE: "1"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/3724"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      ac-database: { condition: service_healthy }
+      ac-db-import: { condition: service_completed_successfully }
+
+  ac-worldserver:
+    container_name: wu-host-worldserver
+    image: ${WU_IMAGE:-ov/ac-wotlk}-worldserver:${WU_TAG:-custom}
+    working_dir: /azerothcore
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    logging: *logging
+    networks: [realm]
+    stop_grace_period: 2m      # saves every online player on the way down
+    volumes:
+      # dbc + maps extracted from YOUR 3.3.5a install (same volume the realm\ tooling uses)
+      - ov-client-data:/azerothcore/env/dist/data:ro
+      - ./realm-files/lua_scripts:/azerothcore/lua_scripts:ro
+    env_file:
+      - path: realm-files/profiles/${WU_PROFILE:-main}.env
+      - path: realm-files/modules.env
+    environment:
+      <<: *db
+      AC_DATA_DIR: /azerothcore/env/dist/data
+      AC_LOGS_DIR: /azerothcore/env/dist/logs
+      AC_CLOSE_IDLE_CONNECTIONS: "0"
+      AC_PLAYERBOTS_DATABASE_INFO: "ac-database;3306;root;${DB_ROOT_PASSWORD:?run Host a Wrath realm first};acore_playerbots"
+      AC_PLAYERBOTS_MIN_RANDOM_BOTS: "${WU_BOTS:-40}"
+      AC_PLAYERBOTS_MAX_RANDOM_BOTS: "${WU_BOTS:-40}"
+      AC_VMAP_ENABLE_LOS: "${OV_PATHING:-0}"
+      AC_VMAP_ENABLE_HEIGHT: "${OV_PATHING:-0}"
+      AC_VMAP_PET_LOS: "${OV_PATHING:-0}"
+      AC_MOVE_MAPS_ENABLE: "${OV_PATHING:-0}"
+      AC_WARDEN_ENABLED: "${WU_WARDEN:-0}"
+      AC_SOAP_ENABLED: "0"
+      AC_PLAYER_LIMIT: "${WU_PLAYER_LIMIT:-50}"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8085"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15m
+    depends_on:
+      ac-database: { condition: service_healthy }
+      ac-db-import: { condition: service_completed_successfully }
+
+  wu-agent:
+    container_name: wu-host-agent
+    image: ${WU_TOOLS_IMAGE:-wu-host-tools:1}
+    restart: unless-stopped
+    logging: *logging
+    networks: [realm, egress]
+    command: ["python", "-m", "wuhost.agent", "--state", "/state"]
+    user: "${WU_UID:-0}:${WU_GID:-0}"      # the .sh sets your user id so state/ stays yours
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp"]
+    volumes:
+      - ./state:/state
+    environment:
+      DB_HOST: ac-database
+      DB_PASSWORD: ${DB_ROOT_PASSWORD:?run Host a Wrath realm first}
+      WU_REALM_DB_ID: "1"
+    depends_on:
+      ac-database: { condition: service_healthy }
+
+volumes:
+  wu-database:
+  ov-client-data:
+    external: true

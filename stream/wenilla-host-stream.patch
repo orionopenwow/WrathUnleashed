@@ -1,0 +1,3270 @@
+diff --git a/crates/wenilla-host/Cargo.toml b/crates/wenilla-host/Cargo.toml
+index 16bf1172..57c56a0a 100644
+--- a/crates/wenilla-host/Cargo.toml
++++ b/crates/wenilla-host/Cargo.toml
+@@ -13,6 +13,11 @@ description = "Native web host for the browser build: serves the wasm bundle, an
+ anyhow.workspace = true
+ clap.workspace = true
+ benilla-formats = { path = "../benilla-formats", default-features = false }
++# `--deps`'s static walk of a slice: ADT (MTEX/MMDX/MWMO), WMO (textures) and M2 (`.anim` names)
++# readers, the same ones the client uses.
++benilla-adt = { path = "../benilla-adt" }
++benilla-wmo = { path = "../benilla-wmo" }
++benilla-m2 = { path = "../benilla-m2" }
+ axum = { version = "0.8", features = ["ws"] }
+ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync"] }
+ # Splits `axum::extract::ws::WebSocket` into independent read/write halves — it implements
+@@ -29,6 +34,8 @@ tracing = "0.1"
+ tracing-subscriber = "0.3"
+ 
+ [dev-dependencies]
++# The lite-BLP test decodes its output with the client's own decoder.
++benilla-blp = { path = "../benilla-blp" }
+ # Only the WebSocket proxy test needs a client library (framing is fiddly to hand-roll); the
+ # plain-HTTP tests talk raw sockets — one GET request doesn't need a whole HTTP client crate.
+ tokio-tungstenite = "0.30"
+diff --git a/crates/wenilla-host/src/data.rs b/crates/wenilla-host/src/data.rs
+index bd0f0acd..6b88caee 100644
+--- a/crates/wenilla-host/src/data.rs
++++ b/crates/wenilla-host/src/data.rs
+@@ -28,8 +28,21 @@ use tower_http::set_header::SetResponseHeaderLayer;
+ /// chain module doc). The serialized index is shared across requests for this mounted chain.
+ #[derive(Clone)]
+ pub struct DataState {
+-    pub chain: Arc<Chain>,
++    /// `None` only for a slice host (`--only-listed` with no `--data`): no archives at all.
++    pub chain: Option<Arc<Chain>>,
+     index: Arc<IndexCache>,
++    /// `--only-listed`: answer only names present in the patch folder; the chain and the loose
++    /// folder are never consulted, so a box holding just a slice cannot fall back to anything.
++    only_listed: bool,
++    /// `--record`: every name served (200, GET or HEAD) is appended to a manifest, once.
++    record: Option<Arc<Recorder>>,
++    /// The player's own loose `Interface` folder beside `Data` (addons, addon art), served under
++    /// `Interface\...` names when the chain lacks them, as the desktop client reads them off disk.
++    loose: Option<Arc<std::path::PathBuf>>,
++    /// A patch folder laid OVER the chain: any game file placed there (a DBC, a texture, a
++    /// FrameXML file, at its chain path) is served instead of the archive's copy. The way to edit
++    /// the client's data without building MPQs.
++    patch: Option<Arc<std::path::PathBuf>>,
+ }
+ 
+ /// Single-flight initialization; transient list errors are retried on the next request.
+@@ -61,8 +74,58 @@ impl IndexCache {
+ /// Build the `/data/*` router. Kept separate from `static_site`'s and `ws`'s so `main.rs` can
+ /// merge them with `Router::merge` and each test file can stand its half up alone.
+ pub fn router(chain: Arc<Chain>) -> Router {
++    router_with_loose(chain, None)
++}
++
++/// [`router`] plus a loose `Interface` folder (the player's own `Interface\AddOns` and addon art)
++/// layered under the chain: a name the chain lacks is looked up there, and the index lists it.
++pub fn router_with_loose(chain: Arc<Chain>, loose: Option<std::path::PathBuf>) -> Router {
++    router_with_layers(chain, loose, None)
++}
++
++/// [`router_with_loose`] plus a patch folder served before the chain ([`DataState::patch`]).
++pub fn router_with_layers(
++    chain: Arc<Chain>,
++    loose: Option<std::path::PathBuf>,
++    patch: Option<std::path::PathBuf>,
++) -> Router {
++    router_with_config(DataConfig {
++        chain: Some(chain),
++        loose,
++        patch,
++        ..DataConfig::default()
++    })
++}
++
++/// Everything the `/data` router can be built from ([`router_with_config`]).
++#[derive(Default)]
++pub struct DataConfig {
++    /// The MPQ chain; `None` is only meaningful with `only_listed`.
++    pub chain: Option<Arc<Chain>>,
++    /// The player's loose `Interface` folder (see [`DataState::loose`]).
++    pub loose: Option<std::path::PathBuf>,
++    /// The patch folder laid over the chain (see [`DataState::patch`]).
++    pub patch: Option<std::path::PathBuf>,
++    /// Serve the patch folder and nothing else (see [`DataState::only_listed`]).
++    pub only_listed: bool,
++    /// Append each served name to this manifest (see [`Recorder`]).
++    pub record: Option<Arc<Recorder>>,
++}
++
++/// The `/data/*` router from a full [`DataConfig`].
++pub fn router_with_config(cfg: DataConfig) -> Router {
++    let DataConfig {
++        chain,
++        loose,
++        patch,
++        only_listed,
++        record,
++    } = cfg;
+     Router::new()
+         .route("/data/__index", get(index))
++        // A slice's per-tier file lists (`--export` writes them to `<patch>/.tiers/`), for the
++        // browser's "Download this section". Behind the same gate as the rest of /data.
++        .route("/data/__tier/{file}", get(tier_list))
+         // axum's matchit picks the more specific literal route above over this wildcard on its
+         // own — registration order here doesn't matter.
+         .route("/data/{*name}", get(file).head(file))
+@@ -83,7 +146,94 @@ pub fn router(chain: Arc<Chain>) -> Router {
+         .with_state(DataState {
+             chain,
+             index: Arc::default(),
++            only_listed,
++            record,
++            loose: loose.map(Arc::new),
++            patch: patch.map(Arc::new),
++        })
++}
++
++/// The manifest `--record` writes: one chain name per line, appended the first time each name is
++/// served, flushed per line so a capture session that is killed keeps everything it saw. Names
++/// already in the file (an earlier session) are not written again; the comparison is the MPQ
++/// one, any case and `/` = `\`, because the client asks for one file under several spellings.
++pub struct Recorder {
++    state: std::sync::Mutex<(std::collections::HashSet<String>, std::fs::File)>,
++}
++
++/// The key two spellings of one chain name share.
++pub fn name_key(name: &str) -> String {
++    name.replace('/', "\\").to_ascii_lowercase()
++}
++
++impl Recorder {
++    /// Open (or create) `path` for appending, remembering the names it already holds.
++    pub fn open(path: &std::path::Path) -> anyhow::Result<Self> {
++        use anyhow::Context;
++        let mut seen = std::collections::HashSet::new();
++        if let Ok(text) = std::fs::read_to_string(path) {
++            for line in text.lines() {
++                let line = line.trim();
++                if !line.is_empty() && !line.starts_with('#') {
++                    seen.insert(name_key(line));
++                }
++            }
++        }
++        let file = std::fs::OpenOptions::new()
++            .create(true)
++            .append(true)
++            .open(path)
++            .with_context(|| format!("opening {} to record into", path.display()))?;
++        Ok(Self {
++            state: std::sync::Mutex::new((seen, file)),
+         })
++    }
++
++    /// Record one served name; `true` when it was new.
++    pub fn note(&self, name: &str) -> bool {
++        use std::io::Write;
++        let mut guard = self.state.lock().unwrap_or_else(|p| p.into_inner());
++        let (seen, file) = &mut *guard;
++        if !seen.insert(name_key(name)) {
++            return false;
++        }
++        if let Err(e) = writeln!(file, "{name}").and_then(|_| file.flush()) {
++            tracing::error!(error = %e, "could not append to the record manifest");
++        }
++        true
++    }
++}
++
++/// Read one chain name through the layers, the way `GET /data/{name}` does: the patch folder
++/// first, then the chain, then the loose `Interface` folder; with `only_listed`, the patch folder
++/// alone. `Ok((bytes, editable))`, or an error [`is_missing`] recognises for "no such file".
++/// Shared with `--export`, so a slice holds exactly the bytes the capture session was served.
++pub fn read_layered(
++    chain: Option<&Chain>,
++    loose: Option<&std::path::Path>,
++    patch: Option<&std::path::Path>,
++    only_listed: bool,
++    name: &str,
++) -> anyhow::Result<(Vec<u8>, bool)> {
++    // `true` = a file the player edits on disk (patch or loose): never cached as immutable.
++    if let Some(path) = patch.and_then(|r| patch_file(r, name)) {
++        return std::fs::read(path).map(|b| (b, true)).map_err(anyhow::Error::from);
++    }
++    let missing = || anyhow::anyhow!("file not in patch chain: {name}");
++    if only_listed {
++        return Err(missing());
++    }
++    let from_chain = match chain {
++        Some(c) => c.read(name),
++        None => Err(missing()),
++    };
++    match from_chain {
++        Err(e) if is_missing(&e) => match loose.and_then(|r| loose_file(r, name)) {
++            Some(path) => std::fs::read(path).map(|b| (b, true)).map_err(anyhow::Error::from),
++            None => Err(e),
++        },
++        other => other.map(|b| (b, false)),
++    }
+ }
+ 
+ /// Which bodies are worth compressing, as a value rather than inline in [`router`] so the tests
+@@ -129,7 +279,7 @@ fn content_type(name: &str) -> &'static str {
+ /// A chain-read failure that means "this path doesn't exist in the composite" — the two shapes
+ /// `Chain::read` produces for a missing file (never mounted at all, or tombstoned by a patch) —
+ /// as opposed to a real I/O fault reading a corrupt archive, which is a 500, not a 404.
+-fn is_missing(err: &anyhow::Error) -> bool {
++pub fn is_missing(err: &anyhow::Error) -> bool {
+     let msg = err.to_string();
+     msg.contains("not in patch chain") || msg.contains("deleted from patch chain")
+ }
+@@ -142,12 +292,29 @@ async fn file(method: Method, uri: Uri, State(state): State<DataState>) -> Respo
+     // name and yields a `&'static str`, so it costs nothing to take it out of the task's way.
+     let content_type = content_type(&name);
+ 
+-    let chain = Arc::clone(&state.chain);
++    let chain = state.chain.clone();
++    let loose = state.loose.clone();
++    let patch = state.patch.clone();
++    let only_listed = state.only_listed;
++    let record = state.record.clone();
+     // `Chain::read` does synchronous file I/O (through benilla-mpq's blocking reads); running it
+     // on the async runtime thread would stall every other in-flight request behind one disk seek.
+-    let read = tokio::task::spawn_blocking(move || chain.read(&name)).await;
++    let read = tokio::task::spawn_blocking(move || {
++        let got = read_layered(
++            chain.as_deref(),
++            loose.as_deref().map(|p| p.as_path()),
++            patch.as_deref().map(|p| p.as_path()),
++            only_listed,
++            &name,
++        );
++        if let (Ok(_), Some(r)) = (&got, &record) {
++            r.note(&name);
++        }
++        got
++    })
++    .await;
+     match read {
+-        Ok(Ok(bytes)) => {
++        Ok(Ok((bytes, editable))) => {
+             let body = if method == Method::HEAD {
+                 Vec::new()
+             } else {
+@@ -161,7 +328,11 @@ async fn file(method: Method, uri: Uri, State(state): State<DataState>) -> Respo
+                     // browser (they never change under one name), never by a shared cache.
+                     (
+                         header::CACHE_CONTROL,
+-                        "private, max-age=31536000, immutable",
++                        if editable {
++                            "no-cache"
++                        } else {
++                            "private, max-age=31536000, immutable"
++                        },
+                     ),
+                 ],
+                 body,
+@@ -180,22 +351,69 @@ async fn file(method: Method, uri: Uri, State(state): State<DataState>) -> Respo
+     }
+ }
+ 
++/// `GET /data/__tier/{n}.txt` and `/data/__tier/index.json`: the slice's per-tier file lists from
++/// `<patch>/.tiers/` (written by `--export`). 404 without a patch folder or for any other name.
++async fn tier_list(
++    axum::extract::Path(file): axum::extract::Path<String>,
++    State(state): State<DataState>,
++) -> Response {
++    let ok_name = file == "index.json"
++        || file
++            .strip_suffix(".txt")
++            .is_some_and(|n| !n.is_empty() && n.len() <= 3 && n.bytes().all(|b| b.is_ascii_digit()));
++    let Some(root) = state.patch.clone().filter(|_| ok_name) else {
++        return StatusCode::NOT_FOUND.into_response();
++    };
++    let path = root.join(".tiers").join(&file);
++    match tokio::task::spawn_blocking(move || std::fs::read(path)).await {
++        Ok(Ok(bytes)) => (
++            [
++                // `no-cache`: a new slice upload changes the lists under the same names.
++                (header::CACHE_CONTROL, "no-cache"),
++                (
++                    header::CONTENT_TYPE,
++                    if file.ends_with(".json") { "application/json" } else { "text/plain; charset=utf-8" },
++                ),
++            ],
++            bytes,
++        )
++            .into_response(),
++        _ => StatusCode::NOT_FOUND.into_response(),
++    }
++}
++
+ /// `GET /data/__index` — every name [`Chain::list`] can enumerate, for the wasm `Chain::list`
+ /// (Lane A) to mirror the native directory walk it can't do in a browser.
+ async fn index(State(state): State<DataState>) -> Response {
+-    let chain = Arc::clone(&state.chain);
++    let chain = state.chain.clone();
++    let loose = state.loose.clone();
++    let patch = state.patch.clone();
++    let only_listed = state.only_listed;
+     let listed = state
+         .index
+         .get(move || {
+-            let entries = chain.list()?;
+-            let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
++            let mut names: Vec<String> = Vec::new();
++            if !only_listed {
++                if let Some(chain) = chain.as_deref() {
++                    names.extend(chain.list()?.into_iter().map(|e| e.name));
++                }
++                if let Some(root) = loose.as_deref() {
++                    loose_names(root, "Interface", &mut names);
++                }
++            }
++            if let Some(root) = patch.as_deref() {
++                let mut extra = Vec::new();
++                loose_names(root, "", &mut extra);
++                names.extend(extra.into_iter().map(|n| n.trim_start_matches('\\').to_string()));
++            }
+             Ok(serde_json::to_vec(&names)?)
+         })
+         .await;
+     match listed {
+         Ok(bytes) => (
+             [
+-                (header::CACHE_CONTROL, "private, max-age=86400"),
++                // `no-cache`: the list changes when the player adds an addon, and a stale copy hides it.
++                (header::CACHE_CONTROL, "no-cache"),
+                 (header::CONTENT_TYPE, "application/json"),
+             ],
+             bytes,
+@@ -208,9 +426,92 @@ async fn index(State(state): State<DataState>) -> Response {
+     }
+ }
+ 
++/// Map a chain-style `Interface\...` name onto a file under the loose `Interface` root, each
++/// component matched case-insensitively as on Windows. Any other prefix, an empty or dot
++/// component, is refused, so a request cannot leave the folder.
++fn loose_file(root: &std::path::Path, name: &str) -> Option<std::path::PathBuf> {
++    let (head, rest) = name.split_once('\\')?;
++    if !head.eq_ignore_ascii_case("interface") {
++        return None;
++    }
++    let mut at = root.to_path_buf();
++    for comp in rest.split('\\') {
++        if comp.is_empty() || comp.starts_with('.') {
++            return None;
++        }
++        let direct = at.join(comp);
++        at = if direct.exists() {
++            direct
++        } else {
++            std::fs::read_dir(&at).ok()?.flatten().find(|e| {
++                e.file_name().to_str().is_some_and(|n| n.eq_ignore_ascii_case(comp))
++            })?.path()
++        };
++    }
++    at.is_file().then_some(at)
++}
++
++/// Map any chain name onto a file under the patch root, each component matched
++/// case-insensitively; empty or dot components refused.
++fn patch_file(root: &std::path::Path, name: &str) -> Option<std::path::PathBuf> {
++    let mut at = root.to_path_buf();
++    for comp in name.split('\\') {
++        if comp.is_empty() || comp.starts_with('.') {
++            return None;
++        }
++        let direct = at.join(comp);
++        at = if direct.exists() {
++            direct
++        } else {
++            std::fs::read_dir(&at).ok()?.flatten().find(|e| {
++                e.file_name().to_str().is_some_and(|n| n.eq_ignore_ascii_case(comp))
++            })?.path()
++        };
++    }
++    at.is_file().then_some(at)
++}
++
++/// Every file under `dir`, as `prefix\rel\path` chain names, for the index.
++fn loose_names(dir: &std::path::Path, prefix: &str, out: &mut Vec<String>) {
++    let Ok(entries) = std::fs::read_dir(dir) else {
++        return;
++    };
++    for e in entries.flatten() {
++        let Some(n) = e.file_name().to_str().map(str::to_owned) else {
++            continue;
++        };
++        if n.starts_with('.') {
++            continue;
++        }
++        let name = format!("{prefix}\\{n}");
++        let path = e.path();
++        if path.is_dir() {
++            loose_names(&path, &name, out);
++        } else if path.is_file() {
++            out.push(name);
++        }
++    }
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::{compressible, content_type};
++
++    #[test]
++    fn loose_files_map_case_insensitively_and_stay_inside_the_root() {
++        let root = std::env::temp_dir().join(format!("wh-loose-{}", std::process::id()));
++        std::fs::create_dir_all(root.join("AddOns").join("Foo")).unwrap();
++        std::fs::write(root.join("AddOns").join("Foo").join("Foo.toc"), b"x").unwrap();
++        assert!(super::loose_file(&root, "Interface\\addons\\foo\\FOO.toc").is_some());
++        assert!(super::loose_file(&root, "Interface\\AddOns\\..\\x").is_none());
++        assert!(super::loose_file(&root, "Data\\AddOns\\Foo\\Foo.toc").is_none());
++        let mut names = Vec::new();
++        super::loose_names(&root, "Interface", &mut names);
++        assert_eq!(names, vec!["Interface\\AddOns\\Foo\\Foo.toc".to_string()]);
++        assert!(super::patch_file(&root, "AddOns\\foo\\foo.toc").is_some());
++        assert!(super::patch_file(&root, "AddOns\\..\\foo.toc").is_none());
++        let _ = std::fs::remove_dir_all(&root);
++    }
+     use axum::body::Body;
+     use axum::http::Request;
+     use tower::ServiceExt;
+diff --git a/crates/wenilla-host/src/lib.rs b/crates/wenilla-host/src/lib.rs
+index 7435cc2a..7ccaa8b9 100644
+--- a/crates/wenilla-host/src/lib.rs
++++ b/crates/wenilla-host/src/lib.rs
+@@ -4,6 +4,9 @@
+ //! these modules.
+ 
+ pub mod data;
++pub mod deps;
++pub mod export;
++pub mod size;
+ pub mod static_site;
+ pub mod ws;
+ 
+diff --git a/crates/wenilla-host/src/main.rs b/crates/wenilla-host/src/main.rs
+index b43f024d..dcb4ecd5 100644
+--- a/crates/wenilla-host/src/main.rs
++++ b/crates/wenilla-host/src/main.rs
+@@ -8,11 +8,20 @@
+ //! anyone who can reach the socket, with no login, so it binds to loopback by default and must
+ //! never be exposed on the open internet. Multi-user hosting is `wenilla-realm`, which mounts the
+ //! same routers behind a session cookie.
++//!
++//! Streaming a "mini" slice (a small part of the game) uses four more switches:
++//! - `--record <file>` while serving: append every name served to a manifest (capture).
++//! - `--deps <slice.json> --tiers 0-N --out <dir>`: the static walk of what a slice needs.
++//! - `--export <names...> <outdir>`: copy those names out of the chain into loose files.
++//! - `--only-listed` while serving: serve `--patch` and nothing else (the slice host, which runs
++//!   behind the website's sign-in, never with the full game data).
++//! - `--size-report <slice.json> --out <dir>`: the walk again for the base, every slice tier and
++//!   every instance in Map.dbc, measured (lite and full) without exporting anything.
+ 
+ use std::path::PathBuf;
+ use std::sync::Arc;
+ 
+-use anyhow::{Context, Result};
++use anyhow::{bail, Context, Result};
+ use benilla_formats::Chain;
+ use clap::Parser;
+ 
+@@ -22,7 +31,8 @@ use clap::Parser;
+     after_help = "wenilla-host is for local testing. /data serves the game files under --data to \
+                   anyone who can reach the socket, without any login. Keep it on loopback or a \
+                   private network; never expose it on the open internet. For hosting players, \
+-                  use wenilla-realm."
++                  use wenilla-realm. --only-listed serves a slice folder only, for a host behind \
++                  a sign-in gate."
+ )]
+ struct Cli {
+     /// Address to listen on. Loopback by default; anything else exposes `/data` to that
+@@ -30,17 +40,256 @@ struct Cli {
+     #[arg(long, default_value = "127.0.0.1:8090")]
+     bind: String,
+     /// Directory holding the wasm-bindgen output (`index.html`, `wenilla.js`, `*.wasm`) —
+-    /// `scripts/web-build.sh`'s `web/dist/`.
++    /// `scripts/web-build.sh`'s `web/dist/`. Required to serve.
+     #[arg(long)]
+-    www: PathBuf,
+-    /// The vanilla `Data` directory (or a single `.MPQ`) the chain opens — the same one `benilla`
+-    /// itself reads on the desktop.
++    www: Option<PathBuf>,
++    /// The `Data` directory (or a single `.MPQ`) the chain opens — the same one `benilla`
++    /// itself reads on the desktop. Required except with `--only-listed`.
+     #[arg(long)]
+-    data: PathBuf,
++    data: Option<PathBuf>,
+     /// Host the `/ws/{port}` proxy dials for the allowed ports — the mangos boxes this host
+     /// itself runs against, so it defaults to loopback.
+     #[arg(long, default_value = "127.0.0.1")]
+     upstream: String,
++    /// A folder of edited game files served instead of the archives' copies, by game path
++    /// (`patch\DBFilesClient\Spell.dbc`, `patch\Interface\FrameXML\...`). Defaults to the
++    /// `patch` folder next to the `play` folder when it exists.
++    #[arg(long)]
++    patch: Option<PathBuf>,
++    /// Append every `/data` name served (once each, any case) to this file: run the client,
++    /// visit the places a slice should hold, and the file lists what they needed.
++    #[arg(long, value_name = "FILE")]
++    record: Option<PathBuf>,
++    /// Serve `/data` only for names in `--patch` (everything else 404; `__index` lists only
++    /// those). For a server that holds a slice and nothing else.
++    #[arg(long)]
++    only_listed: bool,
++    /// Export: one or more names lists (text, one name per line, or a `{"names":[...]}`
++    /// manifest), in tier order, then the output folder. Reads `--data` (+ `--patch`).
++    #[arg(long, num_args = 2.., value_names = ["NAMES", "OUTDIR"])]
++    export: Option<Vec<PathBuf>>,
++    /// Export: a boot list exported first (the client's login read-set). Defaults to
++    /// `boot-manifest.json` and `world-manifest.json` in `--www` when given.
++    #[arg(long, value_name = "MANIFEST")]
++    boot: Vec<PathBuf>,
++    /// Export: leave out the first tier that would take the slice over this many MiB, and every
++    /// tier after it. Default: the slice's `budgetMB` with `--slice`.
++    #[arg(long, value_name = "MIB")]
++    budget_mb: Option<u64>,
++    /// Export: report sizes only, write nothing.
++    #[arg(long)]
++    dry_run: bool,
++    /// Export: BLPs under these prefixes keep only mips of at most `--lite-max` px ("lite").
++    #[arg(long, value_name = "PREFIX")]
++    lite_prefix: Vec<String>,
++    /// Export: the long-side limit for lite textures.
++    #[arg(long, default_value_t = 256)]
++    lite_max: u32,
++    /// Export: read `budgetMB` and `lite` from this slice description (`slices/mini.json`).
++    #[arg(long, value_name = "SLICE_JSON")]
++    slice: Option<PathBuf>,
++    /// Static walk: the slice description to walk (`slices/mini.json`).
++    #[arg(long, value_name = "SLICE_JSON")]
++    deps: Option<PathBuf>,
++    /// Static walk: which tiers (`0-3`, `0,2`). Default: `0` to the slice's `maxTier`.
++    #[arg(long)]
++    tiers: Option<String>,
++    /// Static walk: spawned displays (`kind<TAB>map<TAB>displayId`, from `displays.py`).
++    #[arg(long, value_name = "TSV")]
++    displays: Option<PathBuf>,
++    /// Static walk: folder for `tier-<n>.txt`, one names list per tier. Size report: folder for
++    /// `size-report.md` and `size-report.json`.
++    #[arg(long, value_name = "DIR")]
++    out: Option<PathBuf>,
++    /// Size report: walk the base, every tier of this slice and every instance in Map.dbc, and
++    /// report what each would take on the server (lite and full), beyond the base. Writes no game
++    /// file. Uses --data, --displays (displays.py --instances) and --boot.
++    #[arg(long, value_name = "SLICE_JSON")]
++    size_report: Option<PathBuf>,
++}
++
++fn open_chain(data: &Option<PathBuf>) -> Result<Chain> {
++    let Some(data) = data else {
++        bail!("--data (the game's Data folder) is required here");
++    };
++    Chain::open(data).with_context(|| format!("opening {}", data.display()))
++}
++
++fn read_json(path: &std::path::Path) -> Result<serde_json::Value> {
++    let text =
++        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
++    serde_json::from_str(&text).with_context(|| format!("{} is not valid JSON", path.display()))
++}
++
++fn run_deps(cli: &Cli, spec_path: &std::path::Path) -> Result<()> {
++    let mut chain = open_chain(&cli.data)?;
++    let text = std::fs::read_to_string(spec_path)
++        .with_context(|| format!("reading {}", spec_path.display()))?;
++    let spec = wenilla_host::deps::SliceSpec::parse(&text)?;
++    let max_tier = read_json(spec_path)?
++        .get("maxTier")
++        .and_then(|v| v.as_u64())
++        .unwrap_or(0);
++    let tiers =
++        wenilla_host::deps::parse_tiers(cli.tiers.as_deref().unwrap_or(&format!("0-{max_tier}")))?;
++    let displays = match &cli.displays {
++        Some(p) => wenilla_host::deps::parse_displays(
++            &std::fs::read_to_string(p).with_context(|| format!("reading {}", p.display()))?,
++        ),
++        None => {
++            eprintln!("note: no --displays file, so no creature or object models are walked");
++            Vec::new()
++        }
++    };
++    let Some(out) = &cli.out else {
++        bail!("--deps needs --out <folder>");
++    };
++    std::fs::create_dir_all(out)?;
++    let cats = wenilla_host::deps::Catalogs::load(&mut chain)?;
++    for w in &cats.warnings {
++        eprintln!("warning: {w}");
++    }
++    let result = wenilla_host::deps::walk(&chain, &cats, &spec, &tiers, &displays);
++    for t in &result {
++        let path = out.join(format!("tier-{}.txt", t.tier));
++        let mut body = format!("# tier {} {} (wenilla-host --deps)\n", t.tier, t.name);
++        for n in &t.notes {
++            body.push_str(&format!("# {n}\n"));
++        }
++        for n in &t.names {
++            body.push_str(n);
++            body.push('\n');
++        }
++        std::fs::write(&path, body).with_context(|| format!("writing {}", path.display()))?;
++        println!(
++            "tier {:>2} {:<28} {:>7} files  -> {}",
++            t.tier,
++            t.name,
++            t.names.len(),
++            path.display()
++        );
++        for n in &t.notes {
++            println!("         {n}");
++        }
++    }
++    Ok(())
++}
++
++fn lite_of(slice: Option<&serde_json::Value>, cli: &Cli) -> Option<wenilla_host::export::Lite> {
++    let mut prefixes = cli.lite_prefix.clone();
++    let mut max_px = cli.lite_max;
++    if let Some(l) = slice.and_then(|s| s.get("lite")) {
++        if let Some(a) = l.get("prefixes").and_then(|a| a.as_array()) {
++            prefixes.extend(a.iter().filter_map(|p| p.as_str().map(str::to_owned)));
++        }
++        if let Some(m) = l.get("maxPx").and_then(|m| m.as_u64()) {
++            max_px = m as u32;
++        }
++    }
++    (!prefixes.is_empty()).then_some(wenilla_host::export::Lite { max_px, prefixes })
++}
++
++fn run_size_report(cli: &Cli, spec_path: &std::path::Path) -> Result<()> {
++    let mut chain = open_chain(&cli.data)?;
++    let text = std::fs::read_to_string(spec_path)
++        .with_context(|| format!("reading {}", spec_path.display()))?;
++    let slice = read_json(spec_path)?;
++    let displays = match &cli.displays {
++        Some(p) => wenilla_host::deps::parse_displays(
++            &std::fs::read_to_string(p).with_context(|| format!("reading {}", p.display()))?,
++        ),
++        None => {
++            eprintln!("note: no --displays file: creature and object models are not counted");
++            Vec::new()
++        }
++    };
++    let mut boot = Vec::new();
++    for p in &cli.boot {
++        boot.extend(wenilla_host::export::read_names(p)?);
++    }
++    let Some(out) = &cli.out else {
++        bail!("--size-report needs --out <folder>");
++    };
++    let lite = lite_of(Some(&slice), cli);
++    wenilla_host::size::run(&mut chain, &text, &displays, &boot, lite.as_ref(), out)?;
++    println!("\nwritten: {} and {}", out.join("size-report.md").display(), out.join("size-report.json").display());
++    Ok(())
++}
++
++fn run_export(cli: &Cli, args: &[PathBuf]) -> Result<()> {
++    let (out, lists) = args.split_last().expect("clap requires two values");
++    let chain = open_chain(&cli.data)?;
++    let mut sources: Vec<(String, Vec<String>)> = Vec::new();
++    let mut boot = cli.boot.clone();
++    if boot.is_empty() {
++        if let Some(www) = &cli.www {
++            boot = ["boot-manifest.json", "world-manifest.json"]
++                .iter()
++                .map(|m| www.join(m))
++                .filter(|p| p.is_file())
++                .collect();
++        }
++    }
++    if boot.is_empty() {
++        eprintln!(
++            "warning: no boot list (--boot or --www): a slice without the login read-set cannot \
++             reach the login screen"
++        );
++    }
++    for p in boot.iter().chain(lists.iter()) {
++        sources.push((
++            p.display().to_string(),
++            wenilla_host::export::read_names(p)?,
++        ));
++    }
++    let slice = match &cli.slice {
++        Some(p) => Some(read_json(p)?),
++        None => None,
++    };
++    let budget = cli
++        .budget_mb
++        .or_else(|| slice.as_ref()?.get("budgetMB")?.as_u64())
++        .map(|m| m * 1024 * 1024);
++    let lite = lite_of(slice.as_ref(), cli);
++    let reader = wenilla_host::export::layered_reader(Some(&chain), None, cli.patch.as_deref());
++    let report = wenilla_host::export::export_with(
++        &reader,
++        &sources,
++        out,
++        budget,
++        cli.dry_run,
++        lite.as_ref(),
++    )?;
++    print!("{}", wenilla_host::export::summary(&report));
++    if !cli.dry_run {
++        // The per-tier file lists for the browser's "Download this section" (/data/__tier/<n>.txt):
++        // the boot lists are tier 0's, `tier-<n>.txt` lists tier n's; --record captures are not a tier.
++        let names: std::collections::HashMap<u32, String> = match &cli.slice {
++            Some(p) => wenilla_host::deps::SliceSpec::parse(&std::fs::read_to_string(p)?)?
++                .tiers
++                .into_iter()
++                .map(|t| (t.tier, t.name))
++                .collect(),
++            None => Default::default(),
++        };
++        let mut tiers: Vec<wenilla_host::export::TierFiles> = Vec::new();
++        for (i, l) in report.lists.iter().enumerate() {
++            let n = if i < boot.len() { Some(0) } else { wenilla_host::export::tier_of_list(&l.source) };
++            let Some(n) = n else { continue };
++            match tiers.iter_mut().find(|t| t.tier == n) {
++                Some(t) => t.lists.push(l),
++                None => tiers.push(wenilla_host::export::TierFiles {
++                    tier: n,
++                    name: names.get(&n).cloned().unwrap_or_default(),
++                    lists: vec![l],
++                }),
++            }
++        }
++        tiers.sort_by_key(|t| t.tier);
++        wenilla_host::export::write_tier_lists(out, &tiers)?;
++        println!("slice written to {} (tier file lists in .tiers)", out.display());
++    }
++    Ok(())
+ }
+ 
+ #[tokio::main]
+@@ -50,30 +299,92 @@ async fn main() -> Result<()> {
+         .init();
+     let cli = Cli::parse();
+ 
+-    let chain = Arc::new(
+-        Chain::open(&cli.data).with_context(|| format!("opening {}", cli.data.display()))?,
+-    );
+-    tracing::info!(data = %cli.data.display(), "patch chain open");
++    if let Some(spec) = cli.size_report.clone() {
++        return run_size_report(&cli, &spec);
++    }
++    if let Some(spec) = cli.deps.clone() {
++        return run_deps(&cli, &spec);
++    }
++    if let Some(args) = cli.export.clone() {
++        return run_export(&cli, &args);
++    }
++    let Some(www) = cli.www.clone() else {
++        bail!("--www (the browser build folder) is required to serve");
++    };
++
++    let chain = if cli.only_listed && cli.data.is_none() {
++        None
++    } else {
++        let c = Arc::new(open_chain(&cli.data)?);
++        tracing::info!(data = %cli.data.as_ref().map(|d| d.display().to_string()).unwrap_or_default(), "patch chain open");
++        Some(c)
++    };
+ 
+-    let app = wenilla_host::data::router(chain)
+-        .merge(wenilla_host::ws::router(
+-            cli.upstream.clone(),
+-            wenilla_host::ALLOWED_PORTS,
+-        ))
+-        .merge(wenilla_host::static_site::router(&cli.www));
++    // The player's own loose `Interface` folder beside `Data` (their addons), when there is one.
++    let loose = cli
++        .data
++        .as_ref()
++        .and_then(|d| d.parent())
++        .map(|p| p.join("Interface"))
++        .filter(|p| p.is_dir() && !cli.only_listed);
++    if let Some(l) = &loose {
++        tracing::info!(interface = %l.display(), "serving your loose Interface folder (addons)");
++    }
++    // An optional patch folder (`--patch`, else `patch` beside `--www`'s parent) served before the
++    // chain: drop an edited game file there at its game path to change the client's data.
++    let patch = cli
++        .patch
++        .clone()
++        .or_else(|| www.parent().map(|p| p.join("..").join("patch")))
++        .filter(|p| p.is_dir());
++    if let Some(p) = &patch {
++        tracing::info!(patch = %p.display(), "serving the patch folder over the game files");
++    }
++    if cli.only_listed {
++        let Some(p) = &patch else {
++            bail!("--only-listed needs --patch <slice folder> (an existing folder)");
++        };
++        tracing::info!(slice = %p.display(), "only-listed: serving this folder and nothing else");
++    }
++    let record = match &cli.record {
++        Some(path) => {
++            tracing::info!(record = %path.display(), "recording every name served");
++            Some(Arc::new(wenilla_host::data::Recorder::open(path)?))
++        }
++        None => None,
++    };
++    let app = wenilla_host::data::router_with_config(wenilla_host::data::DataConfig {
++        chain,
++        loose,
++        patch,
++        only_listed: cli.only_listed,
++        record,
++    })
++    .merge(wenilla_host::ws::router(
++        cli.upstream.clone(),
++        wenilla_host::ALLOWED_PORTS,
++    ))
++    .merge(wenilla_host::static_site::router(&www));
+ 
+     let listener = tokio::net::TcpListener::bind(&cli.bind)
+         .await
+         .with_context(|| format!("binding {}", cli.bind))?;
+     if !binds_loopback(&listener) {
+-        tracing::warn!(
+-            bind = %cli.bind,
+-            "wenilla-host is a local testing tool: /data serves your game files to anyone who \
+-             can reach this address, with no login. Do not expose it on the open internet — use \
+-             wenilla-realm to host players."
+-        );
++        if cli.only_listed {
++            tracing::warn!(
++                bind = %cli.bind,
++                "serving a slice beyond loopback: keep this behind the sign-in gate"
++            );
++        } else {
++            tracing::warn!(
++                bind = %cli.bind,
++                "wenilla-host is a local testing tool: /data serves your game files to anyone who \
++                 can reach this address, with no login. Do not expose it on the open internet — use \
++                 wenilla-realm to host players."
++            );
++        }
+     }
+-    tracing::info!(bind = %cli.bind, www = %cli.www.display(), upstream = %cli.upstream, "wenilla-host listening");
++    tracing::info!(bind = %cli.bind, www = %www.display(), upstream = %cli.upstream, "wenilla-host listening");
+     axum::serve(listener, app).await.context("serving")
+ }
+ 
+diff --git a/crates/wenilla-host/src/deps.rs b/crates/wenilla-host/src/deps.rs
+new file mode 100644
+index 00000000..0f80e1e6
+--- /dev/null
++++ b/crates/wenilla-host/src/deps.rs
+@@ -0,0 +1,1002 @@
++//! `--deps`: work out, without playing, which game files a "mini" slice needs — a static walk of
++//! the game data from a slice description (`slices/mini.json`), tier by tier.
++//!
++//! Per tier:
++//! - `prefixes`: every listed chain name under these folders (the shared base: UI, DBCs, the
++//!   player models, spell effects, interface sounds...).
++//! - `names`: single files.
++//! - `maps`: each map's WDT and WDL, its ADT tiles (all of them; for a `zone` only the tiles
++//!   covering that zone's `WorldMapArea` rect; for a world `box` [x min, x max, y min, y max]
++//!   the tiles under it; for `tiles` [x0, x1, y0, y1] those; each plus `marginTiles`), the map's
++//!   loading screen and the minimap tiles; a WMO-only map's global WMO.
++//!
++//! Tier numbers: with a top-level `order` (a list of tier `key`s), a tier's number is its
++//! position there and tiers left out of it are not walked; without one, each tier's `tier`.
++//! - creature and game-object displays spawned on those maps (`--displays`, from the server's
++//!   database: `stream/displays.py`), resolved through `CreatureDisplayInfo` /
++//!   `CreatureModelData` / `CreatureDisplayInfoExtra` / `GameObjectDisplayInfo`.
++//!
++//! Every model found is followed recursively: an ADT's textures, M2s (MMDX) and WMOs (MWMO); a
++//! WMO's groups, textures, doodads (MODN) and skybox (MOSB); an M2's skin profiles, `.anim`
++//! files and file-named textures. Only names the chain actually holds are emitted.
++//!
++//! Known gaps, which a `--record` session of the slice finds: sounds (zone music, ambience,
++//! creature voices), the world-map and dungeon-map art of instances, spell visuals that are not
++//! under the tier's prefixes, creatures summoned by scripts rather than spawned, and textures a
++//! model only gets at run time (equipment on NPCs, through the item prefixes).
++
++use std::collections::{HashSet, VecDeque};
++use std::io::Cursor;
++
++use anyhow::{bail, Context, Result};
++use benilla_formats::Chain;
++
++use crate::data::name_key;
++
++/// A slice description (the parts the walker reads).
++pub struct SliceSpec {
++    pub tiers: Vec<TierSpec>,
++}
++
++pub struct TierSpec {
++    pub tier: u32,
++    /// The stable name `order` refers to (empty in an older file without `order`).
++    pub key: String,
++    pub name: String,
++    pub prefixes: Vec<String>,
++    pub names: Vec<String>,
++    pub maps: Vec<MapSpec>,
++}
++
++pub struct MapSpec {
++    pub id: u32,
++    /// Only the tiles under this `AreaTable` zone's world-map rect.
++    pub zone: Option<u32>,
++    /// Only the tiles under this world rect: x min, x max, y min, y max (a subzone, which has no
++    /// world-map rect of its own: Northshire Valley, the Valley of Trials).
++    pub world_box: Option<[f32; 4]>,
++    /// Only these tiles: x0, x1, y0, y1 (inclusive).
++    pub tiles: Option<[u32; 4]>,
++    pub margin_tiles: u32,
++}
++
++impl MapSpec {
++    /// The whole map.
++    pub fn whole(id: u32) -> Self {
++        Self { id, zone: None, world_box: None, tiles: None, margin_tiles: 0 }
++    }
++}
++
++fn f32x4(v: &serde_json::Value, key: &str) -> Result<Option<[f32; 4]>> {
++    let Some(a) = v.get(key) else { return Ok(None) };
++    let a: Vec<f32> = a
++        .as_array()
++        .map(|a| a.iter().filter_map(|x| x.as_f64()).map(|x| x as f32).collect())
++        .unwrap_or_default();
++    if a.len() < 4 {
++        bail!("\"{key}\" needs four numbers");
++    }
++    Ok(Some([a[0], a[1], a[2], a[3]]))
++}
++
++fn u32_of(v: &serde_json::Value, key: &str) -> Option<u32> {
++    v.get(key).and_then(|x| x.as_u64()).map(|x| x as u32)
++}
++
++fn strings_of(v: &serde_json::Value, key: &str) -> Vec<String> {
++    v.get(key)
++        .and_then(|x| x.as_array())
++        .map(|a| {
++            a.iter()
++                .filter_map(|s| s.as_str().map(str::to_owned))
++                .collect()
++        })
++        .unwrap_or_default()
++}
++
++impl SliceSpec {
++    pub fn parse(text: &str) -> Result<Self> {
++        let v: serde_json::Value = serde_json::from_str(text).context("slice JSON")?;
++        let Some(tiers) = v.get("tiers").and_then(|t| t.as_array()) else {
++            bail!("the slice has no \"tiers\" array");
++        };
++        // With "order": tier number = position of the tier's key in it.
++        let order: Option<Vec<String>> = v.get("order").map(|o| {
++            o.as_array()
++                .map(|a| a.iter().filter_map(|k| k.as_str().map(str::to_owned)).collect())
++                .unwrap_or_default()
++        });
++        if let Some(order) = &order {
++            for (i, k) in order.iter().enumerate() {
++                if order[..i].contains(k) {
++                    bail!("\"order\" lists {k:?} twice");
++                }
++                if !tiers.iter().any(|t| t.get("key").and_then(|x| x.as_str()) == Some(k)) {
++                    bail!("\"order\" lists {k:?}, but no tier has that key");
++                }
++            }
++        }
++        let mut out = Vec::new();
++        for t in tiers {
++            let key = t.get("key").and_then(|k| k.as_str()).unwrap_or("").to_owned();
++            let tier = match &order {
++                Some(order) => match order.iter().position(|k| *k == key) {
++                    Some(i) => i as u32,
++                    None => continue, // left out of "order": not streamed
++                },
++                None => match u32_of(t, "tier") {
++                    Some(n) => n,
++                    None => bail!("a tier has no numeric \"tier\" (and the slice has no \"order\")"),
++                },
++            };
++            let mut maps = Vec::new();
++            for m in t
++                .get("maps")
++                .and_then(|m| m.as_array())
++                .into_iter()
++                .flatten()
++            {
++                let Some(id) = u32_of(m, "id") else {
++                    bail!("tier {tier}: a map has no numeric \"id\"");
++                };
++                let tiles = f32x4(m, "tiles")
++                    .with_context(|| format!("tier {tier}, map {id}"))?
++                    .map(|t| [t[0] as u32, t[1] as u32, t[2] as u32, t[3] as u32]);
++                let world_box = f32x4(m, "box").with_context(|| format!("tier {tier}, map {id}"))?;
++                if let Some(b) = world_box {
++                    if !(b[0] < b[1] && b[2] < b[3]) {
++                        bail!("tier {tier}, map {id}: box must be [x min, x max, y min, y max]");
++                    }
++                }
++                maps.push(MapSpec {
++                    id,
++                    zone: u32_of(m, "zone"),
++                    world_box,
++                    tiles,
++                    margin_tiles: u32_of(m, "marginTiles").unwrap_or(0),
++                });
++            }
++            out.push(TierSpec {
++                tier,
++                key,
++                name: t
++                    .get("name")
++                    .and_then(|n| n.as_str())
++                    .unwrap_or("")
++                    .to_owned(),
++                prefixes: strings_of(t, "prefixes"),
++                names: strings_of(t, "names"),
++                maps,
++            });
++        }
++        out.sort_by_key(|t| t.tier);
++        Ok(Self { tiers: out })
++    }
++}
++
++/// `"0-3"`, `"2"`, `"0,2-4"` → the tier numbers.
++pub fn parse_tiers(s: &str) -> Result<Vec<u32>> {
++    let mut out = Vec::new();
++    for part in s.split(',').map(str::trim).filter(|p| !p.is_empty()) {
++        let (a, b) = part.split_once('-').unwrap_or((part, part));
++        let (a, b): (u32, u32) = (
++            a.trim().parse().with_context(|| format!("tier {a:?}"))?,
++            b.trim().parse().with_context(|| format!("tier {b:?}"))?,
++        );
++        if a > b {
++            bail!("tier range {part:?} runs backwards");
++        }
++        out.extend(a..=b);
++    }
++    out.sort_unstable();
++    out.dedup();
++    Ok(out)
++}
++
++/// One spawned display from the server: `kind` `c` (creature) or `g` (game object).
++pub struct Display {
++    pub kind: char,
++    pub map: u32,
++    pub id: u32,
++    /// The tier whose map entry holds the spawn (`displays.py`'s fourth column); `None` (`-` or
++    /// no column): any tier with this map.
++    pub tier: Option<u32>,
++}
++
++/// Read `displays.tsv` (`kind<TAB>map<TAB>displayId[<TAB>tier]` per line, as `mysql -N -B`
++/// prints it).
++pub fn parse_displays(text: &str) -> Vec<Display> {
++    text.lines()
++        .filter_map(|l| {
++            let mut f = l.split('\t').map(str::trim);
++            let kind = f.next()?.chars().next()?;
++            let map = f.next()?.parse().ok()?;
++            let id = f.next()?.parse().ok()?;
++            let tier = f.next().and_then(|t| t.parse().ok());
++            (matches!(kind, 'c' | 'g') && id != 0).then_some(Display { kind, map, id, tier })
++        })
++        .collect()
++}
++
++/// What the walker reads the game data through, so it can be tested without an install.
++pub trait Source {
++    fn contains(&self, name: &str) -> bool;
++    fn read(&self, name: &str) -> Option<Vec<u8>>;
++    /// Every listed name (for `prefixes`).
++    fn list(&self) -> Vec<String>;
++}
++
++impl Source for Chain {
++    fn contains(&self, name: &str) -> bool {
++        Chain::contains(self, name)
++    }
++    fn read(&self, name: &str) -> Option<Vec<u8>> {
++        Chain::read(self, name).ok()
++    }
++    fn list(&self) -> Vec<String> {
++        Chain::list(self)
++            .map(|v| v.into_iter().map(|e| e.name).collect())
++            .unwrap_or_default()
++    }
++}
++
++/// The DBC-derived lookups the walker needs, loaded once from the chain (or faked in tests).
++#[derive(Default)]
++pub struct Catalogs {
++    /// map id → `Map.dbc` directory.
++    pub map_dir: std::collections::HashMap<u32, String>,
++    /// map id → loading-screen file.
++    pub loading_screen: std::collections::HashMap<u32, String>,
++    /// zone (`AreaTable`) id → world rect (left, right, top, bottom: left/right world Y,
++    /// top/bottom world X).
++    pub zone_rect: std::collections::HashMap<u32, (f32, f32, f32, f32)>,
++    /// creature display id → (model path, texture variation names, baked NPC texture).
++    pub creature: std::collections::HashMap<u32, (String, Vec<String>, Option<String>)>,
++    /// game-object display id → model path.
++    pub gameobject: std::collections::HashMap<u32, String>,
++    /// lower-case `<dir>\map<x>_<y>.blp` → hashed minimap file name.
++    pub minimap: Option<benilla_formats::MinimapTranslate>,
++    /// Catalogs that failed to load (the walk goes on without them; printed by `--deps`).
++    pub warnings: Vec<String>,
++}
++
++impl Catalogs {
++    pub fn load(chain: &mut Chain) -> Result<Self> {
++        let mut c = Catalogs::default();
++        let maps = benilla_formats::load_map_catalog(chain).context("Map.dbc")?;
++        let screens = match benilla_formats::load_loading_screens(chain) {
++            Ok(s) => Some(s),
++            Err(e) => {
++                c.warnings.push(format!("LoadingScreens.dbc: {e:#}"));
++                None
++            }
++        };
++        // `MapCatalog` has no iterator over every row; ids below 2000 cover 3.3.5a's Map.dbc.
++        for id in 0..2000u32 {
++            if let Some(dir) = maps.directory(id) {
++                c.map_dir.insert(id, dir.to_owned());
++                if let (Some(s), Some(ls)) = (&screens, maps.loading_screen_id(id)) {
++                    if let Some(p) = s.path(ls) {
++                        c.loading_screen.insert(id, p.to_owned());
++                    }
++                }
++            }
++        }
++        match benilla_formats::load_world_map_area_catalog(chain) {
++            Err(e) => c.warnings.push(format!("WorldMapArea.dbc: {e:#}")),
++            Ok(wma) => {
++                for (_, a) in wma.iter() {
++                    if a.area_id != 0 {
++                        c.zone_rect.insert(
++                            a.area_id,
++                            (a.loc_left, a.loc_right, a.loc_top, a.loc_bottom),
++                        );
++                    }
++                }
++            }
++        }
++        match benilla_formats::load_creature_catalog(chain) {
++            Err(e) => c.warnings.push(format!("creature displays: {e:#}")),
++            Ok(cc) => {
++                for (display, _) in cc.display_models() {
++                    if let Some(m) = cc.model(display) {
++                        let bake = m.npc_appearance.as_ref().and_then(|a| a.bake_name.clone());
++                        let tex = m.textures.iter().flatten().cloned().collect();
++                        c.creature.insert(display, (m.model_path, tex, bake));
++                    }
++                }
++            }
++        }
++        match benilla_formats::load_gameobject_catalog(chain) {
++            Err(e) => c.warnings.push(format!("GameObjectDisplayInfo.dbc: {e:#}")),
++            Ok(go) => {
++                for (id, path) in go.iter() {
++                    c.gameobject.insert(id, path.to_owned());
++                }
++            }
++        }
++        match benilla_formats::load_minimap_translate(chain) {
++            Ok(m) => c.minimap = Some(m),
++            Err(e) => c.warnings.push(format!("minimap md5translate: {e:#}")),
++        }
++        Ok(c)
++    }
++}
++
++/// The walk's result: one ordered list of names per tier, each without the names of earlier
++/// tiers, plus notes on what could not be resolved.
++pub struct TierNames {
++    pub tier: u32,
++    pub name: String,
++    pub names: Vec<String>,
++    pub notes: Vec<String>,
++}
++
++/// `.mdx` / `.mdl` (the DBC spelling) → `.m2` (what is in the archives).
++pub fn m2_name(path: &str) -> String {
++    let lower = path.to_ascii_lowercase();
++    if lower.ends_with(".mdx") || lower.ends_with(".mdl") {
++        format!("{}.m2", &path[..path.len() - 4])
++    } else {
++        path.to_owned()
++    }
++}
++
++fn dir_of(path: &str) -> &str {
++    path.rfind(['\\', '/']).map_or("", |i| &path[..=i])
++}
++
++/// The zero-terminated strings of a string block (MOTX, MODN, MTEX...).
++fn strings(block: &[u8]) -> Vec<String> {
++    block
++        .split(|&b| b == 0)
++        .filter(|s| !s.is_empty())
++        .map(|s| String::from_utf8_lossy(s).into_owned())
++        .collect()
++}
++
++/// A chunked file's `(magic as stored, payload)` pairs; stops at the first malformed chunk.
++fn chunks(b: &[u8]) -> Vec<([u8; 4], &[u8])> {
++    let mut out = Vec::new();
++    let mut at = 0usize;
++    while at + 8 <= b.len() {
++        let magic = [b[at], b[at + 1], b[at + 2], b[at + 3]];
++        let size = u32::from_le_bytes([b[at + 4], b[at + 5], b[at + 6], b[at + 7]]) as usize;
++        let Some(end) = (at + 8).checked_add(size).filter(|&e| e <= b.len()) else {
++            break;
++        };
++        out.push((magic, &b[at + 8..end]));
++        at = end;
++    }
++    out
++}
++
++fn u32_at(b: &[u8], at: usize) -> Option<u32> {
++    b.get(at..at + 4)
++        .map(|s| u32::from_le_bytes([s[0], s[1], s[2], s[3]]))
++}
++
++/// An M2's skin-profile count and file-named textures (version 264 header: `nViews` at 0x44,
++/// the texture array at 0x50, 16-byte entries `type, flags, filename (len, ofs)`).
++pub fn m2_refs(m2: &[u8]) -> (u32, Vec<String>) {
++    if m2.get(0..4) != Some(b"MD20") {
++        return (0, Vec::new());
++    }
++    let views = u32_at(m2, 0x44).unwrap_or(0).min(8);
++    let mut tex = Vec::new();
++    if let (Some(n), Some(ofs)) = (u32_at(m2, 0x50), u32_at(m2, 0x54)) {
++        for i in 0..n.min(512) as usize {
++            let e = ofs as usize + i * 16;
++            let (Some(kind), Some(len), Some(at)) =
++                (u32_at(m2, e), u32_at(m2, e + 8), u32_at(m2, e + 12))
++            else {
++                break;
++            };
++            if kind != 0 || len < 2 {
++                continue;
++            }
++            if let Some(s) = m2.get(at as usize..at as usize + len as usize) {
++                let s = s.split(|&b| b == 0).next().unwrap_or(&[]);
++                if !s.is_empty() {
++                    tex.push(String::from_utf8_lossy(s).into_owned());
++                }
++            }
++        }
++    }
++    (views, tex)
++}
++
++/// A WMO root's textures (MOTX), doodads (MODN) plus skybox (MOSB), and group count (MOHD +4).
++pub fn wmo_refs(root: &[u8]) -> (Vec<String>, Vec<String>, u32) {
++    let mut tex = Vec::new();
++    let mut doodads = Vec::new();
++    let mut groups = 0;
++    for (magic, data) in chunks(root) {
++        match &magic {
++            b"XTOM" => tex.extend(strings(data)),
++            // The skybox model (MOSB) is followed like a doodad.
++            b"NDOM" | b"BSOM" => doodads.extend(strings(data)),
++            b"DHOM" => groups = u32_at(data, 4).unwrap_or(0).min(512),
++            _ => {}
++        }
++    }
++    (tex, doodads, groups)
++}
++
++/// The names a model refers to (candidates: the walker keeps those the data has). M2: skin
++/// profiles, file-named textures, `.anim` files. WMO root: textures, groups, doodads, skybox
++/// (a group file names nothing). ADT: textures (and their `_s` companions), M2s, WMOs.
++pub fn model_refs(name: &str, bytes: &[u8]) -> Vec<String> {
++    let key = name_key(name);
++    let mut out = Vec::new();
++    if key.ends_with(".m2") {
++        let stem = &name[..name.len() - 3];
++        let (views, tex) = m2_refs(bytes);
++        for i in 0..views.max(1) {
++            out.push(format!("{stem}{i:02}.skin"));
++        }
++        out.extend(tex);
++        if let Ok(anims) = benilla_m2::anim_paths(bytes, name) {
++            out.extend(anims.into_iter().map(|(_, a)| a));
++        }
++    } else if key.ends_with(".wmo") {
++        let stem = &name[..name.len() - 4];
++        let is_group = stem.len() > 4
++            && stem.as_bytes()[stem.len() - 4] == b'_'
++            && stem[stem.len() - 3..].bytes().all(|b| b.is_ascii_digit());
++        if is_group {
++            return out;
++        }
++        let (tex, doodads, groups) = wmo_refs(bytes);
++        // The repo's parser agrees on the texture list; it is the one the renderer trusts.
++        if let Ok(benilla_wmo::ParsedWmo::Root(root)) =
++            benilla_wmo::parse_wmo(&mut Cursor::new(bytes))
++        {
++            out.extend(root.textures.iter().cloned());
++        }
++        out.extend(tex);
++        for g in 0..groups {
++            out.push(format!("{stem}_{g:03}.wmo"));
++        }
++        out.extend(doodads.iter().map(|d| m2_name(d)));
++    } else if key.ends_with(".adt") {
++        let Ok(benilla_adt::ParsedAdt::Root(adt)) = benilla_adt::parse_adt(&mut Cursor::new(bytes))
++        else {
++            return out;
++        };
++        for t in &adt.textures {
++            out.push(t.clone());
++            // The specular/height companions some terrain textures ship with.
++            if let Some(stem) = t.strip_suffix(".blp").or_else(|| t.strip_suffix(".BLP")) {
++                out.push(format!("{stem}_s.blp"));
++            }
++        }
++        out.extend(adt.models.iter().map(|m| m2_name(m)));
++        out.extend(adt.wmos.iter().cloned());
++    }
++    out
++}
++
++/// What one model names (candidate names, before the existence check), per model key: shared
++/// between walkers so `--size-report` reads and parses each model once however many instances
++/// use it.
++pub type RefsCache = std::cell::RefCell<std::collections::HashMap<String, Vec<String>>>;
++
++/// The ADT tiles `[x0, x1, y0, y1]` (inclusive) a map entry streams: `tiles`, else the tiles
++/// under the world `box`, else under the zone's world-map rect, each widened by `marginTiles`;
++/// else the whole map. The note says when a zone had no rect.
++pub fn tile_rect(cat: &Catalogs, m: &MapSpec) -> ([u32; 4], Option<String>) {
++    let grow = |a: u32, b: u32| {
++        (a.min(b).saturating_sub(m.margin_tiles), (a.max(b) + m.margin_tiles).min(63))
++    };
++    let corners = |a: (u32, u32), b: (u32, u32)| {
++        let (x0, x1) = grow(a.0, b.0);
++        let (y0, y1) = grow(a.1, b.1);
++        [x0, x1, y0, y1]
++    };
++    if let Some([tx0, tx1, ty0, ty1]) = m.tiles {
++        return (corners((tx0.min(63), ty0.min(63)), (tx1.min(63), ty1.min(63))), None);
++    }
++    if let Some([wx0, wx1, wy0, wy1]) = m.world_box {
++        // world_to_tile(world x, world y) -> (tile x from world y, tile y from world x)
++        let a = benilla_formats::world_to_tile(wx0, wy0);
++        let b = benilla_formats::world_to_tile(wx1, wy1);
++        return (corners(a, b), None);
++    }
++    if let Some(zone) = m.zone {
++        return match cat.zone_rect.get(&zone) {
++            // left/right are world Y, top/bottom world X
++            Some(&(left, right, top, bottom)) => (
++                corners(
++                    benilla_formats::world_to_tile(top, left),
++                    benilla_formats::world_to_tile(bottom, right),
++                ),
++                None,
++            ),
++            None => (
++                [0, 63, 0, 63],
++                Some(format!("zone {zone}: no WorldMapArea rect; taking the whole map")),
++            ),
++        };
++    }
++    ([0, 63, 0, 63], None)
++}
++
++/// The walker: collects names in discovery order, each once (MPQ name rules).
++pub struct Walker<'a, S: Source> {
++    src: &'a S,
++    seen: HashSet<String>,
++    current: Vec<String>,
++    queue: VecDeque<String>,
++    refs: Option<&'a RefsCache>,
++    pub notes: Vec<String>,
++}
++
++impl<'a, S: Source> Walker<'a, S> {
++    pub fn new(src: &'a S) -> Self {
++        Self {
++            src,
++            seen: HashSet::new(),
++            current: Vec::new(),
++            queue: VecDeque::new(),
++            refs: None,
++            notes: Vec::new(),
++        }
++    }
++
++    /// A walker that already knows `seen` (names a shared base holds: never emitted again) and
++    /// shares parsed model references through `refs`.
++    pub fn seeded(src: &'a S, seen: &HashSet<String>, refs: Option<&'a RefsCache>) -> Self {
++        let mut w = Self::new(src);
++        w.seen = seen.clone();
++        w.refs = refs;
++        w
++    }
++
++    /// Every name key this walker has emitted or was seeded with.
++    pub fn seen(&self) -> &HashSet<String> {
++        &self.seen
++    }
++
++    /// Add one name if the data has it; models are queued for [`Walker::drain`].
++    pub fn add(&mut self, name: &str) -> bool {
++        let name = name.trim().replace('/', "\\");
++        if name.is_empty() {
++            return false;
++        }
++        let key = name_key(&name);
++        if self.seen.contains(&key) {
++            return true;
++        }
++        if !self.src.contains(&name) {
++            return false;
++        }
++        self.seen.insert(key.clone());
++        self.current.push(name.clone());
++        if key.ends_with(".m2") || key.ends_with(".wmo") || key.ends_with(".adt") {
++            self.queue.push_back(name);
++        }
++        true
++    }
++
++    pub fn add_model(&mut self, path: &str) -> bool {
++        self.add(&m2_name(path))
++    }
++
++    /// Follow every queued model's references until nothing new turns up.
++    pub fn drain(&mut self) {
++        while let Some(name) = self.queue.pop_front() {
++            let key = name_key(&name);
++            let cached = self.refs.and_then(|c| c.borrow().get(&key).cloned());
++            let refs = match cached {
++                Some(r) => r,
++                None => {
++                    let Some(bytes) = self.src.read(&name) else {
++                        continue;
++                    };
++                    let r = model_refs(&name, &bytes);
++                    if let Some(c) = self.refs {
++                        c.borrow_mut().insert(key, r.clone());
++                    }
++                    r
++                }
++            };
++            for r in refs {
++                self.add(&r);
++            }
++        }
++    }
++
++    /// Everything listed under `prefix` (any case).
++    pub fn add_prefix(&mut self, all: &[String], prefix: &str) -> usize {
++        let p = name_key(prefix);
++        let mut n = 0;
++        for name in all {
++            if name_key(name).starts_with(&p) && self.add(name) {
++                n += 1;
++            }
++        }
++        n
++    }
++
++    /// One map: WDT, WDL, tiles (optionally only a zone's, a box's or a tile rect), loading
++    /// screen, minimap tiles.
++    pub fn add_map(&mut self, cat: &Catalogs, m: &MapSpec) {
++        let Some(dir) = cat.map_dir.get(&m.id).cloned() else {
++            self.notes.push(format!("map {}: not in Map.dbc", m.id));
++            return;
++        };
++        let base = format!("World\\Maps\\{dir}\\{dir}");
++        self.add(&format!("{base}.wdl"));
++        if let Some(ls) = cat.loading_screen.get(&m.id) {
++            self.add(ls);
++        }
++        let wdt_name = format!("{base}.wdt");
++        if !self.add(&wdt_name) {
++            self.notes.push(format!("map {} ({dir}): no WDT", m.id));
++            return;
++        }
++        let Some(bytes) = self.src.read(&wdt_name) else {
++            return;
++        };
++        let wdt = match benilla_formats::WdtReader::new(
++            Cursor::new(bytes.as_slice()),
++            benilla_formats::WowVersion::Classic,
++        )
++        .read()
++        {
++            Ok(w) => w,
++            Err(e) => {
++                self.notes
++                    .push(format!("map {} ({dir}): WDT unreadable: {e}", m.id));
++                return;
++            }
++        };
++        if let Some(g) = wdt.global_wmo() {
++            self.add(&g.model);
++        }
++        let ([x0, x1, y0, y1], note) = tile_rect(cat, m);
++        if let Some(n) = note {
++            self.notes.push(n);
++        }
++        let mut tiles = 0;
++        for y in y0..=y1 {
++            for x in x0..=x1 {
++                if !wdt
++                    .get_tile(x as usize, y as usize)
++                    .is_some_and(|t| t.has_adt)
++                {
++                    continue;
++                }
++                if self.add(&format!("{base}_{x}_{y}.adt")) {
++                    tiles += 1;
++                }
++                if let Some(h) = cat.minimap.as_ref().and_then(|t| t.tile(&dir, x, y)) {
++                    self.add(&format!("Textures\\Minimap\\{h}"));
++                }
++            }
++        }
++        self.notes.push(format!(
++            "map {} ({dir}): {tiles} tiles x {x0}..{x1} y {y0}..{y1}",
++            m.id
++        ));
++    }
++
++    pub fn add_creature(&mut self, cat: &Catalogs, display: u32) {
++        let Some((model, tex, bake)) = cat.creature.get(&display) else {
++            return;
++        };
++        let m2 = m2_name(model);
++        self.add(&m2);
++        let dir = dir_of(&m2).to_owned();
++        for t in tex {
++            self.add(&format!("{dir}{t}.blp"));
++        }
++        if let Some(b) = bake {
++            let b = if b.contains('.') {
++                b.clone()
++            } else {
++                format!("{b}.blp")
++            };
++            self.add(&format!("Textures\\BakedNpcTextures\\{b}"));
++        }
++    }
++
++    pub fn add_gameobject(&mut self, cat: &Catalogs, display: u32) {
++        if let Some(model) = cat.gameobject.get(&display) {
++            self.add_model(model);
++        }
++    }
++
++    /// Close the current tier: its names, in discovery order.
++    pub fn take(&mut self) -> Vec<String> {
++        std::mem::take(&mut self.current)
++    }
++}
++
++/// Walk `tiers` of `spec` in order; each tier's list excludes earlier tiers' names.
++pub fn walk<S: Source>(
++    src: &S,
++    cat: &Catalogs,
++    spec: &SliceSpec,
++    tiers: &[u32],
++    displays: &[Display],
++) -> Vec<TierNames> {
++    let mut w = Walker::new(src);
++    let mut listed: Option<Vec<String>> = None;
++    let mut out = Vec::new();
++    for t in spec.tiers.iter().filter(|t| tiers.contains(&t.tier)) {
++        if !t.prefixes.is_empty() && listed.is_none() {
++            listed = Some(src.list());
++        }
++        for p in &t.prefixes {
++            let n = w.add_prefix(listed.as_deref().unwrap_or(&[]), p);
++            w.notes.push(format!("prefix {p}: {n} files"));
++        }
++        for n in &t.names {
++            if !w.add(n) {
++                w.notes.push(format!("name not in the data: {n}"));
++            }
++        }
++        for m in &t.maps {
++            w.add_map(cat, m);
++        }
++        let maps: HashSet<u32> = t.maps.iter().map(|m| m.id).collect();
++        let (mut c, mut g) = (0, 0);
++        let mine = |d: &&Display| match d.tier {
++            Some(n) => n == t.tier,
++            None => maps.contains(&d.map),
++        };
++        for d in displays.iter().filter(mine) {
++            if d.kind == 'c' {
++                w.add_creature(cat, d.id);
++                c += 1;
++            } else {
++                w.add_gameobject(cat, d.id);
++                g += 1;
++            }
++        }
++        if c + g > 0 {
++            w.notes
++                .push(format!("{c} creature and {g} object displays"));
++        }
++        w.drain();
++        out.push(TierNames {
++            tier: t.tier,
++            name: t.name.clone(),
++            names: w.take(),
++            notes: std::mem::take(&mut w.notes),
++        });
++    }
++    out
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use std::collections::HashMap;
++
++    struct Fake(HashMap<String, Vec<u8>>);
++
++    impl Fake {
++        fn new(files: &[(&str, Vec<u8>)]) -> Self {
++            Fake(
++                files
++                    .iter()
++                    .map(|(n, b)| (name_key(n), b.clone()))
++                    .collect(),
++            )
++        }
++    }
++
++    impl Source for Fake {
++        fn contains(&self, name: &str) -> bool {
++            self.0.contains_key(&name_key(name))
++        }
++        fn read(&self, name: &str) -> Option<Vec<u8>> {
++            self.0.get(&name_key(name)).cloned()
++        }
++        fn list(&self) -> Vec<String> {
++            let mut v: Vec<String> = self.0.keys().cloned().collect();
++            v.sort();
++            v
++        }
++    }
++
++    fn chunk(magic: &[u8; 4], data: &[u8]) -> Vec<u8> {
++        let mut v = magic.to_vec();
++        v.extend((data.len() as u32).to_le_bytes());
++        v.extend(data);
++        v
++    }
++
++    /// A minimal version-264 M2: `views` skins and one file-named texture.
++    fn m2(views: u32, texture: &str) -> Vec<u8> {
++        let mut b = vec![0u8; 0x130];
++        b[0..4].copy_from_slice(b"MD20");
++        b[4..8].copy_from_slice(&264u32.to_le_bytes());
++        b[0x44..0x48].copy_from_slice(&views.to_le_bytes());
++        let tex_at = b.len() as u32;
++        b[0x50..0x54].copy_from_slice(&1u32.to_le_bytes());
++        b[0x54..0x58].copy_from_slice(&tex_at.to_le_bytes());
++        let name_at = tex_at + 16;
++        let mut e = vec![0u8; 16];
++        e[8..12].copy_from_slice(&((texture.len() + 1) as u32).to_le_bytes());
++        e[12..16].copy_from_slice(&name_at.to_le_bytes());
++        b.extend(e);
++        b.extend(texture.as_bytes());
++        b.push(0);
++        b
++    }
++
++    #[test]
++    fn tiers_parse_and_ranges() {
++        assert_eq!(parse_tiers("0-2").unwrap(), [0, 1, 2]);
++        assert_eq!(parse_tiers("3, 0-1").unwrap(), [0, 1, 3]);
++        assert!(parse_tiers("2-1").is_err());
++        let spec = SliceSpec::parse(
++            r#"{"tiers":[{"tier":1,"maps":[{"id":571,"zone":4395,"marginTiles":1}]},
++                {"tier":0,"prefixes":["Interface\\"]}]}"#,
++        )
++        .unwrap();
++        assert_eq!(spec.tiers[0].tier, 0);
++        assert_eq!(spec.tiers[1].maps[0].zone, Some(4395));
++    }
++
++    #[test]
++    fn displays_tsv() {
++        let d = parse_displays("c\t571\t123\ng\t608\t9\nx\t1\t2\nc\tbad\t1\nc\t1\t0\n");
++        assert_eq!(d.len(), 2);
++        assert_eq!((d[0].kind, d[0].map, d[0].id), ('c', 571, 123));
++        assert_eq!(d[0].tier, None);
++        let d = parse_displays("c\t0\t5\t2\ng\t36\t7\t-\n");
++        assert_eq!((d[0].tier, d[1].tier), (Some(2), None));
++    }
++
++    #[test]
++    fn order_numbers_the_tiers_and_boxes_parse() {
++        let spec = SliceSpec::parse(
++            r#"{"order":["base","dalaran","northshire"],"tiers":[
++                {"key":"northshire","maps":[{"id":0,"box":[-9200,-8550,-480,80],"marginTiles":1}]},
++                {"key":"unused","maps":[{"id":36}]},
++                {"key":"dalaran","maps":[{"id":571,"zone":4395}]},
++                {"key":"base","prefixes":["Interface\\"]}]}"#,
++        )
++        .unwrap();
++        let keys: Vec<(u32, &str)> = spec.tiers.iter().map(|t| (t.tier, t.key.as_str())).collect();
++        assert_eq!(keys, [(0, "base"), (1, "dalaran"), (2, "northshire")]);
++        let m = &spec.tiers[2].maps[0];
++        assert_eq!(m.world_box, Some([-9200.0, -8550.0, -480.0, 80.0]));
++        // Northshire: tile x 31..32 (world y 80..-480), tile y 48..49 (world x -8550..-9200), +1
++        let ([x0, x1, y0, y1], note) = tile_rect(&Catalogs::default(), m);
++        assert_eq!(([x0, x1, y0, y1], note), ([30, 33, 47, 50], None));
++        // a zone without a rect: the whole map, with a note
++        let (r, note) = tile_rect(&Catalogs::default(), &spec.tiers[1].maps[0]);
++        assert_eq!(r, [0, 63, 0, 63]);
++        assert!(note.unwrap().contains("4395"));
++        let mut cat = Catalogs::default();
++        cat.zone_rect.insert(4395, (1000.0, 100.0, 6300.0, 5400.0));
++        assert_eq!(tile_rect(&cat, &spec.tiers[1].maps[0]).0, [30, 31, 20, 21]);
++        let t = MapSpec { tiles: Some([10, 12, 40, 41]), ..MapSpec::whole(1) };
++        assert_eq!(tile_rect(&cat, &t).0, [10, 12, 40, 41]);
++        for bad in [
++            r#"{"order":["base","nope"],"tiers":[{"key":"base"}]}"#,
++            r#"{"order":["base","base"],"tiers":[{"key":"base"}]}"#,
++            r#"{"order":["base"],"tiers":[{"key":"base","maps":[{"id":0,"box":[1,0,0,1]}]}]}"#,
++        ] {
++            assert!(SliceSpec::parse(bad).is_err(), "{bad}");
++        }
++    }
++
++    #[test]
++    fn displays_go_to_their_own_tier_and_the_refs_cache_agrees() {
++        let src = Fake::new(&[
++            ("Creature\\Wolf\\Wolf.m2", m2(1, "Creature\\Wolf\\Wolf.blp")),
++            ("Creature\\Wolf\\Wolf00.skin", vec![1]),
++            ("Creature\\Wolf\\Wolf.blp", vec![1]),
++            ("Creature\\Guard\\Guard.m2", m2(1, "")),
++            ("Creature\\Guard\\Guard00.skin", vec![1]),
++        ]);
++        let mut cat = Catalogs::default();
++        cat.creature.insert(1, ("Creature\\Wolf\\Wolf.mdx".into(), vec![], None));
++        cat.creature.insert(2, ("Creature\\Guard\\Guard.mdx".into(), vec![], None));
++        let spec = SliceSpec::parse(
++            r#"{"order":["base","stormwind","northshire"],"tiers":[{"key":"base"},
++                {"key":"stormwind","maps":[{"id":0,"zone":1519}]},
++                {"key":"northshire","maps":[{"id":0,"box":[-9200,-8550,-480,80]}]}]}"#,
++        )
++        .unwrap();
++        // the guard is spawned in Stormwind (tier 1), the wolf in Northshire (tier 2): both map 0
++        let displays = parse_displays("c\t0\t2\t1\nc\t0\t1\t2\n");
++        let out = walk(&src, &cat, &spec, &[0, 1, 2], &displays);
++        let has = |t: usize, n: &str| out[t].names.iter().any(|x| name_key(x) == n);
++        assert!(has(1, "creature\\guard\\guard.m2") && !has(1, "creature\\wolf\\wolf.m2"));
++        assert!(has(2, "creature\\wolf\\wolf.m2") && has(2, "creature\\wolf\\wolf.blp"));
++        // a seeded walker sharing a refs cache finds the same names, and skips the seed
++        let refs = RefsCache::default();
++        let mut a = Walker::seeded(&src, &HashSet::new(), Some(&refs));
++        a.add_creature(&cat, 1);
++        a.drain();
++        let first = a.take();
++        let mut seed = HashSet::new();
++        seed.insert(name_key("Creature\\Wolf\\Wolf.blp"));
++        let mut b = Walker::seeded(&src, &seed, Some(&refs));
++        b.add_creature(&cat, 1);
++        b.drain();
++        let second = b.take();
++        assert_eq!(first.len(), 3);
++        assert_eq!(second.len(), 2);
++        assert!(refs.borrow().contains_key("creature\\wolf\\wolf.m2"));
++    }
++
++    #[test]
++    fn m2_and_wmo_references_are_followed() {
++        let mut root = chunk(b"DHOM", &[0, 0, 0, 0, 2, 0, 0, 0]);
++        root.extend(chunk(b"XTOM", b"World\\T\\Wall.blp\0\0"));
++        root.extend(chunk(b"NDOM", b"World\\D\\Lamp.mdx\0"));
++        root.extend(chunk(b"BSOM", b"Env\\Sky.m2\0"));
++        let src = Fake::new(&[
++            ("World\\W\\Keep.wmo", root),
++            ("World\\W\\Keep_000.wmo", vec![1]),
++            ("World\\W\\Keep_001.wmo", vec![1]),
++            ("World\\T\\Wall.blp", vec![1]),
++            ("World\\D\\Lamp.m2", m2(2, "World\\D\\Lamp.blp")),
++            ("World\\D\\Lamp00.skin", vec![1]),
++            ("World\\D\\Lamp01.skin", vec![1]),
++            ("World\\D\\Lamp.blp", vec![1]),
++            ("Env\\Sky.m2", m2(1, "Env\\Sky.blp")),
++            ("Env\\Sky00.skin", vec![1]),
++        ]);
++        let mut w = Walker::new(&src);
++        assert!(w.add("world/w/keep.wmo"));
++        w.drain();
++        let got: HashSet<String> = w.take().iter().map(|n| name_key(n)).collect();
++        for want in [
++            "world\\w\\keep_000.wmo",
++            "world\\w\\keep_001.wmo",
++            "world\\t\\wall.blp",
++            "world\\d\\lamp.m2",
++            "world\\d\\lamp01.skin",
++            "world\\d\\lamp.blp",
++            "env\\sky00.skin",
++        ] {
++            assert!(got.contains(want), "missing {want}: {got:?}");
++        }
++        // Env\Sky.blp is not in the data: never emitted.
++        assert!(!got.contains("env\\sky.blp"));
++    }
++
++    #[test]
++    fn later_tiers_exclude_earlier_names_and_creatures_resolve() {
++        let src = Fake::new(&[
++            ("Interface\\A.blp", vec![1]),
++            ("Creature\\Bear\\Bear.m2", m2(1, "")),
++            ("Creature\\Bear\\Bear00.skin", vec![1]),
++            ("Creature\\Bear\\BearSkinBrown.blp", vec![1]),
++            ("Textures\\BakedNpcTextures\\Npc1.blp", vec![1]),
++        ]);
++        let mut cat = Catalogs::default();
++        cat.creature.insert(
++            7,
++            (
++                "Creature\\Bear\\Bear.mdx".into(),
++                vec!["BearSkinBrown".into()],
++                Some("Npc1.blp".into()),
++            ),
++        );
++        let spec = SliceSpec::parse(
++            r#"{"tiers":[{"tier":0,"prefixes":["interface\\"]},
++                {"tier":1,"names":["Interface\\A.blp"],"maps":[{"id":608}]}]}"#,
++        )
++        .unwrap();
++        let displays = parse_displays("c\t608\t7\n");
++        let out = walk(&src, &cat, &spec, &[0, 1], &displays);
++        assert_eq!(out[0].names, ["interface\\a.blp"]);
++        let t1: HashSet<String> = out[1].names.iter().map(|n| name_key(n)).collect();
++        assert!(!t1.contains("interface\\a.blp"));
++        assert!(t1.contains("creature\\bear\\bear00.skin"));
++        assert!(t1.contains("creature\\bear\\bearskinbrown.blp"));
++        assert!(t1.contains("textures\\bakednpctextures\\npc1.blp"));
++        assert!(out[1].notes.iter().any(|n| n.contains("not in Map.dbc")));
++    }
++}
+diff --git a/crates/wenilla-host/src/export.rs b/crates/wenilla-host/src/export.rs
+new file mode 100644
+index 00000000..4529b621
+--- /dev/null
++++ b/crates/wenilla-host/src/export.rs
+@@ -0,0 +1,650 @@
++//! `--export`: copy a list of chain names out of the game data into loose files — a "slice" that
++//! a host started with `--patch <dir> --only-listed` serves and nothing else.
++//!
++//! The lists come from `--record` capture sessions (one name per line) and from the client's
++//! boot manifests (`{"names": [...]}`); they are exported in the order given, each one a "tier":
++//! a name already exported by an earlier list costs nothing in a later one, so the report says
++//! exactly what each tier adds. With a byte budget, the first tier that does not fit is left out
++//! whole (files it already wrote are removed again) and so is everything after it — a slice is
++//! a prefix of the tier list, never half of a tier.
++//!
++//! Layout: every path component is matched case-insensitively against what is already in the
++//! output folder before a new one is created, so `World\Maps\X` and `world\maps\Y` land in one
++//! `World/Maps/` folder. That is the layout the `--patch` layer's case-insensitive walk
++//! (`data::patch_file`) can find both in; two sibling folders differing only in case would hide
++//! one of them.
++
++use std::collections::HashSet;
++use std::path::{Path, PathBuf};
++
++use anyhow::{bail, Context, Result};
++
++use crate::data::{is_missing, name_key};
++
++/// Read a names file: a JSON manifest (`{"names": [...]}` or a bare array), or plain text with
++/// one name per line (blank lines and `#` comments skipped).
++pub fn read_names(path: &Path) -> Result<Vec<String>> {
++    let text =
++        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
++    let trimmed = text.trim_start();
++    if trimmed.starts_with('{') || trimmed.starts_with('[') {
++        let v: serde_json::Value = serde_json::from_str(trimmed)
++            .with_context(|| format!("{} is not valid JSON", path.display()))?;
++        let list = v.get("names").unwrap_or(&v);
++        let Some(arr) = list.as_array() else {
++            bail!(
++                "{}: expected {{\"names\": [...]}} or an array",
++                path.display()
++            );
++        };
++        return Ok(arr
++            .iter()
++            .filter_map(|n| n.as_str().map(str::to_owned))
++            .filter(|n| !n.trim().is_empty())
++            .collect());
++    }
++    Ok(text
++        .lines()
++        .map(str::trim)
++        .filter(|l| !l.is_empty() && !l.starts_with('#'))
++        .map(str::to_owned)
++        .collect())
++}
++
++/// What one list (tier) contributed.
++#[derive(Debug, Clone)]
++pub struct ListReport {
++    pub source: String,
++    /// Names in the list.
++    pub names: usize,
++    /// Files this list added that no earlier list had.
++    pub new_files: usize,
++    /// Bytes of those files.
++    pub new_bytes: u64,
++    /// Running total after this list (or what it would have been, when it was left out).
++    pub cumulative_bytes: u64,
++    /// Names the game data does not have (the client probed for them and got a 404 then too).
++    pub missing: usize,
++    /// Left out because it would have gone over the budget.
++    pub over_budget: bool,
++    /// Textures made "lite", and the bytes that saved (already taken off `new_bytes`).
++    pub lite_files: usize,
++    pub lite_saved_bytes: u64,
++    /// The files this list added (name, bytes written), in order: what `/data/__tier/<n>.txt`
++    /// lists. Empty for a list left out over the budget.
++    pub written: Vec<(String, u64)>,
++}
++
++/// The whole export, also written to `<out>/.export.json` (a dot file: never served).
++#[derive(Debug, Clone)]
++pub struct ExportReport {
++    pub lists: Vec<ListReport>,
++    pub files: usize,
++    pub bytes: u64,
++    pub budget_bytes: Option<u64>,
++    pub dry_run: bool,
++}
++
++impl ExportReport {
++    /// The report as JSON (what `.export.json` holds).
++    pub fn to_json(&self) -> serde_json::Value {
++        serde_json::json!({
++            "files": self.files,
++            "bytes": self.bytes,
++            "budget_bytes": self.budget_bytes,
++            "dry_run": self.dry_run,
++            "lists": self.lists.iter().map(|l| serde_json::json!({
++                "source": l.source,
++                "names": l.names,
++                "new_files": l.new_files,
++                "new_bytes": l.new_bytes,
++                "cumulative_bytes": l.cumulative_bytes,
++                "missing": l.missing,
++                "over_budget": l.over_budget,
++                "lite_files": l.lite_files,
++                "lite_saved_bytes": l.lite_saved_bytes,
++            })).collect::<Vec<_>>(),
++        })
++    }
++}
++
++/// Validate a chain name and split it into path components; `None` for anything that could
++/// leave the output folder or that no `--patch` lookup would ever find (empty or dot components).
++fn components(name: &str) -> Option<Vec<&str>> {
++    let comps: Vec<&str> = name.split(['\\', '/']).collect();
++    if comps
++        .iter()
++        .any(|c| c.is_empty() || c.starts_with('.') || c.contains(':') || c.contains('\0'))
++    {
++        return None;
++    }
++    Some(comps)
++}
++
++/// Find `comp` in `dir` ignoring case.
++fn find_ci(dir: &Path, comp: &str) -> Option<PathBuf> {
++    let direct = dir.join(comp);
++    if direct.exists() {
++        return Some(direct);
++    }
++    std::fs::read_dir(dir).ok()?.flatten().find_map(|e| {
++        e.file_name()
++            .to_str()
++            .is_some_and(|n| n.eq_ignore_ascii_case(comp))
++            .then(|| e.path())
++    })
++}
++
++/// Where `name` goes under `root`, creating folders (reusing any that match ignoring case).
++pub fn place(root: &Path, name: &str) -> Result<PathBuf> {
++    let Some(comps) = components(name) else {
++        bail!("refusing an unsafe name: {name:?}");
++    };
++    let (file, dirs) = comps
++        .split_last()
++        .expect("split always yields one component");
++    let mut at = root.to_path_buf();
++    for d in dirs {
++        at = match find_ci(&at, d) {
++            Some(p) if p.is_dir() => p,
++            Some(p) => bail!("{} is a file, wanted a folder for {name}", p.display()),
++            None => {
++                let p = at.join(d);
++                std::fs::create_dir(&p).with_context(|| format!("creating {}", p.display()))?;
++                p
++            }
++        };
++    }
++    Ok(find_ci(&at, file).unwrap_or_else(|| at.join(file)))
++}
++
++/// Export `lists` (source label, names) into `out`, reading each name with `read`
++/// (`Ok(None)` = not in the game data). See the module doc for budget and layout rules.
++pub fn export(
++    read: &dyn Fn(&str) -> Result<Option<Vec<u8>>>,
++    lists: &[(String, Vec<String>)],
++    out: &Path,
++    budget_bytes: Option<u64>,
++    dry_run: bool,
++) -> Result<ExportReport> {
++    export_with(read, lists, out, budget_bytes, dry_run, None)
++}
++
++/// "Lite" textures: BLPs under `prefixes` keep only their mip levels of at most `max_px` on the
++/// long side ([`lite_blp`]).
++#[derive(Debug, Clone)]
++pub struct Lite {
++    pub max_px: u32,
++    pub prefixes: Vec<String>,
++}
++
++impl Lite {
++    /// Is `name` a BLP under one of the lite prefixes?
++    pub fn applies(&self, name: &str) -> bool {
++        let k = name_key(name);
++        k.ends_with(".blp") && self.prefixes.iter().any(|p| k.starts_with(&name_key(p)))
++    }
++}
++
++/// [`export`] with optional [`Lite`] textures.
++pub fn export_with(
++    read: &dyn Fn(&str) -> Result<Option<Vec<u8>>>,
++    lists: &[(String, Vec<String>)],
++    out: &Path,
++    budget_bytes: Option<u64>,
++    dry_run: bool,
++    lite: Option<&Lite>,
++) -> Result<ExportReport> {
++    if !dry_run {
++        std::fs::create_dir_all(out).with_context(|| format!("creating {}", out.display()))?;
++    }
++    let mut seen: HashSet<String> = HashSet::new();
++    let mut total: u64 = 0;
++    let mut files = 0usize;
++    let mut reports = Vec::new();
++    let mut stopped = false;
++    for (source, names) in lists {
++        let mut rep = ListReport {
++            source: source.clone(),
++            names: names.len(),
++            new_files: 0,
++            new_bytes: 0,
++            cumulative_bytes: total,
++            missing: 0,
++            over_budget: false,
++            lite_files: 0,
++            lite_saved_bytes: 0,
++            written: Vec::new(),
++        };
++        if stopped {
++            rep.over_budget = true;
++            reports.push(rep);
++            continue;
++        }
++        let mut written: Vec<PathBuf> = Vec::new();
++        let mut keys: Vec<String> = Vec::new();
++        for name in names {
++            let key = name_key(name);
++            if seen.contains(&key) || keys.contains(&key) {
++                continue;
++            }
++            if components(name).is_none() {
++                tracing::warn!(name, "skipped an unsafe name");
++                continue;
++            }
++            let Some(mut bytes) = read(name)? else {
++                rep.missing += 1;
++                continue;
++            };
++            if let Some(l) = lite.filter(|l| l.applies(name)) {
++                if let Some(small) = lite_blp(&bytes, l.max_px) {
++                    rep.lite_saved_bytes += (bytes.len() - small.len()) as u64;
++                    rep.lite_files += 1;
++                    bytes = small;
++                }
++            }
++            rep.new_files += 1;
++            rep.new_bytes += bytes.len() as u64;
++            rep.written.push((name.clone(), bytes.len() as u64));
++            keys.push(key);
++            if !dry_run {
++                let path = place(out, name)?;
++                let existed = path.exists();
++                std::fs::write(&path, &bytes)
++                    .with_context(|| format!("writing {}", path.display()))?;
++                if !existed {
++                    written.push(path);
++                }
++            }
++        }
++        rep.cumulative_bytes = total + rep.new_bytes;
++        if budget_bytes.is_some_and(|b| rep.cumulative_bytes > b) {
++            // The tier does not fit: take back what it wrote (folders it created stay; they are
++            // empty and harmless) and stop here.
++            for p in &written {
++                let _ = std::fs::remove_file(p);
++            }
++            rep.over_budget = true;
++            rep.written.clear();
++            stopped = true;
++        } else {
++            total = rep.cumulative_bytes;
++            files += rep.new_files;
++            seen.extend(keys);
++        }
++        reports.push(rep);
++    }
++    let report = ExportReport {
++        lists: reports,
++        files,
++        bytes: total,
++        budget_bytes,
++        dry_run,
++    };
++    if !dry_run {
++        std::fs::write(
++            out.join(".export.json"),
++            serde_json::to_vec_pretty(&report.to_json())?,
++        )?;
++    }
++    Ok(report)
++}
++
++/// One tier of a finished export, for the browser's "Download this section".
++pub struct TierFiles<'a> {
++    pub tier: u32,
++    pub name: String,
++    /// Every list of that tier (boot lists belong to tier 0).
++    pub lists: Vec<&'a ListReport>,
++}
++
++/// Write `<out>/.tiers/<n>.txt` (`# tier <n> <name>` then `<bytes>\t<name>` per line) and
++/// `<out>/.tiers/index.json` (`[{tier, name, files, bytes}]`). A dot folder, so `/data/<name>` never
++/// serves it; `/data/__tier/<n>.txt` and `/data/__tier/index.json` do.
++pub fn write_tier_lists(out: &Path, tiers: &[TierFiles]) -> Result<()> {
++    let dir = out.join(".tiers");
++    let _ = std::fs::remove_dir_all(&dir);
++    std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
++    let mut index = Vec::new();
++    for t in tiers {
++        let files: Vec<&(String, u64)> = t.lists.iter().flat_map(|l| l.written.iter()).collect();
++        if files.is_empty() {
++            continue;
++        }
++        let bytes: u64 = files.iter().map(|f| f.1).sum();
++        let mut body = format!("# tier {} {}\t{}\t{}\n", t.tier, t.name.replace(['\n', '\t'], " "), files.len(), bytes);
++        for (n, b) in &files {
++            body.push_str(&format!("{b}\t{n}\n"));
++        }
++        std::fs::write(dir.join(format!("{}.txt", t.tier)), body)?;
++        index.push(serde_json::json!({"tier": t.tier, "name": t.name, "files": files.len(), "bytes": bytes}));
++    }
++    std::fs::write(dir.join("index.json"), serde_json::to_vec_pretty(&index)?)?;
++    Ok(())
++}
++
++/// The tier number a names list stands for: `tier-<n>.txt` (what `--deps` writes).
++pub fn tier_of_list(path: &str) -> Option<u32> {
++    let file = path.rsplit(['/', '\\']).next()?;
++    file.strip_prefix("tier-")?.strip_suffix(".txt")?.parse().ok()
++}
++
++/// BLP2 header: magic, type, (compression, alpha depth, alpha type, has mips), width, height,
++/// 16 mip offsets, 16 mip sizes, then the 256-entry palette — 1172 bytes in all.
++const BLP2_HEADER: usize = 148 + 1024;
++
++/// A BLP2 with its larger mip levels dropped so the biggest kept level is at most `max_px` on its
++/// long side: the header names the smaller size and its offset/size tables shift down. `None`
++/// when nothing would change (already small, no mips, or not a BLP2 this understands), so the
++/// caller keeps the original bytes.
++pub fn lite_blp(b: &[u8], max_px: u32) -> Option<Vec<u8>> {
++    if b.len() < BLP2_HEADER || &b[0..4] != b"BLP2" || b[11] == 0 || max_px == 0 {
++        return None;
++    }
++    let rd = |at: usize| u32::from_le_bytes([b[at], b[at + 1], b[at + 2], b[at + 3]]);
++    let (w, h) = (rd(12), rd(16));
++    let mut skip = 0u32;
++    while (w >> skip).max(h >> skip) > max_px {
++        skip += 1;
++    }
++    if skip == 0 || skip >= 16 {
++        return None;
++    }
++    let mips: Vec<(usize, usize)> = (0..16)
++        .map(|i| (rd(20 + i * 4) as usize, rd(84 + i * 4) as usize))
++        .collect();
++    let kept: Vec<(usize, usize)> = mips[skip as usize..]
++        .iter()
++        .copied()
++        .take_while(|&(o, s)| o != 0 && s != 0)
++        .collect();
++    if kept.is_empty()
++        || kept
++            .iter()
++            .any(|&(o, s)| o.checked_add(s).is_none_or(|e| e > b.len()))
++    {
++        return None;
++    }
++    let mut out = b[..BLP2_HEADER].to_vec();
++    out[12..16].copy_from_slice(&(w >> skip).max(1).to_le_bytes());
++    out[16..20].copy_from_slice(&(h >> skip).max(1).to_le_bytes());
++    for i in 0..16 {
++        out[20 + i * 4..24 + i * 4].copy_from_slice(&0u32.to_le_bytes());
++        out[84 + i * 4..88 + i * 4].copy_from_slice(&0u32.to_le_bytes());
++    }
++    for (i, &(o, s)) in kept.iter().enumerate() {
++        let at = out.len() as u32;
++        out[20 + i * 4..24 + i * 4].copy_from_slice(&at.to_le_bytes());
++        out[84 + i * 4..88 + i * 4].copy_from_slice(&(s as u32).to_le_bytes());
++        out.extend_from_slice(&b[o..o + s]);
++    }
++    (out.len() < b.len()).then_some(out)
++}
++
++/// The `read` callback for [`export`] over the same layers `/data` serves.
++pub fn layered_reader<'a>(
++    chain: Option<&'a benilla_formats::Chain>,
++    loose: Option<&'a Path>,
++    patch: Option<&'a Path>,
++) -> impl Fn(&str) -> Result<Option<Vec<u8>>> + 'a {
++    move |name| match crate::data::read_layered(chain, loose, patch, false, name) {
++        Ok((bytes, _)) => Ok(Some(bytes)),
++        Err(e) if is_missing(&e) => Ok(None),
++        Err(e) => Err(e),
++    }
++}
++
++/// A human-readable table of the report.
++pub fn summary(r: &ExportReport) -> String {
++    let mb = |b: u64| b as f64 / (1024.0 * 1024.0);
++    let mut s = String::new();
++    s.push_str(&format!(
++        "{:<40} {:>7} {:>8} {:>10} {:>11} {:>8}\n",
++        "list", "names", "new", "new MB", "total MB", "missing"
++    ));
++    for l in &r.lists {
++        s.push_str(&format!(
++            "{:<40} {:>7} {:>8} {:>10.1} {:>11.1} {:>8}{}\n",
++            l.source
++                .chars()
++                .rev()
++                .take(40)
++                .collect::<Vec<_>>()
++                .into_iter()
++                .rev()
++                .collect::<String>(),
++            l.names,
++            l.new_files,
++            mb(l.new_bytes),
++            mb(l.cumulative_bytes),
++            l.missing,
++            if l.over_budget {
++                "  OVER BUDGET (left out)"
++            } else {
++                ""
++            }
++        ));
++        if l.lite_files > 0 {
++            s.push_str(&format!(
++                "    lite textures: {} files, {:.1} MB saved ({:.1} MB at full size)\n",
++                l.lite_files,
++                mb(l.lite_saved_bytes),
++                mb(l.new_bytes + l.lite_saved_bytes)
++            ));
++        }
++    }
++    s.push_str(&format!(
++        "{} files, {:.1} MB{}{}\n",
++        r.files,
++        mb(r.bytes),
++        r.budget_bytes
++            .map(|b| format!(" (budget {:.0} MB)", mb(b)))
++            .unwrap_or_default(),
++        if r.dry_run {
++            ", dry run: nothing written"
++        } else {
++            ""
++        }
++    ));
++    s
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn tmp(tag: &str) -> PathBuf {
++        let p = std::env::temp_dir().join(format!("wh-export-{tag}-{}", std::process::id()));
++        let _ = std::fs::remove_dir_all(&p);
++        p
++    }
++
++    fn fake(name: &str) -> Result<Option<Vec<u8>>> {
++        Ok(match name_key(name).as_str() {
++            "missing.x" => None,
++            k => Some(vec![b'z'; 10 + k.len()]),
++        })
++    }
++
++    #[test]
++    fn reads_text_and_json_lists() {
++        let d = tmp("lists");
++        std::fs::create_dir_all(&d).unwrap();
++        std::fs::write(d.join("a.txt"), "# c\nA\\b.dbc\n\n  C\\d.blp \n").unwrap();
++        std::fs::write(
++            d.join("b.json"),
++            r#"{"comment":"x","names":["X\\y.dbc",""]}"#,
++        )
++        .unwrap();
++        std::fs::write(d.join("c.json"), r#"["Q.m2"]"#).unwrap();
++        assert_eq!(
++            read_names(&d.join("a.txt")).unwrap(),
++            ["A\\b.dbc", "C\\d.blp"]
++        );
++        assert_eq!(read_names(&d.join("b.json")).unwrap(), ["X\\y.dbc"]);
++        assert_eq!(read_names(&d.join("c.json")).unwrap(), ["Q.m2"]);
++        let _ = std::fs::remove_dir_all(&d);
++    }
++
++    #[test]
++    fn folders_differing_only_in_case_merge() {
++        let d = tmp("case");
++        std::fs::create_dir_all(&d).unwrap();
++        let lists = vec![(
++            "t".to_string(),
++            vec![
++                "World\\Maps\\A.adt".to_string(),
++                "world\\MAPS\\b.adt".to_string(),
++            ],
++        )];
++        export(&fake, &lists, &d, None, false).unwrap();
++        let entries: Vec<_> = std::fs::read_dir(&d)
++            .unwrap()
++            .flatten()
++            .map(|e| e.file_name().into_string().unwrap())
++            .filter(|n| !n.starts_with('.'))
++            .collect();
++        assert_eq!(entries, ["World"]);
++        assert!(d.join("World/Maps/A.adt").is_file());
++        assert!(d.join("World/Maps/b.adt").is_file());
++        let _ = std::fs::remove_dir_all(&d);
++    }
++
++    #[test]
++    fn tiers_dedupe_count_missing_and_report() {
++        let d = tmp("tiers");
++        let lists = vec![
++            (
++                "base".to_string(),
++                vec!["A.dbc".into(), "a.DBC".into(), "missing.x".into()],
++            ),
++            ("t1".to_string(), vec!["A.dbc".into(), "B\\c.blp".into()]),
++        ];
++        let r = export(&fake, &lists, &d, None, false).unwrap();
++        assert_eq!(r.lists[0].new_files, 1);
++        assert_eq!(r.lists[0].missing, 1);
++        assert_eq!(r.lists[1].new_files, 1);
++        assert_eq!(r.files, 2);
++        assert_eq!(r.bytes, (10 + 5) + (10 + 7));
++        assert!(d.join(".export.json").is_file());
++        assert!(summary(&r).contains("2 files"));
++        let _ = std::fs::remove_dir_all(&d);
++    }
++
++    #[test]
++    fn a_tier_over_budget_is_left_out_whole_and_so_is_the_rest() {
++        let d = tmp("budget");
++        let lists = vec![
++            ("base".to_string(), vec!["A.dbc".into()]), // 15 bytes
++            ("t1".to_string(), vec!["B.dbc".into(), "C.dbc".into()]), // 30 more
++            ("t2".to_string(), vec!["D.dbc".into()]),   // never tried
++        ];
++        let r = export(&fake, &lists, &d, Some(30), false).unwrap();
++        assert!(!r.lists[0].over_budget);
++        assert!(r.lists[1].over_budget && r.lists[2].over_budget);
++        assert_eq!(r.bytes, 15);
++        assert!(d.join("A.dbc").is_file());
++        assert!(!d.join("B.dbc").exists() && !d.join("C.dbc").exists());
++        let _ = std::fs::remove_dir_all(&d);
++    }
++
++    /// An uncompressed (ARGB, compression 3) BLP2 of `w`x`h` with a full mip chain, each level
++    /// filled with its level number.
++    fn blp(w: u32, h: u32) -> Vec<u8> {
++        let mut b = vec![0u8; BLP2_HEADER];
++        b[0..4].copy_from_slice(b"BLP2");
++        b[4..8].copy_from_slice(&1u32.to_le_bytes());
++        b[8] = 3;
++        b[9] = 8;
++        b[11] = 1;
++        b[12..16].copy_from_slice(&w.to_le_bytes());
++        b[16..20].copy_from_slice(&h.to_le_bytes());
++        let (mut lw, mut lh, mut i) = (w, h, 0usize);
++        loop {
++            let at = b.len() as u32;
++            let size = lw * lh * 4;
++            b[20 + i * 4..24 + i * 4].copy_from_slice(&at.to_le_bytes());
++            b[84 + i * 4..88 + i * 4].copy_from_slice(&size.to_le_bytes());
++            b.extend(std::iter::repeat_n(i as u8, size as usize));
++            if lw == 1 && lh == 1 {
++                break;
++            }
++            lw = (lw / 2).max(1);
++            lh = (lh / 2).max(1);
++            i += 1;
++        }
++        b
++    }
++
++    #[test]
++    fn lite_blp_drops_the_big_mips_and_decodes() {
++        let full = blp(1024, 512);
++        let lite = lite_blp(&full, 256).expect("shrinks");
++        let rd = |b: &[u8], at: usize| u32::from_le_bytes([b[at], b[at + 1], b[at + 2], b[at + 3]]);
++        assert_eq!((rd(&lite, 12), rd(&lite, 16)), (256, 128));
++        // level 0 of the lite file is level 2 of the original (filled with 2s)
++        let o0 = rd(&lite, 20) as usize;
++        assert_eq!(rd(&lite, 84) as usize, 256 * 128 * 4);
++        assert_eq!(lite[o0], 2);
++        assert!(lite.len() < full.len() / 10);
++        let d = benilla_blp::decode(&lite).expect("the repo's decoder reads a lite BLP");
++        assert_eq!((d.width, d.height), (256, 128));
++        // already small, or no mips: untouched
++        assert!(lite_blp(&blp(256, 256), 256).is_none());
++        let mut nomip = blp(512, 512);
++        nomip[11] = 0;
++        assert!(lite_blp(&nomip, 256).is_none());
++        assert!(lite_blp(b"not a blp", 256).is_none());
++    }
++
++    #[test]
++    fn export_reports_lite_savings() {
++        let d = tmp("lite");
++        let big = blp(512, 512);
++        let read = move |n: &str| -> Result<Option<Vec<u8>>> {
++            Ok(Some(if n.ends_with(".blp") {
++                big.clone()
++            } else {
++                vec![1; 8]
++            }))
++        };
++        let lite = Lite {
++            max_px: 256,
++            prefixes: vec!["Item\\ObjectComponents\\".into()],
++        };
++        let lists = vec![(
++            "t".to_string(),
++            vec![
++                "Item\\ObjectComponents\\Weapon\\Sword.blp".into(),
++                "Creature\\x.blp".into(),
++            ],
++        )];
++        let r = export_with(&read, &lists, &d, None, false, Some(&lite)).unwrap();
++        assert_eq!(r.lists[0].lite_files, 1);
++        assert!(r.lists[0].lite_saved_bytes > 0);
++        assert!(summary(&r).contains("lite textures: 1 files"));
++        let _ = std::fs::remove_dir_all(&d);
++    }
++
++    #[test]
++    fn dry_run_writes_nothing() {
++        let d = tmp("dry");
++        let lists = vec![("base".to_string(), vec!["A.dbc".into()])];
++        let r = export(&fake, &lists, &d, None, true).unwrap();
++        assert_eq!(r.files, 1);
++        assert!(!d.exists());
++    }
++
++    #[test]
++    fn unsafe_names_are_refused() {
++        let d = tmp("unsafe");
++        std::fs::create_dir_all(&d).unwrap();
++        assert!(place(&d, "..\\etc\\passwd").is_err());
++        assert!(place(&d, "A\\\\b").is_err());
++        assert!(place(&d, "C:\\x").is_err());
++        let lists = vec![("t".to_string(), vec!["..\\x".into(), "ok.dbc".into()])];
++        let r = export(&fake, &lists, &d, None, false).unwrap();
++        assert_eq!(r.files, 1);
++        let _ = std::fs::remove_dir_all(&d);
++    }
++}
+diff --git a/crates/wenilla-host/src/size.rs b/crates/wenilla-host/src/size.rs
+new file mode 100644
+index 00000000..af00101f
+--- /dev/null
++++ b/crates/wenilla-host/src/size.rs
+@@ -0,0 +1,538 @@
++//! `--size-report`: how much disk every part of the game would take on the stream server, measured
++//! from the game data without writing any game file. The same static walk as `--deps` (this
++//! module only adds the bookkeeping), so a number here is what `--export` would write.
++//!
++//! Units, each measured separately:
++//! - the **base** (tier 0 of the slice plus the client's boot lists): shared by everything;
++//! - every **tier** of the slice (Dalaran, the capitals, the starter areas, ...);
++//! - every **instance** in `Map.dbc` (instance types 1 dungeon, 2 raid, 3 battleground, 4 arena),
++//!   read from the DBC at run time, whatever the slice holds.
++//!
++//! Every unit after the base is counted **beyond the base**: a file the base already ships (the
++//! UI, player models, item textures, spell effects) costs that unit nothing. Units also share
++//! files with each other (two Northrend dungeons use the same rocks and torches): each unit's
++//! number is what it costs *alone* on top of the base, so the sum of all units is more than they
++//! take together. The report says both: the sum, and the union (everything at once, each file
++//! once), and the difference between them is the sharing.
++//!
++//! Sizes are the bytes `--export` writes: the uncompressed file (the size in the archive's block
++//! table), and for "lite" textures (`lite` in the slice) the cut-down BLP. Both lite and full are
++//! reported per unit.
++
++use std::collections::{HashMap, HashSet};
++
++use anyhow::{Context, Result};
++
++use crate::data::name_key;
++use crate::deps::{Catalogs, Display, MapSpec, RefsCache, SliceSpec, Source, Walker};
++use crate::export::{lite_blp, Lite};
++
++/// One measured unit.
++#[derive(Debug, Clone)]
++pub struct Unit {
++    /// `base`, `tier`, `dungeon`, `raid`, `battleground`, `arena`.
++    pub kind: String,
++    pub name: String,
++    /// Map id for an instance; tier number for a tier.
++    pub id: u32,
++    /// `Classic`, `TBC`, `Wrath` for an instance (from `Map.dbc`'s ExpansionID).
++    pub expansion: String,
++    pub files: usize,
++    pub full_bytes: u64,
++    pub lite_bytes: u64,
++    /// Walk notes (tiles, missing WDT).
++    pub notes: Vec<String>,
++}
++
++pub struct Report {
++    pub units: Vec<Unit>,
++    /// Every unit beyond the base, each file once.
++    pub union_full: u64,
++    pub union_lite: u64,
++    pub union_files: usize,
++}
++
++/// A `Map.dbc` row: what the report needs.
++#[derive(Debug, Clone, PartialEq)]
++pub struct MapRow {
++    pub id: u32,
++    pub instance_type: u32,
++    pub name: String,
++    pub expansion: u32,
++}
++
++/// Map.dbc, 3.3.5a (AzerothCore `MapEntryfmt`, `DBCStructure.h` `MapEntry`): field 0 ID, 2
++/// map_type (0 none, 1 dungeon, 2 raid, 3 battleground, 4 arena), 5 name (enUS), 63 expansionID.
++pub fn parse_map_dbc(b: &[u8]) -> Result<Vec<MapRow>> {
++    if b.len() < 20 || &b[0..4] != b"WDBC" {
++        anyhow::bail!("Map.dbc: not a WDBC file");
++    }
++    let rd = |at: usize| -> u32 { u32::from_le_bytes([b[at], b[at + 1], b[at + 2], b[at + 3]]) };
++    let (records, fields, size, strings) = (rd(4) as usize, rd(8) as usize, rd(12) as usize, rd(16) as usize);
++    let str_at = 20 + records * size;
++    if fields < 6 || size < fields * 4 || b.len() < str_at + strings {
++        anyhow::bail!("Map.dbc: unexpected layout ({fields} fields, {size} bytes a record)");
++    }
++    let string = |ofs: u32| -> String {
++        let s = &b[str_at + (ofs as usize).min(strings)..str_at + strings];
++        String::from_utf8_lossy(s.split(|&c| c == 0).next().unwrap_or(&[])).into_owned()
++    };
++    let mut out = Vec::with_capacity(records);
++    for r in 0..records {
++        let at = 20 + r * size;
++        let f = |i: usize| rd(at + i * 4);
++        out.push(MapRow {
++            id: f(0),
++            instance_type: f(2),
++            name: string(f(5)),
++            expansion: if fields > 63 { f(63) } else { 0 },
++        });
++    }
++    Ok(out)
++}
++
++/// Sizes of names: the listed size when the chain lists the file, else its read length.
++pub struct Sizer<'a, S: Source> {
++    src: &'a S,
++    listed: HashMap<String, u64>,
++    lite: Option<&'a Lite>,
++}
++
++impl<'a, S: Source> Sizer<'a, S> {
++    pub fn new(src: &'a S, listed: HashMap<String, u64>, lite: Option<&'a Lite>) -> Self {
++        Self { src, listed, lite }
++    }
++
++    /// (full bytes, lite bytes) of one name.
++    pub fn size(&self, name: &str) -> (u64, u64) {
++        let key = name_key(name);
++        let lite_applies = self.lite.is_some_and(|l| l.applies(name));
++        if !lite_applies {
++            if let Some(&n) = self.listed.get(&key) {
++                if n > 0 {
++                    return (n, n);
++                }
++            }
++        }
++        let Some(bytes) = self.src.read(name) else {
++            return (0, 0);
++        };
++        let full = bytes.len() as u64;
++        let lite = match self.lite.filter(|_| lite_applies) {
++            Some(l) => lite_blp(&bytes, l.max_px).map_or(full, |s| s.len() as u64),
++            None => full,
++        };
++        (full, lite)
++    }
++
++    fn total(&self, names: &[String]) -> (u64, u64) {
++        names.iter().fold((0, 0), |(a, b), n| {
++            let (f, l) = self.size(n);
++            (a + f, b + l)
++        })
++    }
++}
++
++fn expansion_name(e: u32) -> &'static str {
++    match e {
++        0 => "Classic",
++        1 => "TBC",
++        2 => "Wrath",
++        _ => "?",
++    }
++}
++
++fn kind_name(t: u32) -> &'static str {
++    match t {
++        1 => "dungeon",
++        2 => "raid",
++        3 => "battleground",
++        4 => "arena",
++        _ => "map",
++    }
++}
++
++/// Walk and measure. `boot`: the client's boot read-sets (part of the base). `progress` is told
++/// each unit as it is done.
++#[allow(clippy::too_many_arguments)]
++pub fn measure<S: Source>(
++    src: &S,
++    cat: &Catalogs,
++    spec: &SliceSpec,
++    maps: &[MapRow],
++    displays: &[Display],
++    boot: &[String],
++    sizer: &Sizer<S>,
++    progress: &mut dyn FnMut(&Unit),
++) -> Report {
++    let refs = RefsCache::default();
++    let mut units = Vec::new();
++    // The base: tier 0 + the boot lists.
++    let base_tier = spec.tiers.iter().find(|t| t.tier == 0);
++    let mut w = Walker::seeded(src, &HashSet::new(), Some(&refs));
++    for n in boot {
++        w.add(n);
++    }
++    if let Some(t) = base_tier {
++        walk_tier(&mut w, src, cat, t, displays);
++    }
++    w.drain();
++    let names = w.take();
++    let base_seen = w.seen().clone();
++    let (full, lite) = sizer.total(&names);
++    let u = Unit {
++        kind: "base".into(),
++        name: base_tier.map_or("base".into(), |t| t.name.clone()),
++        id: 0,
++        expansion: String::new(),
++        files: names.len(),
++        full_bytes: full,
++        lite_bytes: lite,
++        notes: std::mem::take(&mut w.notes),
++    };
++    progress(&u);
++    units.push(u);
++    drop(w);
++
++    let mut union: HashSet<String> = HashSet::new();
++    let mut union_names: Vec<String> = Vec::new();
++    let mut keep = |names: &[String]| {
++        for n in names {
++            if union.insert(name_key(n)) {
++                union_names.push(n.clone());
++            }
++        }
++    };
++    // The slice's own tiers (cities, starter areas, Dalaran, and the instance tiers again: the
++    // instance list below measures each instance map once more, alone).
++    for t in spec.tiers.iter().filter(|t| t.tier != 0) {
++        let mut w = Walker::seeded(src, &base_seen, Some(&refs));
++        walk_tier(&mut w, src, cat, t, displays);
++        w.drain();
++        let names = w.take();
++        let (full, lite) = sizer.total(&names);
++        keep(&names);
++        let u = Unit {
++            kind: "tier".into(),
++            name: format!("tier {} {}", t.tier, t.name),
++            id: t.tier,
++            expansion: String::new(),
++            files: names.len(),
++            full_bytes: full,
++            lite_bytes: lite,
++            notes: std::mem::take(&mut w.notes),
++        };
++        progress(&u);
++        units.push(u);
++    }
++    // Every instance in Map.dbc.
++    let mut inst: Vec<&MapRow> = maps.iter().filter(|m| (1..=4).contains(&m.instance_type)).collect();
++    inst.sort_by_key(|m| m.id);
++    for m in inst {
++        let mut w = Walker::seeded(src, &base_seen, Some(&refs));
++        w.add_map(cat, &MapSpec::whole(m.id));
++        for d in displays.iter().filter(|d| d.map == m.id) {
++            if d.kind == 'c' {
++                w.add_creature(cat, d.id);
++            } else {
++                w.add_gameobject(cat, d.id);
++            }
++        }
++        w.drain();
++        let names = w.take();
++        let (full, lite) = sizer.total(&names);
++        keep(&names);
++        let u = Unit {
++            kind: kind_name(m.instance_type).into(),
++            name: m.name.clone(),
++            id: m.id,
++            expansion: expansion_name(m.expansion).into(),
++            files: names.len(),
++            full_bytes: full,
++            lite_bytes: lite,
++            notes: std::mem::take(&mut w.notes),
++        };
++        progress(&u);
++        units.push(u);
++    }
++    let (union_full, union_lite) = sizer.total(&union_names);
++    Report { units, union_full, union_lite, union_files: union_names.len() }
++}
++
++fn walk_tier<S: Source>(w: &mut Walker<S>, src: &S, cat: &Catalogs, t: &crate::deps::TierSpec, displays: &[Display]) {
++    if !t.prefixes.is_empty() {
++        let all = src.list();
++        for p in &t.prefixes {
++            let n = w.add_prefix(&all, p);
++            w.notes.push(format!("prefix {p}: {n} files"));
++        }
++    }
++    for n in &t.names {
++        w.add(n);
++    }
++    for m in &t.maps {
++        w.add_map(cat, m);
++    }
++    let maps: HashSet<u32> = t.maps.iter().map(|m| m.id).collect();
++    for d in displays.iter().filter(|d| match d.tier {
++        Some(n) => n == t.tier,
++        None => maps.contains(&d.map) && t.maps.iter().any(|m| m.id == d.map && m.zone.is_none() && m.world_box.is_none() && m.tiles.is_none()),
++    }) {
++        if d.kind == 'c' {
++            w.add_creature(cat, d.id);
++        } else {
++            w.add_gameobject(cat, d.id);
++        }
++    }
++}
++
++fn mb(b: u64) -> f64 {
++    b as f64 / (1024.0 * 1024.0)
++}
++
++/// The report as Markdown: a table sorted by size (lite), biggest first, then the totals.
++pub fn markdown(r: &Report, title: &str) -> String {
++    let base = &r.units[0];
++    let mut s = format!("# {title}\n\n");
++    s.push_str(&format!(
++        "Measured from the game data by `wenilla-host --size-report`: the bytes `--export` would write \
++         (uncompressed files; \"lite\" = item textures cut to the slice's lite size, \"full\" = as in \
++         the archives). Nothing was exported.\n\n\
++         **The base** ({}: login, character create, the UI, spells, player and item models) is \
++         **{:.1} MB lite / {:.1} MB full**, {} files. Every place below is counted **beyond the \
++         base**: what it adds on top of it, alone. Places also share files with each other, so the \
++         sum of the rows ({:.1} MB lite) is more than all of them together ({:.1} MB lite, {:.1} MB \
++         full, {} files, each file once): {:.1} MB is shared between places.\n\n",
++        base.name,
++        mb(base.lite_bytes),
++        mb(base.full_bytes),
++        base.files,
++        mb(r.units[1..].iter().map(|u| u.lite_bytes).sum()),
++        mb(r.union_lite),
++        mb(r.union_full),
++        r.union_files,
++        mb(r.units[1..].iter().map(|u| u.lite_bytes).sum::<u64>().saturating_sub(r.union_lite)),
++    ));
++    let mut rows: Vec<&Unit> = r.units[1..].iter().collect();
++    rows.sort_by(|a, b| b.lite_bytes.cmp(&a.lite_bytes).then(a.name.cmp(&b.name)));
++    s.push_str("| # | place | kind | expansion | map / tier | files | MB lite | MB full |\n");
++    s.push_str("|---:|---|---|---|---:|---:|---:|---:|\n");
++    for (i, u) in rows.iter().enumerate() {
++        s.push_str(&format!(
++            "| {} | {} | {} | {} | {} | {} | {:.1} | {:.1} |\n",
++            i + 1,
++            u.name.replace('|', "/"),
++            u.kind,
++            u.expansion,
++            u.id,
++            u.files,
++            mb(u.lite_bytes),
++            mb(u.full_bytes)
++        ));
++    }
++    let by = |k: &str| -> (usize, u64) {
++        let v: Vec<&&Unit> = rows.iter().filter(|u| u.kind == k).collect();
++        (v.len(), v.iter().map(|u| u.lite_bytes).sum())
++    };
++    s.push_str("\n## Totals by kind (sum of rows, beyond the base, lite)\n\n| kind | count | MB |\n|---|---:|---:|\n");
++    for k in ["tier", "dungeon", "raid", "battleground", "arena"] {
++        let (n, b) = by(k);
++        s.push_str(&format!("| {k} | {n} | {:.1} |\n", mb(b)));
++    }
++    s.push_str(&format!(
++        "\nEverything (base + every place, each file once): **{:.1} MB lite, {:.1} MB full**.\n",
++        mb(base.lite_bytes + r.union_lite),
++        mb(base.full_bytes + r.union_full)
++    ));
++    let empty: Vec<&&Unit> = rows.iter().filter(|u| u.files == 0).collect();
++    if !empty.is_empty() {
++        s.push_str("\nRows with 0 files have no WDT in this data (test or unused maps in Map.dbc).\n");
++    }
++    s
++}
++
++pub fn to_json(r: &Report) -> serde_json::Value {
++    serde_json::json!({
++        "base": unit_json(&r.units[0]),
++        "union_beyond_base": {"files": r.union_files, "full_bytes": r.union_full, "lite_bytes": r.union_lite},
++        "units": r.units[1..].iter().map(unit_json).collect::<Vec<_>>(),
++    })
++}
++
++fn unit_json(u: &Unit) -> serde_json::Value {
++    serde_json::json!({
++        "kind": u.kind, "name": u.name, "id": u.id, "expansion": u.expansion, "files": u.files,
++        "full_bytes": u.full_bytes, "lite_bytes": u.lite_bytes, "notes": u.notes,
++    })
++}
++
++/// The `--size-report` command: open the chain's catalogs, walk, write `<out>/size-report.md` and
++/// `.json`, print the table.
++pub fn run(
++    chain: &mut benilla_formats::Chain,
++    spec_text: &str,
++    displays: &[Display],
++    boot: &[String],
++    lite: Option<&Lite>,
++    out: &std::path::Path,
++) -> Result<Report> {
++    let spec = SliceSpec::parse(spec_text)?;
++    let cat = Catalogs::load(chain)?;
++    for w in &cat.warnings {
++        eprintln!("warning: {w}");
++    }
++    let map_bytes = chain.read("DBFilesClient\\Map.dbc").context("reading Map.dbc")?;
++    let maps = parse_map_dbc(&map_bytes)?;
++    let listed: HashMap<String, u64> = chain
++        .list()
++        .map(|v| v.into_iter().map(|e| (name_key(&e.name), e.size)).collect())
++        .unwrap_or_default();
++    let chain = &*chain;
++    let sizer = Sizer::new(chain, listed, lite);
++    let n_inst = maps.iter().filter(|m| (1..=4).contains(&m.instance_type)).count();
++    eprintln!(
++        "measuring the base, {} slice tiers and {n_inst} instances from Map.dbc...",
++        spec.tiers.len().saturating_sub(1)
++    );
++    let mut done = 0usize;
++    let report = measure(chain, &cat, &spec, &maps, displays, boot, &sizer, &mut |u| {
++        done += 1;
++        eprintln!(
++            "  [{done:>3}] {:<44} {:>7} files {:>9.1} MB lite {:>9.1} MB full",
++            u.name.chars().take(44).collect::<String>(),
++            u.files,
++            mb(u.lite_bytes),
++            mb(u.full_bytes)
++        );
++    });
++    std::fs::create_dir_all(out)?;
++    let md = markdown(&report, "Stream server disk: every 3.3.5a instance, the base and the slice's tiers");
++    std::fs::write(out.join("size-report.md"), &md)?;
++    std::fs::write(out.join("size-report.json"), serde_json::to_vec_pretty(&to_json(&report))?)?;
++    print!("{md}");
++    Ok(report)
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn map_dbc(rows: &[(u32, u32, &str, u32)]) -> Vec<u8> {
++        let fields = 66usize;
++        let mut strings = vec![0u8];
++        let mut body = Vec::new();
++        for &(id, ty, name, exp) in rows {
++            let ofs = strings.len() as u32;
++            strings.extend(name.as_bytes());
++            strings.push(0);
++            let mut rec = vec![0u32; fields];
++            rec[0] = id;
++            rec[2] = ty;
++            rec[5] = ofs;
++            rec[63] = exp;
++            body.extend(rec.iter().flat_map(|v| v.to_le_bytes()));
++        }
++        let mut b = b"WDBC".to_vec();
++        for v in [rows.len() as u32, fields as u32, (fields * 4) as u32, strings.len() as u32] {
++            b.extend(v.to_le_bytes());
++        }
++        b.extend(body);
++        b.extend(strings);
++        b
++    }
++
++    struct Fake(HashMap<String, Vec<u8>>);
++    impl Source for Fake {
++        fn contains(&self, n: &str) -> bool {
++            self.0.contains_key(&name_key(n))
++        }
++        fn read(&self, n: &str) -> Option<Vec<u8>> {
++            self.0.get(&name_key(n)).cloned()
++        }
++        fn list(&self) -> Vec<String> {
++            self.0.keys().cloned().collect()
++        }
++    }
++
++    #[test]
++    fn units_are_counted_beyond_the_base_and_the_union_once() {
++        let mut files = HashMap::new();
++        for (n, len) in [
++            ("interface\\a.blp", 100usize),
++            ("world\\maps\\a\\a.wdl", 10),
++            ("world\\maps\\b\\b.wdl", 20),
++            ("interface\\glues\\loading\\shared.blp", 7),
++            ("dbfilesclient\\map.dbc", 5),
++        ] {
++            files.insert(n.to_string(), vec![0u8; len]);
++        }
++        let src = Fake(files);
++        let mut cat = Catalogs::default();
++        cat.map_dir.insert(1, "A".into());
++        cat.map_dir.insert(2, "B".into());
++        // both instances use one loading screen: shared, counted in each, once in the union
++        cat.loading_screen.insert(1, "Interface\\Glues\\Loading\\Shared.blp".into());
++        cat.loading_screen.insert(2, "Interface\\Glues\\Loading\\Shared.blp".into());
++        let spec = SliceSpec::parse(r#"{"order":["base"],"tiers":[{"key":"base","names":["Interface\\A.blp"]}]}"#).unwrap();
++        let maps = vec![
++            MapRow { id: 1, instance_type: 1, name: "Alpha".into(), expansion: 0 },
++            MapRow { id: 2, instance_type: 2, name: "Beta".into(), expansion: 2 },
++            MapRow { id: 0, instance_type: 0, name: "Continent".into(), expansion: 0 },
++        ];
++        let sizer = Sizer::new(&src, HashMap::new(), None);
++        let boot = vec!["DBFilesClient\\Map.dbc".to_string()];
++        let r = measure(&src, &cat, &spec, &maps, &[], &boot, &sizer, &mut |_| {});
++        assert_eq!(r.units[0].full_bytes, 105);
++        assert_eq!(r.units.len(), 3, "base + two instances (the continent is not one)");
++        let a = r.units.iter().find(|u| u.name == "Alpha").unwrap();
++        let b = r.units.iter().find(|u| u.name == "Beta").unwrap();
++        assert_eq!((a.full_bytes, a.kind.as_str()), (17, "dungeon"));
++        assert_eq!((b.full_bytes, b.kind.as_str(), b.expansion.as_str()), (27, "raid", "Wrath"));
++        assert_eq!(r.union_full, 37, "the shared loading screen once");
++        let md = markdown(&r, "t");
++        assert!(md.contains("| 1 | Beta | raid | Wrath |"), "{md}");
++        assert!(md.contains("7.0") || md.contains("0.0"));
++        assert_eq!(to_json(&r)["units"].as_array().unwrap().len(), 2);
++    }
++
++    #[test]
++    fn lite_sizes_come_from_the_cut_blp() {
++        let mut b = vec![0u8; 1172];
++        b[0..4].copy_from_slice(b"BLP2");
++        b[4] = 1;
++        b[8] = 3;
++        b[9] = 8;
++        b[11] = 1;
++        b[12..16].copy_from_slice(&512u32.to_le_bytes());
++        b[16..20].copy_from_slice(&512u32.to_le_bytes());
++        let (mut w, mut i) = (512u32, 0usize);
++        while w >= 1 {
++            let at = b.len() as u32;
++            let size = w * w * 4;
++            b[20 + i * 4..24 + i * 4].copy_from_slice(&at.to_le_bytes());
++            b[84 + i * 4..88 + i * 4].copy_from_slice(&size.to_le_bytes());
++            b.extend(std::iter::repeat_n(0u8, size as usize));
++            if w == 1 { break; }
++            w /= 2;
++            i += 1;
++        }
++        let full = b.len() as u64;
++        let mut files = HashMap::new();
++        files.insert("item\\objectcomponents\\x.blp".to_string(), b);
++        let src = Fake(files);
++        let lite = Lite { max_px: 256, prefixes: vec!["Item\\ObjectComponents\\".into()] };
++        let sizer = Sizer::new(&src, HashMap::new(), Some(&lite));
++        let (f, l) = sizer.size("Item\\ObjectComponents\\X.blp");
++        assert_eq!(f, full);
++        assert!(l < f / 3, "{l} vs {f}");
++    }
++
++    #[test]
++    fn map_dbc_rows() {
++        let rows = parse_map_dbc(&map_dbc(&[(0, 0, "Eastern Kingdoms", 0), (389, 1, "Ragefire Chasm", 0), (631, 2, "Icecrown Citadel", 2)])).unwrap();
++        assert_eq!(rows.len(), 3);
++        assert_eq!(rows[1], MapRow { id: 389, instance_type: 1, name: "Ragefire Chasm".into(), expansion: 0 });
++        assert_eq!(rows[2].expansion, 2);
++        assert!(parse_map_dbc(b"nope").is_err());
++    }
++}
+diff --git a/crates/wenilla-host/tests/slice.rs b/crates/wenilla-host/tests/slice.rs
+new file mode 100644
+index 00000000..ce2309f7
+--- /dev/null
++++ b/crates/wenilla-host/tests/slice.rs
+@@ -0,0 +1,182 @@
++//! The slice host: `--only-listed` serves a patch folder and nothing else, `--record` writes each
++//! served name once. No game install needed: a slice host has none either.
++
++use std::path::PathBuf;
++use std::sync::Arc;
++
++use axum::body::Body;
++use axum::http::{Request, StatusCode};
++use tower::ServiceExt;
++use wenilla_host::data::{router_with_config, DataConfig, Recorder};
++
++fn tmp(tag: &str) -> PathBuf {
++    let p = std::env::temp_dir().join(format!("wh-slice-{tag}-{}", std::process::id()));
++    let _ = std::fs::remove_dir_all(&p);
++    std::fs::create_dir_all(&p).unwrap();
++    p
++}
++
++async fn get(app: &axum::Router, method: &str, uri: &str) -> (StatusCode, Vec<u8>) {
++    let resp = app
++        .clone()
++        .oneshot(
++            Request::builder()
++                .method(method)
++                .uri(uri)
++                .body(Body::empty())
++                .unwrap(),
++        )
++        .await
++        .unwrap();
++    let status = resp.status();
++    let body = axum::body::to_bytes(resp.into_body(), 1 << 20)
++        .await
++        .unwrap();
++    (status, body.to_vec())
++}
++
++fn slice_folder(root: &std::path::Path) {
++    std::fs::create_dir_all(root.join("DBFilesClient")).unwrap();
++    std::fs::write(root.join("DBFilesClient").join("Map.dbc"), b"WDBC-map").unwrap();
++    std::fs::create_dir_all(root.join("World").join("Maps")).unwrap();
++    std::fs::write(root.join("World").join("Maps").join("x.adt"), b"adt").unwrap();
++    std::fs::write(root.join(".export.json"), b"{}").unwrap();
++}
++
++#[tokio::test]
++async fn only_listed_serves_the_slice_and_nothing_else() {
++    let root = tmp("only");
++    slice_folder(&root);
++    let app = router_with_config(DataConfig {
++        patch: Some(root.clone()),
++        only_listed: true,
++        ..DataConfig::default()
++    });
++    let (s, b) = get(&app, "GET", "/data/DBFilesClient%5CMap.dbc").await;
++    assert_eq!(s, StatusCode::OK);
++    assert_eq!(b, b"WDBC-map");
++    // any case, either separator
++    let (s, _) = get(&app, "HEAD", "/data/dbfilesclient%5Cmap.DBC").await;
++    assert_eq!(s, StatusCode::OK);
++    let (s, _) = get(&app, "GET", "/data/World/maps/X.adt").await;
++    assert_eq!(s, StatusCode::OK);
++    // not in the slice: 404, never a fallback
++    let (s, _) = get(&app, "GET", "/data/DBFilesClient%5CSpell.dbc").await;
++    assert_eq!(s, StatusCode::NOT_FOUND);
++    // the export report is a dot file: not served, not listed
++    let (s, _) = get(&app, "GET", "/data/.export.json").await;
++    assert_eq!(s, StatusCode::NOT_FOUND);
++    let (s, b) = get(&app, "GET", "/data/__index").await;
++    assert_eq!(s, StatusCode::OK);
++    let mut names: Vec<String> = serde_json::from_slice(&b).unwrap();
++    names.sort();
++    assert_eq!(names, ["DBFilesClient\\Map.dbc", "World\\Maps\\x.adt"]);
++    let _ = std::fs::remove_dir_all(&root);
++}
++
++#[tokio::test]
++async fn only_listed_does_not_escape_the_folder() {
++    let root = tmp("escape");
++    slice_folder(&root);
++    std::fs::write(root.parent().unwrap().join("wh-secret.txt"), b"no").unwrap();
++    let app = router_with_config(DataConfig {
++        patch: Some(root.clone()),
++        only_listed: true,
++        ..DataConfig::default()
++    });
++    for uri in ["/data/..%5Cwh-secret.txt", "/data/%2E%2E%2Fwh-secret.txt"] {
++        let (s, _) = get(&app, "GET", uri).await;
++        assert_eq!(s, StatusCode::NOT_FOUND, "{uri}");
++    }
++    let _ = std::fs::remove_dir_all(&root);
++}
++
++#[tokio::test]
++async fn record_appends_each_served_name_once() {
++    let root = tmp("record");
++    slice_folder(&root);
++    let manifest = root
++        .parent()
++        .unwrap()
++        .join(format!("wh-record-{}.txt", std::process::id()));
++    std::fs::write(&manifest, "# earlier session\nWorld\\Maps\\x.adt\n").unwrap();
++    let app = router_with_config(DataConfig {
++        patch: Some(root.clone()),
++        only_listed: true,
++        record: Some(Arc::new(Recorder::open(&manifest).unwrap())),
++        ..DataConfig::default()
++    });
++    get(&app, "GET", "/data/DBFilesClient%5CMap.dbc").await;
++    get(&app, "GET", "/data/dbfilesclient%5Cmap.dbc").await; // same file, other case
++    get(&app, "HEAD", "/data/DBFilesClient%5CMap.dbc").await;
++    get(&app, "GET", "/data/world%5Cmaps%5Cx.adt").await; // already in the file
++    get(&app, "GET", "/data/Nope.dbc").await; // 404: not recorded
++    get(&app, "GET", "/data/__index").await; // not a name
++    let text = std::fs::read_to_string(&manifest).unwrap();
++    assert_eq!(
++        text,
++        "# earlier session\nWorld\\Maps\\x.adt\nDBFilesClient\\Map.dbc\n"
++    );
++    let _ = std::fs::remove_file(&manifest);
++    let _ = std::fs::remove_dir_all(&root);
++}
++
++#[tokio::test]
++async fn tier_lists_are_served_from_the_dot_folder_only() {
++    let root = tmp("tiers");
++    slice_folder(&root);
++    std::fs::create_dir_all(root.join(".tiers")).unwrap();
++    std::fs::write(root.join(".tiers").join("2.txt"), "# tier 2 Stormwind City\t1\t3\n3\tWorld\\Maps\\x.adt\n").unwrap();
++    std::fs::write(root.join(".tiers").join("index.json"), r#"[{"tier":2,"name":"Stormwind City","files":1,"bytes":3}]"#).unwrap();
++    let app = router_with_config(DataConfig {
++        patch: Some(root.clone()),
++        only_listed: true,
++        ..DataConfig::default()
++    });
++    let (s, b) = get(&app, "GET", "/data/__tier/2.txt").await;
++    assert_eq!(s, StatusCode::OK);
++    assert!(String::from_utf8(b).unwrap().contains("World\\Maps\\x.adt"));
++    let (s, b) = get(&app, "GET", "/data/__tier/index.json").await;
++    assert_eq!(s, StatusCode::OK);
++    let v: serde_json::Value = serde_json::from_slice(&b).unwrap();
++    assert_eq!(v[0]["tier"], 2);
++    for uri in ["/data/__tier/3.txt", "/data/__tier/..%2F.export.json", "/data/__tier/x.txt", "/data/.tiers%5C2.txt", "/data/__tier/1234.txt"] {
++        let (s, _) = get(&app, "GET", uri).await;
++        assert_eq!(s, StatusCode::NOT_FOUND, "{uri}");
++    }
++    // and __index never lists them
++    let (_, b) = get(&app, "GET", "/data/__index").await;
++    assert!(!String::from_utf8(b).unwrap().contains("tier"));
++    let _ = std::fs::remove_dir_all(&root);
++}
++
++#[test]
++fn export_writes_tier_lists_by_tier() {
++    use wenilla_host::export::{export, tier_of_list, write_tier_lists, TierFiles};
++    let out = tmp("tierexport");
++    let read = |n: &str| -> anyhow::Result<Option<Vec<u8>>> { Ok(Some(vec![b'x'; n.len()])) };
++    let lists = vec![
++        ("boot-manifest.json".to_string(), vec!["DBFilesClient\\Map.dbc".to_string()]),
++        ("work\\names\\tier-0.txt".to_string(), vec!["Interface\\A.blp".to_string()]),
++        ("work\\names\\tier-2.txt".to_string(), vec!["World\\Maps\\B.adt".to_string(), "Interface\\A.blp".to_string()]),
++        ("record\\names-dalaran.txt".to_string(), vec!["Sound\\C.wav".to_string()]),
++    ];
++    let r = export(&read, &lists, &out, None, false).unwrap();
++    assert_eq!(tier_of_list("work\\names\\tier-2.txt"), Some(2));
++    assert_eq!(tier_of_list("record/names-dalaran.txt"), None);
++    let tiers = vec![
++        TierFiles { tier: 0, name: "base".into(), lists: vec![&r.lists[0], &r.lists[1]] },
++        TierFiles { tier: 2, name: "Stormwind City".into(), lists: vec![&r.lists[2]] },
++    ];
++    write_tier_lists(&out, &tiers).unwrap();
++    let t0 = std::fs::read_to_string(out.join(".tiers").join("0.txt")).unwrap();
++    assert!(t0.starts_with("# tier 0 base\t2\t"), "{t0}");
++    assert!(t0.contains("\tDBFilesClient\\Map.dbc\n") && t0.contains("\tInterface\\A.blp\n"));
++    let t2 = std::fs::read_to_string(out.join(".tiers").join("2.txt")).unwrap();
++    // a file an earlier tier already holds is not listed again
++    assert_eq!(t2.lines().count(), 2, "{t2}");
++    let idx: serde_json::Value = serde_json::from_slice(&std::fs::read(out.join(".tiers").join("index.json")).unwrap()).unwrap();
++    assert_eq!(idx.as_array().unwrap().len(), 2);
++    assert_eq!(idx[1]["name"], "Stormwind City");
++    let _ = std::fs::remove_dir_all(&out);
++}
+diff --git a/Cargo.lock b/Cargo.lock
+index 792114b7..69c44fe8 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -787,6 +787,7 @@ dependencies = [
+  "bevy",
+  "bytemuck",
+  "image",
++ "naga",
+  "objc2 0.5.2",
+  "objc2-app-kit 0.2.2",
+  "objc2-foundation 0.2.2",
+@@ -7792,7 +7793,11 @@ version = "0.1.0"
+ dependencies = [
+  "anyhow",
+  "axum",
++ "benilla-adt",
++ "benilla-blp",
+  "benilla-formats",
++ "benilla-m2",
++ "benilla-wmo",
+  "clap",
+  "futures-util",
+  "percent-encoding",

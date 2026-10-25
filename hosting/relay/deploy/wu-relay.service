@@ -1,0 +1,32 @@
+# Alternative to Docker: run the relay with the box's own Python 3.10+ (python3-cryptography optional,
+# a pure-Python Ed25519 fallback is built in). Files in /opt/wu-relay/app (wunet/, wurelay/).
+#   sudo useradd --system --home /var/lib/wu-relay wu-relay
+#   sudo install -m 644 wu-relay.service /etc/systemd/system/ && sudo systemctl enable --now wu-relay
+[Unit]
+Description=WrathUnleashed relay (home-hosted realms without open ports)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=wu-relay
+EnvironmentFile=/opt/wu-relay/relay.env
+Environment=PYTHONPATH=/opt/wu-relay/app RELAY_STATE=/var/lib/wu-relay/state.json
+ExecStart=/usr/bin/python3 -m wurelay.relay
+Restart=always
+RestartSec=2
+StateDirectory=wu-relay
+LimitNOFILE=65536
+# 3724 is below no privileged boundary (>1024), so no capabilities are needed.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=512M
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

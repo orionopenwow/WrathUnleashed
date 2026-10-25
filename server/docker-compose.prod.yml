@@ -1,0 +1,241 @@
+# WrathUnleashed: public AzerothCore 3.3.5a realm, production compose file.
+#
+# Based on the local realm\docker-compose.yml (project "ov-wotlk"); same services, container
+# names, image variables (OV_IMAGE / OV_TAG), profile files and the external data volume, so
+# every local helper habit carries over. What changes for a public box:
+#   * MySQL sits on an internal-only network and publishes no host port.
+#   * Every password comes from /srv/wrath/.env (bootstrap.sh generates it). No defaults.
+#   * Auth (3724) and world (8085) are published on 0.0.0.0 for players.
+#   * SOAP is on, published on the host's loopback only (127.0.0.1:7878), for signup + admin.
+#   * Warden stays at AzerothCore's default (on): public players use stock 3.3.5a clients.
+#   * Healthchecks, log rotation, a graceful stop window, and file-descriptor limits.
+#
+# Lives in /srv/wrath next to: .env, profiles/*.env, modules.env, ahbot.env (optional),
+# custom/lua_scripts/. bootstrap.sh sets COMPOSE_FILE=docker-compose.prod.yml in .env, so a
+# plain `docker compose ...` run from /srv/wrath uses this file.
+#
+# NOTE ON THE FIREWALL: Docker writes its own iptables rules, so a port published here is
+# reachable even if ufw would block it. That is why SOAP and anything admin-only bind to
+# 127.0.0.1 below instead of relying on ufw.
+#
+# ---------------------------------------------------------------------------------------------
+# RESOURCE NOTES (Hetzner AX42: Ryzen 7 PRO 8700GE 8 cores, 64 GB DDR5 ECC, 2x 512 GB NVMe)
+# Rough sizing for 100-300 real players, plus random bots:
+#   * worldserver: the main cost. One process; the map update loop is the bottleneck, so
+#     MapUpdate.Threads > 1 helps when players spread over many maps. Expect a few GB RAM for
+#     the core + 300 players; mod-playerbots adds RAM and, mostly, CPU per bot. Each random
+#     bot costs roughly what an active player costs. Watch `server info` (update diff ms):
+#     sustained > 100-150 ms means lower the bot count.
+#   * MySQL: give InnoDB a buffer pool well above the hot data (auth + characters + world are
+#     a few GB at most). 8 GB is plenty on a 64 GB box (DB_BUFFER_POOL_SIZE in .env).
+#   * authserver: tiny.
+#   * Disk: client data ~1.5 GB (dbc+maps) up to ~6-8 GB with vmaps+mmaps; DB grows slowly;
+#     binlogs are capped at 3 days below; nightly gzipped dumps are a few hundred MB each.
+#   * Network: 3.3.5a traffic is small (tens of kbit/s per player); 1 Gbit/s is not a limit.
+# ---------------------------------------------------------------------------------------------
+name: ov-wotlk
+
+# The three database connection strings, shared by db-import and worldserver.
+# Format: host;port;user;password;database. DB_ROOT_PASSWORD must be set in .env (the `?`
+# form makes compose refuse to start without it, instead of silently using a default).
+x-db: &db
+  AC_LOGIN_DATABASE_INFO: "ac-database;3306;root;${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in /srv/wrath/.env};acore_auth"
+  AC_WORLD_DATABASE_INFO: "ac-database;3306;root;${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in /srv/wrath/.env};acore_world"
+  AC_CHARACTER_DATABASE_INFO: "ac-database;3306;root;${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in /srv/wrath/.env};acore_characters"
+
+# Docker's json-file logs grow forever by default; cap them per container.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
+networks:
+  # No route to the outside world and no published ports: only containers on it reach MySQL.
+  backend:
+    internal: true
+  # Normal bridge network, used only to publish auth / world / SOAP.
+  edge: {}
+
+services:
+  ac-database:
+    container_name: ov-ac-database
+    image: mysql:8.4
+    restart: unless-stopped
+    logging: *logging
+    networks: [backend]
+    # No `ports:` on purpose. Admin access: docker exec -it ov-ac-database mysql -uroot -p
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in /srv/wrath/.env}
+    command:
+      # InnoDB cache for the hot data (see RESOURCE NOTES). Override in .env.
+      - --innodb-buffer-pool-size=${DB_BUFFER_POOL_SIZE:-8G}
+      # AzerothCore uses a handful of pooled connections per database (plus playerbots);
+      # 500 leaves room for dumps, imports and admin sessions.
+      - --max-connections=500
+      # MySQL 8.4 keeps binary logs by default; cap them at 3 days so the disk never fills.
+      - --binlog-expire-logs-seconds=259200
+    volumes:
+      - ac-database:/var/lib/mysql
+    healthcheck:
+      # Over TCP: the entrypoint's temporary first-run server answers on the socket only, and
+      # the importer must not connect until the real server listens on 3306.
+      test: '/usr/bin/mysql --protocol=TCP --host=127.0.0.1 --user=root --password=$$MYSQL_ROOT_PASSWORD --execute "SHOW DATABASES;"'
+      interval: 10s
+      timeout: 40s
+      retries: 40
+      start_period: 30s
+
+  ac-db-import:
+    image: ${OV_IMAGE:-acore/ac-wotlk}-db-import:${OV_TAG:-master}
+    working_dir: /azerothcore
+    logging: *logging
+    networks: [backend]
+    environment:
+      <<: *db
+      AC_DISABLE_INTERACTIVE: "1"
+      AC_DATA_DIR: /azerothcore/env/dist/data
+      AC_LOGS_DIR: /azerothcore/env/dist/logs
+      AC_CLOSE_IDLE_CONNECTIONS: "0"
+    depends_on:
+      ac-database:
+        condition: service_healthy
+
+  ac-authserver:
+    container_name: ov-ac-authserver
+    image: ${OV_IMAGE:-acore/ac-wotlk}-authserver:${OV_TAG:-master}
+    working_dir: /azerothcore
+    tty: true
+    restart: unless-stopped
+    logging: *logging
+    networks: [backend, edge]
+    ports:
+      # Public: players' realmlist points here.
+      - "0.0.0.0:3724:3724"
+    ulimits:
+      nofile: { soft: 65535, hard: 65535 }
+    volumes:
+      - ./logs/auth:/azerothcore/env/dist/logs
+    environment:
+      AC_LOGIN_DATABASE_INFO: "ac-database;3306;root;${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in /srv/wrath/.env};acore_auth"
+      AC_LOGS_DIR: /azerothcore/env/dist/logs
+      AC_TEMP_DIR: /azerothcore/env/dist/temp
+      # Password guessing: after 10 wrong passwords, ban the source IP for 10 minutes.
+      # (BanType 0 = IP. Account bans (1) would let strangers lock real players out.)
+      AC_WRONG_PASS_MAX_COUNT: "10"
+      AC_WRONG_PASS_BAN_TIME: "600"
+      AC_WRONG_PASS_BAN_TYPE: "0"
+      AC_WRONG_PASS_LOGGING: "1"
+    healthcheck:
+      # Healthy = something accepts TCP on 3724 inside the container (bash's /dev/tcp).
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/3724"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      ac-database:
+        condition: service_healthy
+      ac-db-import:
+        condition: service_completed_successfully
+
+  ac-worldserver:
+    container_name: ov-ac-worldserver
+    image: ${OV_IMAGE:-acore/ac-wotlk}-worldserver:${OV_TAG:-master}
+    working_dir: /azerothcore
+    # Console: `docker attach ov-ac-worldserver`, detach with Ctrl-P then Ctrl-Q.
+    # NEVER Ctrl-C in the attached console: it stops the world server.
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    logging: *logging
+    networks: [backend, edge]
+    # SIGTERM makes the core save every online player and shut down cleanly; give it time.
+    stop_grace_period: 2m
+    ulimits:
+      nofile: { soft: 65535, hard: 65535 }
+    ports:
+      # Public game port.
+      - "0.0.0.0:8085:8085"
+      # SOAP: host loopback ONLY. The signup service and admins (ssh) use it; never 0.0.0.0.
+      - "127.0.0.1:7878:7878"
+    volumes:
+      # Game data extracted from the owner's own client (dbc, maps, optional vmaps/mmaps).
+      # Read-only, server-side only; nothing serves it over HTTP.
+      - ov-client-data:/azerothcore/env/dist/data:ro
+      # Lua scripts for mod-ale (custom image only; the stock image ignores them).
+      - ./custom/lua_scripts:/azerothcore/lua_scripts:ro
+      # mod-playerbots builds its own database on first start from its SQL folder, which the
+      # runtime image doesn't contain: ship it beside the compose file (modules-sql/).
+      - ./modules-sql/mod-playerbots:/azerothcore/modules/mod-playerbots/data/sql:ro
+      - ./logs/world:/azerothcore/env/dist/logs
+    # Settings, same order as local: the profile first, then the module settings, then the
+    # auction bot's character. OV_PROFILE in .env picks the profile (brawl|progression|casual).
+    # The stock image has no modules and ignores their AC_* settings.
+    env_file:
+      - path: profiles/${OV_PROFILE:-brawl}.env
+      - path: modules.env
+      - path: ahbot.env
+        required: false
+    # `environment` wins over `env_file` in compose, so the values below override anything
+    # with the same name in the profile or modules.env.
+    environment:
+      <<: *db
+      AC_DATA_DIR: /azerothcore/env/dist/data
+      AC_LOGS_DIR: /azerothcore/env/dist/logs
+      AC_CLOSE_IDLE_CONNECTIONS: "0"
+      # modules.env (copied from the PC) hardcodes the local test password for the playerbots
+      # database; replace it with the real one. Harmless on the stock image.
+      AC_PLAYERBOTS_DATABASE_INFO: "ac-database;3306;root;${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in /srv/wrath/.env};acore_playerbots"
+      # Line-of-sight and pathing: set OV_PATHING=1 in .env once vmaps + mmaps are uploaded.
+      AC_VMAP_ENABLE_LOS: "${OV_PATHING:-0}"
+      AC_VMAP_ENABLE_HEIGHT: "${OV_PATHING:-0}"
+      AC_VMAP_PET_LOS: "${OV_PATHING:-0}"
+      AC_MOVE_MAPS_ENABLE: "${OV_PATHING:-0}"
+      # SOAP (worldserver.conf.dist keys SOAP.Enabled / SOAP.IP / SOAP.Port). 0.0.0.0 is
+      # inside the container only; the host side is the 127.0.0.1:7878 mapping above.
+      AC_SOAP_ENABLED: "1"
+      AC_SOAP_IP: "0.0.0.0"
+      AC_SOAP_PORT: "7878"
+      # Warden on by default. WU_WARDEN=0 in .env turns it off for a friends-only batch where
+      # browser-client players (no Warden module) must be able to join.
+      AC_WARDEN_ENABLED: "${WU_WARDEN:-1}"
+      # WARDEN (history): previously left unset. AzerothCore's default is Warden.Enabled = 1, which is what
+      # a public realm wants: players connect with stock 3.3.5a clients, and Warden is the
+      # core's client anti-cheat. (The local compose turns it off only because the browser
+      # client has no Warden module. If a browser relay is added later, give that realm its
+      # own worldserver with AC_WARDEN_ENABLED=0 rather than turning it off here.)
+      #
+      # Production tuning (keys: MapUpdate.Threads, Network.Threads, MaxCoreStuckTime,
+      # CharacterDatabase.WorkerThreads, PlayerLimit). These win over the env files, so change
+      # them here, then `docker compose up -d ac-worldserver`.
+      AC_MAP_UPDATE_THREADS: "4"
+      AC_NETWORK_THREADS: "2"
+      AC_CHARACTER_DATABASE_WORKER_THREADS: "2"
+      # Freeze detector: if the world loop is stuck 60 s the core aborts and
+      # `restart: unless-stopped` brings it back, instead of hanging with players connected.
+      AC_MAX_CORE_STUCK_TIME: "60"
+      # Hard cap on simultaneous player sessions (bots do not count against it).
+      AC_PLAYER_LIMIT: "${WU_PLAYER_LIMIT:-1000}"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8085"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # First start loads the world (and creates bots): allow 15 minutes.
+      start_period: 15m
+    depends_on:
+      ac-database:
+        condition: service_healthy
+      ac-db-import:
+        condition: service_completed_successfully
+    # Optional hard memory cap (uncomment after you have watched real usage for a few days):
+    # mem_limit: 24g
+
+volumes:
+  # Named "ov-wotlk_ac-database" on disk (project name prefix), as on the PC.
+  ac-database:
+  # Created by the RUNBOOK (step 4) as a bind to /srv/wrath/client-data, so files rsync'ed
+  # there are what the worldserver sees.
+  ov-client-data:
+    external: true

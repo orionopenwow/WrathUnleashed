@@ -1,0 +1,1376 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 792114b7..806c8ce5 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -698,6 +698,7 @@ dependencies = [
+  "js-sys",
+  "serde_json",
+  "wasm-bindgen",
++ "wasm-bindgen-futures",
+  "web-sys",
+ ]
+ 
+diff --git a/crates/benilla-app/src/cursor.rs b/crates/benilla-app/src/cursor.rs
+index 60a01bca..23d6f0c7 100644
+--- a/crates/benilla-app/src/cursor.rs
++++ b/crates/benilla-app/src/cursor.rs
+@@ -256,7 +256,11 @@ impl Plugin for CursorPlugin {
+                 (drive_displayed_cursor, macos::drive)
+                     .chain()
+                     // After the tick: a FrameXML `SetCursor` made this frame is read here.
+-                    .after(crate::ui_script::UiInput),
++                    .after(crate::ui_script::UiInput)
++                    // And after the targeting chain, so the world leg reads this frame's
++                    // `WorldCursor` (the classifier's verdict over this frame's hover), not
++                    // last frame's: unordered, the hover cursor could trail the pointer a frame.
++                    .after(crate::target::TargetUpdate),
+             );
+         #[cfg(not(target_os = "macos"))]
+         app.init_resource::<other::PayloadCursorImages>()
+@@ -266,7 +270,11 @@ impl Plugin for CursorPlugin {
+                 (drive_displayed_cursor, other::drive)
+                     .chain()
+                     // After the tick: a FrameXML `SetCursor` made this frame is read here.
+-                    .after(crate::ui_script::UiInput),
++                    .after(crate::ui_script::UiInput)
++                    // And after the targeting chain, so the world leg reads this frame's
++                    // `WorldCursor` (the classifier's verdict over this frame's hover), not
++                    // last frame's: unordered, the hover cursor could trail the pointer a frame.
++                    .after(crate::target::TargetUpdate),
+             );
+     }
+ }
+@@ -324,10 +332,32 @@ mod other {
+         // [`crate::ui_script::VmMemo`].
+         mut last_set: Local<Option<String>>,
+         mut decode_failed: Local<HashSet<String>>,
++        // How many of [`CURSOR_STEMS`] the web warm-up has handed the window (see below).
++        mut warmed: Local<usize>,
+     ) {
+         let Some(window) = window else {
+             return;
+         };
++        // Web: winit builds a custom cursor asynchronously the first time it is set (image ->
++        // bitmap -> blob URL -> decode), keeping the old cursor until it loads, so the first
++        // hover of each kind (Speak, Attack, Loot, ...) lagged by several frames. Behind a loading
++        // cover, hand the window one stem per frame so every mode cursor is built and cached
++        // (bevy_winit keys its cache on the image handle) before the world shows. Each set
++        // replaces the last before it loads, so the cover keeps showing the arrow; the last
++        // frame falls through and parks Point again.
++        if cfg!(target_arch = "wasm32") && screen.covering() && *warmed < CURSOR_STEMS.len() {
++            if let Some(cursors) = cursors.as_ref() {
++                while *warmed < CURSOR_STEMS.len() {
++                    let stem = CURSOR_STEMS[*warmed];
++                    *warmed += 1;
++                    if let Some(handle) = cursors.0.get(stem) {
++                        set_custom_cursor(&mut commands, *window, handle.clone());
++                        *last_set = None;
++                        return;
++                    }
++                }
++            }
++        }
+         let held_icon = script
+             .as_ref()
+             .and_then(|s| payload_icon(s, screen.covering()));
+diff --git a/crates/benilla-app/src/ui_tooltip/mod.rs b/crates/benilla-app/src/ui_tooltip/mod.rs
+index 5c0fed98..f18042ff 100644
+--- a/crates/benilla-app/src/ui_tooltip/mod.rs
++++ b/crates/benilla-app/src/ui_tooltip/mod.rs
+@@ -14,7 +14,7 @@ use crate::net::{NetCommands, ObjectStore, SelfPlayer};
+ use crate::target::{go_is_nearest, Hovered, HoveredObject, GO_FLAG_LOCKED};
+ use crate::ui_script::UiFeed;
+ use crate::ui_trainer::TrainerFeed;
+-use crate::ui_unit::{enrich_unit, snapshot, unit_reaction, SnapshotTables, UnitFeed};
++use crate::ui_unit::{enrich_unit, snapshot, unit_reaction, SnapshotTables};
+ 
+ mod spell_deps;
+ mod spell_feed;
+@@ -27,7 +27,15 @@ impl Plugin for UiTooltipPlugin {
+         app.add_systems(
+             Update,
+             (
+-                drive_mouseover_tooltip.in_set(UnitFeed),
++                // After the targeting chain, so the tooltip and `UPDATE_MOUSEOVER_UNIT` follow
++                // this frame's pick; in `UnitFeed` (before the tick) they trailed it a frame,
++                // which on a 30-50 ms web frame read as a slow hover. After the tick it is a
++                // post-tick VM holder: its calls run their handlers at once, and the paint
++                // after it lays the tooltip out this same frame. `UnitFeed`'s gate, carried here.
++                drive_mouseover_tooltip
++                    .after(crate::target::TargetUpdate)
++                    .before(crate::ui_script::UiPaint)
++                    .run_if(crate::ui_script::ingame_ui_up),
+                 // After the trainer and quest feeds, so a list that lands this frame is hoverable
+                 // in its tick; outside `UnitFeed`, which the trainer feed follows, so it takes that
+                 // set's gate.
+diff --git a/crates/benilla-app/src/world_backdrop.rs b/crates/benilla-app/src/world_backdrop.rs
+index 8316b42f..52d7d5db 100644
+--- a/crates/benilla-app/src/world_backdrop.rs
++++ b/crates/benilla-app/src/world_backdrop.rs
+@@ -249,10 +249,95 @@ fn claim_backdrop(
+ /// Owns the world camera's target (the size-carrier) and the UI camera's claim on the world.
+ pub(crate) struct WorldBackdropPlugin;
+ 
++/// The web build's automatic render scale: the 3D world's resolution follows the frame time
++/// between [`AUTO_SCALE_RANGE`] while the interface stays sharp, as the plan's browser path has it
++/// (most browser players are on integrated graphics, where pixels are the main cost). Off on
++/// native, and off for the session once the `renderScale` CVar is set by anyone.
++#[derive(Resource)]
++pub(crate) struct AutoRenderScale {
++    enabled: bool,
++    /// Smoothed frame time, seconds.
++    ema: f32,
++    /// Seconds the smoothed frame time has sat past a threshold, signed: + slow, - fast.
++    held: f32,
++    /// Seconds since the last step, so a resize settles before the next judgement.
++    since_step: f32,
++}
++
++impl Default for AutoRenderScale {
++    fn default() -> Self {
++        Self {
++            enabled: cfg!(target_arch = "wasm32"),
++            ema: 1.0 / 60.0,
++            held: 0.0,
++            since_step: 0.0,
++        }
++    }
++}
++
++/// The automatic scale's bounds: below half the picture is too soft to read a nameplate's world.
++const AUTO_SCALE_RANGE: std::ops::RangeInclusive<f32> = 0.5..=1.0;
++/// Step down past ~45 fps sustained for 2 s; step up under ~70 fps sustained for 5 s.
++const AUTO_SLOW_S: f32 = 1.0 / 45.0;
++const AUTO_FAST_S: f32 = 1.0 / 70.0;
++const AUTO_STEP: f32 = 0.05;
++
++/// One judgement a frame. Never under a loading cover (its frames are load work, not draw cost),
++/// and at most one step every 3 s so each new size is measured before the next.
++fn auto_render_scale(
++    time: Res<Time<bevy::time::Real>>,
++    screen: Res<crate::loading_screen::LoadingScreen>,
++    mut auto: ResMut<AutoRenderScale>,
++    mut scale: ResMut<RenderScale>,
++) {
++    if !auto.enabled {
++        return;
++    }
++    let dt = time.delta_secs();
++    if screen.covering() || dt <= 0.0 || dt > 0.5 {
++        auto.held = 0.0;
++        return;
++    }
++    auto.ema += (dt - auto.ema) * 0.05;
++    auto.since_step += dt;
++    if auto.ema > AUTO_SLOW_S {
++        auto.held = auto.held.max(0.0) + dt;
++    } else if auto.ema < AUTO_FAST_S {
++        auto.held = auto.held.min(0.0) - dt;
++    } else {
++        auto.held = 0.0;
++    }
++    if auto.since_step < 3.0 {
++        return;
++    }
++    let current = scale.0;
++    let next = if auto.held > 2.0 {
++        current - AUTO_STEP
++    } else if auto.held < -5.0 {
++        current + AUTO_STEP
++    } else {
++        return;
++    }
++    .clamp(*AUTO_SCALE_RANGE.start(), *AUTO_SCALE_RANGE.end());
++    if (next - current).abs() > f32::EPSILON {
++        scale.0 = next;
++        auto.since_step = 0.0;
++        auto.held = 0.0;
++    }
++}
++
+ /// Render scale's change callback, clamped to [`RENDER_SCALE_RANGE`]; the backdrop and the
+ /// camera's factor follow together on the next frame.
+-pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut scale: ResMut<RenderScale>) {
++pub(crate) fn on_cvar(
++    ev: On<crate::cvars::CvarChanged>,
++    mut scale: ResMut<RenderScale>,
++    auto: Option<ResMut<AutoRenderScale>>,
++) {
+     if ev.is("renderScale") {
++        // A scale the player (or their saved config) chose holds: the automatic scale stops.
++        if let Some(mut auto) = auto {
++            auto.enabled = false;
++        }
+         scale.0 = ev
+             .num()
+             .clamp(*RENDER_SCALE_RANGE.start(), *RENDER_SCALE_RANGE.end());
+@@ -263,10 +348,17 @@ impl Plugin for WorldBackdropPlugin {
+     fn build(&self, app: &mut App) {
+         app.add_observer(on_cvar);
+         app.init_resource::<RenderScale>()
++            .init_resource::<AutoRenderScale>()
+             .add_systems(Startup, setup_backdrop)
+             .add_systems(
+                 Update,
+-                (track_render_size, retarget_world_camera, claim_backdrop).chain(),
++                (
++                    auto_render_scale.run_if(resource_exists::<crate::loading_screen::LoadingScreen>),
++                    track_render_size,
++                    retarget_world_camera,
++                    claim_backdrop,
++                )
++                    .chain(),
+             );
+     }
+ }
+diff --git a/crates/benilla-assets/src/adt.rs b/crates/benilla-assets/src/adt.rs
+index 3481704c..289e93a5 100644
+--- a/crates/benilla-assets/src/adt.rs
++++ b/crates/benilla-assets/src/adt.rs
+@@ -212,6 +212,22 @@ impl AssetLoader for AdtLoader {
+ 
+         let mut shading: Vec<ChunkShading> = Vec::with_capacity(tile.chunks.len());
+ 
++        // Web: start every layer texture's download (each `_s` sheen variant and its base) at
++        // once; the reads below then take them from the page's file store in order instead of
++        // waiting one round trip apiece. Native reads the archives and skips this.
++        if cfg!(target_arch = "wasm32") {
++            let mut seen = std::collections::HashSet::new();
++            for name in tile.chunks.iter().flat_map(|c| c.layer_textures.iter().take(4)) {
++                let key = normalize_path(name);
++                if seen.insert(key.clone()) {
++                    if let Some(stem) = key.strip_suffix(".blp") {
++                        crate::prefetch_asset(&mpq_url(&format!("{stem}_s.blp")));
++                    }
++                    crate::prefetch_asset(&mpq_url(&key));
++                }
++            }
++        }
++
+         for chunk in tile.chunks.iter() {
+             // A hole-emptied chunk takes no alpha or shadow slot either.
+             if chunk.indices.len() < 3 {
+diff --git a/crates/benilla-assets/src/gpu_blp.rs b/crates/benilla-assets/src/gpu_blp.rs
+index e1c01f73..97634f65 100644
+--- a/crates/benilla-assets/src/gpu_blp.rs
++++ b/crates/benilla-assets/src/gpu_blp.rs
+@@ -36,7 +36,7 @@ impl Plugin for BlpGpuSupportPlugin {
+     fn finish(&self, app: &mut App) {
+         // `WOW_NO_BC=1` forces the decoded path: the A/B lever, and the first thing to try when a
+         // texture looks wrong (hardware block decode is not bit-identical to `texpresso`'s).
+-        let forced_off = std::env::var("WOW_NO_BC").as_deref() == Ok("1");
++        let forced_off = benilla_formats::web::env_var("WOW_NO_BC").as_deref() == Ok("1");
+         let device_can = app
+             .world()
+             .get_resource::<CompressedImageFormatSupport>()
+diff --git a/crates/benilla-assets/src/lib.rs b/crates/benilla-assets/src/lib.rs
+index fdae3e7f..e724c7da 100644
+--- a/crates/benilla-assets/src/lib.rs
++++ b/crates/benilla-assets/src/lib.rs
+@@ -111,19 +111,44 @@ impl MpqAssetReader {
+     /// as `NotFound` ([`wasm_fetch`]).
+     #[cfg(target_arch = "wasm32")]
+     async fn read_bytes(&self, path: &Path) -> Result<Vec<u8>, AssetReaderError> {
+-        let internal = internal_path(path)?;
+-        let url = format!(
+-            "{}/{}",
+-            benilla_formats::web::data_base(),
+-            benilla_formats::web::encode_name(&internal)
+-        );
+-        wasm_fetch(&url).await.map_err(|e| match e {
+-            WasmFetchError::NotFound => AssetReaderError::NotFound(path.to_path_buf()),
+-            WasmFetchError::Other(msg) => AssetReaderError::Io(Arc::new(std::io::Error::other(msg))),
+-        })
++        let url = web_data_url(&internal_path(path)?);
++        // Through the page's file store: a prefetched file resolves at once, a download already
++        // in flight is joined, a known 404 answers without a request (`benilla_formats::web`).
++        benilla_formats::web::fetch_async(&url)
++            .await
++            .map_err(|e| match e.kind() {
++                std::io::ErrorKind::NotFound => AssetReaderError::NotFound(path.to_path_buf()),
++                _ => AssetReaderError::Io(Arc::new(e)),
++            })
+     }
+ }
+ 
++/// The web host URL of an archive path, exactly as [`MpqAssetReader::read_bytes`] fetches it, so a
++/// prefetch and the later read meet on one store key.
++#[cfg(target_arch = "wasm32")]
++fn web_data_url(internal: &str) -> String {
++    format!(
++        "{}/{}",
++        benilla_formats::web::data_base(),
++        benilla_formats::web::encode_name(internal)
++    )
++}
++
++/// Start downloading the file an asset path names (`mpq://World/Maps/…` or the bare archive path)
++/// into the page's file store, so the load that asks for it later does not wait on the network.
++/// Web only; native reads the archives directly and this does nothing.
++pub fn prefetch_asset(path: &str) {
++    #[cfg(target_arch = "wasm32")]
++    {
++        let bare = path.strip_prefix("mpq://").unwrap_or(path);
++        if let Ok(internal) = internal_path(Path::new(bare)) {
++            benilla_formats::web::prefetch(&web_data_url(&internal));
++        }
++    }
++    #[cfg(not(target_arch = "wasm32"))]
++    let _ = path;
++}
++
+ impl AssetReader for MpqAssetReader {
+     async fn read<'a>(&'a self, path: &'a Path) -> Result<impl Reader + 'a, AssetReaderError> {
+         Ok(VecReader::new(self.read_bytes(path).await?))
+@@ -147,49 +172,6 @@ impl AssetReader for MpqAssetReader {
+     }
+ }
+ 
+-/// What can go wrong fetching one asset over the web host's Data URL scheme — collapsed to the two
+-/// shapes [`MpqAssetReader::read_bytes`] cares about: "the asset genuinely isn't there" (a 404, which
+-/// Bevy needs as [`AssetReaderError::NotFound`] to fall back to default meta / report a load
+-/// error cleanly) versus everything else (network failure, a non-`Response` from `fetch`, a body
+-/// read that failed), which is a plain I/O error.
+-#[cfg(target_arch = "wasm32")]
+-enum WasmFetchError {
+-    NotFound,
+-    Other(String),
+-}
+-
+-/// One `GET` of `url` via the browser's async `fetch`, used only from the wasm
+-/// `MpqAssetReader::read_bytes` above. `Chain::read` uses a *synchronous* `XMLHttpRequest` on the
+-/// page instead, because it is called from ~60 non-async call sites; this path has no such
+-/// constraint — `AssetReader` is `async fn` on every target — so it uses the ordinary async
+-/// `fetch`/`Response::array_buffer` pair rather than sync XHR's
+-/// `text/plain; charset=x-user-defined` byte-smuggling trick.
+-#[cfg(target_arch = "wasm32")]
+-async fn wasm_fetch(url: &str) -> std::result::Result<Vec<u8>, WasmFetchError> {
+-    use wasm_bindgen::JsCast;
+-
+-    let window = web_sys::window()
+-        .ok_or_else(|| WasmFetchError::Other("no window: fetch is browser-only".to_string()))?;
+-    let resp_value = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(url))
+-        .await
+-        .map_err(|e| WasmFetchError::Other(format!("{e:?}")))?;
+-    let resp: web_sys::Response = resp_value
+-        .dyn_into()
+-        .map_err(|_| WasmFetchError::Other("fetch() did not resolve to a Response".to_string()))?;
+-    if resp.status() == 404 {
+-        return Err(WasmFetchError::NotFound);
+-    }
+-    if !resp.ok() {
+-        return Err(WasmFetchError::Other(format!("HTTP {}", resp.status())));
+-    }
+-    let array_buffer = resp
+-        .array_buffer()
+-        .map_err(|e| WasmFetchError::Other(format!("{e:?}")))?;
+-    let buf = wasm_bindgen_futures::JsFuture::from(array_buffer)
+-        .await
+-        .map_err(|e| WasmFetchError::Other(format!("{e:?}")))?;
+-    Ok(js_sys::Uint8Array::new(&buf).to_vec())
+-}
+ /// The sampler-mode marker in an `mpq://` texture URL.
+ const SAMPLER_MARKER: char = '@';
+ 
+diff --git a/crates/benilla-assets/src/m2.rs b/crates/benilla-assets/src/m2.rs
+index d6e85728..1b0877a9 100644
+--- a/crates/benilla-assets/src/m2.rs
++++ b/crates/benilla-assets/src/m2.rs
+@@ -241,6 +241,16 @@ impl AssetLoader for M2ModelLoader {
+ 
+         // A 3.3.5a model is read with its skin profile and its sequences' `.anim` files beside it.
+         let path = ctx.path().path().to_string_lossy().to_ascii_lowercase();
++        // Web: start the skin and every `.anim` download together; the reads below then take
++        // them from the page's file store instead of one round trip apiece.
++        if cfg!(target_arch = "wasm32") {
++            crate::prefetch_asset(&format!("mpq://{}", benilla_formats::skin_path(&path)));
++            if let Ok(files) = benilla_formats::anim_paths(&bytes, &path) {
++                for (_, file) in files {
++                    crate::prefetch_asset(&format!("mpq://{file}"));
++                }
++            }
++        }
+         let skin = ctx
+             .read_asset_bytes(format!("mpq://{}", benilla_formats::skin_path(&path)))
+             .await
+diff --git a/crates/benilla-assets/src/tex_filter.rs b/crates/benilla-assets/src/tex_filter.rs
+index 1f55e8fa..1c5ada2d 100644
+--- a/crates/benilla-assets/src/tex_filter.rs
++++ b/crates/benilla-assets/src/tex_filter.rs
+@@ -56,7 +56,7 @@ impl Default for TexFilterSetting {
+         };
+         Self {
+             trilinear: env_flag("WOW_TRILINEAR").unwrap_or(true),
+-            aniso: std::env::var("WOW_ANISO")
++            aniso: benilla_formats::web::env_var("WOW_ANISO")
+                 .ok()
+                 .and_then(|v| v.parse::<u32>().ok())
+                 .map_or(1, |v| v.clamp(*ANISO_RANGE.start(), *ANISO_RANGE.end())),
+diff --git a/crates/benilla-assets/src/wmo.rs b/crates/benilla-assets/src/wmo.rs
+index c3976845..48a5a21f 100644
+--- a/crates/benilla-assets/src/wmo.rs
++++ b/crates/benilla-assets/src/wmo.rs
+@@ -419,6 +419,13 @@ impl AssetLoader for WmoModelLoader {
+             (0..root.group_count()).map(|_| None).collect();
+         let mut group_footprints: Vec<Option<FootprintTris>> =
+             (0..root.group_count()).map(|_| None).collect();
++        // Web: start every group's download together; the loop below then reads them from the
++        // page's file store in order instead of one round trip apiece.
++        if cfg!(target_arch = "wasm32") {
++            for gi in 0..root.group_count() {
++                crate::prefetch_asset(&format!("mpq://{stem}_{gi:03}.wmo"));
++            }
++        }
+         for gi in 0..root.group_count() {
+             let group_url = format!("mpq://{stem}_{gi:03}.wmo");
+             let Ok(gbytes) = ctx.read_asset_bytes(group_url).await else {
+diff --git a/crates/benilla-assets/src/world_assets/images.rs b/crates/benilla-assets/src/world_assets/images.rs
+index 4ca61b1b..7b676b88 100644
+--- a/crates/benilla-assets/src/world_assets/images.rs
++++ b/crates/benilla-assets/src/world_assets/images.rs
+@@ -63,7 +63,7 @@ pub fn repeat_texture_authored(upload: crate::gpu_blp::UploadChain, wrap: (bool,
+ 
+ /// `WOW_LIQUID_DC=raw` keeps the shipped frames' own DC, the A/B lever for [`flatten_frame_dc`].
+ fn dc_normalization_enabled() -> bool {
+-    std::env::var("WOW_LIQUID_DC").as_deref() != Ok("raw")
++    benilla_formats::web::env_var("WOW_LIQUID_DC").as_deref() != Ok("raw")
+ }
+ 
+ /// Shift each frame's DC (per level, per channel) onto the loop's mean.
+diff --git a/crates/benilla-formats/Cargo.toml b/crates/benilla-formats/Cargo.toml
+index 560d5bf1..78cc534b 100644
+--- a/crates/benilla-formats/Cargo.toml
++++ b/crates/benilla-formats/Cargo.toml
+@@ -47,3 +47,5 @@ web-sys = { version = "0.3.99", features = [
+ serde_json = "1"
+ # The boot-read trace (web.rs::trace) reads window.__wenilla_boottrace as a js_sys::Array.
+ js-sys = "0.3"
++# The async read through the page's file store (web.rs::fetch_async).
++wasm-bindgen-futures = "0.4"
+diff --git a/crates/benilla-formats/src/web.rs b/crates/benilla-formats/src/web.rs
+index 18ede66e..a5436774 100644
+--- a/crates/benilla-formats/src/web.rs
++++ b/crates/benilla-formats/src/web.rs
+@@ -27,6 +27,48 @@ pub fn encode_name(name: &str) -> String {
+     out
+ }
+ 
++/// The tuning knobs a test pass may set from the page's address on the web build, where wasm32
++/// has no process environment: `?farclip=600&upload_budget=4` reads back as `WOW_FARCLIP` and
++/// `WOW_UPLOAD_BUDGET` (the `WOW_` prefix dropped, lowercased, as `benilla_app::webenv` maps its
++/// keys). Only these keys: the rest of the `WOW_*` set are native instruments (captures, dumps,
++/// traces that write files) a URL must not switch on in a browser.
++pub const WEB_TUNABLE: &[&str] = &[
++    "WOW_ANISO",
++    "WOW_ART_RADIUS",
++    "WOW_FADE_NEAR",
++    "WOW_FARCLIP",
++    "WOW_LIQUID_DC",
++    "WOW_MSAA",
++    "WOW_NOPORTALCULL",
++    "WOW_NO_BC",
++    "WOW_NO_FRAME_PACE",
++    "WOW_NOVSYNC",
++    "WOW_STATIC_GX",
++    "WOW_STATIC_GX_FADE",
++    "WOW_STATIC_GX_PROP",
++    "WOW_STATIC_GX_WMO",
++    "WOW_STATIC_MERGE",
++    "WOW_TILE_UNLOAD",
++    "WOW_UPLOAD_BUDGET",
++    "WOW_WEATHER",
++];
++
++/// `std::env::var`, with the web build's answer for [`WEB_TUNABLE`] keys taken from the page's
++/// query string. Native: exactly `std::env::var`.
++pub fn env_var(name: &str) -> Result<String, std::env::VarError> {
++    #[cfg(target_arch = "wasm32")]
++    {
++        if !WEB_TUNABLE.contains(&name) {
++            return Err(std::env::VarError::NotPresent);
++        }
++        wasm::query_var(name).ok_or(std::env::VarError::NotPresent)
++    }
++    #[cfg(not(target_arch = "wasm32"))]
++    {
++        std::env::var(name)
++    }
++}
++
+ #[cfg(target_arch = "wasm32")]
+ mod wasm {
+     use wasm_bindgen::JsValue;
+@@ -44,6 +86,23 @@ mod wasm {
+         format!("{origin}/data")
+     }
+ 
++    /// The page query's value for `name` (`WOW_` dropped, lowercased), percent-decoded; read once
++    /// per call, as the knobs are read once at startup.
++    pub fn query_var(name: &str) -> Option<String> {
++        let key = name.strip_prefix("WOW_").unwrap_or(name).to_lowercase();
++        let search = web_sys::window()?.location().search().ok()?;
++        for pair in search.trim_start_matches('?').split('&') {
++            let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
++            let k = js_sys::decode_uri_component(k).ok()?.as_string()?;
++            if k.to_lowercase() == key {
++                return js_sys::decode_uri_component(&v.replace('+', " "))
++                    .ok()?
++                    .as_string();
++            }
++        }
++        None
++    }
++
+     /// Append `name` to the page's boot-read trace, if the page armed one — the input to
+     /// `web/boot-manifest.json` (see `web/boot.js`). A page that wants the trace defines
+     /// `window.__wenilla_boottrace = []` before `init()` (the `?boottrace=1` switch does);
+@@ -71,7 +130,120 @@ mod wasm {
+         });
+     }
+ 
+-    /// A blocking `XMLHttpRequest` GET, returning the raw response bytes.
++    // The page-side file store and the blocking read, in JavaScript: the byte unpack runs in the
++    // JIT in one pass and crosses into wasm as one `Uint8Array` copy, where the Rust loop it
++    // replaces built a UTF-8 `String` out of the response text and walked it one `char` at a time.
++    #[wasm_bindgen::prelude::wasm_bindgen(inline_js = r#"
++const STORE_CAP = 256 * 1024 * 1024;
++function store() {
++  let s = globalThis.__wenilla_files;
++  if (!s) {
++    s = { map: new Map(), bytes: 0 };
++    s.put = (url, bytes) => {
++      const old = s.map.get(url);
++      if (old) { s.bytes -= old.byteLength; s.map.delete(url); }
++      s.map.set(url, bytes);
++      s.bytes += bytes.byteLength;
++      while (s.bytes > STORE_CAP && s.map.size > 1) {
++        const [k, v] = s.map.entries().next().value;
++        s.map.delete(k);
++        s.bytes -= v.byteLength;
++      }
++    };
++    s.get = (url) => {
++      const v = s.map.get(url);
++      if (v) { s.map.delete(url); s.map.set(url, v); }
++      return v;
++    };
++    globalThis.__wenilla_files = s;
++  }
++  return s;
++}
++export function wenilla_read_sync(url) {
++  const s = store();
++  const hit = s.get(url);
++  if (hit) return hit;
++  const x = new XMLHttpRequest();
++  x.open('GET', url, false);
++  x.overrideMimeType('text/plain; charset=x-user-defined');
++  x.send();
++  if (x.status !== 200) return x.status;
++  const t = x.responseText;
++  const n = t.length;
++  const b = new Uint8Array(n);
++  for (let i = 0; i < n; i++) b[i] = t.charCodeAt(i) & 0xff;
++  s.put(url, b);
++  return b;
++}
++export function wenilla_store_has(url) {
++  return store().map.has(url);
++}
++// Async reads share the store: a hit resolves at once, a fetch already in flight (a prefetch, or
++// another loader asking for the same file) is joined rather than repeated, and a 404 is
++// remembered so a probe for an absent name (`_s.blp`, `.tga` after `.blp`) costs one request.
++function inflight() {
++  const s = store();
++  if (!s.inflight) { s.inflight = new Map(); s.missing = new Set(); }
++  return s;
++}
++export function wenilla_read_async(url) {
++  const s = inflight();
++  const hit = s.get(url);
++  if (hit) return Promise.resolve(hit);
++  if (s.missing.has(url)) return Promise.resolve(404);
++  let p = s.inflight.get(url);
++  if (!p) {
++    p = fetch(url).then(async (r) => {
++      if (r.status === 404) { s.missing.add(url); return 404; }
++      if (!r.ok) return r.status;
++      const b = new Uint8Array(await r.arrayBuffer());
++      s.put(url, b);
++      return b;
++    }).catch(() => 0).finally(() => s.inflight.delete(url));
++    s.inflight.set(url, p);
++  }
++  return p;
++}
++export function wenilla_prefetch(url) {
++  wenilla_read_async(url);
++}
++"#)]
++    extern "C" {
++        fn wenilla_read_sync(url: &str) -> JsValue;
++        fn wenilla_store_has(url: &str) -> bool;
++        fn wenilla_read_async(url: &str) -> js_sys::Promise;
++        fn wenilla_prefetch(url: &str);
++    }
++
++    /// Start downloading `url` into the page's file store without waiting; a later read of the
++    /// same URL (sync or async) finds it there, or joins the download still in flight (async).
++    pub fn prefetch(url: &str) {
++        wenilla_prefetch(url);
++    }
++
++    /// An async GET through the page's file store (see the JavaScript above): `Ok(bytes)`,
++    /// `Err(NotFound)` for a 404, any other failure as `Err(other)`.
++    pub async fn fetch_async(url: &str) -> std::io::Result<Vec<u8>> {
++        use wasm_bindgen::JsCast;
++        let got = wasm_bindgen_futures::JsFuture::from(wenilla_read_async(url))
++            .await
++            .map_err(|e| std::io::Error::other(format!("{url}: {e:?}")))?;
++        if let Some(bytes) = got.dyn_ref::<js_sys::Uint8Array>() {
++            return Ok(bytes.to_vec());
++        }
++        match got.as_f64().map(|s| s as u32) {
++            Some(404) => Err(std::io::Error::new(
++                std::io::ErrorKind::NotFound,
++                url.to_string(),
++            )),
++            Some(0) | None => Err(std::io::Error::other(format!("{url}: network error"))),
++            Some(status) => Err(std::io::Error::other(format!("{url}: HTTP {status}"))),
++        }
++    }
++
++    /// A blocking GET, returning the raw response bytes; a file already in the page's file store
++    /// (`globalThis.__wenilla_files`: every earlier read, plus whatever a prefetcher put there)
++    /// returns without touching the network.
+     ///
+     /// Synchronous on purpose: [`crate::Chain::read`] is called from Bevy systems on the main
+     /// thread today — `WorldAssets` and ~60 other call sites read the chain synchronously — and
+@@ -81,34 +253,34 @@ mod wasm {
+     /// (`benilla-assets`) is already `async` end to end, so it uses `fetch` instead (no such
+     /// constraint there).
+     ///
+-    /// A sync XHR's `responseType` is stuck at the default `""` (text), so an `arraybuffer`
+-    /// response type — the normal way to get binary out of an XHR — isn't available here. The
+-    /// standard workaround, used below, is `override_mime_type("text/plain; charset=x-user-defined")`:
+-    /// it forces the browser to decode the response body as one code unit (0x00-0xFF) per byte
+-    /// instead of guessing UTF-8 and mangling anything non-ASCII into U+FFFD, so `response_text()`
+-    /// round-trips arbitrary binary losslessly through `& 0xFF`.
++    /// A sync XHR's `responseType` is stuck at the default `""` (text), so the body is read with
++    /// `overrideMimeType("text/plain; charset=x-user-defined")`, one code unit per byte, and
++    /// unpacked with `& 0xFF` (in the JavaScript above).
++    ///
++    /// The store keeps up to 256 MB outside wasm memory, least recently used first out: terrain
++    /// layers and shared model textures are read again by every tile that uses them.
+     pub fn fetch_sync(url: &str) -> std::io::Result<Vec<u8>> {
+-        let xhr = XmlHttpRequest::new().map_err(js_err)?;
+-        xhr.open_with_async("GET", url, false).map_err(js_err)?;
+-        xhr.override_mime_type("text/plain; charset=x-user-defined")
+-            .map_err(js_err)?;
+-        xhr.send().map_err(js_err)?;
+-        match xhr.status().map_err(js_err)? {
+-            200 => {
+-                let text = xhr.response_text().map_err(js_err)?.unwrap_or_default();
+-                Ok(text.chars().map(|c| (c as u32 & 0xff) as u8).collect())
+-            }
+-            404 => Err(std::io::Error::new(
++        use wasm_bindgen::JsCast;
++        let got = wenilla_read_sync(url);
++        if let Some(bytes) = got.dyn_ref::<js_sys::Uint8Array>() {
++            return Ok(bytes.to_vec());
++        }
++        match got.as_f64().map(|s| s as u32) {
++            Some(404) => Err(std::io::Error::new(
+                 std::io::ErrorKind::NotFound,
+                 url.to_string(),
+             )),
+-            status => Err(std::io::Error::other(format!("{url}: HTTP {status}"))),
++            Some(status) => Err(std::io::Error::other(format!("{url}: HTTP {status}"))),
++            None => Err(std::io::Error::other(format!("{url}: unreadable response"))),
+         }
+     }
+ 
+-    /// A blocking `HEAD` request: does the web host have this name? No body to decode, so no mime
+-    /// override is needed — just the status line.
++    /// A blocking `HEAD` request: does the web host have this name? A file already in the page's
++    /// store answers yes without a request. No body to decode, so no mime override is needed.
+     pub fn exists_sync(url: &str) -> bool {
++        if wenilla_store_has(url) {
++            return true;
++        }
+         let Ok(xhr) = XmlHttpRequest::new() else {
+             return false;
+         };
+@@ -120,11 +292,7 @@ mod wasm {
+         }
+         xhr.status().map(|status| status == 200).unwrap_or(false)
+     }
+-
+-    fn js_err(e: JsValue) -> std::io::Error {
+-        std::io::Error::other(format!("{e:?}"))
+-    }
+ }
+ 
+ #[cfg(target_arch = "wasm32")]
+-pub use wasm::{data_base, exists_sync, fetch_sync, trace};
++pub use wasm::{data_base, exists_sync, fetch_async, fetch_sync, prefetch, trace};
+diff --git a/crates/benilla-world/src/art_scope.rs b/crates/benilla-world/src/art_scope.rs
+index 101f22f1..3d3db27a 100644
+--- a/crates/benilla-world/src/art_scope.rs
++++ b/crates/benilla-world/src/art_scope.rs
+@@ -30,7 +30,7 @@ fn radius_floor() -> f32 {
+ /// raised to it with a warning.
+ fn radius_from_env() -> f32 {
+     let floor = radius_floor();
+-    match std::env::var("WOW_ART_RADIUS")
++    match benilla_formats::web::env_var("WOW_ART_RADIUS")
+         .ok()
+         .and_then(|s| s.parse::<f32>().ok())
+     {
+diff --git a/crates/benilla-world/src/assets/mod.rs b/crates/benilla-world/src/assets/mod.rs
+index 0af2c64e..7125e83b 100644
+--- a/crates/benilla-world/src/assets/mod.rs
++++ b/crates/benilla-world/src/assets/mod.rs
+@@ -59,7 +59,7 @@ fn open_world_assets(mut commands: Commands, device: Res<RenderDevice>) {
+         return;
+     };
+     // Stale tiles released per frame: 1 outpaces even boosted free-fly's stale row a second.
+-    let unload_budget = std::env::var("WOW_TILE_UNLOAD")
++    let unload_budget = benilla_formats::web::env_var("WOW_TILE_UNLOAD")
+         .ok()
+         .and_then(|s| s.parse().ok())
+         .unwrap_or(1);
+diff --git a/crates/benilla-world/src/dev_state.rs b/crates/benilla-world/src/dev_state.rs
+index 5630dd92..1a6d95fb 100644
+--- a/crates/benilla-world/src/dev_state.rs
++++ b/crates/benilla-world/src/dev_state.rs
+@@ -154,7 +154,7 @@ impl Default for ModelDebug {
+             kind_visible: [true; 4],
+             blend_visible: [true; 5],
+             // `WOW_NOPORTALCULL=1` starts the cull off, for a headless A/B of one viewpoint.
+-            portal_cull: std::env::var("WOW_NOPORTALCULL").is_err(),
++            portal_cull: benilla_formats::web::env_var("WOW_NOPORTALCULL").is_err(),
+         }
+     }
+ }
+diff --git a/crates/benilla-world/src/frame_pace.rs b/crates/benilla-world/src/frame_pace.rs
+index f7eb1005..408537cf 100644
+--- a/crates/benilla-world/src/frame_pace.rs
++++ b/crates/benilla-world/src/frame_pace.rs
+@@ -45,7 +45,7 @@ impl Default for FramePacer {
+             hist: VecDeque::with_capacity(WINDOW),
+             carry: 0.0,
+             total: None,
+-            off: std::env::var("WOW_NO_FRAME_PACE").as_deref() == Ok("1"),
++            off: benilla_formats::web::env_var("WOW_NO_FRAME_PACE").as_deref() == Ok("1"),
+         }
+     }
+ }
+diff --git a/crates/benilla-world/src/shaders/ffx_glow.wgsl b/crates/benilla-world/src/shaders/ffx_glow.wgsl
+index 24de1575..592632e0 100644
+--- a/crates/benilla-world/src/shaders/ffx_glow.wgsl
++++ b/crates/benilla-world/src/shaders/ffx_glow.wgsl
+@@ -88,9 +88,69 @@ fn combine_out(outg: vec3<f32>, alpha: f32, frag_coord: vec2<f32>) -> vec4<f32>
+ #endif
+ }
+ 
++// Upscale for a world drawn below the window's size (the `renderScale` CVar under 1): a
++// Catmull-Rom bicubic read (5 bilinear taps, the corners dropped) then contrast-adaptive
++// sharpening over the four source-texel neighbours (the FidelityFX CAS weight). A plain bilinear
++// stretch read soft at 0.75 and below. Every read is `textureSampleLevel` at 0 (the scene target
++// has one mip), so the choice of path can rest on a per-draw derivative without breaking WGSL's
++// uniformity rules.
++const UPSCALE_SHARPNESS: f32 = 0.5;
++
++fn bicubic_scene(uv: vec2<f32>, size: vec2<f32>) -> vec4<f32> {
++    let p = uv * size;
++    let tc = floor(p - 0.5) + 0.5;
++    let f = p - tc;
++    let w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
++    let w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
++    let w2 = f * (0.5 + f * (2.0 - 1.5 * f));
++    let w3 = f * f * (-0.5 + 0.5 * f);
++    let w12 = w1 + w2;
++    let off12 = w2 / w12;
++    let t0 = (tc - 1.0) / size;
++    let t3 = (tc + 2.0) / size;
++    let t12 = (tc + off12) / size;
++    var c = textureSampleLevel(in_tex, in_samp, vec2<f32>(t12.x, t0.y), 0.0) * (w12.x * w0.y);
++    c += textureSampleLevel(in_tex, in_samp, vec2<f32>(t0.x, t12.y), 0.0) * (w0.x * w12.y);
++    c += textureSampleLevel(in_tex, in_samp, vec2<f32>(t12.x, t12.y), 0.0) * (w12.x * w12.y);
++    c += textureSampleLevel(in_tex, in_samp, vec2<f32>(t3.x, t12.y), 0.0) * (w3.x * w12.y);
++    c += textureSampleLevel(in_tex, in_samp, vec2<f32>(t12.x, t3.y), 0.0) * (w12.x * w3.y);
++    let wsum = w12.x * w0.y + w0.x * w12.y + w12.x * w12.y + w3.x * w12.y + w12.x * w3.y;
++    return c / wsum;
++}
++
++fn upscaled_scene(uv: vec2<f32>) -> vec4<f32> {
++    let size = vec2<f32>(textureDimensions(in_tex));
++    let texel = 1.0 / size;
++    let one = vec3<f32>(1.0);
++    let c = bicubic_scene(uv, size);
++    let cc = clamp(c.rgb, vec3<f32>(0.0), one);
++    let n = min(textureSampleLevel(in_tex, in_samp, uv - vec2<f32>(0.0, texel.y), 0.0).rgb, one);
++    let s = min(textureSampleLevel(in_tex, in_samp, uv + vec2<f32>(0.0, texel.y), 0.0).rgb, one);
++    let e = min(textureSampleLevel(in_tex, in_samp, uv + vec2<f32>(texel.x, 0.0), 0.0).rgb, one);
++    let w = min(textureSampleLevel(in_tex, in_samp, uv - vec2<f32>(texel.x, 0.0), 0.0).rgb, one);
++    let mn = min(cc, min(min(n, s), min(e, w)));
++    let mx = max(cc, max(max(n, s), max(e, w)));
++    let amp = sqrt(clamp(min(mn, 2.0 - mx) / max(mx, vec3<f32>(1e-4)), vec3<f32>(0.0), one));
++    let k = amp * mix(-0.125, -0.2, UPSCALE_SHARPNESS);
++    let sharp = (cc + k * (n + s + e + w)) / (1.0 + 4.0 * k);
++    return vec4<f32>(clamp(sharp, vec3<f32>(0.0), one), c.a);
++}
++
++// Whether the scene texture is smaller than the target this pass draws: the target's size from
++// the UV derivative of the fullscreen triangle. Call at the top of a fragment entry (uniform flow).
++fn scene_is_below_target(uv: vec2<f32>) -> bool {
++    let target_w = abs(1.0 / dpdx(uv.x));
++    return f32(textureDimensions(in_tex).x) + 0.5 < target_w;
++}
++
+ // Both combines, at the plain or the warped UV; `frag_coord` stays unwarped for the dither.
+-fn combine_body(uv: vec2<f32>, frag_coord: vec2<f32>) -> vec4<f32> {
+-    let scene = textureSample(in_tex, in_samp, uv);
++fn combine_body(uv: vec2<f32>, frag_coord: vec2<f32>, up: bool) -> vec4<f32> {
++    var scene: vec4<f32>;
++    if up {
++        scene = upscaled_scene(uv);
++    } else {
++        scene = textureSampleLevel(in_tex, in_samp, uv, 0.0);
++    }
+     // Clamped like the downsample taps: the screen term must saturate before the glow add.
+     let sg = clamp(scene.rgb, vec3<f32>(0.0), vec3<f32>(1.0));
+     let bg = max(textureSample(blur_tex, in_samp, uv).rgb, vec3<f32>(0.0));
+@@ -114,7 +174,8 @@ fn combine_body(uv: vec2<f32>, frag_coord: vec2<f32>) -> vec4<f32> {
+ 
+ @fragment
+ fn fs_combine(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
+-    return combine_body(in.uv, in.position.xy);
++    let up = scene_is_below_target(in.uv);
++    return combine_body(in.uv, in.position.xy, up);
+ }
+ 
+ // FFXGlowWave, the warp the reference runs instead of FFXGlow while the eye is in any liquid
+@@ -140,6 +201,7 @@ fn wave_offset(uv: vec2<f32>, screen: vec2<f32>) -> vec2<f32> {
+ 
+ @fragment
+ fn fs_combine_wave(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
++    let up = scene_is_below_target(in.uv);
+     let screen = vec2<f32>(textureDimensions(in_tex));
+-    return combine_body(in.uv + wave_offset(in.uv, screen), in.position.xy);
++    return combine_body(in.uv + wave_offset(in.uv, screen), in.position.xy, up);
+ }
+diff --git a/crates/benilla-world/src/static_gx/bake.rs b/crates/benilla-world/src/static_gx/bake.rs
+index 2230e1c5..41d682f8 100644
+--- a/crates/benilla-world/src/static_gx/bake.rs
++++ b/crates/benilla-world/src/static_gx/bake.rs
+@@ -47,6 +47,9 @@ const CENSUS_SETTLE_FRAMES: u32 = 60;
+ /// The ceiling on that hold (~10 s), so counts that never settle, as on a flight path, still print.
+ const CENSUS_MAX_HOLD_FRAMES: u32 = 600;
+ 
++/// Merged-mesh bakes per frame on the web build (see [`flush_static_gx`]).
++const WEB_BAKES_PER_FRAME: usize = 2;
++
+ /// Bake dirty-and-quiet cells into retained draw data; publish into [`render::GxWorld`].
+ pub(super) fn flush_static_gx(mut gx: ResMut<StaticGx>, mut meshes: ResMut<Assets<Mesh>>) {
+     let _t = super::gx_perf_guard(0);
+@@ -62,10 +65,23 @@ pub(super) fn flush_static_gx(mut gx: ResMut<StaticGx>, mut meshes: ResMut<Asset
+         world,
+         ..
+     } = &mut *gx;
++    // Web: at most [`WEB_BAKES_PER_FRAME`] merged-mesh bakes a frame. Each bake rebuilds and
++    // re-uploads a merged mesh on the one thread, and a streaming burst makes many due at once
++    // (they all go quiet together), which was a hitch a few seconds after stopping. The rest
++    // stay dirty and bake on the following frames. Native, and a `flush_now`, keep no cap.
++    let cap = if cfg!(target_arch = "wasm32") && !now {
++        WEB_BAKES_PER_FRAME
++    } else {
++        usize::MAX
++    };
++    let mut baked_n = 0usize;
+     for (&cell, state) in cells.iter_mut() {
+         if !bake_due(state, world.cells.contains_key(&cell), frame, now) {
+             continue;
+         }
++        if !state.items.is_empty() && baked_n >= cap {
++            continue;
++        }
+         state.dirty = false;
+         if state.items.is_empty() {
+             world.cells.remove(&cell);
+@@ -85,11 +101,15 @@ pub(super) fn flush_static_gx(mut gx: ResMut<StaticGx>, mut meshes: ResMut<Asset
+             baked.draws.last().map_or(0, |d| d.vertex_range.end),
+         );
+         world.cells.insert(cell, std::sync::Arc::new(baked));
++        baked_n += 1;
+     }
+     for (&instance, state) in wmos.iter_mut() {
+         if !bake_due(state, world.wmos.contains_key(&instance), frame, now) {
+             continue;
+         }
++        if !state.items.is_empty() && baked_n >= cap {
++            continue;
++        }
+         state.dirty = false;
+         if state.items.is_empty() {
+             world.wmos.remove(&instance);
+@@ -111,12 +131,16 @@ pub(super) fn flush_static_gx(mut gx: ResMut<StaticGx>, mut meshes: ResMut<Asset
+             baked.draws.last().map_or(0, |d| d.vertex_range.end),
+         );
+         world.wmos.insert(instance, std::sync::Arc::new(baked));
++        baked_n += 1;
+     }
+     // Prop regions: the referrer set is the selection key, and the draw carries the set list.
+     for (&instance, state) in props.iter_mut() {
+         if !bake_due(state, world.props.contains_key(&instance), frame, now) {
+             continue;
+         }
++        if !state.items.is_empty() && baked_n >= cap {
++            continue;
++        }
+         state.dirty = false;
+         if state.items.is_empty() {
+             world.props.remove(&instance);
+@@ -138,6 +162,7 @@ pub(super) fn flush_static_gx(mut gx: ResMut<StaticGx>, mut meshes: ResMut<Asset
+             baked.draws.last().map_or(0, |d| d.vertex_range.end),
+         );
+         world.props.insert(instance, std::sync::Arc::new(baked));
++        baked_n += 1;
+     }
+ }
+ 
+diff --git a/crates/benilla-world/src/static_gx/mod.rs b/crates/benilla-world/src/static_gx/mod.rs
+index 22114448..25fb6e5e 100644
+--- a/crates/benilla-world/src/static_gx/mod.rs
++++ b/crates/benilla-world/src/static_gx/mod.rs
+@@ -67,7 +67,7 @@ const WORD_MATTE: u32 = 1 << 28;
+ /// On unless `WOW_STATIC_GX=0`; read once, and the plugin registers nothing when off.
+ pub fn enabled() -> bool {
+     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+-    *ON.get_or_init(|| std::env::var("WOW_STATIC_GX").as_deref() != Ok("0"))
++    *ON.get_or_init(|| benilla_formats::web::env_var("WOW_STATIC_GX").as_deref() != Ok("0"))
+ }
+ 
+ /// `WOW_WMO_BIAS=0`: the authored batch-order nudge bakes as zero, as in `model_material`.
+@@ -79,19 +79,19 @@ fn wmo_bias_disabled() -> bool {
+ /// `WOW_STATIC_GX_WMO=0`: WMO group batches fall back to the entity path; cells are unaffected.
+ fn wmo_lane_disabled() -> bool {
+     static OFF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+-    *OFF.get_or_init(|| matches!(std::env::var("WOW_STATIC_GX_WMO").as_deref(), Ok("0")))
++    *OFF.get_or_init(|| matches!(benilla_formats::web::env_var("WOW_STATIC_GX_WMO").as_deref(), Ok("0")))
+ }
+ 
+ /// `WOW_STATIC_GX_FADE=0`: fader batches fall back to the entity path; the rest is unaffected.
+ pub(crate) fn fade_lane_disabled() -> bool {
+     static OFF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+-    *OFF.get_or_init(|| matches!(std::env::var("WOW_STATIC_GX_FADE").as_deref(), Ok("0")))
++    *OFF.get_or_init(|| matches!(benilla_formats::web::env_var("WOW_STATIC_GX_FADE").as_deref(), Ok("0")))
+ }
+ 
+ /// `WOW_STATIC_GX_PROP=0`: WMO-prop batches fall back to the merge or entity path.
+ fn prop_lane_disabled() -> bool {
+     static OFF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+-    *OFF.get_or_init(|| matches!(std::env::var("WOW_STATIC_GX_PROP").as_deref(), Ok("0")))
++    *OFF.get_or_init(|| matches!(benilla_formats::web::env_var("WOW_STATIC_GX_PROP").as_deref(), Ok("0")))
+ }
+ 
+ /// `WOW_GX_PERF=1`: system wall times into [`GX_PERF`], printed and zeroed every 64 frames.
+diff --git a/crates/benilla-world/src/terrain_stream.rs b/crates/benilla-world/src/terrain_stream.rs
+index 23ea86bd..08546b39 100644
+--- a/crates/benilla-world/src/terrain_stream.rs
++++ b/crates/benilla-world/src/terrain_stream.rs
+@@ -36,7 +36,7 @@ mod spawn;
+ mod weld;
+ pub(crate) mod window;
+ 
+-use collider::{finish_colliders, impassable_wall_data, terrain_collider_data};
++use collider::{finish_colliders, impassable_wall_data, terrain_collider_cells, terrain_collider_data};
+ use furnish::furnish_tile_cells;
+ use merge::{flush_static_merge, StaticMerge};
+ use spawn::prop_light::WmoDoodadInst;
+@@ -86,6 +86,8 @@ pub struct TerrainStreamer {
+     settled: bool,
+     /// The off-grid focus tile last warned about, so the warning fires once per tile.
+     off_grid_reported: Option<(i32, i32)>,
++    /// The focus point at the last window change, the heading the web prefetch leads along.
++    last_center: Option<[f32; 2]>,
+ }
+ 
+ /// The map-global WMO's placement id: a WMO-only map has no ADT uniqueIds to collide with, and
+@@ -597,6 +599,39 @@ fn stream_terrain(
+         desired.retain(|&(tx, ty)| w.has_tile(tx as u32, ty as u32));
+     }
+ 
++    // Web: download the tiles one tile-width ahead along the heading before the window reaches
++    // them, so their requests find the file already in the page's store instead of waiting a
++    // round trip (and the sync reads behind them, a freeze). Only on a window change while live;
++    // a teleport's jump (more than two tiles) has no heading.
++    if cfg!(target_arch = "wasm32") && focus.paced {
++        if let Some(last) = state.last_center {
++            let (dx, dy) = (center[0] - last[0], center[1] - last[1]);
++            let len = (dx * dx + dy * dy).sqrt();
++            let tile = benilla_formats::TILE_SIZE;
++            if len > 0.5 && len < 2.0 * tile {
++                let ahead = StreamWindow::at(
++                    view.farclip,
++                    center[0] + dx / len * tile,
++                    center[1] + dy / len * tile,
++                );
++                if let Some(dir) = state.map_dir.as_deref() {
++                    for (tx, ty) in ahead.wanted_tiles() {
++                        if desired.contains(&(tx, ty)) || state.tiles.contains_key(&(tx, ty)) {
++                            continue;
++                        }
++                        if wdt_index.is_some_and(|w| !w.has_tile(tx as u32, ty as u32)) {
++                            continue;
++                        }
++                        benilla_assets::prefetch_asset(&format!(
++                            "mpq://World/Maps/{dir}/{dir}_{tx}_{ty}.adt"
++                        ));
++                    }
++                }
++            }
++        }
++    }
++    state.last_center = Some([center[0], center[1]]);
++
+     // A focus off the map's tile grid, usually one written in another map's coordinates, wants no
+     // tile, so `total == 0` and the loading cover can never clear. Warned once per focus tile;
+     // WMO-only maps author no tiles and are exempt.
+@@ -725,7 +760,12 @@ fn stream_terrain(
+             },
+         });
+         // One static trimesh per tile from the drawn chunks, built off-thread, riding the root.
+-        let collider_data = terrain_collider_data(&adt.chunks);
++        // The web build splits it per cell instead (`terrain_collider_cells`), as children.
++        let collider_data = if cfg!(target_arch = "wasm32") {
++            None
++        } else {
++            terrain_collider_data(&adt.chunks)
++        };
+         // The impassable-chunk fences are a second collider, on the walk layer only: the reference
+         // emits them into the movement box gather alone, never its segment and ray path.
+         let wall_data = impassable_wall_data(&adt.chunks);
+@@ -742,7 +782,19 @@ fn stream_terrain(
+                 PickOccluder,
+             ));
+         }
+-        tile.entity = Some(tile_ent.id());
++        let root = tile_ent.id();
++        if cfg!(target_arch = "wasm32") {
++            for (verts, tris) in terrain_collider_cells(&adt.chunks) {
++                commands.spawn((
++                    Transform::IDENTITY,
++                    PendingCollider::new(build_collider_task(verts, tris), None, true),
++                    GroundDecalSurface,
++                    PickOccluder,
++                    ChildOf(root),
++                ));
++            }
++        }
++        tile.entity = Some(root);
+         tile.wall = wall_data.map(|(verts, tris)| {
+             commands
+                 .spawn(PendingCollider::new(
+@@ -792,7 +844,9 @@ fn stream_terrain(
+         }
+ 
+         // Past the budget the rest waits a frame; the `entity` guard above makes this re-entrant.
+-        if Instant::now() >= tile_deadline {
++        // The web build spawns one tile a frame: a tile's work cannot be split, and the budget is
++        // only checked after it, so a second tile was always a second overrun.
++        if cfg!(target_arch = "wasm32") || Instant::now() >= tile_deadline {
+             break;
+         }
+     }
+diff --git a/crates/benilla-world/src/terrain_stream/collider.rs b/crates/benilla-world/src/terrain_stream/collider.rs
+index e8af8ebf..65c9225a 100644
+--- a/crates/benilla-world/src/terrain_stream/collider.rs
++++ b/crates/benilla-world/src/terrain_stream/collider.rs
+@@ -211,6 +211,42 @@ pub(super) fn terrain_collider_data(
+     (!tris.is_empty()).then_some((verts, tris))
+ }
+ 
++/// A terrain tile's collider in 16 pieces, one per cell of 4×4 chunks (the chunks are in MCNK
++/// file order, 16 to a row). Each piece is the same weld as [`terrain_collider_data`] over its 16
++/// chunks; together they are the same surface. The web build uses it: there one whole-tile
++/// trimesh (~65k triangles) was a BVH build the browser budget could not split, a frame of tens of
++/// ms on the one thread; a cell piece (~4k) fits the 2 ms build budget, and the pieces queue.
++#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
++pub(super) fn terrain_collider_cells(
++    chunks: &[benilla_formats::ChunkMesh],
++) -> Vec<(Vec<Vec3>, Vec<[u32; 3]>)> {
++    let mut cells: Vec<Vec<&benilla_formats::ChunkMesh>> = vec![Vec::new(); 16];
++    for (i, chunk) in chunks.iter().enumerate() {
++        let (row, col) = (i / 16, i % 16);
++        cells[(row / 4 % 4) * 4 + col / 4 % 4].push(chunk);
++    }
++    cells
++        .into_iter()
++        .filter_map(|cell| {
++            let mut verts: Vec<Vec3> = Vec::new();
++            let mut tris: Vec<[u32; 3]> = Vec::new();
++            for chunk in cell {
++                let base = verts.len() as u32;
++                verts.extend(chunk.positions.iter().map(|p| wow_to_bevy(*p)));
++                tris.extend(
++                    chunk
++                        .indices
++                        .as_chunks::<3>()
++                        .0
++                        .iter()
++                        .map(|c| [base + c[0], base + c[1], base + c[2]]),
++                );
++            }
++            (!tris.is_empty()).then_some((verts, tris))
++        })
++        .collect()
++}
++
+ /// How far an impassable chunk's fence rises from the chunk AABB's min z (`chunk+0x4c`): the
+ /// reference's `(0, 0, 32000.0)` (`0x46fa0000` at `0x6ab599`, emitter `0x6ab530`). Nothing extends
+ /// below, so a mover under the chunk floor (a mine, the sea bed) passes beneath.
+diff --git a/crates/benilla-world/src/terrain_stream/merge.rs b/crates/benilla-world/src/terrain_stream/merge.rs
+index 5233dae1..413d3942 100644
+--- a/crates/benilla-world/src/terrain_stream/merge.rs
++++ b/crates/benilla-world/src/terrain_stream/merge.rs
+@@ -197,7 +197,7 @@ pub struct StaticMerge {
+ /// Whether the consolidation is armed, read once: on unless `WOW_STATIC_MERGE=0`.
+ pub fn merge_enabled() -> bool {
+     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+-    *ON.get_or_init(|| std::env::var("WOW_STATIC_MERGE").as_deref() != Ok("0"))
++    *ON.get_or_init(|| benilla_formats::web::env_var("WOW_STATIC_MERGE").as_deref() != Ok("0"))
+ }
+ 
+ impl StaticMerge {
+diff --git a/crates/benilla-world/src/terrain_stream/spawn/mod.rs b/crates/benilla-world/src/terrain_stream/spawn/mod.rs
+index c584598f..c9d4f707 100644
+--- a/crates/benilla-world/src/terrain_stream/spawn/mod.rs
++++ b/crates/benilla-world/src/terrain_stream/spawn/mod.rs
+@@ -838,7 +838,7 @@ fn resolve_wmo_doodads(
+ fn fade_near_target() -> Option<(bevy::math::Vec2, f32)> {
+     static T: std::sync::OnceLock<Option<(bevy::math::Vec2, f32)>> = std::sync::OnceLock::new();
+     *T.get_or_init(|| {
+-        let s = std::env::var("WOW_FADE_NEAR").ok()?;
++        let s = benilla_formats::web::env_var("WOW_FADE_NEAR").ok()?;
+         let mut it = s.split(',').map(|v| v.trim().parse::<f32>().ok());
+         let (x, y, r) = (it.next()??, it.next()??, it.next()??);
+         let b = wow_to_bevy([x, y, 0.0]);
+diff --git a/crates/benilla-world/src/view.rs b/crates/benilla-world/src/view.rs
+index a3ebf682..b7363486 100644
+--- a/crates/benilla-world/src/view.rs
++++ b/crates/benilla-world/src/view.rs
+@@ -105,7 +105,7 @@ pub const MSAA_RANGE: std::ops::RangeInclusive<u32> = 1..=16;
+ impl Default for MsaaSetting {
+     /// `$WOW_MSAA` overrides the default for the session; `off`, `0` and `1` all mean none.
+     fn default() -> Self {
+-        let samples = match std::env::var("WOW_MSAA").ok().as_deref() {
++        let samples = match benilla_formats::web::env_var("WOW_MSAA").ok().as_deref() {
+             Some("off") => Some(1),
+             Some(v) => v.parse::<u32>().ok(),
+             None => None,
+@@ -256,7 +256,7 @@ impl Default for ViewDistance {
+     /// `$WOW_FARCLIP` (yd, clamped to [`FARCLIP_RANGE`]) overrides the 350 default, read once at
+     /// startup, so a headless capture can reproduce a player's view distance.
+     fn default() -> Self {
+-        let farclip = std::env::var("WOW_FARCLIP")
++        let farclip = benilla_formats::web::env_var("WOW_FARCLIP")
+             .ok()
+             .and_then(|v| v.parse::<f32>().ok())
+             .map_or(350.0, |v| {
+@@ -293,7 +293,7 @@ pub struct WorldCamera;
+ /// `Rgba16Float` is only guaranteed `[1, 4]` samples, and there is no adapter to ask here.
+ pub fn msaa_from_env() -> bevy::render::view::Msaa {
+     use bevy::render::view::Msaa;
+-    match std::env::var("WOW_MSAA").ok().as_deref() {
++    match benilla_formats::web::env_var("WOW_MSAA").ok().as_deref() {
+         Some("off") | Some("0") | Some("1") => Msaa::Off,
+         Some("2") => Msaa::Sample2,
+         Some("8") => {
+diff --git a/crates/benilla-world/src/weather/mod.rs b/crates/benilla-world/src/weather/mod.rs
+index 4338dd7e..add10997 100644
+--- a/crates/benilla-world/src/weather/mod.rs
++++ b/crates/benilla-world/src/weather/mod.rs
+@@ -229,7 +229,7 @@ fn weather_tick(
+     // The `WOW_WEATHER` script drives the panel override, so captures and headless runs can
+     // force weather without a GM `.wchange`.
+     let script = env_script.get_or_insert_with(|| {
+-        std::env::var("WOW_WEATHER")
++        benilla_formats::web::env_var("WOW_WEATHER")
+             .map(|v| parse_env_script(&v))
+             .unwrap_or_default()
+     });
+diff --git a/crates/benilla-world/src/world_plugins.rs b/crates/benilla-world/src/world_plugins.rs
+index aabdceec..a9a1cdd2 100644
+--- a/crates/benilla-world/src/world_plugins.rs
++++ b/crates/benilla-world/src/world_plugins.rs
+@@ -198,10 +198,17 @@ impl Plugin for WorldFoundation {
+             app.add_systems(bevy::app::Update, crate::static_merge::log_merge_census);
+         }
+         // `WOW_UPLOAD_BUDGET=<MB>`: cap the per-frame GPU upload of meshes and images (bevy's
+-        // `RenderAssetBytesPerFrame`, unlimited by default), a measurement lever.
+-        if let Some(mb) = std::env::var("WOW_UPLOAD_BUDGET")
++        // `RenderAssetBytesPerFrame`, unlimited by default), a measurement lever. The web build
++        // caps at 8 MB by default: its one thread pays every `writeTexture`/`writeBuffer` copy in
++        // the frame a tile's texture arrays land (a tile's alpha array alone is ~4 MB), so a
++        // streaming burst spreads over frames instead of spiking one. An asset larger than the
++        // budget still goes in whole (bevy lets the frame overshoot, then stops).
++        let default_mb = cfg!(target_arch = "wasm32").then_some(8);
++        if let Some(mb) = benilla_formats::web::env_var("WOW_UPLOAD_BUDGET")
+             .ok()
+             .and_then(|v| v.parse::<usize>().ok())
++            .or(default_mb)
++            .filter(|&mb| mb > 0)
+         {
+             app.insert_resource(bevy::render::render_asset::RenderAssetBytesPerFrame::new(
+                 mb * 1024 * 1024,
+diff --git a/crates/benilla-world/src/worldview.rs b/crates/benilla-world/src/worldview.rs
+index 0dc4cc31..50eeafd8 100644
+--- a/crates/benilla-world/src/worldview.rs
++++ b/crates/benilla-world/src/worldview.rs
+@@ -103,7 +103,7 @@ pub fn run(build: BuildId) -> AppExit {
+                 UVec2::new(1600, 900)
+             })
+             .into(),
+-        present_mode: if std::env::var("WOW_NOVSYNC").as_deref() == Ok("1") {
++        present_mode: if benilla_formats::web::env_var("WOW_NOVSYNC").as_deref() == Ok("1") {
+             bevy::window::PresentMode::AutoNoVsync
+         } else {
+             bevy::window::PresentMode::default()
+diff --git a/web/examples/perf.js b/web/examples/perf.js
+new file mode 100644
+index 00000000..80888473
+--- /dev/null
++++ b/web/examples/perf.js
+@@ -0,0 +1,130 @@
++// examples/perf.js — the smooth-frames test pass. `?bridge=perf` mounts it: a small panel that
++// records every frame while you play and reports what players feel — frame times, hitches, the
++// blocking file reads behind freezes, and how fast the cursor answers a hover. Play a fixed route
++// (the plan: Stormwind gate to Goldshire on foot, a flight, Dalaran), then press "Copy report".
++// Everything stays in this tab; nothing is sent anywhere.
++import { wenilla } from '../bridge.js';
++
++const frames = []; // ms between animation frames
++let last = performance.now();
++let syncReads = 0;
++let syncReadMs = 0;
++let slowestRead = { ms: 0, url: '' };
++const hovers = []; // ms from hover change to the canvas cursor changing
++let pendingHover = null;
++let lastHover = null;
++
++// Frame times: the game draws once per animation frame, so the gap between frames is the frame.
++function tick(now) {
++  frames.push(now - last);
++  last = now;
++  if (frames.length > 20000) frames.splice(0, frames.length - 20000);
++  requestAnimationFrame(tick);
++}
++requestAnimationFrame(tick);
++
++// Blocking reads: a synchronous XMLHttpRequest freezes the tab for its whole round trip.
++const open = XMLHttpRequest.prototype.open;
++const send = XMLHttpRequest.prototype.send;
++XMLHttpRequest.prototype.open = function (method, url, async, ...rest) {
++  this.__perf = async === false ? String(url) : null;
++  return open.call(this, method, url, async, ...rest);
++};
++XMLHttpRequest.prototype.send = function (...args) {
++  if (!this.__perf) return send.apply(this, args);
++  const t0 = performance.now();
++  try {
++    return send.apply(this, args);
++  } finally {
++    const ms = performance.now() - t0;
++    syncReads += 1;
++    syncReadMs += ms;
++    if (ms > slowestRead.ms) slowestRead = { ms, url: decodeURIComponent(this.__perf.split('/data/').pop()) };
++  }
++};
++
++// Hover answer time: when the hovered unit changes, time until the canvas cursor style changes.
++const canvas = document.querySelector('canvas');
++if (canvas) {
++  new MutationObserver(() => {
++    if (pendingHover !== null) {
++      hovers.push(performance.now() - pendingHover);
++      pendingHover = null;
++    }
++  }).observe(canvas, { attributes: true, attributeFilter: ['style'] });
++}
++wenilla.on('frame', (s) => {
++  const g = s.hover?.guid ?? null;
++  if (g !== lastHover) {
++    lastHover = g;
++    pendingHover = performance.now();
++  }
++});
++wenilla.set({ hz: 0 }); // every frame, so the hover change is seen the frame it happens
++
++const pct = (arr, p) => {
++  if (!arr.length) return 0;
++  const s = [...arr].sort((a, b) => a - b);
++  return s[Math.min(s.length - 1, Math.floor((p / 100) * s.length))];
++};
++function report() {
++  const f = frames.slice(1);
++  return {
++    when: new Date().toISOString(),
++    build: location.pathname,
++    query: location.search,
++    frames: f.length,
++    seconds: Math.round(f.reduce((a, b) => a + b, 0) / 1000),
++    medianMs: +pct(f, 50).toFixed(1),
++    p95Ms: +pct(f, 95).toFixed(1),
++    p99Ms: +pct(f, 99).toFixed(1),
++    over33ms: f.filter((x) => x > 33).length,
++    over100ms: f.filter((x) => x > 100).length,
++    worstMs: +Math.max(0, ...f).toFixed(0),
++    blockingReads: syncReads,
++    blockingReadMs: Math.round(syncReadMs),
++    slowestRead: { ms: Math.round(slowestRead.ms), file: slowestRead.url },
++    hoverSamples: hovers.length,
++    hoverMedianMs: +pct(hovers, 50).toFixed(1),
++    hoverWorstMs: +Math.max(0, ...hovers).toFixed(1),
++    fileStoreMB: Math.round((globalThis.__wenilla_files?.bytes ?? 0) / 1048576),
++  };
++}
++
++const el = document.createElement('div');
++el.style.cssText = `position: fixed; right: 0; top: 0; z-index: 9; padding: .4rem .6rem;
++  color: #ddd; background: rgba(0,0,0,.6); border-bottom-left-radius: 6px;
++  font: 12px/1.4 ui-monospace, monospace; white-space: pre;`;
++const text = document.createElement('div');
++const copy = document.createElement('button');
++copy.textContent = 'Copy report';
++copy.onclick = async () => {
++  const r = JSON.stringify(report(), null, 2);
++  try {
++    await navigator.clipboard.writeText(r);
++    copy.textContent = 'Copied';
++  } catch {
++    console.log(r);
++    copy.textContent = 'In the console';
++  }
++  setTimeout(() => (copy.textContent = 'Copy report'), 1500);
++};
++const reset = document.createElement('button');
++reset.textContent = 'Reset';
++reset.onclick = () => {
++  frames.length = 0;
++  hovers.length = 0;
++  syncReads = 0;
++  syncReadMs = 0;
++  slowestRead = { ms: 0, url: '' };
++};
++el.append(text, copy, reset);
++document.body.appendChild(el);
++setInterval(() => {
++  const r = report();
++  text.textContent =
++    `frame ${r.medianMs} ms  p95 ${r.p95Ms}  p99 ${r.p99Ms}\n` +
++    `hitches >33ms ${r.over33ms}  >100ms ${r.over100ms}  worst ${r.worstMs}\n` +
++    `blocking reads ${r.blockingReads} (${r.blockingReadMs} ms)\n` +
++    `hover -> cursor ${r.hoverMedianMs} ms (n=${r.hoverSamples})\n`;
++}, 500);

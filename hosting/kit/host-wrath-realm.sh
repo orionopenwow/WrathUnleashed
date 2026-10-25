@@ -1,0 +1,233 @@
+#!/usr/bin/env bash
+# Host a WrathUnleashed (3.3.5a) realm from this Mac or Linux PC. Needs Docker, nothing else.
+# No port forwarding: the realm talks out to the relay, players connect to the relay, nobody sees
+# your home IP address.
+#
+#   bash host-wrath-realm.sh               set up (first time: 3 questions) and start; safe to re-run
+#   bash host-wrath-realm.sh check         is my realm reachable? (plain-language self-check)
+#   bash host-wrath-realm.sh show          invite link, your login, relay status
+#   bash host-wrath-realm.sh stop          stop the realm (characters are kept)
+#   bash host-wrath-realm.sh friend NAME [PASSWORD]   make a game account for a friend
+#   bash host-wrath-realm.sh new-invite    a new invite link (the old one stops working)
+#   bash host-wrath-realm.sh public|private
+#   bash host-wrath-realm.sh claim TOKEN   link the realm to your Hero Key account (token from the site)
+#   bash host-wrath-realm.sh signup invite|open|off   who may make accounts on the join page
+#   bash host-wrath-realm.sh logs [service]
+#
+# Answers can come from the environment (no questions): WU_NAME, WU_PROFILE (main|brawl|progression),
+# WU_VISIBILITY (private|public), WU_WOW_DIR (your 3.3.5a folder). Images: WU_IMAGE / WU_TAG
+# (prebuilt, default below), falling back to the locally built ov/ac-wotlk-*:custom.
+set -euo pipefail
+
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$KIT"
+WU_IMAGE="${WU_IMAGE:-ghcr.io/orionopenwow/wu-ac-wotlk}"   # prebuilt realm images (published by CI, owner's OK)
+WU_TAG="${WU_TAG:-stable}"
+WU_LOCAL_IMAGE="${WU_LOCAL_IMAGE:-ov/ac-wotlk}"            # built by realm/"Build custom realm.bat"
+WU_LOCAL_TAG="${WU_LOCAL_TAG:-custom}"
+WU_TOOLS_PREBUILT="${WU_TOOLS_PREBUILT:-ghcr.io/orionopenwow/wu-host-tools:1}"
+WU_TOOLS_IMAGE="${WU_TOOLS_IMAGE:-wu-host-tools:1}"
+WU_EXTRACT_IMAGE="${WU_EXTRACT_IMAGE:-acore/ac-wotlk-tools:master}"
+WU_RELAY="${WU_RELAY:-relay.openvanilla.app}"
+ARAC_REPO="https://github.com/heyitsbench/mod-arac"
+ARAC_COMMIT="3f605e09c656eb3b620ef2d70c7ef61808c1cfb0"      # = realm/custom/sources.lock
+COMPOSE=(docker compose -f "$KIT/docker-compose.host.yml" --project-directory "$KIT")
+DRY="${WU_DRY:-0}"
+
+if [ -t 1 ]; then B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; N=$'\033[0m'; else B=""; G=""; Y=""; R=""; N=""; fi
+say()  { printf '%s\n' "$*"; }
+step() { printf '\n%s== %s%s\n' "$B" "$*" "$N"; }
+die()  { printf '%sProblem: %s%s\n' "$R" "$*" "$N" >&2; exit 1; }
+run()  { if [ "$DRY" = 1 ]; then printf 'DRY: %s\n' "$*"; else "$@"; fi; }
+export WU_UID="$(id -u)" WU_GID="$(id -g)"   # state/ files stay yours; the agent runs as you
+tools() { run docker run --rm --user "$WU_UID:$WU_GID" -v "$KIT:/kit" -e WU_KIT=/kit -e WU_UID -e WU_GID "$WU_TOOLS_IMAGE" python -m wuhost.setup "$@"; }
+
+need_docker() {
+  command -v docker >/dev/null 2>&1 || die "Docker is not installed. Get Docker Desktop (Mac) or Docker Engine (Linux), then run this again."
+  docker info >/dev/null 2>&1 || die "Docker is installed but not running. Start it, then run this again."
+  docker compose version >/dev/null 2>&1 || die "This Docker has no 'docker compose'. Update Docker."
+}
+
+ask() {  # ask VAR "question" default [choices...]
+  local var="$1" q="$2" def="$3"; shift 3
+  local cur="${!var:-}"
+  if [ -n "$cur" ]; then return; fi
+  if [ ! -t 0 ]; then printf -v "$var" '%s' "$def"; return; fi
+  local a
+  while true; do
+    read -r -p "$q [$def]: " a || true
+    a="${a:-$def}"
+    if [ $# -eq 0 ]; then break; fi
+    for c in "$@"; do [ "$a" = "$c" ] && break 2; done
+    say "  Please type one of: $*"
+  done
+  printf -v "$var" '%s' "$a"
+}
+
+state_get() {  # value of a top-level key in state/host.json (no jq needed)
+  [ -f "$KIT/state/host.json" ] || return 0
+  sed -n "s/^ *\"$1\": *\"\{0,1\}\([^\",]*\)\"\{0,1\},\{0,1\}$/\1/p" "$KIT/state/host.json" | head -1
+}
+
+pick_images() {
+  step "Realm images"
+  if run docker pull -q "$WU_IMAGE-worldserver:$WU_TAG" >/dev/null 2>&1 \
+     && run docker pull -q "$WU_IMAGE-authserver:$WU_TAG" >/dev/null 2>&1 \
+     && run docker pull -q "$WU_IMAGE-db-import:$WU_TAG" >/dev/null 2>&1; then
+    IMG="$WU_IMAGE"; TAG="$WU_TAG"; say "  Using the prebuilt WrathUnleashed images ($IMG-*:$TAG)."
+  elif docker image inspect "$WU_LOCAL_IMAGE-worldserver:$WU_LOCAL_TAG" >/dev/null 2>&1; then
+    IMG="$WU_LOCAL_IMAGE"; TAG="$WU_LOCAL_TAG"; say "  Using the images built on this PC ($IMG-*:$TAG)."
+  else
+    IMG="acore/ac-wotlk"; TAG="master"
+    say "  ${Y}No WrathUnleashed image yet: using AzerothCore's stock images. The realm runs, but without"
+    say "  WrathUnleashed's modules (bots, boost, transmog...). Ask for the prebuilt images, or build them"
+    say "  with realm/'Build custom realm.bat'.${N}"
+  fi
+  if [ "$WU_TOOLS_IMAGE" = "wu-host-tools:1" ]; then
+    if run docker pull -q "$WU_TOOLS_PREBUILT" >/dev/null 2>&1; then
+      run docker tag "$WU_TOOLS_PREBUILT" "$WU_TOOLS_IMAGE"
+    elif ! docker image inspect "$WU_TOOLS_IMAGE" >/dev/null 2>&1 || [ "${WU_REBUILD_TOOLS:-0}" = 1 ]; then
+      say "  Building the small helper image (once, about a minute)..."
+      run docker build -q -t "$WU_TOOLS_IMAGE" "$KIT/tools" >/dev/null || die "Building the helper image failed (is this PC online?)."
+    fi
+  fi
+}
+
+find_wow() {
+  local d
+  for d in "${WU_WOW_DIR:-}" "$HOME/World of Warcraft 3.3.5a" "$HOME/Games/World of Warcraft 3.3.5a" \
+           "$HOME/Downloads/World of Warcraft 3.3.5a" "/Applications/World of Warcraft 3.3.5a" \
+           "$HOME/.wine/drive_c/World of Warcraft 3.3.5a" "$HOME/Games/wow335"; do
+    [ -n "$d" ] && [ -f "$d/Data/lichking.MPQ" -o -f "$d/Data/lichking.mpq" ] && { printf '%s' "$d"; return; }
+  done
+  if [ -t 0 ]; then
+    read -r -p "Where is your World of Warcraft 3.3.5a folder? " d || true
+    [ -f "$d/Data/lichking.MPQ" -o -f "$d/Data/lichking.mpq" ] && { printf '%s' "$d"; return; }
+  fi
+  return 1
+}
+
+client_data() {
+  step "Game data for the server (from your own 3.3.5a install; nothing is downloaded or shared)"
+  docker volume create ov-client-data >/dev/null
+  if docker run --rm -v ov-client-data:/d alpine:3.20 test -d /d/dbc -a -d /d/maps >/dev/null 2>&1; then
+    say "  Already extracted."
+  else
+    local wow
+    wow="$(find_wow)" || die "No 3.3.5a game folder found. Run again with WU_WOW_DIR=/path/to/your/WoW folder."
+    say "  Extracting dbc + maps from $wow (a few minutes)..."
+    run docker run --rm --user root -v "$wow:/wow:ro" -v ov-client-data:/out -w /out "$WU_EXTRACT_IMAGE" \
+      /azerothcore/env/dist/bin/map_extractor -i /wow -o /out || die "Extracting the game data failed."
+  fi
+  if [ "$IMG" != "acore/ac-wotlk" ] && ! docker run --rm -v ov-client-data:/d alpine:3.20 test -d /d/dbc-stock >/dev/null 2>&1; then
+    say "  All-races-all-classes data (mod-arac, pinned commit)..."
+    mkdir -p "$KIT/cache"
+    run docker run --rm --entrypoint sh -v "$KIT/cache:/w" alpine/git:latest -c \
+      "set -e; d=/w/mod-arac; [ -d \$d/.git ] || git init -q \$d; cd \$d; git remote add origin $ARAC_REPO 2>/dev/null || true; git fetch -q --depth 1 origin $ARAC_COMMIT; git checkout -q --force FETCH_HEAD" \
+      && run docker run --rm -v ov-client-data:/d -v "$KIT/cache/mod-arac/patch-contents/DBFilesContent:/s:ro" alpine:3.20 sh -c \
+      'mkdir -p /d/dbc-stock && for f in /s/*.dbc; do b=$(basename $f); [ -f /d/dbc-stock/$b ] || cp /d/dbc/$b /d/dbc-stock/$b; cp $f /d/dbc/$b; done' \
+      || say "  ${Y}Skipped (offline?): new characters can still use the classic race/class pairs.${N}"
+  fi
+}
+
+wait_ready() {  # $1 = timestamp; waits for the worldserver's "ready..."
+  local i
+  for i in $(seq 1 180); do
+    if docker logs --since "$1" wu-host-worldserver 2>&1 | grep -F 'ready...' >/dev/null; then return 0; fi
+    if (( i % 6 == 0 )); then say "  still starting ($((i / 6)) min)..."; fi
+    sleep 10
+  done
+  return 1
+}
+
+db_sql() {  # db_sql DATABASE < file
+  docker exec -i wu-host-database sh -c "MYSQL_PWD=\"\$MYSQL_ROOT_PASSWORD\" exec mysql -uroot $1"
+}
+
+profile_sql() {
+  local p="$1" files f
+  [ -f "$KIT/state/applied-$p" ] && return 0
+  case "$p" in
+    brawl) files="brawl_world.sql brawl_world_2.sql modern_combos.sql" ;;
+    main)  files="main_unbrawl.sql main_world.sql modern_combos.sql" ;;
+    *)     files="modern_combos.sql" ;;
+  esac
+  step "World changes for the $p profile (once)"
+  for f in $files; do
+    if [ -f "$KIT/realm-files/sql/$f" ]; then
+      run db_sql acore_world < "$KIT/realm-files/sql/$f" && say "  applied $f"
+    else
+      say "  $f is not in this kit, skipped"
+    fi
+  done
+  date -u +%FT%TZ > "$KIT/state/applied-$p"
+  return 1   # tells the caller a restart is needed
+}
+
+cmd_up() {
+  need_docker
+  [ -f "$KIT/realm-files/profiles/main.env" ] || die "This kit has no realm-files/ (run make-kit first, or download the full kit)."
+  WU_NAME="${WU_NAME:-$(state_get name)}"
+  WU_PROFILE="${WU_PROFILE:-$(state_get profile)}"
+  WU_VISIBILITY="${WU_VISIBILITY:-$(state_get visibility)}"
+  step "Your realm"
+  ask WU_NAME "Realm name" "My Wrath Realm"
+  ask WU_PROFILE "Profile: main (level 1 or boost to 80), brawl (everyone 80), progression (Vanilla->TBC->Wrath)" "main" main brawl progression
+  ask WU_VISIBILITY "Private (friends with your link) or public (listed in Beacons)" "private" private public
+  pick_images
+  tools init --name "$WU_NAME" --profile "$WU_PROFILE" --visibility "$WU_VISIBILITY" --image "$IMG" --tag "$TAG" \
+        --tools-image "$WU_TOOLS_IMAGE" --relay "$WU_RELAY" >/dev/null || die "Setup failed (see above)."
+  client_data
+  step "Starting the realm (the first start imports the databases: 5-20 minutes)"
+  local t0; t0=$(date -u +%Y-%m-%dT%H:%M:%S)
+  run "${COMPOSE[@]}" up -d || die "The realm did not start. Run: bash host-wrath-realm.sh logs"
+  [ "$DRY" = 1 ] || wait_ready "$t0" || die "The world server did not get ready in 30 minutes. Run: bash host-wrath-realm.sh logs ac-worldserver"
+  if ! profile_sql "$WU_PROFILE"; then
+    t0=$(date -u +%Y-%m-%dT%H:%M:%S)
+    run "${COMPOSE[@]}" restart ac-worldserver
+    [ "$DRY" = 1 ] || wait_ready "$t0" || die "The world server did not come back after the profile change."
+  fi
+  step "Connecting to the relay"
+  local i
+  for i in $(seq 1 24); do
+    grep -q '"realmlist_ok": true' "$KIT/state/relay-state.json" 2>/dev/null && break
+    [ "$DRY" = 1 ] && break
+    sleep 5
+  done
+  grep -q '"connected": true' "$KIT/state/relay-state.json" 2>/dev/null \
+    && say "  ${G}Connected.${N} Your home address stays hidden behind $WU_RELAY." \
+    || say "  ${Y}Not connected yet; it keeps trying. Run: bash host-wrath-realm.sh check${N}"
+  step "Done"
+  tools show || true
+  say ""
+  say "Send your friends the invite link above. They open it once, make an account there, then play with"
+  say "  set realmlist $WU_RELAY"
+  say "Check everything with: bash host-wrath-realm.sh check"
+}
+
+cmd_check() {
+  need_docker
+  run "${COMPOSE[@]}" run --rm --no-deps -e WU_STATE=/state wu-agent python -m wuhost.selfcheck --state /state "$@"
+}
+
+cmd_friend() {
+  need_docker
+  [ $# -ge 1 ] || die "Usage: bash host-wrath-realm.sh friend NAME [PASSWORD]"
+  docker run --rm --user "$WU_UID:$WU_GID" -v "$KIT:/kit" -e WU_KIT=/kit "$WU_TOOLS_IMAGE" python -m wuhost.setup friend "$@" | db_sql acore_auth \
+    && say "Done. Your friend opens your invite link once, then logs in with that account."
+}
+
+case "${1:-up}" in
+  up|start|setup) shift || true; cmd_up "$@" ;;
+  check) shift; cmd_check "$@" ;;
+  show) need_docker; tools show ;;
+  stop) need_docker; run "${COMPOSE[@]}" stop; say "Stopped. Characters and accounts are kept; start again any time." ;;
+  friend) shift; cmd_friend "$@" ;;
+  new-invite) need_docker; tools new-invite ;;
+  public|private) need_docker; tools visibility "$1"; say "Restart for the anti-cheat setting: bash host-wrath-realm.sh" ;;
+  signup) need_docker; [ $# -ge 2 ] || die "Usage: bash host-wrath-realm.sh signup invite|open|off"; tools signup "$2" ;;
+  claim) need_docker; [ $# -ge 2 ] || die "Usage: bash host-wrath-realm.sh claim TOKEN"; tools claim "$2" ;;
+  logs) need_docker; shift; "${COMPOSE[@]}" logs --tail 200 "$@" ;;
+  -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) die "Unknown command '$1'. Try: bash host-wrath-realm.sh help" ;;
+esac

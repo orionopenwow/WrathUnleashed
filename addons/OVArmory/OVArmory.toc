@@ -1,0 +1,6 @@
+## Interface: 30300
+## Title: WrathUnleashed Armory
+## Notes: Search every item in the game and take what you want where the realm allows it. /armory
+## Version: 0.1
+## SavedVariables: OVArmoryDB
+OVArmory.lua
