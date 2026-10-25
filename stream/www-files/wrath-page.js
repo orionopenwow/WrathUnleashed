@@ -53,7 +53,7 @@ export const CONFIG = {
 };
 
 const STYLE_ID = 'wu-page-style';
-const status = { dock: false, signin: 'off', busy: null, logo: false, touch: null, sw: null };
+const status = { dock: false, signin: 'off', busy: null, logo: false, touch: null, sw: null, go: null };
 
 function style() {
   if (document.getElementById(STYLE_ID)) return;
@@ -341,6 +341,27 @@ async function realmLoad() {
   }
 }
 
+// A share link's deep link (stream/links.py): /r/<realm>, /h/<hangout>, /q/<queue>, /m/<mod>, /u/<character>
+// send people on to the page with ?go=<kind>:<id>. This only reads and checks it (the same allow-lists
+// as links.py) and leaves it on window.wuGo / the returned status for a later feature to act on; it
+// never navigates or runs anything. Returns { kind, id } or null.
+const GO_RULES = {
+  r: /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/,
+  h: /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/,
+  q: /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/,
+  m: /^(?=.{3,32}$)[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/,
+  u: /^[A-Za-z]{2,12}$/,
+};
+export function goLink(search = location.search) {
+  let v;
+  try { v = new URLSearchParams(search).get('go'); } catch { return null; }
+  if (!v || v.length > 40) return null;
+  const i = v.indexOf(':');
+  const kind = v.slice(0, i), id = v.slice(i + 1);
+  if (i < 1 || !Object.hasOwn(GO_RULES, kind) || !GO_RULES[kind].test(id)) return null;
+  return { kind, id };
+}
+
 function busyBanner() {
   try { if (sessionStorage.getItem('ow:busy-off')) return; } catch { /* storage off */ }
   let shown = null;
@@ -535,6 +556,7 @@ export async function install(wenilla) {
   step('diag', () => diag(wenilla));
   step('loading', () => loading(wenilla));
   step('busy banner', busyBanner);
+  step('go link', () => { status.go = goLink(); if (status.go) window.wuGo = status.go; });
   // Touch controls only where they can be used (a touch screen, ?touch=, a saved choice); elsewhere
   // a connected controller still starts the bridge's gamepad mapper, which touch.js otherwise does.
   if (touchMaybe()) {

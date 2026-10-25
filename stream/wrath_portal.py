@@ -107,6 +107,31 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from xml.sax.saxutils import escape as xml_escape
 
+
+def _load_links():
+    """stream/links.py (the /r /h /q /m /u share links), loaded from beside this file (python3 -I leaves
+    this folder off sys.path). None when it is missing or broken: the portal runs without those links."""
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("wu_links", os.path.join(os.path.dirname(os.path.abspath(__file__)), "links.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:
+        return None
+
+
+links = _load_links()
+
+
+def go_param(query: dict) -> str:
+    """'&go=<kind>:<id>' for a share-link deep link carried through sign-in (checked again at every hop), else ''."""
+    if links is None:
+        return ""
+    v = (query.get("go") or [""])[0][:40]
+    got = links.check_go(v) if v else None
+    return "&go=" + urllib.parse.quote(links.go_value(*got), safe=":") if got else ""
+
 SOAP_USER = os.environ.get("SOAP_USER", "")
 SOAP_PASS = os.environ.get("SOAP_PASS", "")
 AC_SOAP_URL = os.environ.get("AC_SOAP_URL", "http://ov-ac-worldserver:7878/")
@@ -1331,7 +1356,7 @@ class PageHandler(BaseHTTPRequestHandler):
             return
         code = sessions.create(user, password, slug, info["tier"])
         log.info("stream session for %s (%s, tier %d)", user.upper(), slug, info["tier"])
-        self.redirect(f"https://{STREAM_HOST}/__gate?code={urllib.parse.quote(code)}")
+        self.redirect(f"https://{STREAM_HOST}/__gate?code={urllib.parse.quote(code)}{go_param(query)}")
 
     def stream_end(self) -> None:
         """GET /wrath/play/end: end the player's sessions and clear the realm mark."""
@@ -1364,6 +1389,9 @@ class PageHandler(BaseHTTPRequestHandler):
             return
         sess = sessions.get(sid) or {}
         land = "/?ownfiles=1" if sess.get("mode") == OWN else "/"
+        go = go_param(query)
+        if go:
+            land += ("&" if "?" in land else "?") + go[1:]
         self.redirect(land, f"wu_play={sid}; Path=/; Max-Age={SESSION_TTL}; HttpOnly; Secure; SameSite=Lax")
 
     def stream_session(self) -> dict | None:
@@ -1459,6 +1487,12 @@ class PageHandler(BaseHTTPRequestHandler):
                 return
             self.send(200, leyline_page())
             return
+        if links is not None and links.match(path):   # share links (stream/links.py), same limit as /wrath/leyline
+            if not page_limit.hit(self.ip(), 120):
+                self.send(429, busy_page())
+                return
+            self.send(200, links.share_page(path, card_meta, render, REALM_NAME, community_realms))
+            return
         if path == "/wrath/realms":
             if not page_limit.hit(self.ip(), 120):
                 self.send(429, busy_page())
@@ -1501,7 +1535,7 @@ class PageHandler(BaseHTTPRequestHandler):
             self.send(503, error_page("The Wrath realm isn't answering right now. Please try again shortly."))
             return
         if straight_in:
-            return self.redirect("/wrath/play?mini=mini")
+            return self.redirect("/wrath/play?mini=mini" + go_param(query))
         nonce = secrets.token_urlsafe(16)
         display = str(me.get("display_name") or me.get("username") or user)
         self.send(200, account_page(display, user, password, nonce), nonce=nonce)

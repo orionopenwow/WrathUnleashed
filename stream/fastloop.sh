@@ -16,16 +16,21 @@ TS=$(date +%Y%m%d-%H%M%S); BK=${WU_BACKUPS:-/root/fastloop-backups}/$TS; mkdir -
 
 echo "== 1/2 sign-in page (wu-portal)"
 cp -p "$WU/portal/wrath_portal.py" "$BK/wrath_portal.py"
+had_links=""
+if [ -f "$WU/portal/links.py" ]; then cp -p "$WU/portal/links.py" "$BK/links.py"; had_links=1; fi
 had_art=""
 rm -rf "$BK/art"
 if [ -d "$WU/portal/art" ]; then cp -a "$WU/portal/art" "$BK/art"; had_art=1; fi
 put_back() {
   cp -p "$BK/wrath_portal.py" "$WU/portal/wrath_portal.py"
+  if [ -n "$had_links" ]; then cp -p "$BK/links.py" "$WU/portal/links.py"; else rm -f "$WU/portal/links.py"; fi
   rm -rf "$WU/portal/art"
   if [ -n "$had_art" ]; then cp -a "$BK/art" "$WU/portal/art"; fi
 }
 python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' wrath_portal.py
 install -m 644 wrath_portal.py "$WU/portal/wrath_portal.py"
+# the share links (/wrath/r/<id> and friends): optional, the portal runs without them
+if [ -f links.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' links.py && install -m 644 links.py "$WU/portal/links.py"; fi
 if [ -d www-files/art ] && [ -f www-files/art/wu-theme.css ]; then
   install -d -m 755 "$WU/portal/art"
   install -m 644 www-files/art/* "$WU/portal/art/"
@@ -87,6 +92,8 @@ c1=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://wrath.openvanilla.app/
 c2=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://wrath.openvanilla.app/data/__index || true)
 c3=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath || true)
 c4=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/art/wu-card.webp || true)
+c5=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/q/258 || true)
+echo "  /wrath/q/258 share link (200 = links on): $c5"
 echo "  warm.html (public): $c1   /data (must stay gated, 302/401/403): $c2   /wrath signed out (200 = saved-key page): $c3"
 echo "  /wrath/art/wu-card.webp (200 = the art is served): $c4"
 echo "  backups: $BK"

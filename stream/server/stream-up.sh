@@ -74,6 +74,7 @@ esac
 log "4/6 Sign-in gate (wu-portal)"
 [ -f "$WU/portal/wrath_portal.py.before-stream" ] || cp -p "$WU/portal/wrath_portal.py" "$WU/portal/wrath_portal.py.before-stream"
 install -m 644 "$ST/wrath_portal.py" "$WU/portal/wrath_portal.py"
+[ -f "$ST/links.py" ] && install -m 644 "$ST/links.py" "$WU/portal/links.py"   # the /r /h /q /m /u share links (optional)
 install -d -m 755 "$WU/portal/slices"
 install -m 644 "$ST/slices/$SLICE.json" "$WU/portal/slices/$SLICE.json"
 [ -f "$WU/portal.env.before-stream" ] || cp -p "$WU/portal.env" "$WU/portal.env.before-stream"

@@ -16,7 +16,7 @@ move "%W%\dist-test" "%W%\kit\www" >nul || goto fail
 rem The brotli copy of the client (smaller download), when the build came with one.
 if exist "..\play\wenilla_bg.wasm.br" copy /y "..\play\wenilla_bg.wasm.br" "%W%\kit\www\" >nul
 copy /y server\*.sh "%W%\kit\" >nul || goto fail
-for %%f in (server\www-patch.py server\displays.py wrath_portal.py) do copy /y "%%f" "%W%\kit\" >nul || goto fail
+for %%f in (server\www-patch.py server\displays.py wrath_portal.py links.py) do copy /y "%%f" "%W%\kit\" >nul || goto fail
 xcopy /e /i /q /y www-files "%W%\kit\www-files" >nul || goto fail
 copy /y lua\*.* "%W%\kit\lua\" >nul || goto fail
 tar -czf "%W%\kit.tgz" -C "%W%\kit" . || goto fail

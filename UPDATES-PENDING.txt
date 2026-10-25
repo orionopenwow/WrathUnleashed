@@ -59,3 +59,5 @@
 1026s ship  Save to GitHub (orionopenwow/WrathUnleashed)
 1026t signin  Leyline page: blue frame corners and dividers, a slow starfield, and the Leyline display font
 1026u ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1026v signin  Share links: play.openvanilla.app/wrath/r|h|q|m|u/<id> with link cards, and the link carried through sign-in
+1026w ship  Save to GitHub (orionopenwow/WrathUnleashed)

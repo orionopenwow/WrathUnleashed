@@ -15,13 +15,15 @@ for %%f in (wrath_portal.py fastloop.sh www-files\art\wu-theme.css www-files\art
 if not exist "%KEY%" (echo SSH key %KEY% not found. & pause & exit /b 1)
 set "T=%TEMP%\wu-fastloop.tgz"
 if exist "%T%" del /q "%T%"
-tar -czf "%T%" wrath_portal.py fastloop.sh www-files/art || (echo Packing failed. & pause & exit /b 1)
+set "LINKS="
+if exist links.py set "LINKS=links.py"
+tar -czf "%T%" wrath_portal.py %LINKS% fastloop.sh www-files/art || (echo Packing failed. & pause & exit /b 1)
 
 echo [1/2] Uploading...
 scp %OPTS% "%T%" %HOST%:/tmp/wu-fastloop.tgz || (echo Upload failed. If it says "timed out", wait 2 minutes and run this again. & pause & exit /b 1)
 
 echo [2/2] Applying it on the server (under a minute)...
-ssh %OPTS% %HOST% "mkdir -p /srv/wrath/fastloop && rm -rf /srv/wrath/fastloop/www-files && tar -xzf /tmp/wu-fastloop.tgz -C /srv/wrath/fastloop && rm -f /tmp/wu-fastloop.tgz && cd /srv/wrath/fastloop && sed -i 's/\r$//' fastloop.sh wrath_portal.py && bash fastloop.sh 2>&1 | tee fastloop.log; grep -q '^FASTLOOP OK' fastloop.log"
+ssh %OPTS% %HOST% "mkdir -p /srv/wrath/fastloop && rm -rf /srv/wrath/fastloop/www-files && tar -xzf /tmp/wu-fastloop.tgz -C /srv/wrath/fastloop && rm -f /tmp/wu-fastloop.tgz && cd /srv/wrath/fastloop && sed -i 's/\r$//' fastloop.sh wrath_portal.py $(ls links.py 2>/dev/null) && bash fastloop.sh 2>&1 | tee fastloop.log; grep -q '^FASTLOOP OK' fastloop.log"
 if errorlevel 1 (
   echo.
   echo It did not report success; see the lines above. Anything it changed was put back.
