@@ -1,10 +1,9 @@
 {
- "at": "2026-10-25 01:24:05",
+ "at": "2026-10-25 01:33:59",
  "ids": [
-  "1025w",
-  "1025x"
+  "1026a"
  ],
- "ok": true,
- "failed_step": null,
+ "ok": false,
+ "failed_step": "relay",
  "autopilot": true
 }

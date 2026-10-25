@@ -38,3 +38,6 @@
 1025x ship  Save to GitHub (orionopenwow/WrathUnleashed)
 1025y signin  Play page: Realms list at /wrath/realms (official first, then community realms from Beacons)
 1025z ship  Save the Beacons beta to GitHub (orionopenwow/WrathUnleashed)
+1026a relay  Beacons relay at relay.openvanilla.app (backup, health check, rollback)
+1026b relay  Beacons relay (picks a free web port; 8099 is taken on the server)
+1026c ship  Save to GitHub (orionopenwow/WrathUnleashed)

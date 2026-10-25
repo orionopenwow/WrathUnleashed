@@ -86,6 +86,19 @@ note "memory available: ${AVAIL:-?} MB, relay capped at $MEM"
 RUNNING=0
 if docker ps --format '{{.Names}}' | grep -x wu-relay >/dev/null; then RUNNING=1; fi
 LISTEN=$(listening)
+# The web side's port: the one this relay already uses (a re-run), else 8099, else the first free one in
+# 8100-8199 (8099 was taken on the live box, 2026-10-25). WU_RELAY_HTTP_PORT set by hand always wins.
+if [ -z "${WU_RELAY_HTTP_PORT:-}" ]; then
+  prev=$(sed -n 's/^RELAY_HTTP_BIND=.*:\([0-9][0-9]*\)$/\1/p' "$DIR/relay.env" 2>/dev/null | head -1 || true)
+  if [ "$RUNNING" = 1 ] && [ -n "$prev" ]; then
+    PORT=$prev
+  elif grep -qx "$PORT" <<<"$LISTEN"; then
+    for p in $(seq 8100 8199); do
+      if ! grep -qx "$p" <<<"$LISTEN"; then note "port $PORT is taken on this box: the relay's web side uses $p"; PORT=$p; break; fi
+    done
+  fi
+  BIND="$GW:$PORT"
+fi
 SHARED=3724
 if grep -qx 3724 <<<"$LISTEN"; then
   if [ "$RUNNING" = 1 ] && grep -q '^RELAY_SHARED_AUTH_PORT=3724' "$DIR/relay.env" 2>/dev/null; then :; else

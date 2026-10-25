@@ -54,6 +54,7 @@ esac
 """
 SS = r"""#!/usr/bin/env bash
 printf 'LISTEN 0 128 0.0.0.0:22 0.0.0.0:*\nLISTEN 0 128 0.0.0.0:3724 0.0.0.0:*\nLISTEN 0 128 0.0.0.0:8085 0.0.0.0:*\n'
+[ -f "$STUB_STATE/extra_listen" ] && while read -r p; do printf 'LISTEN 0 128 0.0.0.0:%s 0.0.0.0:*\n' "$p"; done < "$STUB_STATE/extra_listen"
 """
 FREE = "#!/usr/bin/env bash\necho '              total used free shared buff/cache available'\necho 'Mem:  3800 1000 500 10 2300 3300'\n"
 
@@ -181,6 +182,21 @@ class RelayDeploy(unittest.TestCase):
         latest = os.path.join(self.dir, "backups", sorted(bks)[-1])
         self.assertTrue(os.path.exists(os.path.join(latest, "Caddyfile")))
         self.assertTrue(os.path.exists(os.path.join(latest, "relay.env")))
+
+    def test_taken_web_port_moves_to_a_free_one_and_stays(self):
+        # live 2026-10-25: 8099 was taken on the box
+        with open(os.path.join(self.st, "extra_listen"), "w") as f:
+            f.write("8099\n8100\n")
+        rc, out = self.run_up()
+        self.assertEqual(rc, 0, out)
+        self.assertIn("uses 8101", out)
+        self.assertTrue(self.relay_env()["RELAY_HTTP_BIND"].endswith(":8101"))
+        self.assertIn("reverse_proxy 172.18.0.1:8101 {", self.read(self.cf))
+        # a re-run keeps its port even though 8099 is still taken
+        rc, out = self.run_up()
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(self.relay_env()["RELAY_HTTP_BIND"].endswith(":8101"))
+        self.assertEqual(self.read(self.cf).count("relay.openvanilla.app {"), 1)
 
     def test_failed_health_rolls_back(self):
         rc, out = self.run_up()
