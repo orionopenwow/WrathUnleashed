@@ -43,6 +43,85 @@
     window.__wuWarn = warn;
     window.__wuMissingDump = function () { return Array.from(missing.keys()).sort(); };
   } catch (e) { /* the capture is optional */ }
+  // Retries for game files. A /data/ read that fails with a server error (5xx: a busy or restarting
+  // wu-play, a proxy hiccup) or a dropped connection used to cost the asset for the whole session (a
+  // 502 once left Stormwind City unbuilt). Async fetches retry up to 3 times (0.4 s, 1.2 s, 3 s);
+  // synchronous XHRs (the chain's sync reads) retry twice at once. A 404 (not in the slice) is never
+  // retried. window.__wuRetries counts what was retried and what still failed. ?noretry=1 turns it off.
+  try {
+    if (!/[?&]noretry=1\b/.test(location.search)) {
+      var stats = { retried: 0, recovered: 0, failed: 0, last: [] };
+      window.__wuRetries = stats;
+      var isData = function (u) {
+        try { return new URL(String(u), location.href).pathname.indexOf('/data/') === 0 && String(u).indexOf('/data/__') < 0; } catch (e) { return false; }
+      };
+      var note = function (u, what) { stats.last.push(what + ' ' + String(u).slice(-120)); if (stats.last.length > 50) stats.last.shift(); };
+      var origFetch = window.fetch;
+      if (typeof origFetch === 'function') {
+        var waits = [400, 1200, 3000];
+        window.fetch = function (input, init) {
+          var url = typeof input === 'string' ? input : (input && input.url) || '';
+          var method = (init && init.method) || (input && input.method) || 'GET';
+          if (!isData(url) || String(method).toUpperCase() !== 'GET') return origFetch.apply(this, arguments);
+          var self = this, args = arguments;
+          var attempt = function (n) {
+            return origFetch.apply(self, args).then(function (res) {
+              if (res.status < 500 || n >= waits.length) {
+                if (n > 0) { if (res.status < 500) stats.recovered++; else { stats.failed++; note(url, 'HTTP ' + res.status); } }
+                return res;
+              }
+              stats.retried++;
+              return new Promise(function (r) { setTimeout(r, waits[n]); }).then(function () { return attempt(n + 1); });
+            }, function (err) {
+              if (n >= waits.length) { stats.failed++; note(url, 'network'); throw err; }
+              stats.retried++;
+              return new Promise(function (r) { setTimeout(r, waits[n]); }).then(function () { return attempt(n + 1); });
+            });
+          };
+          return attempt(0);
+        };
+      }
+      var XHR = window.XMLHttpRequest;
+      if (XHR && XHR.prototype) {
+        var origOpen = XHR.prototype.open, origSend = XHR.prototype.send;
+        XHR.prototype.open = function (method, url, async) {
+          this.__wuSync = (async === false) && String(method).toUpperCase() === 'GET' && isData(url) ? String(url) : null;
+          this.__wuMime = null;
+          return origOpen.apply(this, arguments);
+        };
+        var origMime = XHR.prototype.overrideMimeType;
+        if (origMime) XHR.prototype.overrideMimeType = function (m) { this.__wuMime = m; return origMime.apply(this, arguments); };
+        XHR.prototype.send = function () {
+          var out, thrown = null;
+          if (!this.__wuSync) return origSend.apply(this, arguments);
+          try { out = origSend.apply(this, arguments); } catch (e) { thrown = e; }
+          if (!thrown && this.status !== 0 && this.status < 500) return out;
+          var url = this.__wuSync, mime = this.__wuMime, rt = this.responseType;
+          for (var n = 0; n < 2; n++) {
+            stats.retried++;
+            var x = new XHR();
+            origOpen.call(x, 'GET', url, false);
+            if (mime && origMime) origMime.call(x, mime);
+            try { if (rt) x.responseType = rt; } catch (e) { /* sync XHR forbids most types */ }
+            try { origSend.call(x); } catch (e) { continue; }
+            if (x.status !== 0 && x.status < 500) {
+              stats.recovered++;
+              var good = x;
+              ['status', 'statusText', 'response', 'responseText', 'responseURL', 'readyState'].forEach(function (k) {
+                try { Object.defineProperty(this, k, { configurable: true, get: function () { return good[k]; } }); } catch (e) { /* keep the original */ }
+              }, this);
+              this.getResponseHeader = function (h) { return good.getResponseHeader(h); };
+              this.getAllResponseHeaders = function () { return good.getAllResponseHeaders(); };
+              return out;
+            }
+          }
+          stats.failed++; note(url, thrown ? 'sync network' : 'sync HTTP ' + this.status);
+          if (thrown) throw thrown;
+          return out;
+        };
+      }
+    }
+  } catch (e) { /* retries are optional */ }
   // One game per browser. Two tabs signed in to the same account knock each other off the realm
   // ("Disconnected", back to the login). The first tab holds a Web Lock for its whole life. A second tab
   // goes to tab.html?m=busy (a small note page: no game starts) with "Play here", which tells the first

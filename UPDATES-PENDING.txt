@@ -114,3 +114,5 @@
 1033b foreverui  Edit mode HUD (F7 or /edit): banner, tool bar, click to select, Props to place by clicking, G to carry
 1033c client  Client 20261025g: edit mode (F7) free building camera, click-select, carry and drop props with Q/E turning; plus the 20261025f fixes (animated char select/create, no black create screen, no falling through, no black screen in Dalaran)
 1033d ship  Save to GitHub (orionopenwow/WrathUnleashed): edit mode, the Leyline Launcher look
+1034a client  Play page: game files retry on a server error or dropped connection (a 502 left Stormwind City unbuilt)
+1034b ship  Save to GitHub (orionopenwow/WrathUnleashed)
