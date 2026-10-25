@@ -10,6 +10,34 @@
 // Music and long sounds are only played, never read before the login screen (and with the page's
 // sign-in the login screen plays none: benilla-app startup_pace.rs, quiet login), so they are left
 // out of that rush; the client fetches a sound itself when it plays it. ?slimboot=0 turns it off.
+// >>> wu-interface (the dock's Interface choice, 2026-10-24) ---------------------------------------
+// Forever UI is the default; the player's saved choice (localStorage 'wu:interface': 'forever' or
+// 'classic', set by the dock's Interface menu in wrath-page.js) goes into the client's env before
+// boot, the same switch as ?foreverui= (benilla-app webenv.rs: the env object outranks the query).
+// An explicit ?foreverui= in the address still wins for that visit. Storage blocked: the default.
+(function () {
+  try {
+    var KEY = 'wu:interface';
+    var stored = null;
+    try { stored = window.localStorage ? window.localStorage.getItem(KEY) : null; } catch (e) { stored = null; }
+    var env = window.__wenilla_env;
+    var choice = stored === 'classic' ? 'classic' : 'forever';
+    var source = (stored === 'classic' || stored === 'forever') ? 'saved' : 'default';
+    // No saved choice: the portal's own value stands (WU_FOREVERUI=0 in portal.env gives "0").
+    if (source === 'default' && env && typeof env === 'object' && String(env.foreverui).trim() === '0') choice = 'classic';
+    var q = /[?&]foreverui=([^&#]*)/.exec(location.search || '');
+    if (q) {
+      var v = '';
+      try { v = decodeURIComponent(q[1]); } catch (e) { v = q[1]; }
+      choice = v.trim() === '0' ? 'classic' : 'forever';
+      source = 'url';
+    }
+    if (env && typeof env === 'object') env.foreverui = choice === 'classic' ? '0' : '1';
+    window.__wuInterface = { choice: choice, source: source, key: KEY };
+  } catch (e) { console.warn('wrath-early.js interface', e); }
+})();
+// <<< wu-interface ---------------------------------------------------------------------------------
+
 (function () {
   'use strict';
   var SKIP_AT_BOOT = /\.(mp3|wav|ogg)$/i;

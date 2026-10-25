@@ -345,6 +345,85 @@ export function touchMaybe() {
 })();
 // <<< fui-glue ------------------------------------------------------------------------------------
 
+// >>> wu-interface (the dock's Interface choice, 2026-10-24) ---------------------------------------
+// An "Interface" menu in the account dock: Forever UI (the default) or Classic 3.3.5. The choice is
+// kept in localStorage ('wu:interface') and applied before boot by wrath-early.js, which sets
+// window.__wenilla_env.foreverui (the ?foreverui= switch). Changing it asks once, then reloads,
+// dropping any ?foreverui= from the address so the saved choice is the one used.
+export const INTERFACE_KEY = 'wu:interface';
+export const INTERFACES = [
+  { id: 'forever', label: 'Forever UI (default)' },
+  { id: 'classic', label: 'Classic 3.3.5' },
+];
+
+/** The address to reload: the current one without its foreverui parameter. */
+export function interfaceReloadUrl(href) {
+  const u = new URL(href);
+  u.searchParams.delete('foreverui');
+  return u.href;
+}
+
+/** Save the choice; false when storage is blocked (the reload would then change nothing). */
+export function saveInterface(choice, storage = globalThis.localStorage) {
+  try {
+    storage.setItem(INTERFACE_KEY, choice === 'classic' ? 'classic' : 'forever');
+    return storage.getItem(INTERFACE_KEY) === (choice === 'classic' ? 'classic' : 'forever');
+  } catch {
+    return false;
+  }
+}
+
+export function interfaceMenu(panel, current = window.__wuInterface?.choice || 'forever') {
+  if (!panel || panel.querySelector('#ow-interface')) return null;
+  const row = document.createElement('label');
+  row.id = 'ow-interface-row';
+  row.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:2px 4px;color:#e8e2d0;font:12px system-ui,sans-serif';
+  row.textContent = 'Interface';
+  const sel = document.createElement('select');
+  sel.id = 'ow-interface';
+  sel.style.cssText = 'font:12px system-ui,sans-serif;background:#1a1626;color:#e8e2d0;border:1px solid rgba(201,162,39,.5);border-radius:4px;padding:1px 4px';
+  for (const o of INTERFACES) {
+    const opt = document.createElement('option');
+    opt.value = o.id;
+    opt.textContent = o.label;
+    sel.append(opt);
+  }
+  sel.value = current === 'classic' ? 'classic' : 'forever';
+  sel.addEventListener('change', () => {
+    const want = sel.value;
+    const label = INTERFACES.find((o) => o.id === want)?.label || want;
+    if (!window.confirm(`Switch the interface to ${label}? The page will reload.`)) {
+      sel.value = current;
+      return;
+    }
+    if (!saveInterface(want)) {
+      // storage blocked: this visit only, through the address
+      const u = new URL(location.href);
+      u.searchParams.set('foreverui', want === 'classic' ? '0' : '1');
+      location.replace(u.href);
+      return;
+    }
+    location.replace(interfaceReloadUrl(location.href));
+  });
+  row.append(sel);
+  panel.append(row);
+  return sel;
+}
+
+(() => {
+  try {
+    if (typeof document === 'undefined') return;
+    let tries = 0;
+    const look = () => {
+      const panel = document.getElementById('ow-dock-panel');
+      if (panel) { interfaceMenu(panel); return; }
+      if (++tries < 120) setTimeout(look, 250);   // the dock is built at install: 30 s at most
+    };
+    look();
+  } catch (e) { console.warn('wrath-page.js interface menu', e); }
+})();
+// <<< wu-interface ---------------------------------------------------------------------------------
+
 let installed = null;
 
 /** The page layer, once. `wenilla` defaults to bridge.js's (the same module the page imports). */

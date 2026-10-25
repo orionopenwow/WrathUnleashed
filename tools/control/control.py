@@ -10,6 +10,10 @@ Serves a page on http://127.0.0.1:8097 (this PC only) and opens it. The page sho
   * Ready to launch: the steps in UPDATES-PENDING.txt not yet in UPDATES-DONE.txt; "Launch all" runs them in
     order (the same steps UPDATE.bat runs) and streams each step's output live; it stops at a failure.
   * History: finished steps with their logs (logs/<id>-<step>.log).
+  * Autopilot (switch in the header, remembered in control/autopilot.json): while this window is open, new
+    steps Claude adds to UPDATES-PENDING.txt run on their own within a minute, and a read-only server check
+    runs every 3 hours (logs/check-auto-*.log), so Claude can read the results without asking you. A failed
+    step is not retried until Claude changes UPDATES-PENDING.txt. The owner's standing rules still apply.
 Only this PC can open it: it listens on 127.0.0.1, and every action needs the session token in the page.
 Standard library only.
 """
@@ -33,6 +37,9 @@ DONE = ROOT / "UPDATES-DONE.txt"
 LOGS = ROOT / "logs"
 STATUS = ROOT / "control" / "claude-status.json"
 PORT = int(os.environ.get("WU_CONTROL_PORT", "8097"))
+AUTO = ROOT / "control" / "autopilot.json"
+LAST = ROOT / "control" / "last-run.json"
+QUIET = "--quiet" in sys.argv                         # started at Windows sign-in: no browser tab
 TOKEN_FILE = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "WrathUnleashed" / "control-token"
 
 
@@ -73,7 +80,7 @@ CHECKS = [
     ("Client", "https://wrath.openvanilla.app/boot-manifest.json"),
 ]
 
-state = {"running": None, "lines": [], "health": {}, "health_at": 0}
+state = {"running": None, "lines": [], "health": {}, "health_at": 0, "auto_failed": None}
 lock = threading.Lock()
 listeners: list[queue.Queue] = []
 
@@ -123,6 +130,65 @@ def claude_status() -> dict:
         return {"updated": "", "now": [], "waiting_on_you": [], "done": [], "note": "No status from Claude yet."}
 
 
+def autopilot_on() -> bool:
+    try:
+        return bool(json.loads(AUTO.read_text(encoding="utf-8-sig")).get("on"))
+    except Exception:
+        return False
+
+
+def set_autopilot(on: bool) -> None:
+    AUTO.parent.mkdir(exist_ok=True)
+    AUTO.write_text(json.dumps({"on": bool(on), "changed": time.strftime("%Y-%m-%d %H:%M:%S")}), encoding="utf-8")
+
+
+def pending_stamp() -> float:
+    try:
+        return PEND.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
+def write_last(ids, ok, step=None) -> None:
+    try:
+        LAST.parent.mkdir(exist_ok=True)
+        LAST.write_text(json.dumps({"at": time.strftime("%Y-%m-%d %H:%M:%S"), "ids": ids, "ok": ok,
+                                    "failed_step": step, "autopilot": autopilot_on()}, indent=1), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def start_run(msg: str, items=None, record=True, title="Starting") -> bool:
+    with lock:
+        if state["running"]:
+            return False
+        state["running"] = {"id": "", "step": "starting", "title": title}
+        state["lines"] = []
+    threading.Thread(target=run_all, args=(msg, items, record), daemon=True).start()
+    return True
+
+
+def autopilot_loop() -> None:
+    """Runs Claude's new steps on their own while the switch is on; a server check every 3 hours."""
+    next_check = time.time() + 300
+    while True:
+        time.sleep(30)
+        if not autopilot_on():
+            continue
+        try:
+            items = pending()
+            failed = state.get("auto_failed")
+            if items and not (failed and failed == pending_stamp()):
+                start_run("Updates from Claude (autopilot)", title="Autopilot")
+            elif time.time() >= next_check:
+                next_check = time.time() + 3 * 3600
+                item = {"id": "check-auto-" + time.strftime("%Y%m%d-%H%M%S"), "step": "check",
+                        "title": STEPS["check"][1], "note": "", "known": True}
+                start_run("", [item], False, "Autopilot server check")
+        except Exception as e:                  # never let the loop die
+            emit("line", f"!! autopilot: {e}")
+
+
 def emit(kind: str, data) -> None:
     msg = json.dumps({"kind": kind, "data": data})
     with lock:
@@ -134,12 +200,15 @@ def emit(kind: str, data) -> None:
 
 
 def run_all(ship_message: str, items=None, record=True) -> None:
+    ran = []
     try:
         LOGS.mkdir(exist_ok=True)
         for item in (items if items is not None else pending()):
             if not item["known"]:
                 emit("line", f"!! Unknown step '{item['step']}' ({item['id']}): ask Claude.")
                 emit("result", {"ok": False, "step": item["step"]})
+                state["auto_failed"] = pending_stamp()
+                write_last([item["id"]], False, item["step"])
                 return
             bat, title, interactive = STEPS[item["step"]]
             with lock:
@@ -174,12 +243,18 @@ def run_all(ship_message: str, items=None, record=True) -> None:
             if rc != 0:
                 emit("line", f"!! {title} failed (exit {rc}). Send Claude a screenshot, or the log: logs/{log.name}")
                 emit("result", {"ok": False, "step": item["step"]})
+                if record:
+                    state["auto_failed"] = pending_stamp()
+                write_last([item["id"]], False, item["step"])
                 return
             if record:
                 with open(DONE, "a", encoding="utf-8") as d:
                     d.write(item["id"] + "\n")
             emit("line", f"== {title}: done")
+            ran.append(item["id"])
         emit("result", {"ok": True})
+        if ran:
+            write_last(ran, True)
     finally:
         with lock:
             state["running"] = None
@@ -247,7 +322,8 @@ class H(http.server.BaseHTTPRequestHandler):
                 lines = state["lines"][-400:]
             return self._send(200, json.dumps({"pending": pending(), "history": history(),
                                                "claude": claude_status(), "running": running,
-                                               "health": health, "health_at": at, "lines": lines}))
+                                               "health": health, "health_at": at, "lines": lines,
+                                               "autopilot": autopilot_on()}))
         if path == "/api/log":
             name = self.path.split("name=", 1)[-1]
             f = (LOGS / os.path.basename(urllib.request.unquote(name)))
@@ -285,23 +361,21 @@ class H(http.server.BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(n) or b"{}") if n else {}
         if self.path == "/api/launch":
-            with lock:
-                if state["running"]:
-                    return self._send(409, '{"error":"already running"}')
-                state["running"] = {"id": "", "step": "starting", "title": "Starting"}
-                state["lines"] = []
             msg = str(body.get("message") or "")[:200].replace("\n", " ")
-            threading.Thread(target=run_all, args=(msg,), daemon=True).start()
+            state["auto_failed"] = None
+            if not start_run(msg):
+                return self._send(409, '{"error":"already running"}')
             return self._send(200, '{"ok":true}')
+        if self.path == "/api/autopilot":
+            set_autopilot(bool(body.get("on")))
+            state["auto_failed"] = None
+            emit("state", {})
+            return self._send(200, json.dumps({"ok": True, "on": autopilot_on()}))
         if self.path == "/api/check":
-            with lock:
-                if state["running"]:
-                    return self._send(409, '{"error":"already running"}')
-                state["running"] = {"id": "", "step": "check", "title": "Server check"}
-                state["lines"] = []
             item = {"id": "check-" + time.strftime("%Y%m%d-%H%M%S"), "step": "check",
                     "title": STEPS["check"][1], "note": "", "known": True}
-            threading.Thread(target=run_all, args=("", [item], False), daemon=True).start()
+            if not start_run("", [item], False, "Server check"):
+                return self._send(409, '{"error":"already running"}')
             return self._send(200, '{"ok":true}')
         if self.path == "/api/open-game":
             webbrowser.open("https://play.openvanilla.app/wrath")
@@ -357,6 +431,7 @@ a{color:var(--blue)}.hist a{font-family:var(--mono);font-size:12px}
 </style></head><body>
 <header><h1>WrathUnleashed <span>Control</span></h1>
 <div class="health" id="health"></div>
+<button id="auto" title="While this window is open, Claude's updates run on their own">Autopilot: …</button>
 <button id="check">Check server</button><button id="game">Open the game</button></header>
 <main>
 <div class="stack">
@@ -387,12 +462,14 @@ const c=s.claude||{};list($("you"),c.waiting_on_you,"you","Nothing. You're clear
 list($("now"),c.now,"now",c.note||"Idle.");list($("fin"),c.done,"fin","Nothing yet.");
 $("cupd").textContent=c.updated?`Updated ${c.updated}`:"";
 list($("pending"),(s.pending||[]).map(p=>({tag:p.step,text:p.title,detail:p.note})),"","Nothing to launch. You're up to date.");
+const a=$("auto");a.textContent=s.autopilot?"Autopilot: ON":"Autopilot: OFF";a.className=s.autopilot?"primary":"";a.dataset.on=s.autopilot?"1":"";
 $("go").disabled=!!s.running||!(s.pending||[]).length;
 $("run").innerHTML=s.running?`<span class="spinner"></span>${esc(s.running.title||"Running")}…`:'<span class="sub">Idle</span>';
 $("hist").innerHTML=(s.history||[]).map(x=>`<div class="item fin"><span class="tag">${esc(x.step)}</span><div>${esc(x.note||x.id)} ${x.log?`<a href="/api/log?t=${T}&name=${encodeURIComponent(x.log)}" target="_blank">log</a>`:""}</div></div>`).join("")||'<div class="empty">No runs yet.</div>';
 if(!$("con").childElementCount&&s.lines)s.lines.forEach(line)}
 $("go").onclick=async()=>{$("con").innerHTML="";const r=await fetch("/api/launch",{method:"POST",headers:{...H,"Content-Type":"application/json"},body:JSON.stringify({message:$("msg").value})});if(!r.ok)alert("Couldn't start: "+(await r.text()));refresh()};
 $("check").onclick=async()=>{$("con").innerHTML="";const r=await fetch("/api/check",{method:"POST",headers:H});if(!r.ok)alert("Busy: "+(await r.text()));refresh()};
+$("auto").onclick=async()=>{await fetch("/api/autopilot",{method:"POST",headers:{...H,"Content-Type":"application/json"},body:JSON.stringify({on:!$("auto").dataset.on})});refresh()};
 $("game").onclick=()=>fetch("/api/open-game",{method:"POST",headers:H});
 const es=new EventSource(`/api/events?t=${T}`);
 es.onmessage=e=>{const m=JSON.parse(e.data);if(m.kind==="line")line(m.data);else refresh()};
@@ -418,11 +495,15 @@ def main() -> int:
     except OSError:
         # Already running (another window): just open it.
         print("WrathUnleashed Control is already running; opening it.")
-        webbrowser.open(url)
+        if not QUIET:
+            webbrowser.open(url)
         return 0
     threading.Thread(target=check_health, daemon=True).start()
+    threading.Thread(target=autopilot_loop, daemon=True).start()
     print(f"WrathUnleashed Control: {url}\n(close this window to stop it)")
-    webbrowser.open(url)
+    print("Autopilot is " + ("ON: Claude's updates run on their own." if autopilot_on() else "OFF (switch it on in the window)."))
+    if not QUIET:
+        webbrowser.open(url)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

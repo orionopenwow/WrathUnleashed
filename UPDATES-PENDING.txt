@@ -9,3 +9,9 @@
 1024z ship    Save tonight's work to GitHub
 1024t slice  Streamed files again: all Wrath 5-player dungeons and heroics now fit (budget 6 GB; the 22:37 run used the old order) (30-60 min)
 1024s gm  GM console: Bug Reports tab (every .bug with where it happened; mark seen/fixed), Health tab (game keeps running)
+1024q client  Client 20261024y: fixes the login bounce and stuck banners, Dalaran loads only what is near you, phone typing, touch icons, smaller character model
+1024p foreverui  Forever UI character-select fixes v2 (tested in the real menu code): logo off, even Realms/Menu buttons, clean layout
+1024o scripts  Rescue anyone who falls under Dalaran: brought back up and revived (live reload, nobody kicked)
+1025a scripts  Random Lich King Dungeon/Heroic queues allowed (every Wrath dungeon is streamed); fall rescue survives script reloads; "you fell, brought back up" message
+1025b client  Client 20261025z: you never fall through the ground while it loads ("Still loading the ground under you"), nearest ground first, lighter Dalaran load
+1025c ship  Save tonight to GitHub (orionopenwow/WrathUnleashed): Autopilot, fall rescue after reloads, random dungeon queues, client 20261025z

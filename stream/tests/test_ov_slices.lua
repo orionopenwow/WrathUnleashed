@@ -93,6 +93,7 @@ local function player(acct, map, x, y, opts)
     function p:GetZoneId() return self.zone end
     function p:GetX() return self.x end
     function p:GetY() return self.y end
+    function p:GetZ() return self.z or 660 end
     function p:GetGUIDLow() return self.acct * 10 end
     function p:GetLevel() return self.level end
     function p:SetLevel(l) local old = self.level; self.level = l; fire(13, self, old) end
@@ -106,7 +107,7 @@ local function player(acct, map, x, y, opts)
     function p:ResurrectPlayer(pct) self.dead = false; self.res = pct end
     function p:Teleport(m, tx, ty, tz, o)
         if not self.canEnter then return false end
-        self.tp[#self.tp + 1] = { m, tx, ty, tz, o }; self.map, self.x, self.y = m, tx, ty
+        self.tp[#self.tp + 1] = { m, tx, ty, tz, o }; self.map, self.x, self.y, self.z = m, tx, ty, tz
         self.zone = zoneAt(m, tx, ty)
         return true
     end
@@ -256,6 +257,15 @@ fire(27, p, 2817, 2817); p.zone = 2817; runTimers()
 check("in Dalaran reported as Crystalsong Forest: stays (no loop)", #p.tp == 1)
 for _ = 1, 3 do runTimers() end
 check("...and the 5 s watch doesn't send it home either", #p.tp == 1)
+-- Fell through Dalaran before its floor loaded (live 2026-10-24): same x/y, Crystalsong's ground below, dead.
+local faller = player(42, 571, 5807, 588)
+faller.zone, faller.z, faller.dead = 2817, 150, true
+fire(27, faller, 2817, 2817); runTimers()
+check("fell under Dalaran: resurrected and brought back up", faller.res == 100 and #faller.tp == 1 and faller.z > 450)
+check("fell under Dalaran: told it fell, not \"not streamed\"", faller.msgs[#faller.msgs]:match("brought back up") and #faller.center == 0, faller.msgs[#faller.msgs])
+faller.dead = false
+for _ = 1, 3 do runTimers() end
+check("...and stays once back up (no loop)", #faller.tp == 1)
 p.x, p.y = 5300, -300                 -- flew out, down to Crystalsong Forest's ground
 fire(27, p, 2817, 2817); runTimers()
 check("Northrend outside Dalaran: sent home", #p.tp == 2)
@@ -314,7 +324,7 @@ h1.map, h1.zone = 389, 0; fire(28, h1); runTimers()
 check("level 1 in Ragefire Chasm: back to Northshire (dungeons open at 10)", #h1.tp == 3 and h1.tp[3][1] == 0)
 h1.map, h1.x, h1.y = 1, 1629, -4373; h1.zone = 1637; fire(28, h1); runTimers()
 check("level 1 Alliance in Orgrimmar: not its capital, back to Northshire", #h1.tp == 4 and h1.tp[4][1] == 0)
-h1.map, h1.x, h1.y, h1.zone = 571, 5807, 588, 4395; fire(28, h1); runTimers()
+h1.map, h1.x, h1.y, h1.z, h1.zone = 571, 5807, 588, 660, 4395; fire(28, h1); runTimers()
 check("level 1 in Dalaran: still home, allowed", #h1.tp == 4)
 
 local dw = player(50, 0, -6240.32, 331.03, { level = 1, class = 1, team = 0 })  -- dwarf in Coldridge Valley
@@ -454,7 +464,14 @@ check("LFG without the id table: refused", fire(50, lf, 0, { 241 }, "") == false
 OV_STREAM_LFG = { [241] = 575, [215] = 608, [4] = 389, [6] = 36, [300] = 4242 }
 OV_STREAM_LFG_LEVEL = { [241] = { 80, 80 }, [215] = { 75, 80 }, [4] = { 15, 21 }, [6] = { 15, 23 } }
 check("LFG: Utgarde Pinnacle allowed at the top tier, level 80", fire(50, lf, 0, { 241, 215 }, "") == true)
-check("LFG: random (not in the table) refused", fire(50, lf, 0, { 261 }, "") == false)
+local keep42 = T.flagged[42].tier
+T.flagged[42].tier = ALL
+check("LFG: Random Lich King Dungeon allowed when every Wrath dungeon is streamed", fire(50, lf, 0, { 261 }, "") == true)
+check("LFG: Random Lich King Heroic too", fire(50, lf, 0, { 262 }, "") == true)
+T.flagged[42].tier = 0
+check("LFG: random refused when the mark doesn't reach all its dungeons", fire(50, lf, 0, { 261 }, "") == false)
+T.flagged[42].tier = keep42
+check("LFG: an unknown random id refused", fire(50, lf, 0, { 9999 }, "") == false)
 check("LFG: a non-streamed dungeon refused", fire(50, lf, 0, { 241, 300 }, "") == false)
 check("LFG: allowed means an explicit true (mod-ale reads nothing as no)", fire(50, lf, 0, { 241 }, "") == true)
 check("LFG: a set keyed by id is read too", fire(50, lf, 0, { [241] = true }, "") == true)
@@ -510,6 +527,20 @@ if mainFile then
 else
     print("SKIP ov_main.lua boost tests (no ov_main.lua given)")
 end
+
+-- .reload ale drops every timed event: the reloaded script re-arms players already online.
+local stuck = player(42, 571, 5807, 588)
+stuck.zone, stuck.z, stuck.dead = 2817, 150, true
+online[#online + 1] = stuck
+logout(stuck)
+rows[42] = { slice = "mini", tier = MID, left = 43200 } -- the mark as the database has it
+for k in pairs(events) do events[k] = nil end
+dofile(script); runTimers()
+check("reload: an online player under Dalaran is rescued", stuck.res == 100 and #stuck.tp == 1 and stuck.z > 450)
+check("reload: the watch is re-armed", repeating(stuck) == 1, repeating(stuck))
+dofile(script); runTimers()
+check("reload twice: still one watch", repeating(stuck) <= 2)
+table.remove(online)
 
 -- tiers in the script, as text for the JSON cross-check (tests/test_lua.py)
 local parts = {}

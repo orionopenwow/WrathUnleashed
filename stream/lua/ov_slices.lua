@@ -125,13 +125,17 @@ end
 -- Zones the server can't place by zone id alone: Dalaran floats above Crystalsong Forest, and without the
 -- city's WMO area the core reports Crystalsong (2817) inside Dalaran. There the zone also matches by position
 -- [x min, x max, y min, y max] (the city's spawn box in mini.json).
-local ZONE_BOXES = { [4395] = { 5500, 6150, 250, 1100 } }
+-- The fifth number is the lowest height still inside: below it is Crystalsong Forest's ground under the
+-- floating city (live 2026-10-24: a player who fell through before the city's floor loaded died down there
+-- and counted as "in Dalaran" by x/y alone, so nothing brought them back up).
+local ZONE_BOXES = { [4395] = { 5500, 6150, 250, 1100, 450 } }
 
-local function inEntry(m, map, zone, x, y)
+local function inEntry(m, map, zone, x, y, z)
     if m.id ~= map then return false end
     if m.zone then
-        if zone == m.zone then return true end
         local b = ZONE_BOXES[m.zone]
+        if b and b[5] and z ~= nil and z < b[5] then return false end
+        if zone == m.zone then return true end
         return b ~= nil and x ~= nil and y ~= nil and x >= b[1] and x <= b[2] and y >= b[3] and y <= b[4]
     end
     if m.box then
@@ -141,13 +145,13 @@ local function inEntry(m, map, zone, x, y)
     return true
 end
 
-local function inSlice(f, p, map, zone, x, y)
+local function inSlice(f, p, map, zone, x, y, z)
     local T = tiers()
     for n = 1, topTier(f) do
         local t = T[n]
         if t and tierOpen(t, p) then
             for _, m in ipairs(t.maps or {}) do
-                if inEntry(m, map, zone, x, y) then return true end
+                if inEntry(m, map, zone, x, y, z) then return true end
             end
         end
     end
@@ -202,7 +206,7 @@ local function tell(p, guid, long)
 end
 
 local function here(p)
-    return p:GetMapId(), p:GetZoneId(), p:GetX(), p:GetY()
+    return p:GetMapId(), p:GetZoneId(), p:GetX(), p:GetY(), (p.GetZ and p:GetZ()) or nil
 end
 
 -- Deferred (teleporting from inside a login/zone/map hook is unsafe). The decision made in the
@@ -220,17 +224,25 @@ local function sendHome(player, why)
         if p:IsDead() then p:ResurrectPlayer(100, false) end
         local h = homeOf(f, p)
         -- Already standing on home: the rule disagrees with its own home (a config mistake). Never loop.
-        if p:GetMapId() == h[1] and math.abs(p:GetX() - h[2]) < 40 and math.abs(p:GetY() - h[3]) < 40 then return end
+        if p:GetMapId() == h[1] and math.abs(p:GetX() - h[2]) < 40 and math.abs(p:GetY() - h[3]) < 40
+            and (not p.GetZ or math.abs(p:GetZ() - h[4]) < 40) then return end
+        -- Fell under home (same map, right below it): not the "not streamed" case, so say so plainly.
+        local fell = p.GetZ and p:GetMapId() == h[1] and math.abs(p:GetX() - h[2]) < 600
+            and math.abs(p:GetY() - h[3]) < 600 and p:GetZ() < h[4] - 60
         p:Teleport(h[1], h[2], h[3], h[4], h[5])
-        tell(p, guid)
+        if fell then
+            p:SendBroadcastMessage(TAG .. "You fell through the world; you've been brought back up.")
+        else
+            tell(p, guid)
+        end
     end, why == "login" and 1500 or 250, 1)
 end
 
 local function check(player, map, zone, why)
     local f = flagOf(player:GetAccountId())
     if not f or player:IsGM() then return end
-    local m0, z0, x, y = here(player)
-    if not inSlice(f, player, map or m0, zone or z0, x, y) then
+    local m0, z0, x, y, h = here(player)
+    if not inSlice(f, player, map or m0, zone or z0, x, y, h) then
         sendHome(player, why)
     end
 end
@@ -524,6 +536,18 @@ end
 -- mod-ale's CAN_JOIN_LFG is a "can" hook whose result defaults to false once any handler is registered:
 -- a handler that returns nothing refuses the queue, silently (live 2026-10-24: every queue dropped).
 -- So every path here returns true or false explicitly.
+-- Random queues (not in OV_STREAM_LFG: the server picks the map) are allowed when every dungeon the
+-- server could pick from is streamed (LFGDungeons.dbc random ids, 3.3.5a).
+local CLASSIC5 = { 389, 43, 36, 33, 34, 48, 90, 47, 129, 70, 109, 209, 349, 429, 229, 230, 329, 289, 189 }
+local BC5 = { 540, 542, 543, 545, 546, 547, 552, 553, 554, 555, 556, 557, 558, 560, 269, 585 }
+local WRATH5 = { 574, 575, 576, 578, 595, 599, 600, 601, 602, 604, 608, 619, 632, 650, 658, 668 }
+local RANDOM_POOL = { [258] = CLASSIC5, [259] = BC5, [260] = BC5, [261] = WRATH5, [262] = WRATH5 }
+
+local function poolStreamed(pool, maps)
+    for _, m in ipairs(pool) do if not maps[m] then return false end end
+    return true
+end
+
 local function onCanJoinLfg(event, player, roles, dungeons, comment)
     local f = flagOf(player:GetAccountId())
     if not f then return true end
@@ -540,7 +564,10 @@ local function onCanJoinLfg(event, player, roles, dungeons, comment)
     for k, v in pairs(dungeons or {}) do ids[#ids + 1] = (type(v) == "number") and v or k end
     for _, id in ipairs(ids) do
         local map = lfg and lfg[id]
-        if not map or not maps[map] then
+        local pool = RANDOM_POOL[id]
+        if pool and poolStreamed(pool, maps) then
+            -- the server checks the level and picks a streamed dungeon
+        elseif not map or not maps[map] then
             player:SendBroadcastMessage(TAG .. "In the browser the Dungeon Finder only "
                 .. "queues for the streamed dungeons (choose them under Specific Dungeons; random queues "
                 .. "can send you anywhere). " .. BYOC)
@@ -569,6 +596,17 @@ AuthDBExecute("CREATE TABLE IF NOT EXISTS ov_stream_accounts ("
     .. "updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, "
     .. "KEY expires_at (expires_at))")
 loadAll()
+
+-- After a script reload (.reload ale) every timed event is gone: re-arm the watch for players already online.
+local function rearm()
+    for _, p in ipairs(GetPlayersInWorld() or {}) do
+        local g = p:GetGUIDLow()
+        pendingHome[g], watching[g] = nil, nil
+        loadAccount(p:GetAccountId())
+        if flagOf(p:GetAccountId()) then check(p, nil, nil, "tick"); watch(p) end
+    end
+end
+if CreateLuaEvent then CreateLuaEvent(rearm, 2000, 1) else rearm() end
 
 RegisterPlayerEvent(3, onLogin)       -- PLAYER_EVENT_ON_LOGIN
 RegisterPlayerEvent(13, onLevel)      -- PLAYER_EVENT_ON_LEVEL_CHANGE
