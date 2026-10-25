@@ -14,6 +14,7 @@ rem           foreverui stream\Add Forever UI to the stream.bat (menus, characte
 rem           slice    stream\Make mini slice.bat              (streamed game files: 30-60 min)
 rem           mods     mods\Put mods on Wrath.bat           (the mods catalog: realm, streamed addons, /wrath/mods)
 rem           ship     Ship WrathUnleashed.bat                 (save everything to GitHub: asks you to type yes)
+rem           leyline  tools\leyline-repo\Update Leyline repo.bat   (public Leyline copy; also runs after every ship)
 cd /d "%~dp0"
 set "PEND=UPDATES-PENDING.txt"
 set "DONE=UPDATES-DONE.txt"
@@ -64,6 +65,7 @@ if /i "%STEP%"=="lean"    set "BAT=realm\Lean server.bat"
 if /i "%STEP%"=="relay"   set "BAT=hosting\relay\Deploy relay.bat"
 if /i "%STEP%"=="foreverui" set "BAT=stream\Add Forever UI to the stream.bat"
 if /i "%STEP%"=="mods"    set "BAT=mods\Put mods on Wrath.bat"
+if /i "%STEP%"=="leyline" set "BAT=tools\leyline-repo\Update Leyline repo.bat"
 if /i "%STEP%"=="slice"   (set "BAT=stream\Make mini slice.bat" & set "INTERACTIVE=1")
 if /i "%STEP%"=="ship"    (set "BAT=Ship WrathUnleashed.bat" & set "INTERACTIVE=1")
 if not defined BAT (echo Unknown step "%STEP%" in %PEND%. Ask Claude. & exit /b 1)
@@ -78,6 +80,15 @@ if defined INTERACTIVE (
 if errorlevel 1 (echo. & echo STEP FAILED: %STEP%. Send Claude a screenshot of this window. & exit /b 1)
 >> "%DONE%" echo %ID%
 cd /d "%~dp0"
+rem Every save to GitHub also refreshes the public Leyline copy (owner 2026-10-25).
+if /i "%STEP%"=="ship" (
+  echo.
+  echo ===== leyline ^(after ship %ID%^) =====
+  call "tools\leyline-repo\Update Leyline repo.bat" < nul > "logs\%ID%-leyline.log" 2>&1
+  if errorlevel 1 (echo Leyline copy failed: see logs\%ID%-leyline.log. Send it to Claude. & exit /b 1)
+  type "logs\%ID%-leyline.log" | findstr /b /c:"LEYLINE OK"
+  cd /d "%~dp0"
+)
 exit /b 0
 
 :failed

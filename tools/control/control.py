@@ -256,7 +256,11 @@ def run_all(ship_message: str, items=None, record=True) -> None:
     ran = []
     try:
         LOGS.mkdir(exist_ok=True)
-        for item in (items if items is not None else pending()):
+        queue = list(items if items is not None else pending())
+        i = 0
+        while i < len(queue):
+            item = queue[i]
+            i += 1
             if not item["known"]:
                 emit("line", f"!! Unknown step '{item['step']}' ({item['id']}): ask Claude.")
                 emit("result", {"ok": False, "step": item["step"]})
@@ -305,6 +309,13 @@ def run_all(ship_message: str, items=None, record=True) -> None:
                     d.write(item["id"] + "\n")
             emit("line", f"== {title}: done")
             ran.append(item["id"])
+            # Every save to WrathUnleashed's GitHub also refreshes the public Leyline copy (owner
+            # 2026-10-25: "make sure it works with ... all changes we make"), unless a Leyline step
+            # is already queued after it. A Leyline failure stops the run like any other step.
+            if item["step"] == "ship" and not any(q["step"] == "leyline" for q in queue[i:]):
+                queue.insert(i, {"id": item["id"] + "-leyline", "step": "leyline",
+                                 "title": STEPS["leyline"][1], "note": "follows Save to GitHub",
+                                 "known": True})
         emit("result", {"ok": True})
         if ran:
             write_last(ran, True)

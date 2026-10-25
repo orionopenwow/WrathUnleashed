@@ -103,3 +103,5 @@
 1029e realm  ov_leyline: realm hop echo (reload, no restart)
 1029f ship  Save to GitHub (orionopenwow/WrathUnleashed)
 1029g leyline  Update the public orionopenwow/Leyline repo (docs and the Leyline Launcher source)
+1029h ship  Save to GitHub (orionopenwow/WrathUnleashed): every save now also refreshes the public Leyline repo; Leyline tests skip the WrathUnleashed-only files
+1029i leyline  Update the public orionopenwow/Leyline repo

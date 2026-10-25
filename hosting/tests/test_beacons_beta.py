@@ -97,7 +97,10 @@ class DalaranPreset(unittest.TestCase):
         self.assertNotIn("WU_DB_BUFFER", read_env(os.path.join(self.kit, ".env")))
 
     def test_kit_files_know_dalaran(self):
-        prof = read_env(os.path.join(REPO, "realm", "profiles", "dalaran.env"))
+        p = os.path.join(REPO, "realm", "profiles", "dalaran.env")
+        if not os.path.exists(p):
+            self.skipTest("realm profiles live in the WrathUnleashed repo")
+        prof = read_env(p)
         self.assertEqual(prof["OV_MAIN"], "1")                       # level 1 or the boost to 80 (Dalaran)
         self.assertEqual(prof["OV_QOL_HUB"], "1")
         self.assertEqual(prof["AC_GRID_UNLOAD"], "1")
@@ -149,6 +152,8 @@ class TrustedProxies(unittest.TestCase):
 class ImagesWorkflow(unittest.TestCase):
     def test_publishes_what_the_kit_pulls(self):
         p = os.path.join(REPO, ".github", "workflows", "wu-images.yml")
+        if not os.path.exists(p):
+            self.skipTest("the image workflow lives in the WrathUnleashed repo")
         text = open(p).read()
         try:
             import yaml

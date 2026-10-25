@@ -251,7 +251,10 @@ class RelayDeploy(unittest.TestCase):
         self.assertNotIn("scp", bat.lower())
         for need in ("kit/tools/wunet", "relay/wurelay", "relay/Dockerfile", "relay/deploy"):
             self.assertIn(need, bat)
-        ctl = open(os.path.join(ROOT, "tools", "control", "control.py")).read()
+        ctl_path = os.path.join(ROOT, "tools", "control", "control.py")
+        if not os.path.exists(ctl_path):
+            self.skipTest("the control panel lives in the WrathUnleashed repo")
+        ctl = open(ctl_path).read()
         self.assertIn('"relay": ("hosting/relay/Deploy relay.bat", "Beacons relay (relay.openvanilla.app)", False)', ctl)
 
     def test_script_syntax(self):
