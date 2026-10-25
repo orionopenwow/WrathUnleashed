@@ -190,5 +190,39 @@ check("listing url: a bad file is ignored", wp.listing_url() == wp.RELAY_LISTING
 os.remove(urlfile)
 check("listing url: no file -> https://relay.openvanilla.app", wp.listing_url() == "https://relay.openvanilla.app/api/listing/realms.json")
 
+# --- the inside address stops answering: the public one is read instead
+fd, urlfile = tempfile.mkstemp()
+os.close(fd)
+with open(urlfile, "w") as f:
+    f.write("http://172.18.0.1:8099/api/listing/realms.json\n")
+wp.RELAY_LISTING_FILE = urlfile
+asked = []
+good = json.dumps({"realms": [{"name": "Dalaran Hangout", "state": "live",
+                               "community": {"realmId": "qt6yi563z2gbxlhx", "lastHeartbeat": {"players": 2}}}]}).encode()
+real_read = wp._read_listing
+
+
+def fake_read(url):
+    asked.append(url)
+    if "172.18.0.1" in url:
+        raise OSError("connection refused")
+    return good
+
+
+wp._read_listing = fake_read
+got = wp.fetch_listing()
+check("listing: inside address down -> public address read", asked == ["http://172.18.0.1:8099/api/listing/realms.json", wp.RELAY_LISTING_DEFAULT])
+check("listing: the public answer is used", [r["name"] for r in got] == ["Dalaran Hangout"] and got[0]["live"])
+asked.clear()
+wp.RELAY_LISTING_FILE = urlfile + ".gone"
+try:
+    wp._read_listing = lambda url: (asked.append(url), (_ for _ in ()).throw(OSError("down")))[1]
+    wp.fetch_listing()
+    check("listing: public address down too -> error", False)
+except OSError:
+    check("listing: public address down too -> error, asked once", asked == [wp.RELAY_LISTING_DEFAULT])
+wp._read_listing = real_read
+os.remove(urlfile)
+
 print(f"\n{count - fails}/{count} passed")
 sys.exit(1 if fails else 0)

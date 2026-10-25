@@ -124,3 +124,5 @@
 1036f foreverui  Leyline window wording
 1036g ship  Save to GitHub (orionopenwow/WrathUnleashed): hosting and hopping end to end
 1036h leyline  Update the public orionopenwow/Leyline repo
+1037a signin  Site: the realm list falls back to the relay's public address (it had gone stale for an hour; the Dalaran Hangout now shows)
+1037b ship  Save to GitHub (orionopenwow/WrathUnleashed)

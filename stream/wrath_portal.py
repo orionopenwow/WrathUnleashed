@@ -948,10 +948,23 @@ def listing_url() -> str:
     return RELAY_LISTING_DEFAULT
 
 
-def fetch_listing() -> list[dict]:
-    req = urllib.request.Request(listing_url(), headers={"Accept": "application/json", "User-Agent": "wrath-portal"})
+def _read_listing(url: str) -> bytes:
+    req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "wrath-portal"})
     with urllib.request.urlopen(req, timeout=LISTING_WAIT) as r:
-        raw = r.read(LISTING_BYTES + 1)
+        return r.read(LISTING_BYTES + 1)
+
+
+def fetch_listing() -> list[dict]:
+    # The relay's address on the server (relay-listing.url) first; if that stops answering (a relay or
+    # network change on the box: the list once went stale for an hour this way), its public address.
+    url = listing_url()
+    try:
+        raw = _read_listing(url)
+    except Exception as first:  # noqa: BLE001 - any failure on the inside address: try the public one
+        if url == RELAY_LISTING_DEFAULT:
+            raise
+        log.info("community listing: %s failed (%s); trying %s", url, str(first)[:80], RELAY_LISTING_DEFAULT)
+        raw = _read_listing(RELAY_LISTING_DEFAULT)
     if len(raw) > LISTING_BYTES:
         raise ValueError("listing too large")
     doc = json.loads(raw.decode("utf-8"))
