@@ -97,4 +97,11 @@ The template's tests show the fake-ALE style: stub the few mod-ale functions you
 
 ## What happens next
 
-For now, send the zip and its sha256 to the WrathUnleashed team. Realm mods also get a human review before they go on a realm. Planned for later: a `wu-mod test` command that runs your mod on a local test realm, signed packages, and a Workshop board in Dalaran where players can browse and install mods.
+Send the zip and its sha256 to the WrathUnleashed team. Realm mods get a human review first. An approved mod goes into
+`mods/catalog/<your id>/`; the next `mods` step puts it on the realm and in the streamed client, and it shows up on the
+Workshop at https://play.openvanilla.app/wrath/mods with its own page, download and share link (`/wrath/m/<your id>`).
+In the game, Esc > Mods & Workshop > Workshop lists it, with an on/off switch for its addon.
+
+`mods/catalog/` has three examples: Dalaran Dice (this template), Pings (a realm half and an addon talking over OVMOD)
+and Emote Wheel (addon only). Planned for later: a `wu-mod test` command that runs your mod on a local test realm, and
+signed packages.

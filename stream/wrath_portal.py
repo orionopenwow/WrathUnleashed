@@ -15,6 +15,8 @@ Two listeners, both inside Docker networks only (never published on the host):
                                Beacons relay's listing (cached; a dead relay never slows the page)
          GET /wrath/armory[/<Name>]  public: the web armory (stream/armory.py), read from the files that
                                realm/custom/armory-export.py writes to /app/armory every 5 minutes
+         GET /wrath/mods       public: the mods Workshop (stream/workshop.py, optional): the catalog the
+                               "mods" step publishes into /app/mods, one page per mod, the zips
          GET /wrath/status.json  public realm status for the website's Beacons page, the launcher
                                and the GM console (CORS *, cached 30 s, at most one SOAP call per
                                30 s however many visitors ask)
@@ -79,6 +81,8 @@ Settings (environment, /srv/wrath/portal.env):
                          https://relay.openvanilla.app/api/listing/realms.json
   WU_JOIN_BASE           where a community realm's Join link goes (default https://relay.openvanilla.app,
                          which serves /join/<realm id> itself)
+  WU_MODS_DIR            the published mods catalog for /wrath/mods (default /app/mods = /srv/wrath/portal/mods,
+                         written by stream/server/mods-install.sh)
   WU_ART_DIR             the site art and theme (default /app/art = /srv/wrath/portal/art on the host,
                          installed from stream/www-files/art by fastloop.sh), served at /wrath/art/<name>
                          from a fixed list. Missing: the pages fall back to plain CSS.
@@ -139,6 +143,17 @@ def _load_armory():
         return None
 
 
+def _load_module(name: str, file: str):
+    """A module beside this file (python3 -I leaves this folder off sys.path), or None when missing or broken."""
+    try:
+        spec = importlib.util.spec_from_file_location(name, os.path.join(os.path.dirname(os.path.abspath(__file__)), file))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:
+        return None
+
+
 def _load_modes():
     """stream/modes.py (GET /wrath/modes and the go intent; its data is stream/modes_data.py), from beside
     this file. None when missing or broken: the portal runs without them."""
@@ -155,6 +170,7 @@ def _load_modes():
 
 armory = _load_armory()
 modes = _load_modes()
+workshop_mod = _load_module("wu_workshop", "workshop.py")   # /wrath/mods (stream/workshop.py); set up below
 
 
 def go_param(query: dict) -> str:
@@ -632,14 +648,15 @@ def stream_ended_page() -> bytes:
         f'<a href="{DISCORD_URL}">{DISCORD_URL}</a></p>')
 
 
-def busy_page(wait: int = 15) -> bytes:
+def busy_page(wait: int = 15, back: str = "/wrath") -> bytes:
     """A 429: the page tries again by itself (a meta refresh, no script) instead of leaving a dead end.
     Limits are per address, and a household or a cafe shares one, so the page stays calm about it."""
     body = (f'{crest(REALM_NAME)}<p class="sub">Lots of sign-ins from your network right now.</p>{RULE}'
             f'<p class="center">Trying again in {int(wait)} seconds…</p>'
-            '<p class="center"><a class="btn" href="/wrath">Try now</a></p>')
+            f'<p class="center"><a class="btn" href="{html.escape(back)}">Try now</a></p>')
     page = render(body).decode("utf-8")
-    return page.replace("<head>", f'<head><meta http-equiv="refresh" content="{int(wait)};url=/wrath">', 1).encode("utf-8")
+    # back to the page that was busy (a browsing page must not bounce people into the game at /wrath)
+    return page.replace("<head>", f'<head><meta http-equiv="refresh" content="{int(wait)};url={html.escape(back)}">', 1).encode("utf-8")
 
 
 def error_page(msg: str) -> bytes:
@@ -1100,7 +1117,7 @@ def leyline_page() -> bytes:
         '<nav class="ly-nav" aria-label="Leyline"><div class="grp">'
         '<a href="/wrath/leyline">Hub</a><a href="/wrath/modes">Modes</a><a href="/wrath/realms">Realms</a>'
         + ('<a href="/wrath/armory">Armory</a>' if armory is not None else '') +
-        f'<a href="{e(LEYLINE_REPO)}/tree/main/mods" rel="noopener noreferrer">Mods</a>'
+        '<a href="/wrath/mods">Mods</a>'
         f'<a href="{e(LEYLINE_REPO)}/blob/main/hosting/INSTALL-OPERATE.md" rel="noopener noreferrer">Server</a></div>'
         '<div class="grp"><a href="/login?next=%2Fwrath">Sign in</a><a class="hot" href="/wrath">Play now</a></div></nav>'
         '<div class="ly-wrap"><header class="ly-hero">'
@@ -1132,8 +1149,8 @@ def leyline_page() -> bytes:
                "world preset. Private by invite link, or public on the realm list.")
         + feat("A relay that hides you", "Players reach your realm through the Leyline relay, so your home address stays "
                "hidden and you open no ports.")
-        + feat("Mods and addons", "In the game, Esc &rarr; Mods &amp; Workshop sets your UI size and turns addons on and off. "
-               "Mods use one open format that anyone can publish to.")
+        + feat("Mods and addons", "Browse the <a href=\"/wrath/mods\">Workshop</a>. In the game, Esc &rarr; Mods &amp; Workshop "
+               "sets your UI size and turns addons on and off. Mods use one open format that anyone can publish to.")
         + feat("Open source", "Every line is on GitHub, and every project it builds on is credited.")
         + feat("Fair by design", "No shop and nothing to buy. Bots are always labelled and counted apart from players.")
         + feat("Companions", "Short a group? Type .recruit tank, healer or dps for labelled bot party members, "
@@ -1159,6 +1176,24 @@ def leyline_page() -> bytes:
             f'<title>Leyline</title>{meta}<style>{css}</style></head><body class="ly"><div class="ly-glow"></div>{body}</body></html>').encode("utf-8")
 
 
+def leyline_css() -> str:
+    """LEYLINE_CSS with its art placeholders pointing at /wrath/art/."""
+    css = LEYLINE_CSS
+    for k, f in (("ART_BG", "leyline-bg.webp"), ("ART_LYF", "leyline-display.woff2"), ("ART_FONT", "Cinzel-SemiBold.woff2"),
+                 ("ART_CTL", "leyline-corner-tl.webp"), ("ART_CTR", "leyline-corner-tr.webp"), ("ART_CBL", "leyline-corner-bl.webp"),
+                 ("ART_CBR", "leyline-corner-br.webp"), ("ART_DIV", "leyline-divider.webp")):
+        css = css.replace(k, art_url(f))
+    return css
+
+
+workshop = None
+if workshop_mod is not None:
+    try:
+        workshop = workshop_mod.Workshop(os.environ.get("WU_MODS_DIR", "/app/mods"), leyline_css, card_meta, REALM_NAME)
+    except Exception:   # the rest of the portal must still start
+        workshop = None
+
+
 class _Window:
     def __init__(self, seconds: int):
         self.seconds, self.q, self.lock = seconds, {}, threading.Lock()
@@ -1178,6 +1213,7 @@ class _Window:
 
 
 page_limit = _Window(60)
+browse_limit = _Window(60)   # public read-only pages (Leyline, realms, modes, armory, mods, share links): 600 a minute
 gate_limit = _Window(60)
 armory_limit = _Window(60)   # armory searches: 30 a minute per address, on top of page_limit
 
@@ -1308,10 +1344,13 @@ class PageHandler(BaseHTTPRequestHandler):
         return (self.headers.get("X-Forwarded-For", "").split(",")[-1].strip() or self.client_address[0])[:64]
 
     def send(self, status: int, body: bytes, ctype: str = "text/html; charset=utf-8", nonce: str = "",
-             public: bool = False, same_origin: bool = False, connect: bool = False) -> None:
+             public: bool = False, same_origin: bool = False, connect: bool = False,
+             headers: dict | None = None) -> None:
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         if same_origin:  # /__env.js: never readable from another site's page
             self.send_header("Cross-Origin-Resource-Policy", "same-origin")
         if public:  # the status document: anyone may read it, from any site
@@ -1521,7 +1560,8 @@ class PageHandler(BaseHTTPRequestHandler):
         if sess and sess.get("mode") != OWN and not stream_on():
             sess = None
         if not sess:
-            body = f"location.replace({json.dumps('https://' + PUBLIC_HOST + '/wrath')});\n".encode()
+            body = (f"var g=null;try{{g=new URLSearchParams(location.search).get('go')}}catch(e){{}}"
+                    f"location.replace({json.dumps('https://' + PUBLIC_HOST + '/wrath')}+(g&&g.length<41?'?go='+encodeURIComponent(g):''));\n").encode()
             self.send(401, body, "application/javascript; charset=utf-8", same_origin=True)
             return
         self.send(200, env_js(sess), "application/javascript; charset=utf-8", same_origin=True)
@@ -1593,35 +1633,44 @@ class PageHandler(BaseHTTPRequestHandler):
             self.art(urllib.parse.unquote(path[len("/wrath/art/"):]))
             return
         if path == "/wrath/leyline":
-            if not page_limit.hit(self.ip(), 120):
-                self.send(429, busy_page())
+            if not browse_limit.hit(self.ip(), 600):
+                self.send(429, busy_page(back=path))
                 return
             self.send(200, leyline_page())
             return
         if armory is not None and armory.match(path):   # the web armory (stream/armory.py): files only, no database
             ip = self.ip()
-            if not page_limit.hit(ip, 120) or (armory.search_query(path, query) and not armory_limit.hit(ip, 30)):
-                self.send(429, busy_page())
+            if not browse_limit.hit(ip, 600) or (armory.search_query(path, query) and not armory_limit.hit(ip, 30)):
+                self.send(429, busy_page(back=path))
                 return
             status, body = armory.page(path, query, leyline_css(), card_meta, REALM_NAME, PUBLIC_HOST)
             self.send(status, body)
             return
         if links is not None and links.match(path):   # share links (stream/links.py), same limit as /wrath/leyline
-            if not page_limit.hit(self.ip(), 120):
-                self.send(429, busy_page())
+            if not browse_limit.hit(self.ip(), 600):
+                self.send(429, busy_page(back=path))
                 return
             self.send(200, links.share_page(path, card_meta, render, REALM_NAME, community_realms,
-                                            who=armory.card_line if armory is not None else None))
+                                            who=armory.card_line if armory is not None else None,
+                                            mods=workshop.mod if workshop else None))
             return
         if path == "/wrath/modes" and modes is not None:
-            if not page_limit.hit(self.ip(), 120):
-                self.send(429, busy_page())
+            if not browse_limit.hit(self.ip(), 600):
+                self.send(429, busy_page(back=path))
                 return
             self.send(200, modes.page(leyline_css(), art_url, art_present, card_meta, REALM_NAME))
             return
+        if workshop is not None and workshop_mod.match(path):   # the mods Workshop (stream/workshop.py)
+            dl = "/download" in path
+            if not browse_limit.hit(self.ip() + ("|dl" if dl else ""), 30 if dl else 600):
+                self.send(429, busy_page(back=path))
+                return
+            status, body, ctype, extra = workshop.serve(path, query)
+            self.send(status, body, ctype, headers=extra)
+            return
         if path == "/wrath/realms":
-            if not page_limit.hit(self.ip(), 120):
-                self.send(429, busy_page())
+            if not browse_limit.hit(self.ip(), 600):
+                self.send(429, busy_page(back=path))
                 return
             self.send(200, realms_page())
             return

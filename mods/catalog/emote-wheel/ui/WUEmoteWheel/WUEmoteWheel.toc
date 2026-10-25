@@ -1,0 +1,9 @@
+## Interface: 30300
+## Title: Emote Wheel
+## Notes: /wheel opens a ring of eight emotes at your cursor; /wheel set 3 kiss changes a slot. Part of the WrathUnleashed mod "emote-wheel".
+## Author: WrathUnleashed
+## Version: 0.1.0
+## X-License: MIT
+## SavedVariablesPerCharacter: WUEmoteWheelDB
+
+WUEmoteWheel.lua

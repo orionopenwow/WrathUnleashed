@@ -178,8 +178,8 @@ check("present shot: served as webp", st == 200 and h3.get("content-type") == "i
 check("art route still refuses other names", get("/wrath/art/leyline-shot-x.webp")[0] == 404)
 
 # --- rate limit -------------------------------------------------------------------------------------------------
-codes = [get("/wrath/modes", ip="10.7.9.9", method="HEAD")[0] for _ in range(121)]
-check("rate limit like /wrath/leyline (120/min)", codes.count(200) == 120 and codes[-1] == 429, (codes.count(200), codes[-1]))
+codes = [get("/wrath/modes", ip="10.7.9.9", method="HEAD")[0] for _ in range(601)]
+check("rate limit like /wrath/leyline (600/min)", codes.count(200) == 600 and codes[-1] == 429, (codes.count(200), codes[-1]))
 
 # --- the go intent: unit ------------------------------------------------------------------------------------------
 check("go_command", M.go_command("wr000123", "q:deadmines") == "ovgo set WR000123 q:deadmines")

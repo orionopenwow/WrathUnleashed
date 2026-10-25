@@ -82,3 +82,10 @@
 1027p slice  Streamed areas: add the Goldshire Inn (for the guest pass)
 1027q ship  Save to GitHub (orionopenwow/WrathUnleashed)
 1027r leyline  Create or update the public orionopenwow/Leyline repo (needs gh signed in as orionopenwow)
+1027s scripts  Load the website "Go" teleports and the Builder: a real restart this time (5-minute warning); the last one only announced
+1027t foreverui  In-game: Mods & Workshop lists the installed mods with on/off
+1027u signin  Site: /wrath/mods (the Workshop), sign-in keeps share links, public pages no longer show "Lots of sign-ins"
+1027v client  Client 20261025e: guests go straight into the Goldshire Inn, "Taking you to" toast, bars re-seat after a resize
+1027w mods  Mods on Wrath: Pings, Emote Wheel and Dalaran Dice (new realm scripts load by a restart with a 5-minute warning)
+1027x ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1027y leyline  Update the public orionopenwow/Leyline repo

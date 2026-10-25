@@ -7,4 +7,6 @@ set -euo pipefail
 patch_index
 # Forever UI's files back into the new client's boot list, when the server has it (fui-install.sh).
 if [ -f "$ST/fui-install.sh" ]; then bash "$ST/fui-install.sh" reapply-www || echo "  WARNING: Forever UI's files are not in the boot list: they load on demand"; fi
+# The catalog mods' addons too (mods-install.sh).
+if [ -f "$ST/mods-install.sh" ]; then bash "$ST/mods-install.sh" reapply-www || echo "  WARNING: the mods' addons are not in the boot list: they load on demand"; fi
 grep -q 'src="/__env.js"' "$ST/www/index.html" && echo "  index.html loads /__env.js"

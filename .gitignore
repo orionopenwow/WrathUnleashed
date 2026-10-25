@@ -46,3 +46,6 @@ logs.txt
 charfix-diagnose.txt
 dev/merge-help/
 __pycache__/
+
+# wu-mod.py catalog / pack output
+/mods/dist/

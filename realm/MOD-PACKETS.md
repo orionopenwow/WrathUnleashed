@@ -104,3 +104,9 @@ that run the AIO client addon. To accept it in this dispatcher:
    installed client-side and reviewed, so `AIO.AddAddon` should be refused (or limited to a
    signed allowlist) rather than letting the server send executable Lua to every client.
 5. Same swallow rule: return false for `CAIO` so the core never relays it.
+
+## Mod "pings" from the Workshop catalog
+
+`mods/catalog/pings` (installed as `lua_scripts/mods/pings/pings.lua`) uses its own name, `map`, so it never
+replaces this file's `ping` / `marker` handlers: C -> S `map` `kind,area,floor,x,y` (map-area coordinates 0-1, what an
+addon can know), S -> C `map` `kind,area,floor,x,y,senderName`, and the same `denied` replies (`rate`, `nogroup`, `bad`).

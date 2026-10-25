@@ -4,7 +4,7 @@
     GET /h/<hangout>            a Dalaran hangout
     GET /q/<dungeon or queue>   a Dungeon Finder queue (a dungeon id such as 258, or a queue slug)
     GET /b/<raid or wing>       a boss fight: a raid or one of its wings (stream/modes_data.py ids)
-    GET /m/<mod id>             a mod
+    GET /m/<mod id>             a mod (its real name and description from the Workshop catalog, stream/workshop.py)
     GET /u/<character>          a player profile (with the web armory, stream/armory.py, the card shows the
                                 real character: "Name, level 80 Blood Elf Paladin", and links its sheet)
 
@@ -105,10 +105,11 @@ def _pretty(slug: str) -> str:
     return " ".join(w.capitalize() for w in slug.split("-") if w)
 
 
-def describe(kind: str, ident: str, realm_name: str, realms=None, who=None) -> tuple[str, str, str]:
+def describe(kind: str, ident: str, realm_name: str, realms=None, who=None, mods=None) -> tuple[str, str, str]:
     """(card title, card description, the line on the page) for a valid link. realms is a callable
     giving the community realm list ([{"id", "name", "tagline"}...]); who(name) gives a character in the
-    armory ({"name", "line"}) or None; any failure falls back to generic."""
+    armory ({"name", "line"}) or None; mods(id) gives one Workshop entry ({"name", "description"}) or
+    None (stream/workshop.py Workshop.mod); any failure falls back to generic."""
     label = KINDS[kind][1]
     desc = _DESC[kind]
     if kind == "r":
@@ -142,6 +143,14 @@ def describe(kind: str, ident: str, realm_name: str, realms=None, who=None) -> t
             return (f"{name} · {realm_name}", f"{name}, {line}. {desc}", f"{name}, {line}")
         return f"{ident} · {realm_name}", desc, f"{ident}'s profile"
     if kind == "m":
+        try:
+            m = mods(ident) if mods else None
+            if m:
+                name = str(m.get("name") or _pretty(ident))[:48]
+                about = str(m.get("description") or "").strip()[:200]
+                return f"{label}: {name} · Leyline", (about + " " if about else "") + desc, f"the {name} mod"
+        except Exception:   # a broken catalog never breaks a link
+            pass
         return f"{label}: {_pretty(ident)} · Leyline", desc, f"the {_pretty(ident)} mod"
     return f"{_pretty(ident)} · {label}", desc, f"the {_pretty(ident)} hangout in Dalaran"
 
@@ -165,8 +174,10 @@ def _who(who, ident: str) -> tuple[str, str] | None:
     return name, line
 
 
-def share_page(path: str, card_meta, render, realm_name: str = "WrathUnleashed", realms=None, who=None) -> bytes:
-    """The share page for path. card_meta(path, title) and render(body, meta=...) are the portal's own.
+def share_page(path: str, card_meta, render, realm_name: str = "WrathUnleashed", realms=None, who=None,
+               mods=None) -> bytes:
+    """The share page for path. card_meta(path, title) and render(body, meta=...) are the portal's own;
+    who(name) gives an armory character for /u/<name>, mods(id) a Workshop entry for /m/<id>.
     Always returns a page: an unknown or malformed link gets the generic card and a link to /wrath."""
     e = html.escape
     got = None
@@ -177,7 +188,7 @@ def share_page(path: str, card_meta, render, realm_name: str = "WrathUnleashed",
     if got:
         kind, ident = got
         try:
-            title, desc, line = describe(kind, ident, realm_name, realms, who)
+            title, desc, line = describe(kind, ident, realm_name, realms, who, mods)
         except Exception:
             title, desc, line = f"{realm_name} · Leyline", _DESC[kind], "a link"
         target = deep_link(kind, ident)
@@ -196,6 +207,12 @@ def share_page(path: str, card_meta, render, realm_name: str = "WrathUnleashed",
         found = _who(who, got[1])
         if found:
             sheet = f'<p class="center"><a href="/wrath/armory/{e(found[0])}">See {e(found[0])} in the armory</a></p>'
+    if got and got[0] == "m":
+        try:
+            if mods and mods(got[1]):
+                sheet = f'<p class="center"><a href="/wrath/mods/{e(got[1])}">See it in the Workshop</a></p>'
+        except Exception:
+            sheet = ""
 
     body = (f'<div class="crest wu-brand"><h1>{e(title or realm_name)}</h1></div>{shared}'
             '<hr class="rule wu-divider">'

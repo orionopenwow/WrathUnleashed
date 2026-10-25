@@ -46,6 +46,10 @@ chmod -R a+rX "$D/$NAME.stage"
 if [ -f "$ST/fui-install.sh" ]; then
   bash "$ST/fui-install.sh" reapply-slice "$NAME" "$D/$NAME.stage" || echo "  WARNING: Forever UI could not be laid over the new slice: it streams with the stock interface (bash $ST/fui-install.sh status)"
 fi
+# The catalog mods' addons (mods-install.sh), when the server has them, go back over it too.
+if [ -f "$ST/mods-install.sh" ]; then
+  bash "$ST/mods-install.sh" reapply-slice "$NAME" "$D/$NAME.stage" || echo "  WARNING: the mods' addons could not be laid over the new slice (bash $ST/mods-install.sh status)"
+fi
 [ -d "$D/$NAME" ] && mv "$D/$NAME" "$D/$NAME.old"
 mv "$D/$NAME.stage" "$D/$NAME"
 rm -rf "$D/$NAME.old"

@@ -504,6 +504,165 @@ class PackCommand(Base):
         self.assertFalse(os.path.exists(os.path.join(out, "dalaran-dice-0.1.0.zip")))
 
 
+CATALOG = os.path.join(ROOT, "catalog")
+LUAC = shutil.which("luac5.1")
+
+
+def catalog_ids():
+    return sorted(d for d in os.listdir(CATALOG) if os.path.isdir(os.path.join(CATALOG, d)))
+
+
+def lua_tests(mod_dir):
+    """(test file, target) pairs: test_ui.lua runs against each addon's main file, test_<x>.lua against realm/<x>.lua."""
+    out = []
+    for t in sorted(os.listdir(os.path.join(mod_dir, "tests"))):
+        if not t.endswith(".lua"):
+            continue
+        if t == "test_ui.lua":
+            for a in sorted(os.listdir(os.path.join(mod_dir, "ui"))):
+                out.append(("tests/" + t, "ui/%s/%s.lua" % (a, a)))
+        else:
+            out.append(("tests/" + t, "realm/%s.lua" % t[len("test_"):-len(".lua")]))
+    return out
+
+
+class CatalogMods(unittest.TestCase):
+    def test_catalog_has_the_three_mods(self):
+        self.assertEqual(catalog_ids(), ["dalaran-dice", "emote-wheel", "pings"])
+
+    def test_every_catalog_mod_passes_check_without_warnings(self):
+        for mid in catalog_ids():
+            r = wu.check_package(os.path.join(CATALOG, mid))
+            self.assertEqual(r.items, [], "%s:\n%s" % (mid, Base.dump(r)))
+            for env in ({}, {"WU_MOD_NO_LUAC": "1"}):
+                p = run("check", os.path.join(CATALOG, mid), env=env)
+                self.assertEqual(p.returncode, 0, p.stdout)
+
+    def test_kinds_and_permissions(self):
+        m = {mid: json.load(open(os.path.join(CATALOG, mid, "mod.json"))) for mid in catalog_ids()}
+        self.assertEqual((m["pings"]["kind"], m["pings"]["permissions"]), ("both", ["chat", "timers"]))
+        self.assertEqual(m["emote-wheel"]["kind"], "ui")
+        self.assertNotIn("permissions", m["emote-wheel"])
+
+    def test_dalaran_dice_matches_the_template(self):
+        for rel in ("realm/dalaran_dice.lua", "ui/DalaranDice/DalaranDice.lua", "ui/DalaranDice/DalaranDice.xml"):
+            self.assertEqual(open(os.path.join(TEMPLATE, rel)).read(),
+                             open(os.path.join(CATALOG, "dalaran-dice", rel)).read(), rel)
+
+    def test_pings_realm_uses_ovmod_without_require(self):
+        src = open(os.path.join(CATALOG, "pings", "realm", "pings.lua")).read()
+        self.assertNotIn("require", src)
+        self.assertIn('OVMod.On(MOD, "map", onMap)', src)
+
+    @unittest.skipUnless(LUA, "no lua interpreter")
+    def test_catalog_lua_tests_pass(self):
+        ran = 0
+        for mid in catalog_ids():
+            d = os.path.join(CATALOG, mid)
+            for test, target in lua_tests(d):
+                p = subprocess.run([LUA, test, target], cwd=d, capture_output=True, text=True)
+                self.assertEqual(p.returncode, 0, "%s %s\n%s%s" % (mid, test, p.stdout[-800:], p.stderr))
+                self.assertRegex(p.stdout, r"\n(\d+)/\1 passed")
+                ran += 1
+        self.assertGreaterEqual(ran, 5)
+
+
+class CatalogCommand(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="wu-cat-test-")
+        self.cat = os.path.join(self.tmp, "catalog")
+        shutil.copytree(CATALOG, self.cat)
+        self.out = os.path.join(self.tmp, "catalog.json")
+        self.dist = os.path.join(self.tmp, "dist")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def build(self, *extra):
+        return run("catalog", self.cat, "-o", self.out, "--dist", self.dist, *extra)
+
+    def test_writes_the_catalog(self):
+        p = self.build()
+        self.assertEqual(p.returncode, 0, p.stdout)
+        doc = json.load(open(self.out))
+        self.assertEqual(doc["format"], 1)
+        mods = {m["id"]: m for m in doc["mods"]}
+        self.assertEqual(sorted(mods), ["dalaran-dice", "emote-wheel", "pings"])
+        for k in ("id", "name", "version", "author", "licence", "kind", "description", "permissions",
+                  "screenshots", "sha256", "zip", "addons"):
+            self.assertIn(k, mods["pings"], k)
+        for m in mods.values():
+            z = os.path.join(self.dist, m["zip"])
+            self.assertEqual(m["sha256"], hashlib.sha256(open(z, "rb").read()).hexdigest())
+            self.assertEqual(m["size"], os.path.getsize(z))
+            self.assertTrue(os.path.isfile(z + ".sha256"))
+        self.assertEqual(mods["pings"]["addons"], ["WUPings"])
+        self.assertEqual(mods["pings"]["realm_files"], ["pings.lua"])
+        self.assertEqual(mods["emote-wheel"]["realm_files"], [])
+        self.assertEqual(mods["pings"]["screenshots"], ["assets/preview.png"])
+
+    def test_deterministic(self):
+        self.assertEqual(self.build().returncode, 0)
+        a = open(self.out, "rb").read()
+        self.assertEqual(self.build().returncode, 0)
+        self.assertEqual(open(self.out, "rb").read(), a)
+
+    def test_committed_catalog_json_is_current(self):
+        self.assertEqual(run("catalog", CATALOG, "-o", self.out, "--dist", self.dist).returncode, 0)
+        self.assertEqual(open(self.out).read(), open(os.path.join(ROOT, "catalog.json")).read(),
+                         "run: python3 mods/wu-mod.py catalog --dist /tmp/x  (and commit mods/catalog.json)")
+
+    def test_a_bad_mod_stops_everything(self):
+        with open(os.path.join(self.cat, "pings", "realm", "pings.lua"), "a") as f:
+            f.write('\nlocal f = io.open("x")\n')
+        p = self.build()
+        self.assertEqual(p.returncode, 1)
+        self.assertIn("pings", p.stdout)
+        self.assertIn("forbidden-api", p.stdout)
+        self.assertFalse(os.path.exists(self.out))
+
+    def test_folder_must_be_the_id(self):
+        os.rename(os.path.join(self.cat, "pings"), os.path.join(self.cat, "map-pings"))
+        p = self.build()
+        self.assertEqual(p.returncode, 1)
+        self.assertIn("[catalog-id]", p.stdout)
+
+    def test_addon_names_are_unique_and_not_reserved(self):
+        shutil.copytree(os.path.join(self.cat, "emote-wheel", "ui", "WUEmoteWheel"),
+                        os.path.join(self.cat, "pings", "ui", "WUEmoteWheel"))
+        p = self.build()
+        self.assertEqual(p.returncode, 1)
+        self.assertIn("already used by", p.stdout)
+        shutil.rmtree(os.path.join(self.cat, "pings", "ui", "WUEmoteWheel"))
+        ui = os.path.join(self.cat, "emote-wheel", "ui")
+        os.rename(os.path.join(ui, "WUEmoteWheel"), os.path.join(ui, "WrathUnleashedUI"))
+        os.rename(os.path.join(ui, "WrathUnleashedUI", "WUEmoteWheel.toc"), os.path.join(ui, "WrathUnleashedUI", "WrathUnleashedUI.toc"))
+        p = self.build()
+        self.assertEqual(p.returncode, 1)
+        self.assertIn("[catalog-addon]", p.stdout)
+
+    def test_empty_catalog(self):
+        empty = os.path.join(self.tmp, "empty")
+        os.mkdir(empty)
+        self.assertEqual(run("catalog", empty, "-o", self.out, "--dist", self.dist).returncode, 1)
+
+    def test_lua_mod_list_addon(self):
+        m = json.load(open(os.path.join(self.cat, "pings", "mod.json")))
+        m["description"] = 'Quotes " and \\ and a\nnew line'
+        json.dump(m, open(os.path.join(self.cat, "pings", "mod.json"), "w"))
+        gen = os.path.join(self.tmp, "addons")
+        self.assertEqual(self.build("--lua", gen).returncode, 0)
+        toc = open(os.path.join(gen, "WUModCatalog", "WUModCatalog.toc")).read()
+        self.assertIn("## Interface: 30300", toc)
+        lua = os.path.join(gen, "WUModCatalog", "WUModCatalog.lua")
+        self.assertIn('id = "pings"', open(lua).read())
+        if LUA:
+            p = subprocess.run([LUA, "-e", 'dofile(arg and arg[1] or "%s") for _, m in ipairs(WU_MOD_CATALOG) do '
+                                'if m.id == "pings" then io.write(m.description, "|", #WU_MOD_CATALOG, "|", m.addons[1]) end end'
+                                % lua.replace("\\", "/")], capture_output=True, text=True)
+            self.assertEqual(p.stdout, 'Quotes " and \\ and a\nnew line|3|WUPings', p.stderr)
+
+
 class Cli(unittest.TestCase):
     def test_usage(self):
         self.assertEqual(run().returncode, 2)

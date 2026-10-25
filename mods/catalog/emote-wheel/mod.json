@@ -1,0 +1,13 @@
+{
+  "id": "emote-wheel",
+  "name": "Emote Wheel",
+  "version": "0.1.0",
+  "author": "WrathUnleashed",
+  "licence": "MIT",
+  "kind": "ui",
+  "wu": "1.0",
+  "description": "Type /wheel (or set a key) for a ring of eight emotes at your cursor: wave, cheer, dance, laugh and more in one click. /wheel set 3 kiss puts your favourite in any slot.",
+  "screenshots": [
+    "assets/preview.png"
+  ]
+}

@@ -13964,7 +13964,7 @@ index 5dc172ee..38a9c1ad 100644
      /// `.xml` running its own `<Script file=>` in place.
      #[test]
 diff --git a/crates/benilla-app/src/ui_script/mod.rs b/crates/benilla-app/src/ui_script/mod.rs
-index d1156053..5d7c8579 100644
+index d1156053..35f20d0d 100644
 --- a/crates/benilla-app/src/ui_script/mod.rs
 +++ b/crates/benilla-app/src/ui_script/mod.rs
 @@ -13,6 +13,7 @@ use benilla_world::schedule::WorldStage;
@@ -14178,7 +14178,86 @@ index d1156053..5d7c8579 100644
              .init_resource::<glue_mgr::GlueMgr>()
              .init_resource::<UiFrameCost>()
              .init_resource::<crate::bindings::WheelNotches>()
-@@ -1125,12 +1265,57 @@ mod seam_scale_tests {
+@@ -420,6 +560,7 @@ impl Plugin for UiScriptPlugin {
+             )
+             // In the feed phase, so an `OnUpdate` reads this frame's `GetFramerate()`.
+             .add_systems(Update, feed_framerate.in_set(UiFeed))
++            .add_systems(Update, feed_display_events.in_set(UiFeed))
+             // The input pass hit-tests the rects the tick just resolved, and runs in-world only or
+             // on the stock glue screens.
+             .init_resource::<UiPassState>()
+@@ -498,6 +639,70 @@ pub(crate) use lifecycle::{
+ 
+ /// `GetFramerate()`'s host half: FPS on `Time<Real>`, smoothed by a one-second pole; how the
+ /// reference averages it is untraced.
++/// What [`feed_display_events`] last told a VM, and a change still settling.
++#[derive(Default)]
++pub(crate) struct DisplaySeen {
++    /// The window's logical size and the effective uiScale, as last announced.
++    size: Option<(u32, u32)>,
++    scale: Option<u32>,
++    /// The values awaiting [`DISPLAY_SETTLE_SECS`] of quiet, and since when.
++    pending: Option<((u32, u32), u32, f32)>,
++}
++
++/// A window drag or a phone's rotation moves the size every frame: the events wait this long
++/// after the last change, so a layout addon re-seats once.
++const DISPLAY_SETTLE_SECS: f32 = 0.25;
++
++/// `DISPLAY_SIZE_CHANGED` when the window's size moves and `UI_SCALE_CHANGED` when the effective
++/// uiScale does (the reference fires them on a mode set and a `uiScale` write), so a layout addon
++/// (Forever UI's glue `onScale`, the bar layout) re-seats after a browser resize, a rotation or the
++/// pixel-perfect scale following the canvas. The first values a VM sees are not a change.
++pub(crate) fn feed_display_events(
++    script: Option<NonSendMut<UiScript>>,
++    window: Query<&Window, With<bevy::window::PrimaryWindow>>,
++    scale: Res<UiScaleCvar>,
++    time: Res<Time<bevy::time::Real>>,
++    mut seen: Local<VmMemo<DisplaySeen>>,
++) {
++    let (Some(mut script), Ok(w)) = (script, window.single()) else {
++        return;
++    };
++    let size = (w.width().round() as u32, w.height().round() as u32);
++    let bits = scale.for_vm(script.vm_kind()).to_bits();
++    let now = time.elapsed_secs();
++    let s = seen.get(&script);
++    if s.size.is_none() {
++        s.size = Some(size);
++        s.scale = Some(bits);
++        return;
++    }
++    if s.size == Some(size) && s.scale == Some(bits) {
++        s.pending = None;
++        return;
++    }
++    match s.pending {
++        Some((ps, pb, since)) if ps == size && pb == bits => {
++            if now - since < DISPLAY_SETTLE_SECS {
++                return;
++            }
++        }
++        _ => {
++            s.pending = Some((size, bits, now));
++            return;
++        }
++    }
++    let (size_moved, scale_moved) = (s.size != Some(size), s.scale != Some(bits));
++    s.size = Some(size);
++    s.scale = Some(bits);
++    s.pending = None;
++    if size_moved {
++        script.queue_event("DISPLAY_SIZE_CHANGED", Vec::new());
++    }
++    if scale_moved {
++        script.queue_event("UI_SCALE_CHANGED", Vec::new());
++    }
++}
++
+ fn feed_framerate(
+     script: Option<NonSendMut<UiScript>>,
+     time: Res<Time<bevy::time::Real>>,
+@@ -1125,12 +1330,57 @@ mod seam_scale_tests {
      use super::seam_scale;
  
      #[test]
@@ -43552,10 +43631,10 @@ index 00000000..3d84ae8f
 \ No newline at end of file
 diff --git a/web/boot.js b/web/boot.js
 new file mode 100644
-index 00000000..01aeb836
+index 00000000..d18b83eb
 --- /dev/null
 +++ b/web/boot.js
-@@ -0,0 +1,985 @@
+@@ -0,0 +1,1050 @@
 +// boot.js — the pre-login loading experience, shared by the dev page (web/index.html) and the
 +// realm page (crates/wenilla-realm/templates/play.html).
 +//
@@ -43594,6 +43673,13 @@ index 00000000..01aeb836
 +
 +export async function boot(init, opts = {}) {
 +  installTouchAsMouse();
++  // A guest pass (the portal's /__env.js `demo: "1"`, with `char`): read before the client
++  // snapshots and the page may delete the env object.
++  try {
++    window.__wenilla_demo = !!(window.__wenilla_env && window.__wenilla_env.demo === '1');
++  } catch (_) {
++    /* no env */
++  }
 +  const q = new URLSearchParams(location.search);
 +  const ui = createBootUi();
 +  if (q.get('boottrace') === '1') window.__wenilla_boottrace = [];
@@ -44044,6 +44130,65 @@ index 00000000..01aeb836
 +/// in. A page layer that draws its own (`wenilla-cover` event, `preventDefault`-free) can set
 +/// `window.__wenilla_own_cover = true` to keep this one off.
 +let coverEl = null;
++/// The loading cover's line: a guest pass is going straight into the Goldshire Inn.
++export function coverLabel(demo) {
++  return demo ? 'Opening the Goldshire Inn…' : 'Loading…';
++}
++
++/// A guest pass skips character select (the client enters `char` itself): the cover stays up over
++/// the select screen until the world session starts, or drops after this long without one (the
++/// character was not on the account, so the list is the player's).
++const DEMO_SELECT_COVER_MS = 12000;
++let demoCoverTimer = null;
++function demoSelectCover(screen) {
++  if (typeof window === 'undefined' || !window.__wenilla_demo) return;
++  if (screen !== 'charselect') return;
++  showCover({ active: true, percent: 3 });
++  clearTimeout(demoCoverTimer);
++  demoCoverTimer = setTimeout(() => {
++    if (window.__wenilla_phase !== 'enter' && window.__wenilla_phase !== 'world') {
++      showCover({ active: false, percent: 100 });
++    }
++  }, DEMO_SELECT_COVER_MS);
++}
++
++/// The cover's state to the page: `window.__wenilla_cover`, a `wenilla-cover` event for a page
++/// layer that draws its own, and ours ([`coverScreen`]) unless the page said it draws it.
++function showCover(detail) {
++  detail.label = coverLabel(window.__wenilla_demo);
++  window.__wenilla_cover = detail;
++  try {
++    window.dispatchEvent(new CustomEvent('wenilla-cover', { detail }));
++  } catch (_) {
++    /* no listener */
++  }
++  coverScreen(detail);
++}
++
++/// A share link's destination (`window.wuGo = {kind, id}`, from `?go=`): a short toast once in the
++/// world, while the realm takes the player there.
++export function goToastText(go) {
++  if (!go || typeof go.id !== 'string' || !go.id) return null;
++  const what = { r: `the ${go.id} realm`, h: `the ${go.id} hangout`, q: `the ${go.id} queue`, m: `the ${go.id} mod`, u: go.id }[go.kind];
++  return what ? `Taking you to ${what}…` : null;
++}
++let goToastShown = false;
++function goToast() {
++  if (goToastShown || typeof document === 'undefined') return;
++  const text = goToastText(window.wuGo);
++  if (!text) return;
++  goToastShown = true;
++  const el = document.createElement('div');
++  el.setAttribute('role', 'status');
++  el.textContent = text;
++  el.style.cssText = 'position:fixed;left:50%;top:12%;transform:translateX(-50%);padding:8px 16px;border-radius:6px;' +
++    'background:rgba(10,8,18,.85);border:1px solid rgba(201,162,39,.55);color:#f4e2b0;font:600 14px system-ui,sans-serif;' +
++    'pointer-events:none;z-index:2147482000;transition:opacity .4s';
++  document.body.appendChild(el);
++  setTimeout(() => (el.style.opacity = '0'), 4000);
++  setTimeout(() => el.remove(), 4600);
++}
++
 +function coverScreen({ active, percent }) {
 +  if (typeof document === 'undefined' || window.__wenilla_own_cover) return;
 +  if (!active) {
@@ -44060,7 +44205,7 @@ index 00000000..01aeb836
 +      'justify-content:flex-end;padding-bottom:12vh;z-index:2147481000;pointer-events:none;' +
 +      `background:${bg && !/rgba\(0, 0, 0, 0\)/.test(bg) ? bg : '#000'};background-size:cover;background-position:center`;
 +    const label = document.createElement('div');
-+    label.textContent = 'Loading…';
++    label.textContent = coverLabel(window.__wenilla_demo);
 +    label.style.cssText = 'color:#ccc;font:15px system-ui,sans-serif;margin-bottom:10px';
 +    const bar = document.createElement('div');
 +    bar.style.cssText = 'width:min(420px,70vw);height:6px;background:#222;border-radius:3px;overflow:hidden';
@@ -44376,20 +44521,18 @@ index 00000000..01aeb836
 +      }
 +    } else if (reconnectDismissedBy(stage) && stage !== 'enter' && stage !== 'world') {
 +      reconnectOverlay(null);
-+      if (typeof stage === 'string' && stage.startsWith('glue:')) window.__wenilla_glue_screen = stage.slice(5);
++      if (typeof stage === 'string' && stage.startsWith('glue:')) {
++        window.__wenilla_glue_screen = stage.slice(5);
++        demoSelectCover(stage.slice(5));
++      }
 +    } else if (typeof stage === 'string' && stage.startsWith('cover:')) {
 +      // The client's loading cover (every one, teleports included, when the page signed in):
 +      // `cover:<percent>` while up, `cover:off` when down. The page draws its own screen for it;
 +      // `wenilla-cover` events carry {active, percent} for whatever page layer draws it.
 +      const v = stage.slice(6);
 +      const detail = v === 'off' ? { active: false, percent: 100 } : { active: true, percent: Number(v) || 0 };
-+      window.__wenilla_cover = detail;
-+      try {
-+        window.dispatchEvent(new CustomEvent('wenilla-cover', { detail }));
-+      } catch (_) {
-+        /* no listener */
-+      }
-+      coverScreen(detail);
++      if (detail.active) clearTimeout(demoCoverTimer);
++      showCover(detail);
 +    } else if (stage === 'ground-wait:1' || stage === 'ground-wait:0') {
 +      groundWaitLine(stage === 'ground-wait:1');
 +    } else if (stage === 'textfocus:1' || stage === 'textfocus:0') {
@@ -44421,6 +44564,7 @@ index 00000000..01aeb836
 +      reconnectOverlay(null);
 +      window.__wenilla_phase = 'world';
 +      focusCanvas();
++      goToast();
 +      logMemory('entering the world');
 +      dropGlueBodies();
 +      // Settled numbers, once the entry's own transients are gone.
@@ -45729,10 +45873,10 @@ index 00000000..6910bf45
 +});
 diff --git a/web/tests/boot.test.mjs b/web/tests/boot.test.mjs
 new file mode 100644
-index 00000000..4d4152d8
+index 00000000..9a2d05d6
 --- /dev/null
 +++ b/web/tests/boot.test.mjs
-@@ -0,0 +1,108 @@
+@@ -0,0 +1,118 @@
 +import assert from 'node:assert/strict';
 +import { readFile } from 'node:fs/promises';
 +import test from 'node:test';
@@ -45840,6 +45984,16 @@ index 00000000..4d4152d8
 +  assert.equal(touchToMouse(touch('pointercancel'))[0].type, 'pointerup');
 +  assert.equal(touchToMouse(touch('pointerdown', { isPrimary: false })), null, 'a second finger is left alone');
 +  assert.equal(touchToMouse({ type: 'pointerdown', pointerType: 'mouse', isPrimary: true }), null, 'a mouse is untouched');
++});
++
++test('a guest pass covers with the inn line, and a share link names where it goes', async () => {
++  const { coverLabel, goToastText } = await import('../boot.js');
++  assert.equal(coverLabel(true), 'Opening the Goldshire Inn…');
++  assert.equal(coverLabel(false), 'Loading…');
++  assert.equal(goToastText({ kind: 'h', id: 'goldshire' }), 'Taking you to the goldshire hangout…');
++  assert.equal(goToastText({ kind: 'u', id: 'Elza' }), 'Taking you to Elza…');
++  assert.equal(goToastText({ kind: 'x', id: 'a' }), null);
++  assert.equal(goToastText(null), null);
 +});
 diff --git a/web/tests/journal.test.mjs b/web/tests/journal.test.mjs
 new file mode 100644

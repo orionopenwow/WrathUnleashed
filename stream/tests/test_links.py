@@ -105,8 +105,8 @@ check("html, no-store, CSP", hd.get("Content-Type", "").startswith("text/html") 
 check("GET bad link is 200 card", get("/q/%3Cscript%3E")[0] == 200 and "Traceback" not in get("/u/!!!")[2])
 check("GET /wrath/m/better-bags", get("/wrath/m/better-bags")[0] == 200)
 check("other paths unchanged", get("/nope")[0] == 404)
-codes = [get("/h/x", ip="198.51.100.9")[0] for _ in range(125)]
-check("rate limit like /wrath/leyline (120/min)", codes.count(200) == 120 and codes[-1] == 429, (codes.count(200), codes[-1]))
+codes = [get("/h/x", ip="198.51.100.9")[0] for _ in range(605)]
+check("rate limit like /wrath/leyline (600/min)", codes.count(200) == 600 and codes[-1] == 429, (codes.count(200), codes[-1]))
 srv.shutdown()
 
 # --- the deep link survives sign-in: /wrath -> /wrath/play -> /__gate -> the game page

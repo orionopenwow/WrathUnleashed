@@ -65,6 +65,21 @@ Only files you made or may redistribute. Every file in `assets/` is listed in `a
 
 `wu-mod.py pack <dir>` checks the mod, then writes `<id>-<version>.zip` (sorted entries under `<id>/`, fixed timestamps and modes, so the same files always give the same bytes) and `<id>-<version>.zip.sha256`. A realm installs `realm/` under its mod-ale `lua_scripts/mods/<id>/`, and the client installs each `ui/<Name>/` as an addon.
 
+## The catalog
+
+Approved mods live in `mods/catalog/<id>/` (the folder name is the mod id). `wu-mod.py catalog` checks every one
+(one failure and nothing is written), packs each into `dist/`, and writes `mods/catalog.json`: per mod its id, name,
+version, author, licence, kind, wu, description, permissions, screenshots, links, `addons` (the `ui/` folder names),
+`realm_files`, `zip`, `sha256` and `size`. The same files always give the same JSON. Addon folder names must be unique
+across the catalog and may not be `ForeverUI`, `WrathUnleashedUI` or `WUModCatalog`. `--lua <dir>` also writes the
+`WUModCatalog` addon (`WU_MOD_CATALOG = { ... }`), which the in-game Workshop tab reads.
+
+The `mods` step (`mods/Put mods on Wrath.bat`, Autopilot step `mods`) puts the whole catalog live in one SSH
+connection (`stream/server/mods-install.sh`): realm halves into `lua_scripts/mods/<id>/` with a live `reload ale`
+(rolled back on a refused reload or a Lua error from `mods/`), addon halves into the streamed client
+(`stream/server/mods-overlay.py`, beside Forever UI's overlay), and catalog.json, zips and screenshots to the site,
+where players browse them at `/wrath/mods`.
+
 ## How this fits the larger plans
 
 - This is the MVP from the community release plan ("WU mod package"). Later steps there: `wu-mod test` against a local test realm, human review for anything realm-side, and signed packages once approved.

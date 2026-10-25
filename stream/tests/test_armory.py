@@ -251,8 +251,8 @@ check("GET /wrath/u/Arthas card", "level 80 Human Paladin" in get("/wrath/u/Arth
 check("GET leyline page links the armory", 'href="/wrath/armory"' in get("/wrath/leyline")[2])
 codes = [get("/wrath/armory?q=ar", ip="198.51.100.20")[0] for _ in range(32)]
 check("search rate limit (30/min)", codes.count(200) == 30 and codes[-1] == 429, (codes.count(200), codes[-1]))
-codes = [get("/wrath/armory/Arthas", ip="198.51.100.21")[0] for _ in range(122)]
-check("page rate limit (120/min)", codes.count(200) == 120 and codes[-1] == 429, (codes.count(200), codes[-1]))
+codes = [get("/wrath/armory/Arthas", ip="198.51.100.21")[0] for _ in range(602)]
+check("page rate limit (600/min)", codes.count(200) == 600 and codes[-1] == 429, (codes.count(200), codes[-1]))
 srv.shutdown()
 
 # --- no game-brand names in the new files' visible strings --------------------------------------------

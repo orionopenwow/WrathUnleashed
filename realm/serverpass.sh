@@ -106,9 +106,26 @@ for kv in AC_DUNGEON_ACCESS_REQUIREMENTS_LFGLEVEL_DBCOVERRIDE=1 AC_ALLOW_TWO_SID
   echo "  $k=$v"
 done
 
-[ -z "$NEW" ] || need=1
+# Scripts the running world server has not loaded yet, even from an earlier pass: $DST/.ov-loaded lists
+# what the last successful load (restart or reload) had; without it, anything newer than the server's start.
+envchange=$need
+LOADED_LIST="$DST/.ov-loaded"
+start_epoch=$(date -d "$(docker inspect -f '{{.State.StartedAt}}' ov-ac-worldserver 2>/dev/null || echo now)" +%s 2>/dev/null || date +%s)
+for f in "$DST"/*.lua; do
+  [ -f "$f" ] || continue
+  b=$(basename "$f")
+  case " $NEW " in *" $b "*) continue ;; esac
+  if [ -f "$LOADED_LIST" ]; then
+    grep -qxF "$b" "$LOADED_LIST" || NEW="$NEW $b"
+  elif [ "$(stat -c %Y "$f")" -gt "$start_epoch" ]; then
+    NEW="$NEW $b"
+  fi
+done
+[ -z "$NEW" ] || { echo "  not yet loaded by the world server:$NEW (a restart loads them)"; need=1; }
+mark_loaded() { (cd "$DST" && ls -1 *.lua 2>/dev/null) > "$LOADED_LIST" || true; }
 if [ "$need" = 0 ] && [ "$changed" = 0 ]; then
   echo "== 4. settings and scripts already live: nothing to reload"
+  [ -f "$LOADED_LIST" ] || mark_loaded
 elif [ "$need" = 0 ]; then
   echo "== 4. settings already live: reloading the changed scripts"
   out=$(bash soap-cmd.sh "reload ale" 2>&1) || {
@@ -119,6 +136,7 @@ elif [ "$need" = 0 ]; then
     die "reload ale refused ($out); the previous scripts are back"
   }
   echo "  reload ale: ${out:-ok}"
+  mark_loaded
 else
   MIN=${SERVERPASS_WARN_MIN:-5}
   if [ "$MIN" -gt 0 ]; then
@@ -129,10 +147,19 @@ else
     sleep 60
     bash soap-cmd.sh "saveall" >/dev/null 2>&1 || true
   fi
-  echo "== recreating the world server (2-10 minutes)"
   started() { docker inspect -f '{{.State.StartedAt}}' ov-ac-worldserver; }
-  docker compose up -d --no-deps ac-worldserver
+  before=$(started)
+  if [ "$envchange" = 1 ]; then
+    echo "== recreating the world server for the new settings (2-10 minutes)"
+    docker compose up -d --no-deps ac-worldserver
+  fi
+  # "compose up" leaves a running container alone when its settings are the same (scripts only): restart it
+  if [ "$(started)" = "$before" ]; then
+    echo "== restarting the world server to load the scripts (2-10 minutes)"
+    docker restart ov-ac-worldserver >/dev/null
+  fi
   sleep 3
+  [ "$(started)" != "$before" ] || die "the world server did not restart. Backups: $BK"
   ok=0
   for i in $(seq 1 120); do
     if docker logs --since "$(started)" ov-ac-worldserver 2>&1 | grep -F 'ready...' >/dev/null; then ok=1; break; fi
@@ -141,6 +168,7 @@ else
   done
   [ "$ok" = 1 ] || die "the world server did not report ready in 20 min: docker logs --tail 80 ov-ac-worldserver. Backups: $BK"
   echo "  world server ready"
+  mark_loaded
 fi
 sleep 2
 if docker logs --since 60s ov-ac-worldserver 2>&1 | grep -iE 'lua.*(error|failed)|ALE.*error' | tail -5 | grep . ; then

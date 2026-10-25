@@ -4,6 +4,7 @@
     python3 wu-mod.py check <dir|zip>      validate a mod package (exit 1 on errors)
     python3 wu-mod.py new <id> [--dir D]   make a new mod from the template
     python3 wu-mod.py pack <dir> [-o D]    check, then write <id>-<version>.zip and .sha256
+    python3 wu-mod.py catalog              check and pack every mod in catalog/, write catalog.json
 
 Python 3.8+, standard library only. Uses `luac5.1 -p` for Lua syntax when it is installed,
 otherwise a small built-in parser (set WU_MOD_NO_LUAC=1 to force the built-in one).
@@ -1167,6 +1168,26 @@ def cmd_new(mod_id, parent):
 ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
 
 
+def write_zip(root, files, mod_id, zpath):
+    """The package zip: sorted entries under <id>/, fixed timestamps and modes (same files, same bytes)."""
+    with zipfile.ZipFile(zpath, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+        for rel in sorted(files):
+            info = zipfile.ZipInfo("%s/%s" % (mod_id, rel), date_time=ZIP_EPOCH)
+            info.external_attr = 0o100644 << 16
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.create_system = 3
+            with open(os.path.join(root, rel), "rb") as fh:
+                zf.writestr(info, fh.read(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+    h = hashlib.sha256()
+    with open(zpath, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 16), b""):
+            h.update(chunk)
+    digest = h.hexdigest()
+    with open(zpath + ".sha256", "w", encoding="utf-8", newline="\n") as fh:
+        fh.write("%s  %s\n" % (digest, os.path.basename(zpath)))
+    return digest
+
+
 def cmd_pack(path, out_dir):
     report = check_package(path)
     if report.errors:
@@ -1179,24 +1200,143 @@ def cmd_pack(path, out_dir):
     name = "%s-%s.zip" % (m["id"], m["version"])
     os.makedirs(out_dir, exist_ok=True)
     zpath = os.path.join(out_dir, name)
-    with zipfile.ZipFile(zpath, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
-        for rel in sorted(files):
-            info = zipfile.ZipInfo("%s/%s" % (m["id"], rel), date_time=ZIP_EPOCH)
-            info.external_attr = 0o100644 << 16
-            info.compress_type = zipfile.ZIP_DEFLATED
-            info.create_system = 3
-            with open(os.path.join(root, rel), "rb") as fh:
-                zf.writestr(info, fh.read(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
-    h = hashlib.sha256()
-    with open(zpath, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 16), b""):
-            h.update(chunk)
-    digest = h.hexdigest()
-    with open(zpath + ".sha256", "w", encoding="utf-8", newline="\n") as fh:
-        fh.write("%s  %s\n" % (digest, name))
+    digest = write_zip(root, files, m["id"], zpath)
     n_warn = len(report.items)
     print("Packed %s (%d files, %d warning(s))" % (zpath, len(files), n_warn))
     print("sha256 %s" % digest)
+    return 0
+
+
+# ---------------------------------------------------------------- catalog
+
+CATALOG_DIR = os.path.join(HERE, "catalog")
+CATALOG_JSON = os.path.join(HERE, "catalog.json")
+CATALOG_DIST = os.path.join(HERE, "dist")
+CATALOG_FORMAT = 1
+CATALOG_ADDON = "WUModCatalog"     # the generated addon that tells the in-game Workshop tab what is installed
+# Addon folder names a catalog mod may not use: the realm's own addons ship through the foreverui step.
+RESERVED_ADDONS = {"foreverui", "wrathunleashedui", CATALOG_ADDON.lower()}
+
+
+def ui_addons(files):
+    return sorted({f.split("/")[1] for f in files if f.startswith("ui/") and f.count("/") >= 2})
+
+
+def catalog_entry(files, m, zname, digest, size):
+    return {
+        "id": m["id"], "name": m["name"], "version": m["version"], "author": m["author"],
+        "licence": m["licence"], "kind": m["kind"], "wu": m["wu"], "description": m["description"],
+        "permissions": list(m.get("permissions", [])),
+        "screenshots": list(m.get("screenshots", [])),
+        "links": list(m.get("links", [])),
+        "addons": ui_addons(files),
+        "realm_files": sorted(f[len("realm/"):] for f in files if f.startswith("realm/") and f.endswith(".lua")),
+        "zip": zname, "sha256": digest, "size": size,
+    }
+
+
+def build_catalog(cat_dir, dist):
+    """Check every mod in cat_dir and pack it into dist. Returns (catalog dict or None, list of problems)."""
+    problems, mods, addon_owner = [], [], {}
+    if not os.path.isdir(cat_dir):
+        return None, ["%s: no catalog folder" % cat_dir]
+    names = sorted(d for d in os.listdir(cat_dir) if d not in IGNORED_NAMES and not d.startswith("."))
+    folders = [d for d in names if os.path.isdir(os.path.join(cat_dir, d))]
+    if not folders:
+        return None, ["%s: the catalog is empty" % cat_dir]
+    os.makedirs(dist, exist_ok=True)
+    for d in folders:
+        root = os.path.join(cat_dir, d)
+        report = check_package(root)
+        if report.errors:
+            for level, code, where, msg, fix in report.errors:
+                problems.append("%s: %s  [%s] %s" % (d, where or "-", code, msg))
+            continue
+        m = report.manifest
+        if m["id"] != d:
+            problems.append("%s: [catalog-id] the folder name must be the mod id (%s)" % (d, m["id"]))
+            continue
+        files = walk_files(root, Report())
+        for a in ui_addons(files):
+            if a.lower() in RESERVED_ADDONS:
+                problems.append("%s: [catalog-addon] ui/%s/ is a name the realm's own addons use" % (d, a))
+            elif a.lower() in addon_owner:
+                problems.append("%s: [catalog-addon] ui/%s/ is already used by %s" % (d, a, addon_owner[a.lower()]))
+            else:
+                addon_owner[a.lower()] = d
+        zname = "%s-%s.zip" % (m["id"], m["version"])
+        zpath = os.path.join(dist, zname)
+        digest = write_zip(root, files, m["id"], zpath)
+        mods.append(catalog_entry(files, m, zname, digest, os.path.getsize(zpath)))
+    if problems:
+        return None, problems
+    return {"format": CATALOG_FORMAT, "tool": "wu-mod %s" % TOOL_VERSION, "mods": mods}, []
+
+
+def lua_str(s):
+    out = []
+    for ch in str(s):
+        o = ord(ch)
+        if ch == "\\":
+            out.append("\\\\")
+        elif ch == '"':
+            out.append('\\"')
+        elif ch == "\n":
+            out.append("\\n")
+        elif o < 32 or o == 127:
+            out.append("\\%03d" % o)
+        else:
+            out.append(ch)
+    return '"' + "".join(out) + '"'
+
+
+def catalog_lua(catalog):
+    """WUModCatalog.lua: the installed catalog as a Lua table for the in-game Workshop tab (ModsPanel.lua)."""
+    lines = ["-- Generated by wu-mod.py catalog: the mods installed on this realm (do not edit).",
+             "WU_MOD_CATALOG = {"]
+    for e in catalog["mods"]:
+        lst = lambda xs: "{ " + ", ".join(lua_str(x) for x in xs) + " }"
+        lines.append("    { id = %s, name = %s, version = %s, author = %s, kind = %s, description = %s, "
+                     "permissions = %s, addons = %s }," % (
+                         lua_str(e["id"]), lua_str(e["name"]), lua_str(e["version"]), lua_str(e["author"]),
+                         lua_str(e["kind"]), lua_str(e["description"]), lst(e["permissions"]), lst(e["addons"])))
+    lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
+CATALOG_TOC = """## Interface: 30300
+## Title: Mod list (WrathUnleashed)
+## Notes: The list of mods installed on this realm, for Esc > Mods & Workshop > Workshop. Made by wu-mod.py.
+## Author: WrathUnleashed
+WUModCatalog.lua
+"""
+
+
+def write_catalog_addon(catalog, parent):
+    d = os.path.join(parent, CATALOG_ADDON)
+    os.makedirs(d, exist_ok=True)
+    for name, text in (("WUModCatalog.toc", CATALOG_TOC), ("WUModCatalog.lua", catalog_lua(catalog))):
+        with open(os.path.join(d, name), "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
+    return d
+
+
+def cmd_catalog(cat_dir, out_json, dist, lua_dir):
+    catalog, problems = build_catalog(cat_dir, dist)
+    if problems:
+        for p in problems:
+            print("ERROR " + p)
+        print("\nCatalog not written: fix the problems above (run `wu-mod.py check <mod>` for the fix lines).")
+        return 1
+    text = json.dumps(catalog, indent=2, sort_keys=True) + "\n"
+    os.makedirs(os.path.dirname(os.path.abspath(out_json)), exist_ok=True)
+    with open(out_json, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(text)
+    if lua_dir:
+        write_catalog_addon(catalog, lua_dir)
+    for e in catalog["mods"]:
+        print("  %-20s %-8s %-5s %s" % (e["id"], e["version"], e["kind"], e["sha256"][:16]))
+    print("Catalog: %d mod(s) -> %s (zips in %s)" % (len(catalog["mods"]), out_json, dist))
     return 0
 
 
@@ -1204,6 +1344,10 @@ USAGE = """usage:
   wu-mod.py check <dir|zip>       validate a mod package
   wu-mod.py new <id> [--dir D]    create a mod from the template (in D, default: current folder)
   wu-mod.py pack <dir> [-o D]     check, then write <id>-<version>.zip and .sha256 (in D, default: current folder)
+  wu-mod.py catalog [<dir>] [-o catalog.json] [--dist D] [--lua D]
+                                  check and pack every mod in <dir> (default: catalog/ beside this file), then
+                                  write catalog.json (default: beside this file; zips in dist/) and, with --lua,
+                                  the WUModCatalog addon for the in-game Workshop tab into D
   wu-mod.py --version
 """
 
@@ -1238,6 +1382,12 @@ def main(argv):
         d = opt(("-o", "--out"), ".")
         if len(rest) == 1:
             return cmd_pack(rest[0], d)
+    if cmd == "catalog":
+        out = opt(("-o", "--out"), CATALOG_JSON)
+        dist = opt(("--dist",), CATALOG_DIST)
+        lua = opt(("--lua",), None)
+        if len(rest) <= 1:
+            return cmd_catalog(rest[0] if rest else CATALOG_DIR, out, dist, lua)
     sys.stderr.write(USAGE)
     return 2
 

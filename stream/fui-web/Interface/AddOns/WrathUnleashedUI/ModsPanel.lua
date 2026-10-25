@@ -1,7 +1,8 @@
 -- Esc > Mods & Workshop (3.3.5a API): the in-game front door of the WrathUnleashed mod workshop.
 --   Interface: UI size slider (modern size by default), action bars on, fill my bars.
 --   Installed:  every addon in this client with an on/off switch (takes effect after Reload UI).
---   Workshop:   where mods, tweaks and repos live (the workshop site, the GitHub repos), to copy.
+--   Workshop:   the Workshop mods this realm runs (WU_MOD_CATALOG, from the generated WUModCatalog addon),
+--               with on/off for their addons, and the links (the Workshop site, the repos), to copy.
 -- The button is named GameMenuButtonAddOns: Forever UI's game menu keeps a place for that name
 -- (after Ratings), skins it and lays it out with the other buttons.
 
@@ -9,11 +10,10 @@ local W = WrathUnleashedUI
 local PANEL_W, PANEL_H, ROW_H, ROWS = 460, 470, 22, 12
 
 local WORKSHOP = {
-    { "Workshop site (mods, modes, tweaks): opening soon", "https://play.openvanilla.app/wrath" },
-    { "WrathUnleashed (this realm, open source)", "https://github.com/orionopenwow/WrathUnleashed" },
-    { "Forever UI (the modern interface, GPL-2)", "https://github.com/Adrestie/mod-forever-ui" },
-    { "Make a mod: the WU mod format", "https://github.com/orionopenwow/WrathUnleashed/tree/main/mods" },
-    { "Report a bug: type .bug and what happened", "" },
+    { "Every mod", "https://play.openvanilla.app/wrath/mods" },
+    { "Make a mod", "https://github.com/orionopenwow/WrathUnleashed/tree/main/mods" },
+    { "This realm's code", "https://github.com/orionopenwow/WrathUnleashed" },
+    { "Forever UI (GPL-2)", "https://github.com/Adrestie/mod-forever-ui" },
 }
 
 local panel
@@ -41,6 +41,7 @@ local function showTab(n)
         panel.tabs[i]:SetAlpha(i == n and 1 or 0.6)
     end
     if n == 2 then panel.RefreshAddons() end
+    if n == 3 and panel.RefreshWorkshop then panel.RefreshWorkshop() end
 end
 
 local function buildInterface(page)
@@ -133,8 +134,46 @@ local function buildInstalled(page)
     panel.RefreshAddons = refresh
 end
 
+-- The catalog mods this realm runs: WU_MOD_CATALOG, from the WUModCatalog addon that the "mods" step
+-- (wu-mod.py catalog --lua) generates and streams with the mods' own addons.
+local KIND_LABEL = { ui = "Addon", realm = "Realm", both = "Realm + addon" }
+
+-- The rows for the Workshop list: { id, title, line, addons, kind } per mod, sorted by name.
+function W.CatalogRows(catalog)
+    local rows = {}
+    for _, m in ipairs(type(catalog) == "table" and catalog or {}) do
+        if type(m) == "table" and type(m.id) == "string" and type(m.name) == "string" then
+            rows[#rows + 1] = {
+                id = m.id, kind = m.kind, name = m.name,
+                title = string.format("%s |cff9d9d9dv%s - %s|r", m.name, tostring(m.version or "?"), KIND_LABEL[m.kind] or "Mod"),
+                line = tostring(m.description or ""),
+                addons = type(m.addons) == "table" and m.addons or {},
+            }
+        end
+    end
+    table.sort(rows, function(a, b) return a.name:lower() < b.name:lower() end)
+    return rows
+end
+
+-- On when every addon of the mod is enabled (GetAddOnInfo's 4th value); nil when it has none.
+function W.ModAddonsOn(row)
+    if #row.addons == 0 then return nil end
+    for _, name in ipairs(row.addons) do
+        local _, _, _, enabled = GetAddOnInfo(name)
+        if not enabled then return false end
+    end
+    return true
+end
+
+function W.SetModAddons(row, on)
+    for _, name in ipairs(row.addons) do
+        if on then pcall(EnableAddOn, name) else pcall(DisableAddOn, name) end
+    end
+end
+
 local function buildWorkshop(page)
-    label(page, "Mods, modes, tweaks and repos. Click a line to copy its address.", "GameFontHighlightSmall", "TOPLEFT", 16, -12)
+    local MOD_ROWS, MOD_H = 4, 42
+    label(page, "Mods on this realm. Untick an addon to turn it off (after Reload UI).", "GameFontHighlightSmall", "TOPLEFT", 16, -12)
     local box = CreateFrame("EditBox", nil, page, "InputBoxTemplate")
     box:SetWidth(PANEL_W - 50); box:SetHeight(20)
     box:SetPoint("BOTTOMLEFT", 22, 46)
@@ -142,20 +181,61 @@ local function buildWorkshop(page)
     box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     box:SetScript("OnTextChanged", function(self) if self.fixed and self:GetText() ~= self.fixed then self:SetText(self.fixed) end end)
     label(page, "Ctrl+C copies the address above.", "GameFontDisableSmall", "BOTTOMLEFT", 22, 30)
+    local function copy(url)
+        if url == "" then return end
+        box.fixed = url; box:SetText(url); box:SetFocus(); box:HighlightText()
+    end
+
+    local rows, offset = {}, 0
+    for i = 1, MOD_ROWS do
+        local y = -30 - (i - 1) * MOD_H
+        local cb = CreateFrame("CheckButton", nil, page, "UICheckButtonTemplate")
+        cb:SetWidth(22); cb:SetHeight(22)
+        cb:SetPoint("TOPLEFT", 14, y)
+        cb:SetScript("OnClick", function(self)
+            if self.row then W.SetModAddons(self.row, self:GetChecked() and true or false) end
+        end)
+        cb.title = label(page, "", "GameFontNormal", "TOPLEFT", 40, y - 2)
+        cb.title:SetWidth(PANEL_W - 70)
+        cb.line = label(page, "", "GameFontHighlightSmall", "TOPLEFT", 40, y - 18)
+        cb.line:SetWidth(PANEL_W - 70); cb.line:SetHeight(20)
+        cb.realm = label(page, "realm", "GameFontDisableSmall", "TOPLEFT", 12, y - 6)
+        rows[i] = cb
+    end
+    local by = -30 - MOD_ROWS * MOD_H
+    local count = label(page, "", "GameFontHighlightSmall", "TOPLEFT", 16, by - 6)
+    local function refresh()
+        local list = W.CatalogRows(WU_MOD_CATALOG)
+        if offset > math.max(0, #list - MOD_ROWS) then offset = math.max(0, #list - MOD_ROWS) end
+        for i, cb in ipairs(rows) do
+            local row = list[offset + i]
+            cb.row = row
+            if row then
+                cb.title:SetText(row.title); cb.line:SetText(row.line)
+                cb.title:Show(); cb.line:Show()
+                local on = W.ModAddonsOn(row)
+                if on == nil then cb:Hide(); cb.realm:Show() else cb:SetChecked(on); cb:Show(); cb.realm:Hide() end
+            else
+                cb:Hide(); cb.title:Hide(); cb.line:Hide(); cb.realm:Hide()
+            end
+        end
+        count:SetText(#list == 0 and "No Workshop mods on this realm yet."
+            or string.format("%d-%d of %d", offset + 1, math.min(#list, offset + MOD_ROWS), #list))
+        page.rows, page.list = rows, list
+    end
+    button(page, "Up", 50, function() offset = math.max(0, offset - MOD_ROWS); refresh() end, "TOPLEFT", 150, by)
+    button(page, "Down", 60, function() offset = offset + MOD_ROWS; refresh() end, "TOPLEFT", 204, by)
+    button(page, "Reload UI", 90, function() ReloadUI() end, "TOPLEFT", 270, by)
     for i, e in ipairs(WORKSHOP) do
         local b = CreateFrame("Button", nil, page)
-        b:SetWidth(PANEL_W - 40); b:SetHeight(36)
-        b:SetPoint("TOPLEFT", 16, -30 - (i - 1) * 40)
-        local t = label(b, e[1], "GameFontNormal", "TOPLEFT", 0, 0)
-        label(b, e[2] ~= "" and e[2] or " ", "GameFontHighlightSmall", "TOPLEFT", t, "BOTTOMLEFT", 0, -2)
+        b:SetWidth(PANEL_W - 40); b:SetHeight(16)
+        b:SetPoint("TOPLEFT", 16, by - 30 - (i - 1) * 17)
+        b.label = label(b, e[1] .. ": |cff9d9d9d" .. e[2] .. "|r", "GameFontHighlightSmall", "LEFT", 0, 0)
         b:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
-        b:SetScript("OnClick", function()
-            if e[2] == "" then return end
-            box.fixed = e[2]; box:SetText(e[2]); box:SetFocus(); box:HighlightText()
-        end)
+        b:SetScript("OnClick", function() copy(e[2]) end)
     end
-    label(page, "Coming: browse and install mods here in one click, and host your own realm with a link.",
-        "GameFontHighlightSmall", "TOPLEFT", 16, -30 - #WORKSHOP * 40 - 6):SetWidth(PANEL_W - 40)
+    page.copyBox = box
+    panel.RefreshWorkshop = refresh
 end
 
 local function build()

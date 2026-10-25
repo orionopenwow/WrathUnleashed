@@ -24,6 +24,8 @@ had_armory=""
 if [ -f "$WU/portal/armory.py" ]; then cp -p "$WU/portal/armory.py" "$BK/armory.py"; had_armory=1; fi
 had_modes=""
 if [ -f "$WU/portal/modes.py" ]; then cp -p "$WU/portal/modes.py" "$BK/"; [ ! -f "$WU/portal/modes_data.py" ] || cp -p "$WU/portal/modes_data.py" "$BK/"; had_modes=1; fi
+had_workshop=""
+if [ -f "$WU/portal/workshop.py" ]; then cp -p "$WU/portal/workshop.py" "$BK/workshop.py"; had_workshop=1; fi
 had_art=""
 rm -rf "$BK/art"
 if [ -d "$WU/portal/art" ]; then cp -a "$WU/portal/art" "$BK/art"; had_art=1; fi
@@ -34,6 +36,7 @@ put_back() {
   if [ -n "$had_armory" ]; then cp -p "$BK/armory.py" "$WU/portal/armory.py"; else rm -f "$WU/portal/armory.py"; fi
   if [ -n "$had_modes" ]; then cp -p "$BK/modes.py" "$WU/portal/modes.py"; [ ! -f "$BK/modes_data.py" ] || cp -p "$BK/modes_data.py" "$WU/portal/modes_data.py"
   else rm -f "$WU/portal/modes.py" "$WU/portal/modes_data.py"; fi
+  if [ -n "$had_workshop" ]; then cp -p "$BK/workshop.py" "$WU/portal/workshop.py"; else rm -f "$WU/portal/workshop.py"; fi
   rm -rf "$WU/portal/art"
   if [ -n "$had_art" ]; then cp -a "$BK/art" "$WU/portal/art"; fi
 }
@@ -50,6 +53,8 @@ fi
 if [ -f demo.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' demo.py && install -m 644 demo.py "$WU/portal/demo.py"; fi
 # the web armory (/wrath/armory): optional; it reads $WU/portal/armory/, which armory-export.py fills (realm/serverpass.sh)
 if [ -f armory.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' armory.py && install -m 644 armory.py "$WU/portal/armory.py"; fi
+# the mods Workshop (/wrath/mods): optional; its data comes from the "mods" step ($WU/portal/mods)
+if [ -f workshop.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' workshop.py && install -m 644 workshop.py "$WU/portal/workshop.py"; fi
 if [ -d www-files/art ] && [ -f www-files/art/wu-theme.css ]; then
   install -d -m 755 "$WU/portal/art"
   install -m 644 www-files/art/* "$WU/portal/art/"
@@ -115,6 +120,8 @@ c5=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/w
 echo "  /wrath/q/258 share link (200 = links on): $c5"
 c6=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/armory || true)
 echo "  /wrath/armory (200 = the armory is on): $c6"
+c7=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/mods || true)
+echo "  /wrath/mods Workshop (200 = on): $c7"
 echo "  warm.html (public): $c1   /data (must stay gated, 302/401/403): $c2   /wrath signed out (200 = saved-key page): $c3"
 echo "  /wrath/art/wu-card.webp (200 = the art is served): $c4"
 echo "  backups: $BK"
