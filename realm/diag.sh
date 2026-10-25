@@ -15,8 +15,10 @@ soap "lfg options"
 soap "lfg queue"
 echo; echo "== Lua scripts loaded"
 ls -1 custom/lua_scripts/ | tr '\n' ' '; echo
-echo; echo "== recent world server errors (last 30 min, deduplicated)"
-docker logs --since 30m ov-ac-worldserver 2>&1 | grep -iE 'error|lua|ale|lfg|crash|assert|exception' | sed -E 's/[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9:.]+//' | sort | uniq -c | sort -rn | head -40
+echo; echo "== world server: started at / restarts / state"
+docker inspect -f '{{.State.StartedAt}} restarts={{.RestartCount}} status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}}' ov-ac-worldserver 2>&1
+echo; echo "== recent world server errors (last 90 min, deduplicated)"
+docker logs --since 90m ov-ac-worldserver 2>&1 | grep -iE 'error|lua|ale|lfg|crash|assert|exception' | sed -E 's/[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9:.]+//' | sort | uniq -c | sort -rn | head -40
 echo; echo "== world server: last 25 lines"
 docker logs --tail 25 ov-ac-worldserver 2>&1 | cut -c1-220
 echo; echo "DIAG OK"

@@ -20,6 +20,10 @@ had_links=""
 if [ -f "$WU/portal/links.py" ]; then cp -p "$WU/portal/links.py" "$BK/links.py"; had_links=1; fi
 had_demo=""
 if [ -f "$WU/portal/demo.py" ]; then cp -p "$WU/portal/demo.py" "$BK/demo.py"; had_demo=1; fi
+had_armory=""
+if [ -f "$WU/portal/armory.py" ]; then cp -p "$WU/portal/armory.py" "$BK/armory.py"; had_armory=1; fi
+had_modes=""
+if [ -f "$WU/portal/modes.py" ]; then cp -p "$WU/portal/modes.py" "$BK/"; [ ! -f "$WU/portal/modes_data.py" ] || cp -p "$WU/portal/modes_data.py" "$BK/"; had_modes=1; fi
 had_art=""
 rm -rf "$BK/art"
 if [ -d "$WU/portal/art" ]; then cp -a "$WU/portal/art" "$BK/art"; had_art=1; fi
@@ -27,6 +31,9 @@ put_back() {
   cp -p "$BK/wrath_portal.py" "$WU/portal/wrath_portal.py"
   if [ -n "$had_links" ]; then cp -p "$BK/links.py" "$WU/portal/links.py"; else rm -f "$WU/portal/links.py"; fi
   if [ -n "$had_demo" ]; then cp -p "$BK/demo.py" "$WU/portal/demo.py"; else rm -f "$WU/portal/demo.py"; fi
+  if [ -n "$had_armory" ]; then cp -p "$BK/armory.py" "$WU/portal/armory.py"; else rm -f "$WU/portal/armory.py"; fi
+  if [ -n "$had_modes" ]; then cp -p "$BK/modes.py" "$WU/portal/modes.py"; [ ! -f "$BK/modes_data.py" ] || cp -p "$BK/modes_data.py" "$WU/portal/modes_data.py"
+  else rm -f "$WU/portal/modes.py" "$WU/portal/modes_data.py"; fi
   rm -rf "$WU/portal/art"
   if [ -n "$had_art" ]; then cp -a "$BK/art" "$WU/portal/art"; fi
 }
@@ -34,8 +41,15 @@ python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' wrath_portal.
 install -m 644 wrath_portal.py "$WU/portal/wrath_portal.py"
 # the share links (/wrath/r/<id> and friends): optional, the portal runs without them
 if [ -f links.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' links.py && install -m 644 links.py "$WU/portal/links.py"; fi
+# the Modes hub (/wrath/modes and the go intent): modes.py and its data, optional, always as a pair
+if [ -f modes.py ] && [ -f modes_data.py ]; then
+  python3 -I -c 'import ast,sys;[ast.parse(open(f).read()) for f in sys.argv[1:]]' modes.py modes_data.py \
+    && install -m 644 modes.py modes_data.py "$WU/portal/"
+fi
 # the guest pass (demo.py): off unless portal.env has WU_GUEST_DEMO=1
 if [ -f demo.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' demo.py && install -m 644 demo.py "$WU/portal/demo.py"; fi
+# the web armory (/wrath/armory): optional; it reads $WU/portal/armory/, which armory-export.py fills (realm/serverpass.sh)
+if [ -f armory.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' armory.py && install -m 644 armory.py "$WU/portal/armory.py"; fi
 if [ -d www-files/art ] && [ -f www-files/art/wu-theme.css ]; then
   install -d -m 755 "$WU/portal/art"
   install -m 644 www-files/art/* "$WU/portal/art/"
@@ -99,6 +113,8 @@ c3=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/w
 c4=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/art/wu-card.webp || true)
 c5=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/q/258 || true)
 echo "  /wrath/q/258 share link (200 = links on): $c5"
+c6=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/armory || true)
+echo "  /wrath/armory (200 = the armory is on): $c6"
 echo "  warm.html (public): $c1   /data (must stay gated, 302/401/403): $c2   /wrath signed out (200 = saved-key page): $c3"
 echo "  /wrath/art/wu-card.webp (200 = the art is served): $c4"
 echo "  backups: $BK"

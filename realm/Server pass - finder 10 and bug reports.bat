@@ -25,10 +25,24 @@ rem The Leyline realm list for the in-game Leyline window (WULY addon messages) 
 if exist "custom\lua_scripts\ov_leyline.lua" copy /y "custom\lua_scripts\ov_leyline.lua" "%T%\" >nul
 rem Companions (.recruit, .buddy, .dismiss) ride along too.
 if exist "custom\lua_scripts\ov_companions.lua" copy /y "custom\lua_scripts\ov_companions.lua" "%T%\" >nul
+rem The Goldshire Inn guest pass (inert until the website hands out passes) and the Discord World chat bridge
+rem (inert until the bridge daemon is switched on) ride along too.
+if exist "custom\lua_scripts\ov_demo.lua" copy /y "custom\lua_scripts\ov_demo.lua" "%T%\" >nul
+if exist "custom\lua_scripts\ov_discord.lua" copy /y "custom\lua_scripts\ov_discord.lua" "%T%\" >nul
+rem Go anywhere from the website (the Modes hub: ovgo set, .go) rides along too.
+if exist "custom\lua_scripts\ov_go.lua" copy /y "custom\lua_scripts\ov_go.lua" "%T%\" >nul
+rem The Builder (.build: props in build areas, saved builds and share codes) rides along too.
+if exist "custom\lua_scripts\ov_build.lua" copy /y "custom\lua_scripts\ov_build.lua" "%T%\" >nul
+rem The OVMOD addon channel the Builder window talks over (ov_build.lua works without it, dot commands only).
+if exist "custom\lua_scripts\ov_modapi.lua" copy /y "custom\lua_scripts\ov_modapi.lua" "%T%\" >nul
 if exist "custom\leyline-fetch.py" copy /y "custom\leyline-fetch.py" "%T%\" >nul
+rem The web armory rides along too: .armory off / .armory on (ov_armory.lua), and armory-export.py, which
+rem serverpass.sh installs with its 5-minute cron (step 1b) to fill play.openvanilla.app/wrath/armory.
+if exist "custom\lua_scripts\ov_armory.lua" copy /y "custom\lua_scripts\ov_armory.lua" "%T%\" >nul
+if exist "custom\armory-export.py" copy /y "custom\armory-export.py" "%T%\" >nul
 copy /y serverpass.sh "%T%\serverpass.sh.txt" >nul
 tar -cf "%TEMP%\wu-serverpass.tar" -C "%T%" . || (echo Packing failed. & pause & exit /b 1)
-ssh -i "%KEY%" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 root@play.openvanilla.app "T=$(mktemp -d) && tar -x -C $T -f - && sed 's/\r$//' $T/serverpass.sh.txt > $T/sp.sh && rm -f $T/serverpass.sh.txt && (cd $T && tar -cf - *.lua $(ls leyline-fetch.py 2>/dev/null)) | SERVERPASS_WARN_MIN=%WARN% bash $T/sp.sh 2>&1 | tee /tmp/wu-serverpass.log; rm -rf $T; grep -q '^SERVERPASS OK' /tmp/wu-serverpass.log" < "%TEMP%\wu-serverpass.tar"
+ssh -i "%KEY%" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 root@play.openvanilla.app "T=$(mktemp -d) && tar -x -C $T -f - && sed 's/\r$//' $T/serverpass.sh.txt > $T/sp.sh && rm -f $T/serverpass.sh.txt && (cd $T && tar -cf - *.lua $(ls leyline-fetch.py armory-export.py 2>/dev/null)) | SERVERPASS_WARN_MIN=%WARN% bash $T/sp.sh 2>&1 | tee /tmp/wu-serverpass.log; rm -rf $T; grep -q '^SERVERPASS OK' /tmp/wu-serverpass.log" < "%TEMP%\wu-serverpass.tar"
 if errorlevel 1 (echo. & echo It did not report success; see above. & del /q "%TEMP%\wu-serverpass.tar" & rmdir /s /q "%T%" & pause & exit /b 1)
 del /q "%TEMP%\wu-serverpass.tar" & rmdir /s /q "%T%"
 echo.

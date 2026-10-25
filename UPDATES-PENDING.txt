@@ -69,3 +69,16 @@
 1027c signin  Portal: Goldshire Inn guest pass code (switched off until the owner says), share links kept
 1027d relay  Leyline relay: private realms leave the list at once, only connected realms listed, join page wording, open signup for public realms
 1027e ship  Save to GitHub (orionopenwow/WrathUnleashed): also leyline host, the Discord bridge (off until you add a token), the Goldshire demo
+# held 1027f scripts  Goldshire guest pass script (group invites fixed) and the Discord chat script (both inert until switched on)
+# held 1027g client  Client 20261025d: taps work on phones, modern nameplates, Dalaran minimap, our loading screen on every teleport, faster Dalaran arrival
+# held 1027h signin  Leyline page: live screenshots and the new features (Companions, realms in the game, share links)
+# held 1027i slice  Streamed areas: add the Goldshire Inn (for the guest pass)
+# held 1027j ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1027k check  Read-only check: why the script reload was refused (world server state, restarts, errors)
+1027l scripts  Realm scripts: website "Go" teleports (.go), the Builder (.build), armory privacy (.armory off) and its export; new scripts load by a restart with a 5-minute warning (a live reload of new scripts crashed the realm at 03:39)
+1027m foreverui  In-game: the Builder window (/builder) and its button in Mods & Workshop
+1027n client  Client 20261025d: taps work on phones, modern nameplates, Dalaran minimap, our loading screen on every teleport, faster Dalaran arrival
+1027o signin  Site: /wrath/modes (duels, boss fights by raid and wing, dungeons, hangouts), /wrath/armory, Leyline page screenshots
+1027p slice  Streamed areas: add the Goldshire Inn (for the guest pass)
+1027q ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1027r leyline  Create or update the public orionopenwow/Leyline repo (needs gh signed in as orionopenwow)

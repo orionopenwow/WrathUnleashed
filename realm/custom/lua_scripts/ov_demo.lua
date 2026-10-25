@@ -305,7 +305,7 @@ RegisterPlayerEvent(28, onMap)         -- PLAYER_EVENT_ON_MAP_CHANGE
 RegisterPlayerEvent(42, onCommand)     -- PLAYER_EVENT_ON_COMMAND
 RegisterPlayerEvent(48, onCanTrade)    -- PLAYER_EVENT_ON_CAN_INIT_TRADE
 RegisterPlayerEvent(49, onCanMail)     -- PLAYER_EVENT_ON_CAN_SEND_MAIL
-RegisterPlayerEvent(51, onCanInvite)   -- PLAYER_EVENT_ON_CAN_GROUP_INVITE
+RegisterPlayerEvent(55, onCanInvite)   -- PLAYER_EVENT_ON_CAN_GROUP_INVITE (55 in mod-ale; mods/wu-mod.py CAN_PLAYER_EVENTS)
 
 -- for tests (stream/tests/test_ov_demo.lua loads this file under a fake ALE)
 OV_DEMO_TEST = { passes = passes, inInn = inInn, isDemo = isDemo, INN = INN, SIGNUP_URL = SIGNUP_URL }

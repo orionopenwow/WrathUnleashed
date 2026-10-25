@@ -2068,7 +2068,7 @@ index 00000000..24562eb4
 +    }
 +}
 diff --git a/crates/benilla-app/src/cvars/mod.rs b/crates/benilla-app/src/cvars/mod.rs
-index a40584bb..86bb2c2e 100644
+index a40584bb..e8dcda99 100644
 --- a/crates/benilla-app/src/cvars/mod.rs
 +++ b/crates/benilla-app/src/cvars/mod.rs
 @@ -20,13 +20,16 @@
@@ -2176,7 +2176,54 @@ index a40584bb..86bb2c2e 100644
                  "frillDensity",
                  "gxApi",
                  "gxColorBits",
-@@ -1880,7 +1915,7 @@ mod tests {
+@@ -1710,6 +1745,46 @@ mod tests {
+ 
+     /// A client with a real CVar host: every knob resource an observer writes, every observer,
+     /// [`CvarPlugin`] and a VM for the mirror.
++    /// The later clients' plate switches through Lua: `SetCVar` turns the V plates on, and the V
++    /// verbs write the switches back, so an addon reading `GetCVar` agrees with the plates.
++    #[test]
++    fn the_plate_switches_toggle_through_lua_both_ways() {
++        use crate::local_state::test_env::{EnvGuard, ENV_LOCK};
++        let _l = ENV_LOCK
++            .lock()
++            .unwrap_or_else(std::sync::PoisonError::into_inner);
++        let tmp = std::env::temp_dir().join(format!("benilla-plate-cvar-{}", std::process::id()));
++        std::fs::remove_dir_all(&tmp).ok();
++        let _h = EnvGuard::set("BENILLA_HOME", tmp.to_str().unwrap());
++        let mut app = cvar_app();
++        app.init_resource::<crate::vplates::VPlateMode>()
++            .add_observer(crate::vplates::on_show_cvar)
++            .add_systems(Update, crate::vplates::apply_plate_verbs);
++        app.update();
++        let mode = |app: &App| *app.world().resource::<crate::vplates::VPlateMode>();
++        assert!(!mode(&app).enemies && !mode(&app).friends);
++
++        app.world_mut()
++            .non_send_resource_mut::<UiScript>()
++            .run(r#"SetCVar("nameplateShowEnemies", "1")"#)
++            .unwrap();
++        app.update();
++        app.update();
++        assert!(mode(&app).enemies, "SetCVar shows the enemy plates");
++
++        app.world_mut()
++            .non_send_resource_mut::<UiScript>()
++            .run("ShowFriendNameplates() HideNameplates()")
++            .unwrap();
++        app.update();
++        app.update();
++        assert!(mode(&app).friends && !mode(&app).enemies, "the verbs drive the plates");
++        let cvars = app.world().resource::<Cvars>();
++        assert_eq!(cvars.get("nameplateShowFriends"), Some("1"));
++        assert_eq!(cvars.get("nameplateShowEnemies"), Some("0"), "and write the switches back");
++        std::fs::remove_dir_all(&tmp).ok();
++    }
++
+     fn cvar_app() -> App {
+         let mut app = App::new();
+         app.add_plugins(bevy::MinimalPlugins)
+@@ -1880,7 +1955,7 @@ mod tests {
          };
  
          // ── Launch 1: the roster lands, and the player enters the world as the third row. ────
@@ -2185,7 +2232,7 @@ index a40584bb..86bb2c2e 100644
          let mut app = cvar_app();
          app.add_plugins(bevy::state::app::StatesPlugin);
          crate::char_select::add_test_systems(&mut app, tx);
-@@ -1904,7 +1939,7 @@ mod tests {
+@@ -1904,7 +1979,7 @@ mod tests {
          );
  
          // ── Launch 2: a fresh client over the same folder, and the roster arrives. ───────────
@@ -2194,7 +2241,7 @@ index a40584bb..86bb2c2e 100644
          let mut app = cvar_app();
          app.add_plugins(bevy::state::app::StatesPlugin);
          crate::char_select::add_test_systems(&mut app, tx);
-@@ -2019,7 +2054,7 @@ mod tests {
+@@ -2019,7 +2094,7 @@ mod tests {
          strings.sort_unstable(); // the list is the claim, not where the rows sit in the table
          assert_eq!(
              strings,
@@ -3113,7 +3160,7 @@ index ca1c54b2..30dbfc47 100644
      if let Some(extend) = extend {
          extend(&mut app);
 diff --git a/crates/benilla-app/src/loading_screen.rs b/crates/benilla-app/src/loading_screen.rs
-index 9193bf34..5e96d87f 100644
+index 9193bf34..6ca54738 100644
 --- a/crates/benilla-app/src/loading_screen.rs
 +++ b/crates/benilla-app/src/loading_screen.rs
 @@ -27,6 +27,8 @@ use benilla_world::world_map::CurrentMap;
@@ -3140,11 +3187,11 @@ index 9193bf34..5e96d87f 100644
 +    page_sent: Option<Option<u8>>,
  }
  
-+/// The page draws every loading screen (its own background and bar, the look of its "Entering
-+/// the world") when it signed the player in: the client keeps only its black cover and tells the
++/// In the browser the page draws every loading screen, the first entry and every in-world port
++/// alike (the Orion background and our bar): the client keeps only its black cover and tells the
 +/// page the cover's state and progress. Deviation: the reference draws the map's art and bar.
 +fn page_draws_cover() -> bool {
-+    crate::startup_pace::page_signed_in()
++    cfg!(target_arch = "wasm32")
 +}
 +
 +/// No progress for this long, the world at least [`STALL_LIFT_RESIDENT`] resident and everything
@@ -3483,6 +3530,158 @@ index d5e1738b..d3cae144 100644
          let mut app = App::new();
          app.add_plugins((MinimalPlugins, bevy::state::app::StatesPlugin))
              .insert_state(ClientState::Login)
+diff --git a/crates/benilla-app/src/minimap/mod.rs b/crates/benilla-app/src/minimap/mod.rs
+index f220c079..d23137e4 100644
+--- a/crates/benilla-app/src/minimap/mod.rs
++++ b/crates/benilla-app/src/minimap/mod.rs
+@@ -306,8 +306,15 @@ fn minimap_interior<'a>(
+     wmos: &'a Assets<WmoModel>,
+     world: &benilla_world::world_point::WorldPoint,
+     asset_server: &AssetServer,
+-) -> Option<(Affine3A, &'a WmoModel, String, usize)> {
+-    if !player.active || player.detached || world.area_interior().is_none() {
++    map_id: Option<u32>,
++) -> Option<(Affine3A, &'a WmoModel, String, usize, bool)> {
++    if !player.active || player.detached {
++        return None;
++    }
++    if let Some(city) = city_minimap(player, instances, wmos, asset_server, map_id) {
++        return Some(city);
++    }
++    if world.area_interior().is_none() {
+         return None;
+     }
+     let eye = player.pos + Vec3::Y * INTERIOR_PROBE_HEIGHT;
+@@ -325,7 +332,56 @@ fn minimap_interior<'a>(
+         let stem = asset_server
+             .get_path(inst.handle.id())
+             .and_then(|p| wmo_minimap_stem(&p.path().to_string_lossy()))?;
+-        Some((inst.world_from_local, model, stem, in_group))
++        Some((inst.world_from_local, model, stem, in_group, false))
++    })
++}
++
++/// Dalaran's streets (map 571): the city floats over Crystalsong Forest, whose terrain tiles are
++/// all the outdoor minimap has, and its groups are exterior, so the indoor gate never opens.
++/// Deviation, as the later clients draw it: inside the city's box and above [`DALARAN_FLOOR_Z`],
++/// the minimap shows the city WMO's own tiles, every group that has them.
++const DALARAN_MAP: u32 = 571;
++const DALARAN_CENTRE: [f32; 2] = [5804.0, 625.0];
++const DALARAN_RADIUS_YD: f32 = 420.0;
++const DALARAN_FLOOR_Z: f32 = 450.0;
++
++/// Whether a WoW-space point is in the Dalaran box: map 571, within the radius, above the floor.
++pub(crate) fn in_dalaran_box(map_id: Option<u32>, wow: [f32; 3]) -> bool {
++    map_id == Some(DALARAN_MAP)
++        && wow[2] > DALARAN_FLOOR_Z
++        && (wow[0] - DALARAN_CENTRE[0]).hypot(wow[1] - DALARAN_CENTRE[1]) <= DALARAN_RADIUS_YD
++}
++
++fn city_minimap<'a>(
++    player: &Player,
++    instances: &Query<&WmoPortalInstance>,
++    wmos: &'a Assets<WmoModel>,
++    asset_server: &AssetServer,
++    map_id: Option<u32>,
++) -> Option<(Affine3A, &'a WmoModel, String, usize, bool)> {
++    if !in_dalaran_box(map_id, bevy_to_wow(player.pos)) {
++        return None;
++    }
++    instances.iter().find_map(|inst| {
++        let model = wmos.get(&inst.handle)?;
++        let stem = asset_server
++            .get_path(inst.handle.id())
++            .and_then(|p| wmo_minimap_stem(&p.path().to_string_lossy()))?;
++        if !stem.ends_with("dalaran\\nd_dalaran") {
++            return None;
++        }
++        // The group under the player draws last; any group will do as the sort's seed.
++        let pw = bevy_to_wow(inst.world_from_local.inverse().transform_point3(player.pos));
++        let in_group = model
++            .group_nav
++            .iter()
++            .position(|g| {
++                (g.bbox_min[0]..=g.bbox_max[0]).contains(&pw[0])
++                    && (g.bbox_min[1]..=g.bbox_max[1]).contains(&pw[1])
++                    && (g.bbox_min[2]..=g.bbox_max[2]).contains(&pw[2])
++            })
++            .unwrap_or(0);
++        Some((inst.world_from_local, model, stem, in_group, true))
+     })
+ }
+ 
+@@ -408,12 +464,19 @@ fn emit_minimap(
+         rect: slot.rect,
+     });
+ 
+-    let interior = minimap_interior(&player, &instances, &wmos, &world, &asset_server);
++    let interior = minimap_interior(
++        &player,
++        &instances,
++        &wmos,
++        &world,
++        &asset_server,
++        Some(map.0),
++    );
+ 
+     // For the dots' indoor test; the branch below consumes `interior`.
+     let player_indoors = interior.is_some();
+     let view_radius = view_radius_yd(zoom, inside_zoom, player_indoors);
+-    if let Some((world_from_local, model, stem, in_group)) = interior {
++    if let Some((world_from_local, model, stem, in_group, city)) = interior {
+         // Interior: the WMO's own per-group tiles, drawn white. They are baked in the model frame
+         // (north = model +X), so each sits at its model-space centre through the placement and the
+         // whole set turns by one placement yaw (`0x6da180`).
+@@ -446,8 +509,12 @@ fn emit_minimap(
+ 
+         // The portal flood-fill from the player's group (`0x6a5020`). Its query box uses the draw
+         // radius (`0x6d96b6`), so zooming in also tightens the box's Z extent.
+-        let drawable =
+-            interior_group_selection(model, &world_from_local, player.pos, radius, in_group);
++        // The city: every group with tiles, as the streets are not portal-joined rooms.
++        let drawable = if city {
++            vec![true; model.group_nav.len()]
++        } else {
++            interior_group_selection(model, &world_from_local, player.pos, radius, in_group)
++        };
+         // Draw order (`0x4ebeb0`, keyed at `0x6d9e30`): ascending by `Zmidpoint − playerZ`, the
+         // player's own group keyed `FLT_MAX`, so it draws last and no storey covers the room.
+         let player_z = bevy_to_wow(world_from_local.inverse().transform_point3(player.pos))[2];
+@@ -785,8 +852,17 @@ fn feed_minimap_inside(
+     mut inside_res: ResMut<MinimapInside>,
+     mut was_inside: Local<crate::ui_script::VmMemo<Option<bool>>>,
+     mut pushed_at: Local<crate::ui_script::VmMemo<u64>>,
++    map: Option<Res<CurrentMap>>,
+ ) {
+-    let inside = minimap_interior(&player, &instances, &wmos, &world, &asset_server).is_some();
++    let inside = minimap_interior(
++        &player,
++        &instances,
++        &wmos,
++        &world,
++        &asset_server,
++        map.as_ref().map(|m| m.0),
++    )
++    .is_some();
+     inside_res.0 = inside;
+     let Some(mut script) = script else { return };
+     let edge = *was_inside.get(&script) != Some(inside);
+@@ -928,6 +1004,15 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn the_dalaran_box_is_the_city_above_its_floor() {
++        use super::in_dalaran_box;
++        assert!(in_dalaran_box(Some(571), [5804.0, 625.0, 648.0]), "the owner's spot");
++        assert!(!in_dalaran_box(Some(571), [5804.0, 625.0, 200.0]), "Crystalsong below");
++        assert!(!in_dalaran_box(Some(571), [5000.0, 625.0, 648.0]), "outside the box");
++        assert!(!in_dalaran_box(Some(0), [5804.0, 625.0, 648.0]), "another map");
++    }
++
+     #[test]
+     fn full_white_light_leaves_tiles_at_full_brightness() {
+         // Both bands white ⇒ tint white ⇒ the tile draws verbatim (the noon-ish bright case).
 diff --git a/crates/benilla-app/src/name_persist.rs b/crates/benilla-app/src/name_persist.rs
 index 5d5696c2..98f6e574 100644
 --- a/crates/benilla-app/src/name_persist.rs
@@ -9906,10 +10105,10 @@ index 002c9bff..aadb0e37 100644
                      grounded: true,
 diff --git a/crates/benilla-app/src/startup_pace.rs b/crates/benilla-app/src/startup_pace.rs
 new file mode 100644
-index 00000000..55265f46
+index 00000000..0cd4dc40
 --- /dev/null
 +++ b/crates/benilla-app/src/startup_pace.rs
-@@ -0,0 +1,608 @@
+@@ -0,0 +1,635 @@
 +//! Startup pacing: what the browser does before the first glue screen, and when the rest happens.
 +//!
 +//! A browser boot runs the whole `Startup` schedule in the first frame, one main-thread task that
@@ -10387,6 +10586,30 @@ index 00000000..55265f46
 +    }
 +}
 +
++/// A worldport's destination, as the page's world prefetch wants it (`port:<adt>`): the page warms
++/// the slice tier holding it, nearest tiles first and at full priority, while the client streams,
++/// so the destination's reads find the HTTP cache warm rather than queueing behind each other.
++fn signal_port_focus(
++    mut ports: MessageReader<crate::net::WorldportMessage>,
++    maps: Option<Res<benilla_assets::MapCatalogRes>>,
++) {
++    let Some(maps) = maps else {
++        ports.clear();
++        return;
++    };
++    for port in ports.read() {
++        // A boat-local position names no tile.
++        if port.transport_entry.is_some() {
++            continue;
++        }
++        let Some(dir) = maps.0.directory(port.map_id) else {
++            continue;
++        };
++        let (tx, ty) = benilla_formats::world_to_tile(port.position[0], port.position[1]);
++        crate::webprogress::signal(&format!("port:World\\Maps\\{dir}\\{dir}_{tx}_{ty}.adt"));
++    }
++}
++
 +/// The glue screen the page sees (`glue:<screen>` on each change, `glue:world` in the world), so a
 +/// page without the bridge still knows a return to the character list.
 +fn signal_glue_screen(
@@ -10425,7 +10648,10 @@ index 00000000..55265f46
 +                drive_quiet_login.after(crate::ui_script::glue_mgr::drive_glue_mgr),
 +            )
 +            .add_systems(Last, (report_first_frame, report_first_world_frame))
-+            .add_systems(Update, (signal_char_focus, signal_glue_screen).run_if(cfg_web));
++            .add_systems(
++                Update,
++                (signal_char_focus, signal_glue_screen, signal_port_focus).run_if(cfg_web),
++            );
 +    }
 +}
 +
@@ -11204,7 +11430,7 @@ index 9f630cd1..30a780e1 100644
  use bevy::prelude::*;
  
 diff --git a/crates/benilla-app/src/ui_cast.rs b/crates/benilla-app/src/ui_cast.rs
-index 3740b960..75410f22 100644
+index 3740b960..41bc88fb 100644
 --- a/crates/benilla-app/src/ui_cast.rs
 +++ b/crates/benilla-app/src/ui_cast.rs
 @@ -9,7 +9,7 @@
@@ -11216,6 +11442,31 @@ index 3740b960..75410f22 100644
  
  use benilla_formats::SpellDisplay;
  use bevy::prelude::*;
+@@ -86,6 +86,24 @@ pub(crate) struct UnitCasts {
+     channels: HashMap<u64, Running>,
+ }
+ 
++impl UnitCasts {
++    /// `guid`'s running cast or channel for its nameplate at `now_ms` (the `GetTime` clock, ms):
++    /// the spell, the bar's fill (a cast fills, a channel drains) and whether it is a channel.
++    pub(crate) fn plate_cast(&self, guid: u64, now_ms: f64) -> Option<(u32, f32, bool)> {
++        let frac = |r: &Running| {
++            let span = (r.end_ms - r.start_ms).max(1.0);
++            ((now_ms - r.start_ms) / span).clamp(0.0, 1.0) as f32
++        };
++        if let Some(r) = self.casts.get(&guid).filter(|r| now_ms < r.end_ms) {
++            return Some((r.spell_id, frac(r), false));
++        }
++        self.channels
++            .get(&guid)
++            .filter(|r| now_ms < r.end_ms)
++            .map(|r| (r.spell_id, 1.0 - frac(r), true))
++    }
++}
++
+ #[derive(Clone, Copy, Debug)]
+ struct Running {
+     spell_id: u32,
 diff --git a/crates/benilla-app/src/ui_chat.rs b/crates/benilla-app/src/ui_chat.rs
 index 975f3ec8..eaed36d4 100644
 --- a/crates/benilla-app/src/ui_chat.rs
@@ -14035,13 +14286,15 @@ index c4a2f3ed..58f5a2de 100644
  use super::*;
  
 diff --git a/crates/benilla-app/src/ui_script/session.rs b/crates/benilla-app/src/ui_script/session.rs
-index 0142bb48..517977c3 100644
+index 0142bb48..882d354b 100644
 --- a/crates/benilla-app/src/ui_script/session.rs
 +++ b/crates/benilla-app/src/ui_script/session.rs
-@@ -160,6 +160,10 @@ mod tests {
+@@ -160,6 +160,12 @@ mod tests {
      /// `Local`s in VM-holding systems that are not memory about the VM, keyed
      /// `(path under src/, parameter name)`.
      const EXEMPT: &[(&str, &str)] = &[
++        // The plate driver's scratch lists, cleared at the top of every frame: no memory at all.
++        ("vplates.rs", "buffers"),
 +        // The last focus tile sent to the page: about the page's prefetch, not the VM.
 +        ("startup_pace.rs", "last"),
 +        // The bridge readout's last position, for the page's speed: not about the VM.
@@ -14596,7 +14849,7 @@ index 00000000..65fa76ad
 +    }
 +}
 diff --git a/crates/benilla-app/src/vplates.rs b/crates/benilla-app/src/vplates.rs
-index 4fb4c523..a2b18929 100644
+index 4fb4c523..0b7b002e 100644
 --- a/crates/benilla-app/src/vplates.rs
 +++ b/crates/benilla-app/src/vplates.rs
 @@ -16,7 +16,7 @@
@@ -14632,8 +14885,41 @@ index 4fb4c523..a2b18929 100644
  /// The unit whose plate the pointer is inside, from last frame's layout: the plate's OnEnter
  /// publishing the mouseover (`0x7cb850` into `[0xb4e2c8]`), since the world pick stands down
  /// over UI.
-@@ -102,11 +119,33 @@ const SKULL_SIZE: f32 = 0.01;
+@@ -100,13 +117,66 @@ const SKULL_SIZE: f32 = 0.01;
+ /// The raid-target icon (`0x7cb250`): its RIGHT on the border's LEFT, hanging off the plate's
+ /// left edge.
  const RAID_ICON_SIZE: f32 = 0.02;
++
++/// The modern look, in logical px (uiScale-blind like the rest): a 110x12 bar in a one-pixel
++/// border, a cast bar below, the name and level above and beside.
++const MODERN_PLATES: bool = true;
++const MODERN_BAR: Vec2 = Vec2::new(110.0, 12.0);
++const MODERN_BORDER_PX: f32 = 1.0;
++const MODERN_CAST_H: f32 = 8.0;
++const MODERN_NAME_PX: f32 = 11.0;
++const MODERN_LEVEL_PX: f32 = 10.0;
++const MODERN_ELITE_PX: f32 = 16.0;
++const MODERN_RAID_PX: f32 = 20.0;
++const MODERN_SKULL_PX: f32 = 12.0;
++/// At most this many plates, the nearest to the player: a crowded city costs no more.
++pub(crate) const MAX_PLATES: usize = 40;
++
++/// `RAID_CLASS_COLORS` (3.3.5a `Constants.lua`), by class id: an enemy player's bar.
++fn class_colour(class: u8) -> Option<[f32; 3]> {
++    Some(match class {
++        1 => [0.78, 0.61, 0.43],
++        2 => [0.96, 0.55, 0.73],
++        3 => [0.67, 0.83, 0.45],
++        4 => [1.0, 0.96, 0.41],
++        5 => [1.0, 1.0, 1.0],
++        6 => [0.77, 0.12, 0.23],
++        7 => [0.0, 0.44, 0.87],
++        8 => [0.41, 0.80, 0.94],
++        9 => [0.58, 0.51, 0.79],
++        11 => [1.0, 0.49, 0.04],
++        _ => return None,
++    })
++}
  /// `[0x80abfc]`.
  const PLATE_LIFT: f32 = 2.0 / 3.0;
 -/// 20 yd, hardcoded in the reference.
@@ -14671,7 +14957,7 @@ index 4fb4c523..a2b18929 100644
  
  /// The bar-fill palette, the dwords at `0xcf60d0`/`e8`/`c8`/`dc`, in sRGB.
  const PLATE_HOSTILE: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
-@@ -193,6 +232,7 @@ pub(crate) fn text_px(h: f32, basis: f32) -> f32 {
+@@ -193,6 +263,7 @@ pub(crate) fn text_px(h: f32, basis: f32) -> f32 {
  pub(crate) fn apply_plate_verbs(
      script: Option<NonSendMut<benilla_ui::script::UiScript>>,
      mut mode: ResMut<VPlateMode>,
@@ -14679,7 +14965,7 @@ index 4fb4c523..a2b18929 100644
  ) {
      let Some(mut script) = script else {
          return;
-@@ -209,6 +249,25 @@ pub(crate) fn apply_plate_verbs(
+@@ -209,6 +280,25 @@ pub(crate) fn apply_plate_verbs(
              if now.friends { "ON" } else { "OFF" }
          );
          *mode = now;
@@ -14705,7 +14991,7 @@ index 4fb4c523..a2b18929 100644
      }
  }
  
-@@ -220,13 +279,20 @@ pub(crate) fn clear_at_world_entry(world: &mut World) {
+@@ -220,13 +310,20 @@ pub(crate) fn clear_at_world_entry(world: &mut World) {
      if let Some(mut script) = world.get_non_send_resource_mut::<benilla_ui::script::UiScript>() {
          let _ = script.take_nameplate_bit_writes();
      }
@@ -14727,7 +15013,7 @@ index 4fb4c523..a2b18929 100644
  const LEGACY_CVARS: [(&str, &str); 2] = [
      ("nameplateShowEnemies", "NAMEPLATES_ON"),
      ("nameplateShowFriends", "FRIENDNAMEPLATES_ON"),
-@@ -237,16 +303,13 @@ const LEGACY_CVARS: [(&str, &str); 2] = [
+@@ -237,16 +334,13 @@ const LEGACY_CVARS: [(&str, &str); 2] = [
  #[derive(Default)]
  pub(crate) struct LegacyPlateSettings(Vec<(&'static str, bool)>);
  
@@ -14747,7 +15033,7 @@ index 4fb4c523..a2b18929 100644
              .collect(),
      )
  }
-@@ -292,6 +355,7 @@ struct PlateWorld<'w, 's> {
+@@ -292,6 +386,7 @@ struct PlateWorld<'w, 's> {
      window: Query<'w, 's, &'static Window, With<bevy::window::PrimaryWindow>>,
      // The pending ground-target cast, for the plate's hit-test veto (`0x7cba30`).
      targeting: Res<'w, crate::spell::SpellTargeting>,
@@ -14755,7 +15041,56 @@ index 4fb4c523..a2b18929 100644
  }
  
  /// Every frame: gate the units, seat each plate and hand the result to the widget layer as
-@@ -406,7 +470,8 @@ fn drive_vplates(
+@@ -320,7 +415,15 @@ fn drive_vplates(
+     mut bucket: Local<crate::smart_rect::SmartBucket>,
+     group: Res<crate::ui_party::GroupState>,
+     mut mouse_told: Local<crate::ui_script::VmMemo<Option<bool>>>,
++    // The modern look's casts and their icons.
++    casting: (
++        Res<crate::ui_cast::UnitCasts>,
++        Option<Res<crate::ui_action::Spells>>,
++    ),
++    // The frame's reused lists, cleared every frame.
++    mut buffers: Local<PlateBuffers>,
+ ) {
++    let (casts, spells) = casting;
+     plates.0.clear();
+     plate_hover.0 = None;
+     bucket.clear();
+@@ -372,21 +475,28 @@ fn drive_vplates(
+     let my_level = self_store.and_then(|s| s.0.unit_level()).unwrap_or(1);
+     let has_target = world.selection.target.is_some();
+ 
+-    let (pw, ph) = (gx(PLATE_W), gx(PLATE_H));
++    let (pw, ph) = if MODERN_PLATES {
++        let b = 2.0 * MODERN_BORDER_PX;
++        (MODERN_BAR.x + b, MODERN_BAR.y + b)
++    } else {
++        (gx(PLATE_W), gx(PLATE_H))
++    };
++    let now_ms = script.now() * 1000.0;
+     let scale = window.map_or(1.0, |w| w.scale_factor());
+     // Everything below is in window px, divided by this once for the widget layer's units.
+     let seam = window.map_or(1.0, |w| {
+         crate::ui_script::seam_scale(w.height(), ui_scale.0)
+     });
+-    let mut states: Vec<PlateState> = Vec::new();
++    let PlateBuffers { states, cands } = &mut *buffers;
++    states.clear();
++    cands.clear();
+ 
+     // Plates seat in squared-distance order from the gx point (0.4, 0.3), Y mirrored from the
+     // reference's Y-up space (`0x608870`, `0x6089a0`, walked by `0x608ce0`); each later plate is
+     // solved off those already claimed. The undamped diagonal: this is position, not size.
+     let diag = viewport.length();
+     let sort_pt = Vec2::new(0.4 * diag, viewport.y - 0.3 * diag);
+-    let mut cands = Vec::new();
+-    for (entity, net, guid, tf, store) in &world.units {
++    for (entity, net, _guid, tf, store) in &world.units {
+         if !matches!(net.kind, EntityKind::Unit | EntityKind::Player) {
+             continue;
+         }
+@@ -406,7 +516,8 @@ fn drive_vplates(
          if store.is_some_and(|s| s.0.unit_is_ghost_visual()) {
              continue;
          }
@@ -14765,16 +15100,136 @@ index 4fb4c523..a2b18929 100644
              continue;
          }
          // A CREATEDBY owner, no SUMMONEDBY owner and flags bit 9 (`0x200`): no plate in either
-@@ -477,7 +542,7 @@ fn drive_vplates(
+@@ -460,26 +571,41 @@ fn drive_vplates(
+             continue;
+         };
+         cands.push((
++            (tf.translation - self_tf.translation).length_squared(),
+             screen.distance_squared(sort_pt),
+             screen,
+             anchor,
+             rank,
+             is_player,
++            friendly,
+             entity,
+-            guid,
+-            store,
+         ));
+     }
+-    cands.sort_by(|a, b| a.0.total_cmp(&b.0));
+-    for (_, screen, anchor, rank, is_player, entity, guid, store) in cands {
++    // The nearest [`MAX_PLATES`] to the player, then seated in the reference's screen order.
++    if cands.len() > MAX_PLATES {
++        cands.select_nth_unstable_by(MAX_PLATES - 1, |a, b| a.0.total_cmp(&b.0));
++        cands.truncate(MAX_PLATES);
++    }
++    cands.sort_by(|a, b| a.1.total_cmp(&b.1));
++    for &(_, _, screen, anchor, rank, is_player, friendly, entity) in cands.iter() {
++        let Ok((_, _, guid, _, store)) = world.units.get(entity) else {
++            continue;
++        };
+         plates.0.insert(entity);
+ 
          let alpha = if !has_target || world.selection.target == Some(entity) {
              1.0
          } else {
 -            DIM_ALPHA
 +            world.backport.non_target_alpha
++        };
++        // The modern look colours an enemy player's bar by class; NPCs keep the reaction colour.
++        let tint = match (MODERN_PLATES && is_player && !friendly)
++            .then(|| store.and_then(|s| s.0.unit_class()).and_then(class_colour))
++            .flatten()
++        {
++            Some(c) => [c[0], c[1], c[2], 1.0],
++            None => plate_tint(rank, is_player),
          };
-         let tint = plate_tint(rank, is_player);
+-        let tint = plate_tint(rank, is_player);
          // `WOW_VPLATE_TRACE=1` prints each plate rect in logical px.
-@@ -636,10 +701,14 @@ pub(crate) struct VPlatesPlugin;
+         static TRACE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+         let trace = *TRACE.get_or_init(|| std::env::var("WOW_VPLATE_TRACE").as_deref() == Ok("1"));
+@@ -599,12 +725,52 @@ fn drive_vplates(
+             alpha,
+             lit,
+             hovered: hover,
++            target: world.selection.target == Some(entity),
++            elite: matches!(
++                crate::names::gated_rank(
++                    store
++                        .and_then(|s| s.0.object_entry())
++                        .and_then(|e| names.creature_record(e)),
++                    store,
++                ),
++                1 | 2
++            ),
++            cast: casts.plate_cast(guid.0, now_ms).map(|(spell, progress, channel)| {
++                benilla_ui::script::PlateCast {
++                    progress,
++                    icon: spells
++                        .as_deref()
++                        .and_then(|s| s.catalog.get(spell))
++                        .and_then(|d| d.icon.clone()),
++                    channel,
++                }
++            }),
+         });
+     }
+ 
+     // The widget layer rewrites the static anchors only when this moves, so an addon's own
+     // re-anchoring survives between resizes.
+-    script.sync_nameplates(
++    let geometry = if MODERN_PLATES {
++        PlateGeometry {
++            width: pw / seam,
++            height: ph / seam,
++            bar_off_x: MODERN_BORDER_PX / seam,
++            bar_off_y: MODERN_BORDER_PX / seam,
++            bar_width: MODERN_BAR.x / seam,
++            bar_height: MODERN_BAR.y / seam,
++            level_off_x: 0.0,
++            level_off_y: 0.0,
++            skull_size: MODERN_SKULL_PX / seam,
++            raid_size: MODERN_RAID_PX / seam,
++            name_height: MODERN_NAME_PX / seam,
++            level_height: MODERN_LEVEL_PX / seam,
++            shadow_offset: 1.0 / seam,
++            modern: true,
++            border: MODERN_BORDER_PX / seam,
++            cast_height: MODERN_CAST_H / seam,
++            elite_size: MODERN_ELITE_PX / seam,
++        }
++    } else {
+         PlateGeometry {
+             width: pw / seam,
+             height: ph / seam,
+@@ -622,9 +788,23 @@ fn drive_vplates(
+             // draws 2 px thick and too heavy at larger windows. Divided by the seam, which the
+             // shared text arm would otherwise scale it by.
+             shadow_offset: 1.0 / seam,
+-        },
+-        &states,
+-    );
++            modern: false,
++            border: 1.0 / seam,
++            cast_height: 0.0,
++            elite_size: 0.0,
++        }
++    };
++    script.sync_nameplates(geometry, states);
++}
++
++/// The plate driver's per-frame buffers, kept so a frame allocates no new list.
++#[derive(Default)]
++pub(crate) struct PlateBuffers {
++    states: Vec<PlateState>,
++    /// (distance² to the player, distance² to the seat point, screen point, anchor, reaction
++    /// rank, is a player, is friendly, entity).
++    #[allow(clippy::type_complexity)]
++    cands: Vec<(f32, f32, Vec2, Vec3, u8, bool, bool, Entity)>,
+ }
+ 
+ /// The plate driver's set; the overhead-name driver runs after it.
+@@ -636,10 +816,14 @@ pub(crate) struct VPlatesPlugin;
  
  impl Plugin for VPlatesPlugin {
      fn build(&self, app: &mut App) {
@@ -14789,7 +15244,7 @@ index 4fb4c523..a2b18929 100644
              .add_systems(
                  Update,
                  (
-@@ -649,6 +718,7 @@ impl Plugin for VPlatesPlugin {
+@@ -649,6 +833,7 @@ impl Plugin for VPlatesPlugin {
                      // through this frame's camera; `ui_script::extract::paint_script` runs after
                      // it, so the plates paint the same frame.
                      drive_vplates.after(TargetUpdate),
@@ -14797,7 +15252,7 @@ index 4fb4c523..a2b18929 100644
                  )
                      .chain()
                      .in_set(VPlateSet),
-@@ -660,6 +730,35 @@ impl Plugin for VPlatesPlugin {
+@@ -660,6 +845,35 @@ impl Plugin for VPlatesPlugin {
  mod tests {
      use super::*;
  
@@ -14833,7 +15288,7 @@ index 4fb4c523..a2b18929 100644
      /// `0x7cbd50` at level 30 (grayband[6] = 7: green down to 23, gray at 22) and the low edge.
      #[test]
      fn con_color_matches_the_byte_table() {
-@@ -873,17 +972,14 @@ mod tests {
+@@ -873,17 +1087,14 @@ mod tests {
          use crate::cvars::Cvars;
          let mut cvars = Cvars::with_value("nameplateShowFriends", "1");
          let legacy = take_legacy_settings(&mut cvars);
@@ -14858,7 +15313,7 @@ index 4fb4c523..a2b18929 100644
          );
  
          let s = benilla_ui::script::UiScript::new().unwrap();
-@@ -898,8 +994,8 @@ mod tests {
+@@ -898,8 +1109,8 @@ mod tests {
          );
          assert_eq!(
              s.eval::<Option<i64>>("return NAMEPLATES_ON").unwrap(),
@@ -22057,7 +22512,7 @@ index 00000000..2a13b87e
 +    Ok(())
 +}
 diff --git a/crates/benilla-ui/src/script/mod.rs b/crates/benilla-ui/src/script/mod.rs
-index 78422c6e..7e45fb6d 100644
+index 78422c6e..200b6994 100644
 --- a/crates/benilla-ui/src/script/mod.rs
 +++ b/crates/benilla-ui/src/script/mod.rs
 @@ -69,6 +69,7 @@ macro_rules! set_field {
@@ -22076,15 +22531,21 @@ index 78422c6e..7e45fb6d 100644
  mod worldmap_arrow;
  // `camera_view`: the five camera views and `FlipCameraYaw`, the reference's `UIUtil\Camera.cpp`.
  mod button;
-@@ -185,6 +187,7 @@ mod measure;
+@@ -185,9 +187,12 @@ mod measure;
  mod merchant;
  mod messageframe;
  mod minimap;
 +mod mirror_timer;
  pub mod nameplate;
  mod quest_poi_frame;
- pub use nameplate::{PlateBitWrites, PlateGeometry, PlateState, PLATE_BIT_ENEMY, PLATE_BIT_FRIEND};
-@@ -200,6 +203,9 @@ mod unit_cast;
+-pub use nameplate::{PlateBitWrites, PlateGeometry, PlateState, PLATE_BIT_ENEMY, PLATE_BIT_FRIEND};
++pub use nameplate::{
++    PlateBitWrites, PlateCast, PlateGeometry, PlateState, PLATE_BIT_ENEMY, PLATE_BIT_FRIEND,
++};
+ mod macro_options;
+ 
+ mod model;
+@@ -200,6 +205,9 @@ mod unit_cast;
  pub use object::frame_kind_from_tag;
  mod achievement;
  mod multicast;
@@ -22094,7 +22555,7 @@ index 78422c6e..7e45fb6d 100644
  mod party;
  mod pet;
  mod petition;
-@@ -253,7 +259,7 @@ mod zone_text;
+@@ -253,7 +261,7 @@ mod zone_text;
  pub use action::{ActionSlot, ActionState, ActionUse};
  pub use addon::AddOnInfo;
  pub use addon_enable::EnableHash;
@@ -22103,7 +22564,7 @@ index 78422c6e..7e45fb6d 100644
  pub use arena_team::{
      ArenaTeamMemberView, ArenaTeamRecordView, ArenaTeamRequest, ArenaTeamSlotView,
  };
-@@ -363,6 +369,9 @@ pub(crate) use minimap::apply_model_attrs as apply_minimap_model_attrs;
+@@ -363,6 +371,9 @@ pub(crate) use minimap::apply_model_attrs as apply_minimap_model_attrs;
  pub use model::{FontProbe, MacroIconSource, TextureProbe, TextureSizeProbe};
  pub(crate) use model::{Model, ModelCell};
  pub use multicast::MultiCastView;
@@ -22113,7 +22574,7 @@ index 78422c6e..7e45fb6d 100644
  pub use party::{PartyMemberInfo, PartyRequest, PartyState, RaidMemberInfo, SavedInstanceInfo};
  pub use pet::{PetActionView, PetStats, PossessView};
  pub use pvp::{
-@@ -468,9 +477,9 @@ pub(crate) const REGION_LEAF_SHARED: [&str; 9] = [
+@@ -468,9 +479,9 @@ pub(crate) const REGION_LEAF_SHARED: [&str; 9] = [
  ];
  
  /// Texture-only, each in the client's Texture map (`0x87c128`): `GetVertexColor` though
@@ -22126,7 +22587,7 @@ index 78422c6e..7e45fb6d 100644
      "SetGradient",
      "SetGradientAlpha",
      "GetTexture",
-@@ -483,12 +492,16 @@ pub(crate) const TEXTURE_ONLY_METHODS: [&str; 12] = [
+@@ -483,12 +494,16 @@ pub(crate) const TEXTURE_ONLY_METHODS: [&str; 12] = [
      "GetTexCoordModifiesRect",
      "SetDesaturated",
      "GetVertexColor",
@@ -22146,7 +22607,7 @@ index 78422c6e..7e45fb6d 100644
      "SetFont",
      "GetFont",
      "SetFontObject",
-@@ -507,8 +520,13 @@ pub(crate) const FONTSTRING_ONLY_METHODS: [&str; 23] = [
+@@ -507,8 +522,13 @@ pub(crate) const FONTSTRING_ONLY_METHODS: [&str; 23] = [
      "GetText",
      "SetTextHeight",
      "GetStringWidth",
@@ -22160,7 +22621,7 @@ index 78422c6e..7e45fb6d 100644
      "SetAlphaGradient",
      "SetSpacing",
      "GetSpacing",
-@@ -516,7 +534,7 @@ pub(crate) const FONTSTRING_ONLY_METHODS: [&str; 23] = [
+@@ -516,7 +536,7 @@ pub(crate) const FONTSTRING_ONLY_METHODS: [&str; 23] = [
  
  /// The Region method map: the names every region leaf reaches on a miss, 3.3.5a's `SetSize` and
  /// `GetSize` (`0x49d7a0`, `0x49d6f0`, registrar `0xac1480`) among them.
@@ -22169,7 +22630,7 @@ index 78422c6e..7e45fb6d 100644
      "GetObjectType",
      "IsObjectType",
      "GetName",
-@@ -541,6 +559,7 @@ pub(crate) const REGION_MAP_METHODS: [&str; 24] = [
+@@ -541,6 +561,7 @@ pub(crate) const REGION_MAP_METHODS: [&str; 24] = [
      "CreateAnimationGroup",
      "GetAnimationGroups",
      "StopAnimating",
@@ -22177,7 +22638,7 @@ index 78422c6e..7e45fb6d 100644
  ];
  const REG_WRAPPERS: &str = "__benilla_wrappers";
  const REG_SCRIPTS: &str = "__benilla_scripts";
-@@ -964,6 +983,7 @@ fn install_in_game(lua: &Lua) -> mlua::Result<()> {
+@@ -964,6 +985,7 @@ fn install_in_game(lua: &Lua) -> mlua::Result<()> {
      battle_net::install(lua)?;
      autocomplete::install(lua)?;
      nameplate::install_verbs(lua)?;
@@ -22185,7 +22646,7 @@ index 78422c6e..7e45fb6d 100644
      saved::install(lua)?;
      keybind::install(lua)?;
      modified_click::install(lua)?;
-@@ -993,6 +1013,7 @@ fn install_in_game(lua: &Lua) -> mlua::Result<()> {
+@@ -993,6 +1015,7 @@ fn install_in_game(lua: &Lua) -> mlua::Result<()> {
      rune::install(lua)?;
      totem::install(lua)?;
      multicast::install(lua)?;
@@ -22193,7 +22654,7 @@ index 78422c6e..7e45fb6d 100644
      pet::install(lua)?;
      gossip::install(lua)?;
      merchant::install(lua)?;
-@@ -1022,12 +1043,15 @@ fn install_in_game(lua: &Lua) -> mlua::Result<()> {
+@@ -1022,12 +1045,15 @@ fn install_in_game(lua: &Lua) -> mlua::Result<()> {
      quest_log::install(lua)?;
      quest_watch::install(lua)?;
      minimap::install(lua)?;
@@ -22209,7 +22670,7 @@ index 78422c6e..7e45fb6d 100644
      Ok(())
  }
  
-@@ -1263,6 +1287,36 @@ impl UiScript {
+@@ -1263,6 +1289,36 @@ impl UiScript {
          self.lua.load(chunk).set_mode(mlua::ChunkMode::Text).eval()
      }
  
@@ -22246,7 +22707,7 @@ index 78422c6e..7e45fb6d 100644
      /// How many values the Lua expression `expr` returns (`"GetItemInfo(1)"`, not a chunk), zero
      /// values and one `nil` told apart; a raise propagates. `select` is not a 1.12 global, so
      /// inside Lua the count is `(function(...) return arg.n end)(expr)`.
-@@ -1555,6 +1609,11 @@ impl UiScript {
+@@ -1555,6 +1611,11 @@ impl UiScript {
          keyboard::frame_key_input(&self.lua, key)
      }
  
@@ -22861,7 +23322,7 @@ index 142f556c..0723e1fe 100644
              AtomicU32::new(n.trim().parse().ok()?),
          ))
 diff --git a/crates/benilla-ui/src/script/nameplate.rs b/crates/benilla-ui/src/script/nameplate.rs
-index 369fdfac..0bbad459 100644
+index 369fdfac..248c18d9 100644
 --- a/crates/benilla-ui/src/script/nameplate.rs
 +++ b/crates/benilla-ui/src/script/nameplate.rs
 @@ -7,6 +7,15 @@
@@ -22880,7 +23341,88 @@ index 369fdfac..0bbad459 100644
  
  use mlua::Lua;
  
-@@ -135,6 +144,11 @@ pub(crate) struct NamePlates {
+@@ -28,6 +37,16 @@ pub const SKULL_TEXTURE: &str = "Interface\\TargetingFrame\\UI-TargetingFrame-Sk
+ pub const RAID_ICON_TEXTURE: &str = "Interface\\TargetingFrame\\UI-RaidTargetingIcons";
+ /// The health bar's fill, which `GetStatusBarTexture()` returns.
+ pub const BAR_FILL_TEXTURE: &str = "Interface\\TargetingFrame\\UI-TargetingFrame-BarFill";
++/// The modern look's flat bar fill, health and cast alike.
++pub const MODERN_FILL_TEXTURE: &str = "Interface\\TargetingFrame\\UI-StatusBar";
++/// The elite dragon, the modern look's seventh region.
++pub const ELITE_TEXTURE: &str = "Interface\\Tooltips\\EliteNameplateIcon";
++/// The modern border, plain and target-lit.
++const MODERN_BORDER: [f32; 4] = [0.0, 0.0, 0.0, 0.85];
++const MODERN_BORDER_TARGET: [f32; 4] = [1.0, 1.0, 1.0, 0.95];
++/// The cast bar's fill, a cast and a channel.
++const CAST_COLOUR: [f32; 4] = [1.0, 0.7, 0.0, 1.0];
++const CHANNEL_COLOUR: [f32; 4] = [0.3, 0.85, 0.3, 1.0];
+ /// `NAMEPLATE_FONT`: Friz Quadrata.
+ pub const PLATE_FONT: &str = "Fonts\\FRIZQT__.TTF";
+ 
+@@ -58,6 +77,22 @@ pub struct PlateGeometry {
+     /// The text's drop-shadow step, seam divided out like the rest: one logical pixel at any
+     /// window size, since the text path multiplies it by the seam.
+     pub shadow_offset: f32,
++    /// The modern look: a flat bar in a one-pixel border (`border` thick), the name above, the
++    /// level after the bar, a cast bar below it with its icon to the left, an elite dragon.
++    /// Off, the reference's 1.12 plate.
++    pub modern: bool,
++    pub border: f32,
++    pub cast_height: f32,
++    pub elite_size: f32,
++}
++
++/// A unit's running cast or channel, as its plate draws it.
++#[derive(Clone, Debug, PartialEq, Default)]
++pub struct PlateCast {
++    /// 0..1: a cast fills, a channel drains.
++    pub progress: f32,
++    pub icon: Option<String>,
++    pub channel: bool,
+ }
+ 
+ /// One plate's per-frame state: everything that can move while the plate is alive.
+@@ -90,6 +125,11 @@ pub struct PlateState {
+     pub lit: bool,
+     /// The pointer is on the plate: the name goes yellow (`0x7cb850`) and the glow region shows.
+     pub hovered: bool,
++    /// The modern look's extras: the unit is the target (the border lights), an elite (the
++    /// dragon), and its cast.
++    pub target: bool,
++    pub elite: bool,
++    pub cast: Option<PlateCast>,
+ }
+ 
+ /// One pooled plate's widgets, in the reference's creation order.
+@@ -104,6 +144,10 @@ struct Plate {
+     raid: RegionHandle,
+     bar: FrameHandle,
+     fill: RegionHandle,
++    /// The modern look's extras, built only under it and after the reference's regions and
++    /// child, so the 1.12 order addons walk is untouched (region 1 keeps the border path addons
++    /// identify a plate by, hidden): the flat border, the elite dragon, the cast bar.
++    modern: Option<ModernParts>,
+     /// Last frame's state, so [`Plate::drive`] writes only what moved; `None` while retired.
+     last: Option<PlateState>,
+     /// The geometry its anchors were written under, `None` before the first lay-out. Kept per
+@@ -117,6 +161,17 @@ impl Plate {
+     }
+ }
+ 
++/// A modern plate's extra widgets.
++#[derive(Debug, Clone, Copy)]
++struct ModernParts {
++    frame_border: RegionHandle,
++    elite: RegionHandle,
++    cast: FrameHandle,
++    cast_fill: RegionHandle,
++    cast_back: RegionHandle,
++    cast_icon: RegionHandle,
++}
++
+ /// The plate pool, grown on demand and never shrunk or reordered: addons scan only the children
+ /// past the count they last saw, so a compacted list would hide every later plate from them.
+ #[derive(Debug, Default)]
+@@ -135,6 +190,11 @@ pub(crate) struct NamePlates {
      /// The verbs' writes to the two script bits, drained by
      /// [`UiScript::take_nameplate_bit_writes`].
      bit_writes: PlateBitWrites,
@@ -22892,7 +23434,7 @@ index 369fdfac..0bbad459 100644
  }
  
  impl NamePlates {
-@@ -249,6 +263,21 @@ impl UiScript {
+@@ -249,6 +309,21 @@ impl UiScript {
          for (bar, value) in effects.values {
              super::statusbar::fire_engine_value_changed(lua, bar, value);
          }
@@ -22914,7 +23456,7 @@ index 369fdfac..0bbad459 100644
      }
  
      /// The unit whose plate is the hovered frame, the mouseover its OnEnter publishes (`0x7cb850`
-@@ -314,6 +343,7 @@ impl UiScript {
+@@ -314,6 +389,7 @@ impl UiScript {
              effects
          };
          super::event::fire_visibility_changes(lua, effects.visibility);
@@ -22922,7 +23464,41 @@ index 369fdfac..0bbad459 100644
      }
  
      /// How many plate widgets the pool holds.
-@@ -496,6 +526,7 @@ impl Plate {
+@@ -379,7 +455,7 @@ fn sync(
+                 let free = (0..model.nameplates.plates.len())
+                     .find(|i| model.nameplates.plates[*i].last.is_none());
+                 let i = free.unwrap_or_else(|| {
+-                    let plate = Plate::create(model, world, &mut effects);
++                    let plate = Plate::create(model, world, geometry.modern, &mut effects);
+                     model.nameplates.plates.push(plate);
+                     model.nameplates.plates.len() - 1
+                 });
+@@ -407,7 +483,12 @@ fn sync(
+ impl Plate {
+     /// Build one plate: the Button, its six regions in the reference's order, and the health bar.
+     /// Written once, so a region an addon blanks stays blank.
+-    fn create(model: &mut Model, world: FrameHandle, effects: &mut SyncEffects) -> Plate {
++    fn create(
++        model: &mut Model,
++        world: FrameHandle,
++        modern: bool,
++        effects: &mut SyncEffects,
++    ) -> Plate {
+         // Anonymous, as the reference's name is zeroed (`0x76c50b`): plate addons reject a named
+         // `WorldFrame` child.
+         let frame = model.arena.create(FrameKind::Button, None, Some(world));
+@@ -487,6 +568,10 @@ impl Plate {
+             model.region_data.entry(rh).or_default().hidden = true;
+         }
+ 
++        // The modern extras, after everything the 1.12 order names.
++        let modern = modern.then(|| Self::create_modern(model, frame, strata, effects));
++
++
+         // Born retired and hidden: addons tell a live plate from a pooled one by `IsShown()`.
+         effects
+             .visibility
+@@ -496,6 +581,7 @@ impl Plate {
              .nameplates
              .by_frame
              .insert(frame, model.nameplates.plates.len());
@@ -22930,7 +23506,239 @@ index 369fdfac..0bbad459 100644
  
          Plate {
              frame,
-@@ -789,3 +820,272 @@ pub(super) fn is_unpainted_glow(data: &RegionData) -> bool {
+@@ -507,11 +593,66 @@ impl Plate {
+             raid,
+             bar,
+             fill,
++            modern,
+             last: None,
+             laid_out: None,
+         }
+     }
+ 
++    /// The modern look's extra widgets on `frame`.
++    fn create_modern(
++        model: &mut Model,
++        frame: FrameHandle,
++        strata: crate::order::Strata,
++        effects: &mut SyncEffects,
++    ) -> ModernParts {
++        // The flat border under the bar (the bar's level is below the plate's, so BACKGROUND).
++        let frame_border = model
++            .arena
++            .create_region(frame, RegionKind::Texture, DrawLayer::Background, 0)
++            .expect("live plate");
++        model.region_data.entry(frame_border).or_default().fill = Some(MODERN_BORDER);
++        let elite = texture(model, frame, DrawLayer::Overlay, ELITE_TEXTURE, BlendMode::Blend);
++        model.region_data.entry(elite).or_default().hidden = true;
++        let cast = model.arena.create(FrameKind::StatusBar, None, Some(frame));
++        model.arena.set_frame_strata(cast, strata);
++        model.arena.set_frame_level(cast, BAR_LEVEL, true);
++        let cast_back = model
++            .arena
++            .create_region(cast, RegionKind::Texture, DrawLayer::Background, 0)
++            .expect("live cast bar");
++        let back = model.region_data.entry(cast_back).or_default();
++        back.fill = Some(MODERN_BORDER);
++        let cast_fill = model
++            .arena
++            .create_region(cast, RegionKind::Texture, DrawLayer::Artwork, 0)
++            .expect("live cast bar");
++        let cf = model.region_data.entry(cast_fill).or_default();
++        cf.texture = Some(MODERN_FILL_TEXTURE.to_string());
++        cf.blend = BlendMode::Blend;
++        let cast_icon = model
++            .arena
++            .create_region(cast, RegionKind::Texture, DrawLayer::Artwork, 0)
++            .expect("live cast bar");
++        if let Some(KindState::StatusBar(sb)) =
++            model.arena.frame_mut(cast).map(|f| &mut f.kind_state)
++        {
++            sb.bar = Some(cast_fill);
++            sb.min = 0.0;
++            sb.max = 1.0;
++            sb.value = 0.0;
++        }
++        effects.visibility.extend(model.arena.set_shown(cast, false));
++        ModernParts {
++            frame_border,
++            elite,
++            cast,
++            cast_fill,
++            cast_back,
++            cast_icon,
++        }
++    }
++
+     /// Write the window-derived sizes and anchors, on the first drive and a geometry change. The
+     /// reference's are real anchors too, through `SetPoint`'s own store (`0x767c70`).
+     fn lay_out(model: &mut Model, i: usize, g: PlateGeometry) {
+@@ -588,11 +729,83 @@ impl Plate {
+         raid_data.anchors = vec![Anchor::new(Point::Right, plate_id, Point::Left, 0.0, 0.0)];
+         raid_data.size = Some((g.raid_size, g.raid_size));
+ 
++        if let (true, Some(parts)) = (g.modern, model.nameplates.plates[i].modern) {
++            Self::lay_out_modern(model, i, g, parts);
++        }
++
+         // The first lay-out adds anchor targets, so the full touch; once per geometry change.
+         model.touch_layout();
+         model.nameplates.plates[i].laid_out = Some(g);
+     }
+ 
++    /// The modern look over the reference's anchors: the plate is the bar plus its border, the
++    /// border region a flat frame, the name above, the level after the bar, the raid mark over
++    /// the name, the elite dragon on the plate's right end, the cast bar below with its icon left.
++    fn lay_out_modern(model: &mut Model, i: usize, g: PlateGeometry, m: ModernParts) {
++        let p = &model.nameplates.plates[i];
++        let (frame, bar, cast) = (p.frame, p.bar, m.cast);
++        let (border, name, level, skull, raid, fill) =
++            (p.border, p.name, p.level, p.skull, p.raid, p.fill);
++        let (elite, cast_back, cast_icon) = (m.elite, m.cast_back, m.cast_icon);
++        let plate_id = model.frame_id(frame);
++        let cast_id = model.frame_id(cast);
++        let b = g.border;
++
++        let input = model.layout_inputs.entry(frame).or_default();
++        input.width = g.bar_width + 2.0 * b;
++        input.height = g.bar_height + 2.0 * b;
++
++        // Region 1 keeps the path addons identify a plate by; the flat border draws instead.
++        model.region_data.entry(border).or_default().hidden = true;
++        model.region_data.entry(m.frame_border).or_default().anchors = vec![
++            Anchor::new(Point::TopLeft, plate_id, Point::TopLeft, 0.0, 0.0),
++            Anchor::new(Point::BottomRight, plate_id, Point::BottomRight, 0.0, 0.0),
++        ];
++
++        let bar_input = model.layout_inputs.entry(bar).or_default();
++        bar_input.anchors = vec![Anchor::new(Point::BottomLeft, plate_id, Point::BottomLeft, b, b)];
++        model.region_data.entry(fill).or_default().texture = Some(MODERN_FILL_TEXTURE.to_string());
++
++        model.region_data.entry(name).or_default().anchors =
++            vec![Anchor::new(Point::Bottom, plate_id, Point::Top, 0.0, 2.0 * b + 1.0)];
++        for rh in [level, skull] {
++            model.region_data.entry(rh).or_default().anchors =
++                vec![Anchor::new(Point::Left, plate_id, Point::Right, 3.0 * b, 0.0)];
++        }
++        model.region_data.entry(skull).or_default().size = Some((g.skull_size, g.skull_size));
++        model.region_data.entry(raid).or_default().anchors = vec![Anchor::new(
++            Point::Bottom,
++            plate_id,
++            Point::Top,
++            0.0,
++            g.name_height + 4.0 * b,
++        )];
++        let elite_data = model.region_data.entry(elite).or_default();
++        elite_data.anchors = vec![Anchor::new(Point::Center, plate_id, Point::Right, 0.0, 0.0)];
++        elite_data.size = Some((g.elite_size, g.elite_size));
++
++        let cast_input = model.layout_inputs.entry(cast).or_default();
++        cast_input.anchors = vec![Anchor::new(
++            Point::TopLeft,
++            plate_id,
++            Point::BottomLeft,
++            b,
++            -3.0 * b,
++        )];
++        cast_input.width = g.bar_width;
++        cast_input.height = g.cast_height;
++        model.region_data.entry(cast_back).or_default().anchors = vec![
++            Anchor::new(Point::TopLeft, cast_id, Point::TopLeft, -b, b),
++            Anchor::new(Point::BottomRight, cast_id, Point::BottomRight, b, -b),
++        ];
++        // The icon spans both bars, square, left of the plate.
++        let icon = g.bar_height + 2.0 * b + 3.0 * b + g.cast_height;
++        let icon_data = model.region_data.entry(cast_icon).or_default();
++        icon_data.anchors = vec![Anchor::new(Point::TopRight, plate_id, Point::TopLeft, -2.0 * b, 0.0)];
++        icon_data.size = Some((icon, icon));
++        icon_data.tex_coords = Some(TexCoords::Rect([0.08, 0.92, 0.08, 0.92]));
++    }
++
+     /// The per-frame write, each property only when it moved.
+     fn drive(
+         model: &mut Model,
+@@ -721,19 +934,79 @@ impl Plate {
+             }
+         }
+ 
++        if let Some(parts) = model.nameplates.plates[i]
++            .modern
++            .filter(|_| model.nameplates.geometry.is_some_and(|g| g.modern))
++        {
++            Self::drive_modern(model, parts, state, last.as_ref(), effects);
++        }
++
+         model.nameplates.plates[i].last = Some(state.clone());
+     }
+ 
++    /// The modern extras' per-frame writes: the border lights for the target, the dragon, the
++    /// cast bar.
++    fn drive_modern(
++        model: &mut Model,
++        m: ModernParts,
++        state: &PlateState,
++        last: Option<&PlateState>,
++        effects: &mut SyncEffects,
++    ) {
++        let (border, elite, cast, cast_fill, cast_icon) =
++            (m.frame_border, m.elite, m.cast, m.cast_fill, m.cast_icon);
++        if last.is_none_or(|l| l.target != state.target) {
++            model.region_data.entry(border).or_default().fill = Some(if state.target {
++                MODERN_BORDER_TARGET
++            } else {
++                MODERN_BORDER
++            });
++        }
++        if last.is_none_or(|l| l.elite != state.elite) {
++            model.region_data.entry(elite).or_default().hidden = !state.elite;
++        }
++        let was = last.and_then(|l| l.cast.as_ref());
++        if was != state.cast.as_ref() {
++            match &state.cast {
++                Some(c) => {
++                    if was.is_none() {
++                        effects.visibility.extend(model.arena.set_shown(cast, true));
++                    }
++                    if let Some(KindState::StatusBar(sb)) =
++                        model.arena.frame_mut(cast).map(|f| &mut f.kind_state)
++                    {
++                        sb.value = c.progress.clamp(0.0, 1.0);
++                    }
++                    effects.values.push((cast, c.progress));
++                    if was.is_none_or(|w| w.channel != c.channel) {
++                        model.region_data.entry(cast_fill).or_default().vertex_color =
++                            Some(if c.channel { CHANNEL_COLOUR } else { CAST_COLOUR });
++                    }
++                    if was.is_none_or(|w| w.icon != c.icon) {
++                        let data = model.region_data.entry(cast_icon).or_default();
++                        data.texture = c.icon.clone();
++                        data.hidden = c.icon.is_none();
++                    }
++                }
++                None => effects.visibility.extend(model.arena.set_shown(cast, false)),
++            }
++        }
++    }
++
+     /// Retire a plate: hide it, never destroy it (`0x608a10`), so it keeps its child-list index and
+     /// comes back as the same Lua object addons key their per-plate state by.
+     fn retire(model: &mut Model, i: usize, effects: &mut SyncEffects) {
+         if model.nameplates.plates[i].last.is_none() {
+             return;
+         }
+-        let frame = model.nameplates.plates[i].frame;
++        let (frame, modern) = (model.nameplates.plates[i].frame, model.nameplates.plates[i].modern);
+         effects
+             .visibility
+             .extend(model.arena.set_shown(frame, false));
++        // A reused plate starts with no cast on it.
++        if let Some(m) = modern {
++            effects.visibility.extend(model.arena.set_shown(m.cast, false));
++        }
+         model.nameplates.plates[i].last = None;
+     }
+ }
+@@ -789,3 +1062,272 @@ pub(super) fn is_unpainted_glow(data: &RegionData) -> bool {
  /// The lit bar's brighten, a multiply of the fill tint in encoded sRGB like the client's modulate:
  /// 255/215 takes the fill texture's encoded peak exactly to white, so no gradient row clips.
  const LIT_BOOST: f32 = 255.0 / 215.0;
@@ -24065,6 +24873,47 @@ index b07a37db..d139d137 100644
  ];
  
  /// `reference/3.3.5a-globals.tsv`'s `engine` names.
+diff --git a/crates/benilla-ui/src/script/tests/button.rs b/crates/benilla-ui/src/script/tests/button.rs
+index c2472c06..421ec124 100644
+--- a/crates/benilla-ui/src/script/tests/button.rs
++++ b/crates/benilla-ui/src/script/tests/button.rs
+@@ -1502,3 +1502,36 @@ fn a_frame_in_its_xml_load_fires_no_enable_scripts() {
+         "onload,enable"
+     );
+ }
++
++/// The Dungeon Finder's role button (`LFGRoleButtonTemplate`, Forever UI's `createRole`): a 24-unit
++/// CheckButton hung off its 64-unit Button's BOTTOMLEFT at (-5, -5), half outside it. A click
++/// anywhere on the box toggles it, the part outside the parent included, and a click with no
++/// move before it (a tap, a synthetic click) hits as well as a hovered one.
++#[test]
++fn a_role_checkbox_takes_clicks_on_all_of_its_box_with_no_hover_first() {
++    let mut s = script();
++    s.set_screen_size(1024.0, 768.0);
++    s.run(
++        r#"
++        role = CreateFrame("Button", "RoleB", UIParent)
++        role:SetWidth(64) role:SetHeight(64) role:SetPoint("BOTTOMLEFT", 100, 100)
++        check = CreateFrame("CheckButton", "RoleC", role)
++        check:SetWidth(24) check:SetHeight(24) check:SetPoint("BOTTOMLEFT", role, "BOTTOMLEFT", -5, -5)
++        clicks = 0
++        check:SetScript("OnClick", function() clicks = clicks + 1 end)
++        role:SetScript("OnClick", function() check:Click() end)
++    "#,
++    )
++    .unwrap();
++    s.resolve();
++    // Inside the box but outside the parent (x 95..100), inside both, and on the parent alone.
++    for (i, (x, y)) in [(97.0, 110.0), (110.0, 110.0), (150.0, 150.0)].into_iter().enumerate() {
++        s.mouse_button(x, y, "LeftButton", true);
++        s.mouse_button(x, y, "LeftButton", false);
++        assert_eq!(
++            s.eval::<i64>("return clicks").unwrap(),
++            i as i64 + 1,
++            "click {i} at ({x}, {y})"
++        );
++    }
++}
 diff --git a/crates/benilla-ui/src/script/tests/dispatch_bench.rs b/crates/benilla-ui/src/script/tests/dispatch_bench.rs
 index a4fcb08e..51251b5c 100644
 --- a/crates/benilla-ui/src/script/tests/dispatch_bench.rs
@@ -24871,12 +25720,99 @@ index 00000000..cc60c222
 +        )
 +        .unwrap());
 +}
+diff --git a/crates/benilla-ui/src/script/tests/nameplate.rs b/crates/benilla-ui/src/script/tests/nameplate.rs
+index 304d3ae3..4322c570 100644
+--- a/crates/benilla-ui/src/script/tests/nameplate.rs
++++ b/crates/benilla-ui/src/script/tests/nameplate.rs
+@@ -17,6 +17,10 @@ fn vm() -> UiScript {
+ /// A 1280 px window, where one gx unit is 1280 px, so the 0.1 × 0.025 plate is 128 × 32.
+ fn geometry() -> PlateGeometry {
+     PlateGeometry {
++        modern: false,
++        border: 1.0,
++        cast_height: 6.0,
++        elite_size: 14.0,
+         width: 128.0,
+         height: 32.0,
+         bar_off_x: 4.0,
+@@ -35,6 +39,9 @@ fn geometry() -> PlateGeometry {
+ 
+ fn plate(name: &str, health: f32, max: f32) -> PlateState {
+     PlateState {
++        target: false,
++        elite: false,
++        cast: None,
+         // A hash of the name stands in for the GUID: stable per unit, distinct between units.
+         key: name.bytes().map(u64::from).sum(),
+         top_centre: (500.0, 400.0),
+@@ -735,3 +742,61 @@ fn a_ground_target_veto_refuses_the_hit_without_disabling_the_mouse() {
+         "and the plate takes it back when the cast is gone"
+     );
+ }
++
++/// The modern look: the 1.12 regions and health bar first (region 1 still the border path addons
++/// identify a plate by, hidden), then the flat border and the dragon; the cast bar is the second
++/// child, shown with the cast's progress and icon, and hidden again on the plate's reuse.
++#[test]
++fn the_modern_plate_keeps_the_abi_and_draws_its_cast_and_dragon() {
++    let mut s = vm();
++    let g = PlateGeometry {
++        modern: true,
++        width: 112.0,
++        height: 14.0,
++        bar_width: 110.0,
++        bar_height: 12.0,
++        ..geometry()
++    };
++    let mut wolf = plate("Wolf", 30.0, 40.0);
++    wolf.elite = true;
++    wolf.target = true;
++    wolf.cast = Some(crate::script::PlateCast {
++        progress: 0.25,
++        icon: Some("Interface\\Icons\\Spell_Fire_Fireball02".into()),
++        channel: false,
++    });
++    s.sync_nameplates(g, &[wolf]);
++    s.resolve();
++    let got: (i64, i64, String, bool, f64, f64, f64, bool) = s
++        .eval(
++            r#"
++            local p = WorldFrame:GetChildren()
++            local border = p:GetRegions()
++            local _, cast = p:GetChildren()
++            local health = select(1, p:GetChildren())
++            return p:GetNumRegions(), p:GetNumChildren(), border:GetTexture(),
++                border:IsShown() == 1, health:GetWidth(), health:GetHeight(), cast:GetValue(),
++                cast:IsShown() == 1
++        "#,
++        )
++        .unwrap();
++    assert_eq!(got.0, 8, "six 1.12 regions, then the flat border and the dragon");
++    assert_eq!(got.1, 2, "the health bar, then the cast bar");
++    assert_eq!(got.2, "Interface\\Tooltips\\Nameplate-Border");
++    assert!(!got.3, "the stock border art is hidden under the modern look");
++    assert_eq!((got.4, got.5), (110.0, 12.0), "the 110x12 bar");
++    assert!((got.6 - 0.25).abs() < 1e-6 && got.7, "the cast shows its progress");
++    let dragon: bool = s
++        .eval("local p = WorldFrame:GetChildren() return select(8, p:GetRegions()):IsShown() == 1")
++        .unwrap();
++    assert!(dragon, "an elite shows the dragon");
++
++    // The unit leaves and another takes the plate: no stale cast bar.
++    s.sync_nameplates(g, &[]);
++    s.sync_nameplates(g, &[plate("Bear", 10.0, 90.0)]);
++    s.resolve();
++    let cast_shown: bool = s
++        .eval("local p = WorldFrame:GetChildren() local _, c = p:GetChildren() return c:IsShown() == 1")
++        .unwrap();
++    assert!(!cast_shown);
++}
 diff --git a/crates/benilla-ui/src/script/tests/nameplate_api.rs b/crates/benilla-ui/src/script/tests/nameplate_api.rs
 new file mode 100644
-index 00000000..a478c2d4
+index 00000000..e289ef64
 --- /dev/null
 +++ b/crates/benilla-ui/src/script/tests/nameplate_api.rs
-@@ -0,0 +1,274 @@
+@@ -0,0 +1,281 @@
 +//! The awesome_wotlk nameplate backport as a plate addon uses it: `NAME_PLATE_CREATED`,
 +//! `NAME_PLATE_UNIT_ADDED`/`_REMOVED` with `nameplateN`, the `Unit*` getters on that token, and
 +//! `C_NamePlate`.
@@ -24901,6 +25837,10 @@ index 00000000..a478c2d4
 +
 +fn geometry() -> PlateGeometry {
 +    PlateGeometry {
++        modern: false,
++        border: 1.0,
++        cast_height: 6.0,
++        elite_size: 14.0,
 +        width: 128.0,
 +        height: 32.0,
 +        bar_off_x: 4.0,
@@ -24919,6 +25859,9 @@ index 00000000..a478c2d4
 +
 +fn plate(guid: u64, name: &str) -> PlateState {
 +    PlateState {
++        target: false,
++        elite: false,
++        cast: None,
 +        key: guid,
 +        top_centre: (500.0, 400.0),
 +        health: 30.0,
@@ -25153,10 +26096,10 @@ index 00000000..a478c2d4
 +}
 diff --git a/crates/benilla-ui/src/script/tests/nameplate_backport.rs b/crates/benilla-ui/src/script/tests/nameplate_backport.rs
 new file mode 100644
-index 00000000..6e17c6c1
+index 00000000..5d7296d4
 --- /dev/null
 +++ b/crates/benilla-ui/src/script/tests/nameplate_backport.rs
-@@ -0,0 +1,103 @@
+@@ -0,0 +1,110 @@
 +//! The rest of the backport's plate surface: `C_NamePlate.GetNamePlateByGUID`,
 +//! `C_NamePlate.GetNamePlateTokenByGUID`, the plate's `unit` field, `UnitTokenFromGUID` on a plate
 +//! unit, and `NAME_PLATE_OWNER_CHANGED` registering harmlessly (a plate changing hands is always a
@@ -25169,6 +26112,10 @@ index 00000000..6e17c6c1
 +
 +fn geometry() -> PlateGeometry {
 +    PlateGeometry {
++        modern: false,
++        border: 1.0,
++        cast_height: 6.0,
++        elite_size: 14.0,
 +        width: 128.0,
 +        height: 32.0,
 +        bar_off_x: 4.0,
@@ -25187,6 +26134,9 @@ index 00000000..6e17c6c1
 +
 +fn plate(guid: u64, name: &str) -> PlateState {
 +    PlateState {
++        target: false,
++        elite: false,
++        cast: None,
 +        key: guid,
 +        top_centre: (500.0, 400.0),
 +        health: 30.0,
@@ -42602,10 +43552,10 @@ index 00000000..3d84ae8f
 \ No newline at end of file
 diff --git a/web/boot.js b/web/boot.js
 new file mode 100644
-index 00000000..538198fc
+index 00000000..01aeb836
 --- /dev/null
 +++ b/web/boot.js
-@@ -0,0 +1,911 @@
+@@ -0,0 +1,985 @@
 +// boot.js — the pre-login loading experience, shared by the dev page (web/index.html) and the
 +// realm page (crates/wenilla-realm/templates/play.html).
 +//
@@ -42643,6 +43593,7 @@ index 00000000..538198fc
 +const PREFETCH_CONCURRENCY = 24;
 +
 +export async function boot(init, opts = {}) {
++  installTouchAsMouse();
 +  const q = new URLSearchParams(location.search);
 +  const ui = createBootUi();
 +  if (q.get('boottrace') === '1') window.__wenilla_boottrace = [];
@@ -42941,7 +43892,10 @@ index 00000000..538198fc
 +  return adts.map((a) => a[1]).concat(rest);
 +}
 +
-+async function prefetchWorld() {
++/// The most files an in-world port's prefetch warms, nearest first.
++const PORT_PREFETCH_MAX = 600;
++
++async function prefetchWorld({ urgent = false } = {}) {
 +  const gen = ++WORLD.gen;
 +  const tiers = await tierLists();
 +  if (gen !== WORLD.gen) return;
@@ -42961,9 +43915,15 @@ index 00000000..538198fc
 +    console.log(`boot: no streamed tier holds ${WORLD.focus}; no world prefetch`);
 +    return corner.set('');
 +  }
-+  const names = orderForFocus(pick.flatMap((t) => t.names), want);
++  // An in-world port warms only the nearest part of the tier: the rest streams as the player moves.
++  const ordered = orderForFocus(pick.flatMap((t) => t.names), want);
++  const names = urgent ? ordered.slice(0, PORT_PREFETCH_MAX) : ordered;
 +  console.log(`boot: world prefetch for ${WORLD.focus}: tier ${pick.map((t) => `${t.tier} (${t.name})`).join(', ')}, ${names.length} files`);
-+  await prefetchNames(names, onProgress, { concurrency: 12, low: true, alive: () => gen === WORLD.gen });
++  await prefetchNames(names, onProgress, {
++    concurrency: urgent ? 24 : 12,
++    low: !urgent,
++    alive: () => gen === WORLD.gen,
++  });
 +  if (gen === WORLD.gen) corner.set('');
 +}
 +
@@ -43300,6 +44260,66 @@ index 00000000..538198fc
 +/// Keys reach the client only through the canvas's own listeners (winit), so the canvas takes
 +/// focus when the overlay goes and at the first world frame: with the page signing the player in,
 +/// nothing else had put it there. A page control the player is typing in keeps it.
++/// Touch as the mouse. The client reads only mouse pointers (winit hands touch pointers to Bevy
++/// as `Touch`, which the interface never sees), so on a phone a tap did nothing. Each primary
++/// touch on the canvas is re-sent as the mouse: a move to the finger, then the press, the drags,
++/// the release, each carrying the touch's own pointer id so pointer capture still works. The
++/// canvas takes `touch-action: none`, so a tap is never a scroll or a zoom.
++const TOUCH_AS_MOUSE = { pointerdown: 'pointerdown', pointermove: 'pointermove', pointerup: 'pointerup', pointercancel: 'pointerup' };
++
++/// The mouse pointer events one touch pointer event becomes (`null`: leave it alone).
++export function touchToMouse(ev) {
++  if (!ev || ev.pointerType !== 'touch' || !ev.isPrimary) return null;
++  const type = TOUCH_AS_MOUSE[ev.type];
++  if (!type) return null;
++  const at = {
++    pointerId: ev.pointerId,
++    pointerType: 'mouse',
++    isPrimary: true,
++    clientX: ev.clientX,
++    clientY: ev.clientY,
++    screenX: ev.screenX,
++    screenY: ev.screenY,
++    bubbles: true,
++    cancelable: true,
++    composed: true,
++  };
++  const down = type === 'pointerdown';
++  const up = type === 'pointerup';
++  const out = [];
++  // The cursor lands on the finger first, so the press hits what it is over.
++  if (down) out.push({ type: 'pointermove', init: { ...at, button: -1, buttons: 0 } });
++  out.push({
++    type,
++    init: { ...at, button: down || up ? 0 : -1, buttons: up ? 0 : 1, pressure: up ? 0 : 0.5 },
++  });
++  return out;
++}
++
++function installTouchAsMouse() {
++  if (typeof document === 'undefined' || typeof PointerEvent === 'undefined') return;
++  const c = document.getElementById('benilla');
++  if (!c || c.__wenilla_touch) return;
++  c.__wenilla_touch = true;
++  c.style.touchAction = 'none';
++  const relay = (ev) => {
++    const out = touchToMouse(ev);
++    if (!out) return;
++    // Ours only: the touch never reaches winit as a touch.
++    ev.stopImmediatePropagation();
++    if (ev.cancelable) ev.preventDefault();
++    if (ev.type === 'pointerdown') focusCanvas();
++    for (const e of out) c.dispatchEvent(new PointerEvent(e.type, e.init));
++  };
++  for (const t of Object.keys(TOUCH_AS_MOUSE)) c.addEventListener(t, relay, { capture: true, passive: false });
++  // A touch's compatibility mouse events and its context menu are the relay's to make.
++  c.addEventListener('contextmenu', (ev) => ev.preventDefault());
++}
++if (typeof document !== 'undefined') {
++  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installTouchAsMouse);
++  else installTouchAsMouse();
++}
++
 +function focusCanvas() {
 +  const c = document.getElementById('benilla');
 +  const a = document.activeElement;
@@ -43380,6 +44400,10 @@ index 00000000..538198fc
 +      reconnectOverlay(Number(stage.slice(10)) || 0);
 +    } else if (stage === 'reconnecting') {
 +      reconnectOverlay(-1);
++    } else if (typeof stage === 'string' && stage.startsWith('port:')) {
++      // An in-world port: warm the destination's tier now, at full priority (the cover is up).
++      WORLD.focus = stage.slice(5);
++      if (!skipPrefetch) prefetchWorld({ urgent: true }).catch(() => {});
 +    } else if (typeof stage === 'string' && stage.startsWith('focus:')) {
 +      reconnectOverlay(null);
 +      WORLD.focus = stage.slice(6);
@@ -44705,10 +45729,10 @@ index 00000000..6910bf45
 +});
 diff --git a/web/tests/boot.test.mjs b/web/tests/boot.test.mjs
 new file mode 100644
-index 00000000..4062caec
+index 00000000..4d4152d8
 --- /dev/null
 +++ b/web/tests/boot.test.mjs
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,108 @@
 +import assert from 'node:assert/strict';
 +import { readFile } from 'node:fs/promises';
 +import test from 'node:test';
@@ -44800,6 +45824,23 @@ index 00000000..4062caec
 +  assert.ok(!reconnectDismissedBy('glue:login'));
 +  assert.ok(!reconnectDismissedBy('reconnect:2'));
 +});
++
++test('a touch on the canvas becomes the mouse: move, press, drag, release', async () => {
++  const { touchToMouse } = await import('../boot.js');
++  const touch = (type, extra = {}) => ({ type, pointerType: 'touch', isPrimary: true, pointerId: 7, clientX: 10, clientY: 20, ...extra });
++  const down = touchToMouse(touch('pointerdown'));
++  assert.deepEqual(down.map((e) => e.type), ['pointermove', 'pointerdown']);
++  assert.equal(down[1].init.pointerType, 'mouse');
++  assert.equal(down[1].init.button, 0);
++  assert.equal(down[1].init.buttons, 1);
++  assert.equal(down[1].init.pointerId, 7);
++  assert.equal(touchToMouse(touch('pointermove'))[0].init.buttons, 1);
++  const up = touchToMouse(touch('pointerup'));
++  assert.deepEqual([up[0].type, up[0].init.button, up[0].init.buttons], ['pointerup', 0, 0]);
++  assert.equal(touchToMouse(touch('pointercancel'))[0].type, 'pointerup');
++  assert.equal(touchToMouse(touch('pointerdown', { isPrimary: false })), null, 'a second finger is left alone');
++  assert.equal(touchToMouse({ type: 'pointerdown', pointerType: 'mouse', isPrimary: true }), null, 'a mouse is untouched');
++});
 diff --git a/web/tests/journal.test.mjs b/web/tests/journal.test.mjs
 new file mode 100644
 index 00000000..fac177e2
@@ -44841,6 +45882,82 @@ index 00000000..fac177e2
 +  assert.equal(clicked.download, 'fps-journal.csv');
 +  assert.equal(await (await fetch(clicked.href)).text(), csv);
 +});
+diff --git a/web/tests/touch.browser.mjs b/web/tests/touch.browser.mjs
+new file mode 100644
+index 00000000..0c5911d5
+--- /dev/null
++++ b/web/tests/touch.browser.mjs
+@@ -0,0 +1,70 @@
++// The touch relay in a real browser (Playwright, a touch-only phone context): a tap on the canvas
++// must reach the page as the mouse pointer events winit reads (a move to the finger, a left press,
++// a release), at 390x844 and 844x390, and a touch pointer must never get through as itself.
++//
++//   node web/tests/touch.browser.mjs        (needs `playwright` resolvable and a Chromium)
++//
++// No client, no game data: the page is a bare `#benilla` canvas with boot.js loaded, so this
++// checks the page half of a phone tap. The client half is the ordinary mouse path.
++import assert from 'node:assert/strict';
++import { createServer } from 'node:http';
++import { readFile } from 'node:fs/promises';
++
++let chromium;
++try {
++  ({ chromium } = await import('playwright'));
++} catch (_) {
++  console.log('touch.browser: playwright not installed, skipped');
++  process.exit(0);
++}
++
++const bootSrc = await readFile(new URL('../boot.js', import.meta.url), 'utf8');
++const page = `<!doctype html><meta name=viewport content="width=device-width,initial-scale=1">
++<style>html,body{margin:0;height:100%}canvas{display:block;width:100vw;height:100vh}</style>
++<canvas id="benilla"></canvas>
++<script>
++  window.seen = [];
++  const c = document.getElementById('benilla');
++  for (const t of ['pointerdown', 'pointermove', 'pointerup']) {
++    c.addEventListener(t, (e) => seen.push([e.type, e.pointerType, e.button, e.buttons, Math.round(e.clientX), Math.round(e.clientY)]));
++  }
++</script>
++<script type="module" src="/boot.js"></script>`;
++const server = createServer((req, res) => {
++  if (req.url === '/boot.js') {
++    res.writeHead(200, { 'content-type': 'text/javascript' });
++    return res.end(bootSrc);
++  }
++  res.writeHead(200, { 'content-type': 'text/html' });
++  res.end(page);
++}).listen(0);
++const port = server.address().port;
++
++const browser = await chromium.launch(
++  process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}
++);
++try {
++  for (const [w, h] of [[390, 844], [844, 390]]) {
++    const ctx = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: true, isMobile: true, deviceScaleFactor: 3 });
++    const p = await ctx.newPage();
++    await p.goto(`http://127.0.0.1:${port}/`);
++    await p.waitForFunction(() => document.getElementById('benilla').__wenilla_touch === true);
++    await p.evaluate(() => (window.seen.length = 0));
++    await p.touchscreen.tap(100, 200);
++    const seen = await p.evaluate(() => window.seen);
++    const kinds = new Set(seen.map((e) => e[1]));
++    assert.ok(!kinds.has('touch'), `${w}x${h}: no touch pointer reaches the client: ${JSON.stringify(seen)}`);
++    const types = seen.map((e) => e[0]);
++    assert.deepEqual(types.slice(0, 2), ['pointermove', 'pointerdown'], `${w}x${h}: ${JSON.stringify(seen)}`);
++    assert.equal(types.at(-1), 'pointerup');
++    const down = seen.find((e) => e[0] === 'pointerdown');
++    assert.deepEqual(down.slice(1), ['mouse', 0, 1, 100, 200], `${w}x${h}: a left press at the finger`);
++    const style = await p.evaluate(() => getComputedStyle(document.getElementById('benilla')).touchAction);
++    assert.equal(style, 'none');
++    console.log(`touch.browser: ${w}x${h} ok — ${types.join(' ')}`);
++    await ctx.close();
++  }
++} finally {
++  await browser.close();
++  server.close();
++}
 diff --git a/web/warm.html b/web/warm.html
 new file mode 100644
 index 00000000..a71398cb

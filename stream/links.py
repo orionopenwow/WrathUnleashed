@@ -3,8 +3,10 @@
     GET /r/<realm slug or id>   a realm (the official one, or a community realm from the Beacons listing)
     GET /h/<hangout>            a Dalaran hangout
     GET /q/<dungeon or queue>   a Dungeon Finder queue (a dungeon id such as 258, or a queue slug)
+    GET /b/<raid or wing>       a boss fight: a raid or one of its wings (stream/modes_data.py ids)
     GET /m/<mod id>             a mod
-    GET /u/<character>          a player profile
+    GET /u/<character>          a player profile (with the web armory, stream/armory.py, the card shows the
+                                real character: "Name, level 80 Blood Elf Paladin", and links its sheet)
 
 The same links also answer under /wrath (/wrath/r/<id> ...), which the site's proxy already sends here.
 
@@ -12,7 +14,7 @@ Each one is a small public page: Open Graph and X card tags (wrath_portal.card_m
 wu-card.webp image), a line about what was shared, and a refresh plus a button on to the play page with
 a deep link:
 
-    /wrath?go=<kind>:<id>      kind is one of r h q m u; id passed the same allow-list as the link
+    /wrath?go=<kind>:<id>      kind is one of r h q b m u; id passed the same allow-list as the link
 
 Examples: /q/258 -> /wrath?go=q:258, /u/Arthas -> /wrath?go=u:Arthas, /h/krasus-landing ->
 /wrath?go=h:krasus-landing. The go value only ever holds [A-Za-z0-9._-] after the colon, so it needs no
@@ -36,6 +38,7 @@ KINDS = {
     "r": (re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$"), "Realm"),
     "h": (re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$"), "Dalaran hangout"),
     "q": (re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$"), "Dungeon Finder"),
+    "b": (re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$"), "Boss fight"),
     "m": (re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"), "Mod"),   # mods/wu-mod.py ID_RE, 3-32 long
     "u": (re.compile(r"^[A-Za-z]{2,12}$"), "Player"),               # a 3.3.5a character name
 }
@@ -47,9 +50,15 @@ _DESC = {
     "r": "Join this realm on the Leyline network, right in your browser.",
     "h": "Meet up in Dalaran on the Leyline network, right in your browser.",
     "q": "Queue up together on Wrath, the Leyline network's browser realm.",
+    "b": "A boss fight on Wrath, the Leyline network's browser realm. Gather a raid and go.",
     "m": "A community mod for Wrath on the Leyline network.",
     "u": "A player on Wrath, the Leyline network's browser realm.",
 }
+
+
+# Known names for ids, filled by the portal from stream/modes_data.py: {"q:deadmines": "The Deadmines", ...}.
+# An id missing here still gets a card, from the id itself.
+NAMES: dict = {}
 
 
 def match(path: str) -> bool:
@@ -96,9 +105,10 @@ def _pretty(slug: str) -> str:
     return " ".join(w.capitalize() for w in slug.split("-") if w)
 
 
-def describe(kind: str, ident: str, realm_name: str, realms=None) -> tuple[str, str, str]:
+def describe(kind: str, ident: str, realm_name: str, realms=None, who=None) -> tuple[str, str, str]:
     """(card title, card description, the line on the page) for a valid link. realms is a callable
-    giving the community realm list ([{"id", "name", "tagline"}...]); any failure falls back to generic."""
+    giving the community realm list ([{"id", "name", "tagline"}...]); who(name) gives a character in the
+    armory ({"name", "line"}) or None; any failure falls back to generic."""
     label = KINDS[kind][1]
     desc = _DESC[kind]
     if kind == "r":
@@ -114,17 +124,48 @@ def describe(kind: str, ident: str, realm_name: str, realms=None) -> tuple[str, 
         except Exception:   # a broken listing never breaks a link
             pass
         return f"Realm {ident} · Leyline", desc, f"realm {ident}"
+    known = NAMES.get(f"{kind}:{ident}")
+    if known and kind in ("q", "b", "h"):
+        name = str(known)[:64]
+        if kind == "q" and ident.isdigit():   # a Dungeon Finder id keeps its number in the title
+            return f"{label}: {ident} · {realm_name}", desc, name
+        return f"{name} · {realm_name}", desc, name
+    if kind == "b":
+        return f"{label}: {_pretty(ident)} · {realm_name}", desc, f"the {_pretty(ident)} boss fight"
     if kind == "q":
         what = f"Dungeon Finder queue {ident}" if ident.isdigit() else f"the {_pretty(ident)} queue"
         return f"{label}: {_pretty(ident) if not ident.isdigit() else ident} · {realm_name}", desc, what
     if kind == "u":
+        got = _who(who, ident)
+        if got:
+            name, line = got
+            return (f"{name} · {realm_name}", f"{name}, {line}. {desc}", f"{name}, {line}")
         return f"{ident} · {realm_name}", desc, f"{ident}'s profile"
     if kind == "m":
         return f"{label}: {_pretty(ident)} · Leyline", desc, f"the {_pretty(ident)} mod"
     return f"{_pretty(ident)} · {label}", desc, f"the {_pretty(ident)} hangout in Dalaran"
 
 
-def share_page(path: str, card_meta, render, realm_name: str = "WrathUnleashed", realms=None) -> bytes:
+def _who(who, ident: str) -> tuple[str, str] | None:
+    """(canonical name, "level 80 Blood Elf Paladin") from the armory, or None (not there, opted out, a bot,
+    no armory, or anything odd: the generic card then)."""
+    if who is None:
+        return None
+    try:
+        got = who(ident)
+    except Exception:
+        return None
+    if not isinstance(got, dict):
+        return None
+    name, line = got.get("name"), got.get("line")
+    if not (isinstance(name, str) and KINDS["u"][0].fullmatch(name) and name.lower() == ident.lower()):
+        return None
+    if not (isinstance(line, str) and re.fullmatch(r"[A-Za-z0-9 ]{1,60}", line)):
+        return None
+    return name, line
+
+
+def share_page(path: str, card_meta, render, realm_name: str = "WrathUnleashed", realms=None, who=None) -> bytes:
     """The share page for path. card_meta(path, title) and render(body, meta=...) are the portal's own.
     Always returns a page: an unknown or malformed link gets the generic card and a link to /wrath."""
     e = html.escape
@@ -136,7 +177,7 @@ def share_page(path: str, card_meta, render, realm_name: str = "WrathUnleashed",
     if got:
         kind, ident = got
         try:
-            title, desc, line = describe(kind, ident, realm_name, realms)
+            title, desc, line = describe(kind, ident, realm_name, realms, who)
         except Exception:
             title, desc, line = f"{realm_name} · Leyline", _DESC[kind], "a link"
         target = deep_link(kind, ident)
@@ -150,9 +191,15 @@ def share_page(path: str, card_meta, render, realm_name: str = "WrathUnleashed",
     meta += f'<meta http-equiv="refresh" content="1;url={e(target)}">'
     shared = (f'<p class="sub">Someone shared {e(line)} with you.</p>' if line
               else '<p class="sub">Play Wrath in your browser, on the Leyline network.</p>')
+    sheet = ""
+    if got and got[0] == "u":
+        found = _who(who, got[1])
+        if found:
+            sheet = f'<p class="center"><a href="/wrath/armory/{e(found[0])}">See {e(found[0])} in the armory</a></p>'
+
     body = (f'<div class="crest wu-brand"><h1>{e(title or realm_name)}</h1></div>{shared}'
             '<hr class="rule wu-divider">'
-            f'<p class="center"><a class="btn primary" href="{e(target)}">Open in Wrath</a></p>'
+            f'<p class="center"><a class="btn primary" href="{e(target)}">Open in Wrath</a></p>{sheet}'
             '<p class="fine center">Taking you there now. Nothing to install: it runs in your browser '
             '(or with your own 3.3.5a game files).</p>')
     page = render(body, meta=meta).decode("utf-8")

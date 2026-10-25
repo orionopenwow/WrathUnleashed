@@ -9,6 +9,11 @@
 #      instead of LFGDungeons.dbc's 15), AllowTwoSide.Interaction.Group = 1 (friends on either side can group).
 #      OV_AUTOLEARN = 1: ov_qol.lua's instant spell learn on level up (the profile had it at 0).
 #      AC_PLAYERBOTS_MAX_ADDED_BOTS = 4: the bot module's per-player cap, same as ov_companions.lua's.
+#   1b. The web armory (play.openvanilla.app/wrath/armory, stream/armory.py), when armory-export.py rides
+#      along: makes characters.ov_armory_privacy (the ".armory off" flag, ov_armory.lua), installs
+#      /srv/wrath/armory-export.py, which writes /srv/wrath/portal/armory/ (wu-portal's /app/armory) from
+#      cron every 5 minutes, and runs it once. Read only: fixed SELECTs in a READ ONLY session, no new
+#      database login. Bots and opted-out characters are left out. Backs up the old script and cron file.
 #   4. Announces a restart (SERVERPASS_WARN_MIN, default 5) and recreates the world server; if only the Lua
 #      changed, a live "reload ale" instead.
 # Never prints a password: MySQL runs in its container with the container's own root password.
@@ -27,14 +32,19 @@ echo "== 1. realm scripts"
 DST=custom/lua_scripts
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 tar -x -C "$T" -f -
-n=0
+n=0; changed=0; NEW=""
 for f in "$T"/*.lua; do
   [ -f "$f" ] || continue
-  b=$(basename "$f"); sed -i 's/\r$//' "$f"
-  [ -f "$DST/$b" ] && cp -p "$DST/$b" "$BK/$b"
-  install -m 644 "$f" "$DST/$b"; echo "  $b installed"; n=$((n+1))
+  b=$(basename "$f"); sed -i 's/\r$//' "$f"; n=$((n+1))
+  if [ -f "$DST/$b" ] && cmp -s "$f" "$DST/$b"; then echo "  $b unchanged"; continue; fi
+  if [ -f "$DST/$b" ]; then cp -p "$DST/$b" "$BK/$b"; else NEW="$NEW $b"; fi
+  install -m 644 "$f" "$DST/$b"; echo "  $b installed"; changed=$((changed+1))
 done
 [ "$n" -gt 0 ] || die "no .lua files in the upload"
+# A script the realm has never run is loaded by a restart (with the warning below), never by a live
+# "reload ale": on 2026-10-25 a reload that added two new scripts crashed the world server (no warning
+# for players). Changed scripts the realm already runs still reload live.
+[ -z "$NEW" ] || echo "  new scripts:$NEW (loaded by a restart)"
 # The Leyline realm list for the in-game window: leyline-fetch.py rides along in the upload; it goes to
 # /srv/wrath, runs every 5 minutes from cron, and once now (a failed fetch keeps the old list).
 if [ -f "$T/leyline-fetch.py" ]; then
@@ -47,6 +57,31 @@ if [ -f "$T/leyline-fetch.py" ]; then
       || echo "  NOTE: the first Leyline realm list fetch failed; cron tries again in 5 minutes"
   else
     echo "  NOTE: leyline-fetch.py doesn't parse; skipped"
+  fi
+fi
+
+# The web armory's export (see 1b above). Safe to run again: CREATE TABLE IF NOT EXISTS, install, one cron file.
+if [ -f "$T/armory-export.py" ]; then
+  echo "== 1b. web armory export"
+  sed -i 's/\r$//' "$T/armory-export.py"
+  if python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' "$T/armory-export.py"; then
+    [ -f /srv/wrath/armory-export.py ] && cp -p /srv/wrath/armory-export.py "$BK/armory-export.py"
+    [ -f /etc/cron.d/wu-armory ] && cp -p /etc/cron.d/wu-armory "$BK/cron.wu-armory"
+    docker exec -i ov-ac-database sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot -N -B acore_characters' <<'SQL' || die "could not make ov_armory_privacy"
+CREATE TABLE IF NOT EXISTS ov_armory_privacy (
+  guid INT UNSIGNED NOT NULL PRIMARY KEY,
+  hidden TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  changed_at INT UNSIGNED NOT NULL
+);
+SQL
+    install -m 755 "$T/armory-export.py" /srv/wrath/armory-export.py
+    install -d -m 755 /srv/wrath/portal/armory
+    printf '*/5 * * * * root python3 -I /srv/wrath/armory-export.py >/dev/null 2>&1\n' > /etc/cron.d/wu-armory
+    chmod 644 /etc/cron.d/wu-armory
+    if out=$(python3 -I /srv/wrath/armory-export.py 2>&1); then echo "  $out (cron every 5 min)"
+    else echo "  NOTE: the first armory export failed (${out:0:200}); cron tries again in 5 minutes"; fi
+  else
+    echo "  NOTE: armory-export.py doesn't parse; skipped"
   fi
 fi
 
@@ -71,10 +106,15 @@ for kv in AC_DUNGEON_ACCESS_REQUIREMENTS_LFGLEVEL_DBCOVERRIDE=1 AC_ALLOW_TWO_SID
   echo "  $k=$v"
 done
 
-if [ "$need" = 0 ]; then
-  echo "== 4. settings already live: reloading the scripts only"
+[ -z "$NEW" ] || need=1
+if [ "$need" = 0 ] && [ "$changed" = 0 ]; then
+  echo "== 4. settings and scripts already live: nothing to reload"
+elif [ "$need" = 0 ]; then
+  echo "== 4. settings already live: reloading the changed scripts"
   out=$(bash soap-cmd.sh "reload ale" 2>&1) || {
     for b in "$BK"/*.lua; do [ -f "$b" ] && cp -p "$b" "$DST/"; done
+    # the reload may have taken the world server down: wait for it (docker restarts it) before reporting
+    for _ in $(seq 1 60); do bash soap-cmd.sh "server info" >/dev/null 2>&1 && break; sleep 10; done
     bash soap-cmd.sh "reload ale" >/dev/null 2>&1 || true
     die "reload ale refused ($out); the previous scripts are back"
   }
@@ -83,7 +123,7 @@ else
   MIN=${SERVERPASS_WARN_MIN:-5}
   if [ "$MIN" -gt 0 ]; then
     echo "== 4. announcing a restart in $MIN minute(s)"
-    bash soap-cmd.sh "announce Server restart in $MIN minutes for an update (new: .companions). Back in a few minutes." >/dev/null 2>&1 || true
+    bash soap-cmd.sh "announce Server restart in $MIN minutes for an update. Back in a few minutes." >/dev/null 2>&1 || true
     sleep $(( MIN * 60 - 60 )) || true
     bash soap-cmd.sh "announce Server restart in 1 minute." >/dev/null 2>&1 || true
     sleep 60

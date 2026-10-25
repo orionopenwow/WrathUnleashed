@@ -350,7 +350,7 @@ async function realmLoad() {
   }
 }
 
-// A share link's deep link (stream/links.py): /r/<realm>, /h/<hangout>, /q/<queue>, /m/<mod>, /u/<character>
+// A share link's deep link (stream/links.py): /r/<realm>, /h/<hangout>, /q/<queue>, /b/<raid or wing>, /m/<mod>, /u/<character>
 // send people on to the page with ?go=<kind>:<id>. This only reads and checks it (the same allow-lists
 // as links.py) and leaves it on window.wuGo / the returned status for a later feature to act on; it
 // never navigates or runs anything. Returns { kind, id } or null.
@@ -358,6 +358,7 @@ const GO_RULES = {
   r: /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/,
   h: /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/,
   q: /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/,
+  b: /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/,
   m: /^(?=.{3,32}$)[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/,
   u: /^[A-Za-z]{2,12}$/,
 };

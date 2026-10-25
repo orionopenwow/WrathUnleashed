@@ -4,6 +4,10 @@
 --
 --   .armory <words>      search item names (rare and better, best item level first)
 --   .armory give <id>    put that item in your bags
+--   .armory off | on     hide this character from the web armory (the Wrath site's character pages), or
+--                        show it again. Stored in characters.ov_armory_privacy; realm/custom/armory-export.py
+--                        leaves hidden characters out, and the site drops them within 5 minutes.
+--   .armory privacy      says whether this character is on the web armory
 --
 -- Rules: only where a slice allows it (SLICES below); never GM, test or unobtainable items; at
 -- most one item a second. Every item given is recorded in characters.ov_armory_items, so a
@@ -168,18 +172,57 @@ local function onAddonMessage(event, sender, msgType, prefix, msg, target)
     return false
 end
 
+-- The web armory's opt-out. One row per character that ever chose; hidden = 1 keeps it off the site.
+local last_privacy = {}
+
+local function isBot(player)
+    local ok, v = pcall(function() return player.IsPlayerbot and player:IsPlayerbot() end)
+    if ok and v == true then return true end
+    local ok2, name = pcall(function() return player:GetAccountName() end)
+    return ok2 and type(name) == "string" and name:upper():find("^RNDBOT") ~= nil
+end
+
+local function webHidden(player)
+    local q = CharDBQuery(string.format("SELECT hidden FROM ov_armory_privacy WHERE guid = %d", player:GetGUIDLow()))
+    return q ~= nil and q:GetUInt32(0) == 1
+end
+
+local function setWebVisible(player, visible)
+    if isBot(player) then return end
+    local guid, now = player:GetGUIDLow(), os.time()
+    if last_privacy[guid] and now - last_privacy[guid] < 5 then
+        return say(player, "One change every 5 seconds.")
+    end
+    last_privacy[guid] = now
+    CharDBExecute(string.format(
+        "REPLACE INTO ov_armory_privacy (guid, hidden, changed_at) VALUES (%d, %d, %d)", guid, visible and 0 or 1, now))
+    if visible then
+        say(player, "Your character is back on the web armory (within 5 minutes). Hide it again: .armory off")
+    else
+        say(player, "Your character is hidden from the web armory; it leaves the site within 5 minutes. Show it again: .armory on")
+    end
+end
+
 local function onCommand(event, player, command)
     if not player then return end
     local cmd = (command or ""):gsub("^[%.!]", "")
     local head, rest = cmd:match("^(%S+)%s*(.*)$")
     if not head or head:lower() ~= "armory" then return end
     local sub, arg = rest:match("^(%S+)%s*(.*)$")
-    if sub and sub:lower() == "give" and parseEntry(arg) then
+    local word = rest:lower():match("^%s*(%a+)%s*$")
+    if word == "off" or word == "on" then
+        setWebVisible(player, word == "on")
+    elseif word == "privacy" then
+        if not isBot(player) then
+            say(player, webHidden(player) and "Web armory: hidden (.armory on shows it)."
+                or "Web armory: shown (.armory off hides it).")
+        end
+    elseif sub and sub:lower() == "give" and parseEntry(arg) then
         give(player, parseEntry(arg))
     elseif rest ~= "" then
         search(player, rest)
     else
-        say(player, "Search: .armory <words>   Take: .armory give <id>")
+        say(player, "Search: .armory <words>   Take: .armory give <id>   Web armory: .armory off / .armory on")
     end
     return false
 end
@@ -191,5 +234,11 @@ CharDBExecute([[CREATE TABLE IF NOT EXISTS ov_armory_items (
     given_at INT UNSIGNED NOT NULL,
     KEY owner (owner_guid)
 )]])
+CharDBExecute([[CREATE TABLE IF NOT EXISTS ov_armory_privacy (
+    guid INT UNSIGNED NOT NULL PRIMARY KEY,
+    hidden TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    changed_at INT UNSIGNED NOT NULL
+)]])
+OV_ARMORY_TEST = { webHidden = webHidden, isBot = isBot }
 RegisterPlayerEvent(42, onCommand) -- PLAYER_EVENT_ON_COMMAND
 RegisterServerEvent(30, onAddonMessage) -- ADDON_EVENT_ON_MESSAGE

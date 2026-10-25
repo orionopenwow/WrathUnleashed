@@ -178,6 +178,9 @@ local function build()
     if W.ToggleLeyline then   -- Leyline.lua: the realms of the Leyline network
         button(panel, "Leyline realms", 130, function() panel:Hide(); W.ToggleLeyline() end, "BOTTOMLEFT", 16, 14)
     end
+    if W.ToggleBuilder then   -- Builder.lua: place and share props in build areas
+        button(panel, "Builder", 90, function() panel:Hide(); W.ToggleBuilder() end, "BOTTOMLEFT", 152, 14)
+    end
     tinsert(UISpecialFrames, "WrathUnleashedModsFrame")   -- Esc closes it
 
     panel.pages, panel.tabs = {}, {}

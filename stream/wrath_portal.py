@@ -13,6 +13,8 @@ Two listeners, both inside Docker networks only (never published on the host):
          GET /wrath/healthz    200 when AzerothCore's SOAP answers
          GET /wrath/realms     public: the official realm first, then community realms from the
                                Beacons relay's listing (cached; a dead relay never slows the page)
+         GET /wrath/armory[/<Name>]  public: the web armory (stream/armory.py), read from the files that
+                               realm/custom/armory-export.py writes to /app/armory every 5 minutes
          GET /wrath/status.json  public realm status for the website's Beacons page, the launcher
                                and the GM console (CORS *, cached 30 s, at most one SOAP call per
                                30 s however many visitors ask)
@@ -123,6 +125,36 @@ def _load_links():
 
 
 links = _load_links()
+
+
+def _load_armory():
+    """stream/armory.py (the web armory at /wrath/armory), beside this file like links.py; None when it is
+    missing or broken: the portal runs without it."""
+    try:
+        spec = importlib.util.spec_from_file_location("wu_armory", os.path.join(os.path.dirname(os.path.abspath(__file__)), "armory.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:
+        return None
+
+
+def _load_modes():
+    """stream/modes.py (GET /wrath/modes and the go intent; its data is stream/modes_data.py), from beside
+    this file. None when missing or broken: the portal runs without them."""
+    try:
+        spec = importlib.util.spec_from_file_location("wu_modes", os.path.join(os.path.dirname(os.path.abspath(__file__)), "modes.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        if links is not None:
+            links.NAMES.update(mod.names())   # share cards say "The Deadmines", not "deadmines"
+        return mod
+    except Exception:
+        return None
+
+
+armory = _load_armory()
+modes = _load_modes()
 
 
 def go_param(query: dict) -> str:
@@ -456,9 +488,14 @@ ART_TYPES = {
     "Cinzel-SemiBold.woff2": "font/woff2", "Cinzel-OFL.txt": "text/plain; charset=utf-8",
     "wu-card.webp": "image/webp",   # the link-preview card (tools/art/wu-card.html, 1200 x 630)
     "leyline-emblem.webp": "image/webp", "leyline-bg.webp": "image/webp",   # the Leyline page (owner's art)
+    "leyline-shot-dalaran.webp": "image/webp", "leyline-shot-start.webp": "image/webp",   # gallery (live client shots)
+    "leyline-shot-city.webp": "image/webp", "leyline-shot-durotar.webp": "image/webp",
     "leyline-display.woff2": "font/woff2", "leyline-display-OFL.txt": "text/plain; charset=utf-8",   # Big Shoulders Display 600 (SIL OFL 1.1, leyline-display-OFL.txt)
     "leyline-corner-tl.webp": "image/webp", "leyline-corner-tr.webp": "image/webp",   # our gold frame art, hued blue
     "leyline-corner-bl.webp": "image/webp", "leyline-corner-br.webp": "image/webp", "leyline-divider.webp": "image/webp",
+    # the owner's screenshots for /wrath/modes (stream/modes.py); a missing one leaves a painted panel
+    "leyline-shot-dalaran.webp": "image/webp", "leyline-shot-start.webp": "image/webp",
+    "leyline-shot-city.webp": "image/webp", "leyline-shot-durotar.webp": "image/webp",
 }
 ART_MAX_AGE = 7 * 86400
 _theme_ver = {"key": None, "v": ""}
@@ -523,6 +560,10 @@ def art_url(name: str) -> str:
     return "/wrath/art/" + name
 
 
+def art_present(name: str) -> bool:
+    return name in ART_TYPES and os.path.isfile(os.path.join(ART_DIR, name))
+
+
 CARD_DESCRIPTION = ("Play Wrath in your browser, on the Leyline network. "
                     "Dalaran hangout, Dungeon Finder, host your own realm.")
 
@@ -567,8 +608,9 @@ def signed_out_page() -> bytes:
     return render(
         f'{crest(REALM_NAME)}<p class="sub">Wrath · on the Leyline network</p>{RULE}'
         '<p class="center"><a class="btn primary" href="/login?next=%2Fwrath">Sign in with Google or your Hero Key</a></p>'
-        '<p class="fine center">Played on Open Vanilla before? Use the same sign-in. Your Wrath login appears here.</p>'
-        '<p class="fine center"><a href="/wrath/realms">All realms</a>, including community realms hosted by players</p>',
+        '<p class="fine center">Played here before? Use the same sign-in. Your Wrath login appears here.</p>'
+        '<p class="fine center"><a href="/wrath/realms">All realms</a>, including community realms hosted by players · '
+        '<a href="/wrath/leyline">What is Leyline?</a></p>',
         meta=card_meta("/wrath"))
 
 
@@ -722,7 +764,8 @@ def account_page(display: str, user: str, password: str, nonce: str) -> bytes:
         '<p class="fine">This login is yours alone. Sign in here again any time to see it.</p></details></div>'
         f'<p class="fine foot">No game files? Dalaran needs none. For the whole world: '
         f'{html.escape(DISCORD_HELP.split(DISCORD_URL)[0])}<a href="{DISCORD_URL}">{html.escape(DISCORD_URL.split("//")[-1])}</a></p>'
-        '<p class="fine"><a href="/wrath/realms">Community realms</a>: Dalaran hangouts and realms hosted by players</p>')
+        '<p class="fine"><a href="/wrath/realms">Community realms</a>: Dalaran hangouts and realms hosted by players</p>'
+        '<p class="fine"><a href="/wrath/modes">Modes</a>: duels, boss fights, dungeons and hangouts, one click each</p>')
     return render(body, nonce, COPY_JS, wide=True)
 
 
@@ -989,9 +1032,38 @@ padding:10px 0;border-bottom:1px solid rgba(120,150,255,.12)}.ly-table td{border
 .ly-feat .soon{display:inline-block;margin-left:6px;font:600 10px/1 system-ui;letter-spacing:.1em;text-transform:uppercase;
 color:var(--ly-violet);border:1px solid rgba(180,140,255,.5);border-radius:999px;padding:3px 7px;vertical-align:middle}
 .ly-fine{color:var(--ly-dim);font-size:14px;text-align:center;margin-top:22px}
+.ly-shots{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+@media (max-width:640px){.ly-shots{grid-template-columns:1fr}}
+.ly-shot{margin:0;background:rgba(10,12,34,.8);border:1px solid var(--ly-line);border-radius:6px;overflow:hidden}
+.ly-shot img{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover}
+.ly-shot figcaption{padding:10px 12px;font-size:14px;color:var(--ly-ink)}
+.ly-shot figcaption b{font:600 18px/1.1 'Leyline Display','OW Cinzel',Impact,sans-serif;letter-spacing:.08em;text-transform:uppercase;
+color:var(--ly-cyan);display:block;margin-bottom:3px}
 @font-face{font-family:'OW Cinzel';src:url(ART_FONT) format('woff2');font-display:swap}
 @font-face{font-family:'Leyline Display';src:url(ART_LYF) format('woff2');font-display:swap}
 """
+
+
+def leyline_css() -> str:
+    """LEYLINE_CSS with its art filled in (the Leyline page, the armory and /wrath/modes)."""
+    css = LEYLINE_CSS
+    for k, f in (("ART_BG", "leyline-bg.webp"), ("ART_LYF", "leyline-display.woff2"), ("ART_FONT", "Cinzel-SemiBold.woff2"),
+                 ("ART_CTL", "leyline-corner-tl.webp"), ("ART_CTR", "leyline-corner-tr.webp"), ("ART_CBL", "leyline-corner-bl.webp"),
+                 ("ART_CBR", "leyline-corner-br.webp"), ("ART_DIV", "leyline-divider.webp")):
+        css = css.replace(k, art_url(f))
+    return css
+
+
+def remember_go(user: str, query: dict) -> None:
+    """A signed-in player came with ?go=<kind>:<id>: record it for their game account on the realm
+    ("ovgo set", realm/custom/lua_scripts/ov_go.lua), at most 20 a minute per account. Never fails the page."""
+    if modes is None or links is None:
+        return
+    v = (query.get("go") or [""])[0][:40]
+    got = links.check_go(v) if v else None
+    if not got or got[0] not in ("h", "q", "b") or not gate_limit.hit("go:" + user.upper(), 20):
+        return
+    modes.go_intent(ac_soap, user, links.go_value(*got), log)
 
 
 def leyline_page() -> bytes:
@@ -1016,17 +1088,18 @@ def leyline_page() -> bytes:
     icon_rocket = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 19c1-3 3-5 5-6M14 4c3 0 6 3 6 6l-7 7-6-6z"/><circle cx="15" cy="9" r="1.6"/></svg>'
     icon_portal = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 5a7 7 0 1 0 7 7"/><path d="M12 8a4 4 0 1 0 4 4"/></svg>'
 
+    def shot(name, title, text):
+        return (f'<figure class="ly-shot"><img src="{art_url("leyline-shot-" + name + ".webp")}" alt="{e(title)}" '
+                f'loading="lazy" width="1280" height="720"><figcaption><b>{e(title)}</b>{e(text)}</figcaption></figure>')
+
     def feat(title, text, soon=False):
         return (f'<div class="ly-feat"><h3>{e(title)}{"<span class=soon>planned</span>" if soon else ""}</h3>'
                 f'<p>{text}</p></div>')
-    css = LEYLINE_CSS
-    for k, f in (("ART_BG", "leyline-bg.webp"), ("ART_LYF", "leyline-display.woff2"), ("ART_FONT", "Cinzel-SemiBold.woff2"), ("ART_CTL", "leyline-corner-tl.webp"),
-                 ("ART_CTR", "leyline-corner-tr.webp"), ("ART_CBL", "leyline-corner-bl.webp"),
-                 ("ART_CBR", "leyline-corner-br.webp"), ("ART_DIV", "leyline-divider.webp")):
-        css = css.replace(k, art_url(f))
+    css = leyline_css()
     body = (
         '<nav class="ly-nav" aria-label="Leyline"><div class="grp">'
-        '<a href="/wrath/leyline">Hub</a><a href="/wrath/realms">Realms</a>'
+        '<a href="/wrath/leyline">Hub</a><a href="/wrath/modes">Modes</a><a href="/wrath/realms">Realms</a>'
+        + ('<a href="/wrath/armory">Armory</a>' if armory is not None else '') +
         f'<a href="{e(LEYLINE_REPO)}/tree/main/mods" rel="noopener noreferrer">Mods</a>'
         f'<a href="{e(LEYLINE_REPO)}/blob/main/hosting/INSTALL-OPERATE.md" rel="noopener noreferrer">Server</a></div>'
         '<div class="grp"><a href="/login?next=%2Fwrath">Sign in</a><a class="hot" href="/wrath">Play now</a></div></nav>'
@@ -1046,6 +1119,12 @@ def leyline_page() -> bytes:
         f'<tbody>{"".join(trs)}</tbody></table>'
         '<p class="ly-fine">Community realms run on their hosts\' own PCs and join through the Leyline relay. '
         '<a href="/wrath/realms">All realms and house rules</a></p></section>'
+        '<section class="ly-panel" aria-labelledby="ly-shots"><h2 id="ly-shots">See it running</h2><div class="ly-shots">'
+        + shot("dalaran", "Dalaran hangout", "The flagship realm's meeting place, streamed into a browser tab.")
+        + shot("start", "Your choice at the start", "Begin at level 1, or take a boost to 80 with gear, professions and a trip to Dalaran.")
+        + shot("city", "Play with friends", "Group up, duel, and run dungeons where labelled bots fill the empty places.")
+        + shot("durotar", "Every bar, ready", "A clean modern interface: every action bar on with common keys, sized to your screen.")
+        + '</div><p class="ly-fine">Screenshots from the live browser client.</p></section>'
         '<section class="ly-panel" aria-labelledby="ly-what"><h2 id="ly-what">What Leyline does</h2><div class="ly-grid">'
         + feat("Play in the browser", "No install: sign in with a Hero Key and play the flagship realm, WrathUnleashed. "
                "Dalaran hangout, level 1 or a boost to 80, and a Dungeon Finder where labelled bots fill the group.")
@@ -1057,11 +1136,16 @@ def leyline_page() -> bytes:
                "Mods use one open format that anyone can publish to.")
         + feat("Open source", "Every line is on GitHub, and every project it builds on is credited.")
         + feat("Fair by design", "No shop and nothing to buy. Bots are always labelled and counted apart from players.")
+        + feat("Companions", "Short a group? Type .recruit tank, healer or dps for labelled bot party members, "
+               "or .buddy for a levelling partner who keeps your level.")
+        + feat("Realms in the game", "Esc &rarr; Mods &amp; Workshop &rarr; Leyline realms lists every realm on the network, "
+               "with a link to share.")
+        + feat("Links that open the game", "Share a realm, a hangout or a dungeon queue as one short link with a preview card.")
         + '</div></section>'
         '<section class="ly-panel" aria-labelledby="ly-aims"><h2 id="ly-aims">Where it\'s going</h2><div class="ly-grid">'
         + feat("Host from a browser tab", "Start a realm from a tab and share a link: no install, no server bill.", True)
         + feat("One-click mods", "Browse the Workshop and install mods and modes into a realm in one click.", True)
-        + feat("Hop between realms", "A realm list in the in-game menu, with friends, settings and addons that travel with you.", True)
+        + feat("Hop between realms", "Join any realm from the in-game list, with friends, settings and addons that travel with you.", True)
         + feat("A peer-to-peer network", "Realms, hangouts and mods shared between players, so the network grows with them.", True)
         + feat("Try it here", "A Goldshire Inn demo on this page, with no sign-up.", True)
         + feat("Builders' tools", "Build in the world with your own models, and share it on the Workshop.", True)
@@ -1095,6 +1179,7 @@ class _Window:
 
 page_limit = _Window(60)
 gate_limit = _Window(60)
+armory_limit = _Window(60)   # armory searches: 30 a minute per address, on top of page_limit
 
 
 _health = {"at": 0.0, "ok": False, "kind": ""}
@@ -1295,7 +1380,7 @@ class PageHandler(BaseHTTPRequestHandler):
         display = str(me.get("display_name") or me.get("username") or user)
         return None, user, password, display
 
-    def own_play(self) -> None:
+    def own_play(self, query: dict | None = None) -> None:
         """GET /wrath/play?mode=own: the browser client with the player's own game files."""
         if not ownfiles_on():
             self.send(404, error_page("Playing with your own game files in the browser isn't set up here yet."))
@@ -1317,6 +1402,7 @@ class PageHandler(BaseHTTPRequestHandler):
         # Own files = the whole world: no stream session of this player stays open, and an earlier
         # stream mark is cleared. With streaming off the switch already released every mark (and
         # ov_slices.lua may not even be loaded), so a failed clear only matters while it is on.
+        remember_go(user, query or {})
         sessions.end_user(user)
         try:
             realm_clear(user)
@@ -1332,7 +1418,7 @@ class PageHandler(BaseHTTPRequestHandler):
     def stream_play(self, query: dict) -> None:
         """GET /wrath/play?mini=<slug> on play.openvanilla.app (?mode=own: own_play)."""
         if (query.get("mode") or [""])[0] == OWN:
-            self.own_play()
+            self.own_play(query)
             return
         if not stream_on():
             self.send(200, stream_off_page())
@@ -1357,6 +1443,7 @@ class PageHandler(BaseHTTPRequestHandler):
             log.error("stream mark %s failed: %s %s", user.upper(), e.kind, e.detail[:160])
             self.send(503, error_page("Streaming isn't ready on the realm right now. Please try again shortly."))
             return
+        remember_go(user, query)
         code = sessions.create(user, password, slug, info["tier"])
         log.info("stream session for %s (%s, tier %d)", user.upper(), slug, info["tier"])
         self.redirect(f"https://{STREAM_HOST}/__gate?code={urllib.parse.quote(code)}{go_param(query)}")
@@ -1511,11 +1598,26 @@ class PageHandler(BaseHTTPRequestHandler):
                 return
             self.send(200, leyline_page())
             return
+        if armory is not None and armory.match(path):   # the web armory (stream/armory.py): files only, no database
+            ip = self.ip()
+            if not page_limit.hit(ip, 120) or (armory.search_query(path, query) and not armory_limit.hit(ip, 30)):
+                self.send(429, busy_page())
+                return
+            status, body = armory.page(path, query, leyline_css(), card_meta, REALM_NAME, PUBLIC_HOST)
+            self.send(status, body)
+            return
         if links is not None and links.match(path):   # share links (stream/links.py), same limit as /wrath/leyline
             if not page_limit.hit(self.ip(), 120):
                 self.send(429, busy_page())
                 return
-            self.send(200, links.share_page(path, card_meta, render, REALM_NAME, community_realms))
+            self.send(200, links.share_page(path, card_meta, render, REALM_NAME, community_realms,
+                                            who=armory.card_line if armory is not None else None))
+            return
+        if path == "/wrath/modes" and modes is not None:
+            if not page_limit.hit(self.ip(), 120):
+                self.send(429, busy_page())
+                return
+            self.send(200, modes.page(leyline_css(), art_url, art_present, card_meta, REALM_NAME))
             return
         if path == "/wrath/realms":
             if not page_limit.hit(self.ip(), 120):
@@ -1561,6 +1663,7 @@ class PageHandler(BaseHTTPRequestHandler):
             log.error("ensure %s failed: %s %s", user.upper(), e.kind, e.detail[:160])
             self.send(503, error_page("The Wrath realm isn't answering right now. Please try again shortly."))
             return
+        remember_go(user, query)
         if straight_in:
             return self.redirect("/wrath/play?mini=mini" + go_param(query))
         nonce = secrets.token_urlsafe(16)
