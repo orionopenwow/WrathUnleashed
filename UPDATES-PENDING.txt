@@ -15,4 +15,5 @@
 1025a scripts  Random Lich King Dungeon/Heroic queues allowed (every Wrath dungeon is streamed); fall rescue survives script reloads; "you fell, brought back up" message
 1025b client  Client 20261025z: you never fall through the ground while it loads ("Still loading the ground under you"), nearest ground first, lighter Dalaran load
 1025c ship  Save tonight to GitHub (orionopenwow/WrathUnleashed): Autopilot, fall rescue after reloads, random dungeon queues, client 20261025z
-1025d ship  Recommit to orionopenwow only: no Chumpton references left in the repo
+1025d ship  Recommit to orionopenwow only: only orionopenwow references left in the repo
+1025e ship  Tidy the update list wording
