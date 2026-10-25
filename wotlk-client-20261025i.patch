@@ -1,0 +1,2419 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 69c44fe8..a5fc852e 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -595,6 +595,7 @@ dependencies = [
+  "avian3d",
+  "benilla-assets",
+  "benilla-formats",
++ "benilla-mode",
+  "benilla-protocol",
+  "benilla-srp",
+  "benilla-ui",
+@@ -708,6 +709,10 @@ dependencies = [
+  "benilla-bytes",
+ ]
+ 
++[[package]]
++name = "benilla-mode"
++version = "0.1.0"
++
+ [[package]]
+ name = "benilla-mpq"
+ version = "0.1.0"
+diff --git a/crates/benilla-app/Cargo.toml b/crates/benilla-app/Cargo.toml
+index d3dc7fa7..a60adc47 100644
+--- a/crates/benilla-app/Cargo.toml
++++ b/crates/benilla-app/Cargo.toml
+@@ -27,6 +27,8 @@ webgpu = ["bevy/webgpu", "benilla-world/webgpu"]
+ web-time = "1"
+ anyhow.workspace = true
+ benilla-ui = { path = "../benilla-ui" }
++# Leyline Modes: the deterministic minigolf simulation (`golf`).
++benilla-mode = { path = "../benilla-mode" }
+ bevy.workspace = true
+ wgpu.workspace = true
+ # The debug panel, `dev` only, yet a dependency of every build: as an optional one it would turn
+diff --git a/crates/benilla-app/src/game_plugins.rs b/crates/benilla-app/src/game_plugins.rs
+index 36a529e5..cdb71e75 100644
+--- a/crates/benilla-app/src/game_plugins.rs
++++ b/crates/benilla-app/src/game_plugins.rs
+@@ -245,6 +245,8 @@ impl PluginGroup for GamePlugins {
+             .add(crate::combat_text::CombatTextPlugin)
+             .add(crate::nameplates::NameplatesPlugin)
+             .add(crate::raid_marks::RaidMarksPlugin)
++            // Leyline minigolf: the play layer's first mode (`golf`).
++            .add(crate::golf::GolfPlugin)
+             .add(crate::vplates::VPlatesPlugin)
+             .add(crate::chat_bubble::ChatBubblePlugin)
+             .add(UiItemsPlugin)
+diff --git a/crates/benilla-app/src/golf.rs b/crates/benilla-app/src/golf.rs
+new file mode 100644
+index 00000000..1d8201c3
+--- /dev/null
++++ b/crates/benilla-app/src/golf.rs
+@@ -0,0 +1,1041 @@
++//! Leyline minigolf, the first mode on the play layer.
++//!
++//! The course, the balls and the aim live only on the clients of the players in a session; the
++//! realm (`ov_golf.lua`) only orders turns, counts strokes and relays each shot's integer input.
++//! Every client then plays the shot through [`benilla_mode::golf::simulate`], which is
++//! bit-identical on every platform, so all players see the same roll without any ball positions on
++//! the wire. The HUD (`WrathUnleashedUI/Golf.lua`) drives this module through one Lua function:
++//!
++//! ```text
++//! LeylineGolf("load <wowX> <wowY> <wowZ> <orientation>\n<course text>")   course at a world spot
++//! LeylineGolf("hole <n>")                       build hole n (1-based), fly over it
++//! LeylineGolf("ball <name> <color> <x> <y> <z>")  show a ball (hole-local yards)
++//! LeylineGolf("hide <name>")
++//! LeylineGolf("aim <name> [angle]")             the local player's turn: A/D aim, hold Space
++//! LeylineGolf("noaim")
++//! LeylineGolf("shot <name> <x> <y> <z> <angle> <power> <phase>")  play a shot for everyone
++//! LeylineGolf("phase <tick>")                   where spinners and sliders are now
++//! LeylineGolf("end")                            remove everything
++//! LeylineGolf("state")  -> "aiming=1 power=523 angle=1234 rolling=0 hole=3 charging=0"
++//! ```
++//!
++//! and calls back `WrathUnleashedUI.Golf.OnShoot(angle, power)` when the local player releases a
++//! shot, and `WrathUnleashedUI.Golf.OnRest(name, end, x, y, z, hash)` when a roll finishes.
++
++use std::collections::HashMap;
++use std::sync::Mutex;
++
++use benilla_mode::detmath::{Rot, V3};
++use benilla_mode::golf::{self, Course, End, Hole, Motion, Piece, Shape, Shot, Surface, BALL_R, CUP_R};
++use bevy::asset::RenderAssetUsages;
++use bevy::mesh::{Indices, PrimitiveTopology};
++use bevy::prelude::*;
++
++use crate::player::camera::FlyCam;
++use crate::player::Player;
++
++/// The course is drawn this far above where the session started, on a stone plinth, so uneven
++/// ground doesn't poke through the turf. Only the drawing moves; the simulation is hole-local.
++const LIFT: f32 = 0.35;
++/// Aim turn rate (tenths of a degree per second); Shift turns a fifth as fast.
++const AIM_RATE: f32 = 900.0;
++/// One full power swing up and back down (seconds).
++const CHARGE_CYCLE: f32 = 1.8;
++/// Ticks of path the aim preview shows.
++const PREVIEW_TICKS: u32 = 42;
++const FLYOVER_SECS: f32 = 2.6;
++const BALL_COLORS: [[f32; 3]; 8] = [
++    [0.97, 0.97, 0.95],
++    [1.0, 0.55, 0.12],
++    [0.25, 0.8, 1.0],
++    [1.0, 0.4, 0.75],
++    [1.0, 0.88, 0.2],
++    [0.55, 1.0, 0.3],
++    [0.7, 0.5, 1.0],
++    [1.0, 0.3, 0.25],
++];
++
++// ------------------------------------------------------------------------------------------------
++// The Lua bridge
++
++#[derive(Default)]
++struct Bridge {
++    inbox: Vec<String>,
++    snapshot: String,
++}
++
++static BRIDGE: Mutex<Bridge> = Mutex::new(Bridge { inbox: Vec::new(), snapshot: String::new() });
++
++fn bridge() -> std::sync::MutexGuard<'static, Bridge> {
++    BRIDGE.lock().unwrap_or_else(|p| p.into_inner())
++}
++
++/// Installs `LeylineGolf(text)` into each new UI VM.
++fn install_bridge(script: Option<NonSend<benilla_ui::script::UiScript>>, mut installed: Local<u64>) {
++    let Some(script) = script else {
++        return;
++    };
++    if *installed == script.session() {
++        return;
++    }
++    *installed = script.session();
++    let made = script.lua().create_function(|_, text: String| {
++        let mut b = bridge();
++        if text == "state" {
++            return Ok(b.snapshot.clone());
++        }
++        if text.len() <= golf::MAX_TEXT + 256 && b.inbox.len() < 256 {
++            b.inbox.push(text);
++            Ok("ok".to_string())
++        } else {
++            Ok("busy".to_string())
++        }
++    });
++    match made {
++        Ok(f) => {
++            if let Err(e) = script.lua().globals().set("LeylineGolf", f) {
++                error!("golf: installing LeylineGolf: {e}");
++            }
++        }
++        Err(e) => error!("golf: creating LeylineGolf: {e}"),
++    }
++}
++
++fn call_hud(script: Option<&benilla_ui::script::UiScript>, call: &str) {
++    if let Some(script) = script {
++        crate::ui_script::run_or_warn(
++            script,
++            &format!("if WrathUnleashedUI and WrathUnleashedUI.Golf then WrathUnleashedUI.Golf.{call} end"),
++        );
++    }
++}
++
++/// A Lua string literal for a player name (letters only reach here, but quote safely anyway).
++fn lua_str(s: &str) -> String {
++    let clean: String = s.chars().filter(|c| c.is_alphanumeric() || *c == ' ' || *c == '-').take(24).collect();
++    format!("\"{clean}\"")
++}
++
++// ------------------------------------------------------------------------------------------------
++// State
++
++struct Ball {
++    entity: Entity,
++    pos: V3,
++    /// Holed: the ball is hidden once this time passes.
++    sink_at: Option<f32>,
++}
++
++struct Aim {
++    name: String,
++    angle: f32,
++    power: f32,
++    charging: Option<f32>,
++}
++
++struct Roll {
++    name: String,
++    outcome: golf::Outcome,
++    start: f32,
++    phase: i64,
++}
++
++#[derive(Clone)]
++struct Mats {
++    solid: Handle<StandardMaterial>,
++    glass: Handle<StandardMaterial>,
++    cloth: Handle<StandardMaterial>,
++}
++
++/// The session as this client shows it.
++#[derive(Resource, Default)]
++pub(crate) struct Golf {
++    course: Option<Course>,
++    origin: Vec3,
++    yaw: f32,
++    hole: usize,
++    root: Option<Entity>,
++    movers: Vec<(Entity, Piece)>,
++    flag: Option<Entity>,
++    balls: HashMap<String, Ball>,
++    aim: Option<Aim>,
++    roll: Option<Roll>,
++    /// Phase tick `.0` was current at time `.1` (seconds).
++    phase: (i64, f32),
++    flyover: Option<f32>,
++    cam: Option<Transform>,
++    zoom: f32,
++    confetti: Option<(f32, Vec3)>,
++    mats: Option<Mats>,
++    ball_mesh: Option<Handle<Mesh>>,
++}
++
++impl Golf {
++    fn active(&self) -> bool {
++        self.course.is_some()
++    }
++    fn hole(&self) -> Option<&Hole> {
++        self.course.as_ref().and_then(|c| c.holes.get(self.hole))
++    }
++    fn basis(&self) -> Quat {
++        Quat::from_rotation_y(self.yaw)
++    }
++    /// Hole-local yards to the world.
++    fn world(&self, p: V3) -> Vec3 {
++        self.origin + self.basis() * Vec3::new(p.x, p.y + LIFT, -p.z)
++    }
++    /// A hole-local direction to the world.
++    fn world_dir(&self, d: V3) -> Vec3 {
++        self.basis() * Vec3::new(d.x, d.y, -d.z)
++    }
++    /// A hole-local rotation to a world rotation for a mesh built with z flipped ([`Geo`]).
++    fn world_rot(&self, r: &Rot) -> Quat {
++        let s = [1.0, 1.0, -1.0];
++        let m = |i: usize, j: usize| s[i] * s[j] * r.m[i][j];
++        let mat = Mat3::from_cols(
++            Vec3::new(m(0, 0), m(1, 0), m(2, 0)),
++            Vec3::new(m(0, 1), m(1, 1), m(2, 1)),
++            Vec3::new(m(0, 2), m(1, 2), m(2, 2)),
++        );
++        self.basis() * Quat::from_mat3(&mat).normalize()
++    }
++    fn phase_now(&self, now: f32) -> i64 {
++        self.phase.0 + ((now - self.phase.1).max(0.0) * golf::TICK_HZ as f32) as i64
++    }
++}
++
++// ------------------------------------------------------------------------------------------------
++// Geometry: built in piece-local yards with z flipped (to Bevy's handedness), vertex-lit.
++
++#[derive(Default)]
++struct Geo {
++    pos: Vec<[f32; 3]>,
++    nrm: Vec<[f32; 3]>,
++    col: Vec<[f32; 4]>,
++    idx: Vec<u32>,
++}
++
++/// The light baked into vertex colours (the world has no Bevy lights): a high sun from front-left.
++fn shade(n: Vec3) -> f32 {
++    let l = Vec3::new(-0.35, 0.86, 0.37).normalize();
++    0.58 + 0.42 * n.dot(l).max(0.0)
++}
++
++fn flip(v: Vec3) -> Vec3 {
++    Vec3::new(v.x, v.y, -v.z)
++}
++
++impl Geo {
++    /// A flat quad from hole-local corners (any winding) facing hole-local `n`.
++    fn quad(&mut self, c: [Vec3; 4], n: Vec3, rgb: [f32; 3]) {
++        let n = flip(n);
++        let s = shade(n);
++        let base = self.pos.len() as u32;
++        for p in c {
++            self.pos.push(flip(p).to_array());
++            self.nrm.push(n.to_array());
++            self.col.push([rgb[0] * s, rgb[1] * s, rgb[2] * s, 1.0]);
++        }
++        let p = |i: u32| Vec3::from(self.pos[(base + i) as usize]);
++        // The diagonals' cross: right for degenerate quads (fans, triangles) too.
++        let geo_n = (p(2) - p(0)).cross(p(3) - p(1));
++        if geo_n.dot(n) >= 0.0 {
++            self.idx.extend([base, base + 1, base + 2, base, base + 2, base + 3]);
++        } else {
++            self.idx.extend([base, base + 2, base + 1, base, base + 3, base + 2]);
++        }
++    }
++
++    /// A box centred on the origin. `top` paints the top face (stripes, speckle); `sides` the rest.
++    fn block(&mut self, h: Vec3, top: impl Fn(f32, f32) -> [f32; 3], sides: [f32; 3], bottom: bool) {
++        // Top: strips 1 yd long along z, so stripes and speckle have somewhere to live.
++        let strips = ((h.z * 2.0).ceil() as i32).clamp(1, 60);
++        let cols = ((h.x * 2.0 / 1.2).ceil() as i32).clamp(1, 20);
++        for i in 0..strips {
++            let z0 = -h.z + 2.0 * h.z * i as f32 / strips as f32;
++            let z1 = -h.z + 2.0 * h.z * (i + 1) as f32 / strips as f32;
++            for j in 0..cols {
++                let x0 = -h.x + 2.0 * h.x * j as f32 / cols as f32;
++                let x1 = -h.x + 2.0 * h.x * (j + 1) as f32 / cols as f32;
++                let rgb = top((x0 + x1) * 0.5, (z0 + z1) * 0.5);
++                self.quad(
++                    [Vec3::new(x0, h.y, z0), Vec3::new(x1, h.y, z0), Vec3::new(x1, h.y, z1), Vec3::new(x0, h.y, z1)],
++                    Vec3::Y,
++                    rgb,
++                );
++            }
++        }
++        let (x, y, z) = (h.x, h.y, h.z);
++        self.quad([Vec3::new(x, -y, -z), Vec3::new(x, y, -z), Vec3::new(x, y, z), Vec3::new(x, -y, z)], Vec3::X, sides);
++        self.quad([Vec3::new(-x, -y, -z), Vec3::new(-x, y, -z), Vec3::new(-x, y, z), Vec3::new(-x, -y, z)], -Vec3::X, sides);
++        self.quad([Vec3::new(-x, -y, z), Vec3::new(x, -y, z), Vec3::new(x, y, z), Vec3::new(-x, y, z)], Vec3::Z, sides);
++        self.quad([Vec3::new(-x, -y, -z), Vec3::new(x, -y, -z), Vec3::new(x, y, -z), Vec3::new(-x, y, -z)], -Vec3::Z, sides);
++        if bottom {
++            self.quad([Vec3::new(-x, -y, -z), Vec3::new(x, -y, -z), Vec3::new(x, -y, z), Vec3::new(-x, -y, z)], -Vec3::Y, sides);
++        }
++    }
++
++    /// An upright cylinder from y = 0 to `h`, bands of colour up its side, a cap on top.
++    fn post(&mut self, r: f32, h: f32, band: impl Fn(usize) -> [f32; 3], cap: [f32; 3]) {
++        let seg = 20;
++        let bands = ((h / 0.14).round() as usize).max(1);
++        for b in 0..bands {
++            let y0 = h * b as f32 / bands as f32;
++            let y1 = h * (b + 1) as f32 / bands as f32;
++            for i in 0..seg {
++                let a0 = std::f32::consts::TAU * i as f32 / seg as f32;
++                let a1 = std::f32::consts::TAU * (i + 1) as f32 / seg as f32;
++                let (p0, p1) = (Vec3::new(a0.cos() * r, 0.0, a0.sin() * r), Vec3::new(a1.cos() * r, 0.0, a1.sin() * r));
++                let mid = ((a0 + a1) * 0.5).cos();
++                let n = Vec3::new(mid, 0.0, ((a0 + a1) * 0.5).sin());
++                self.quad([p0 + Vec3::Y * y0, p1 + Vec3::Y * y0, p1 + Vec3::Y * y1, p0 + Vec3::Y * y1], n, band(b));
++            }
++        }
++        for i in 0..seg {
++            let a0 = std::f32::consts::TAU * i as f32 / seg as f32;
++            let a1 = std::f32::consts::TAU * (i + 1) as f32 / seg as f32;
++            let c = Vec3::Y * h;
++            self.quad(
++                [c, c, c + Vec3::new(a1.cos() * r, 0.0, a1.sin() * r), c + Vec3::new(a0.cos() * r, 0.0, a0.sin() * r)],
++                Vec3::Y,
++                cap,
++            );
++        }
++    }
++
++    fn mesh(self) -> Mesh {
++        Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD)
++            .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.pos)
++            .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.nrm)
++            .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.col)
++            .with_inserted_indices(Indices::U32(self.idx))
++    }
++}
++
++/// A cheap stable hash for per-cell colour variation.
++fn jitter(x: f32, z: f32) -> f32 {
++    let h = ((x * 12.9898 + z * 78.233).sin() * 43_758.547).fract();
++    h.abs()
++}
++
++fn turf_colour(x: f32, z: f32) -> [f32; 3] {
++    let stripe = ((z.floor() as i32).rem_euclid(2)) as f32;
++    let j = jitter(x, z) * 0.04;
++    [0.20 + 0.04 * stripe + j, 0.56 + 0.08 * stripe + j, 0.20 + 0.03 * stripe]
++}
++
++fn piece_geo(piece: &Piece) -> Geo {
++    let mut g = Geo::default();
++    match (piece.surface, piece.shape, piece.motion) {
++        (Surface::Wall, Shape::Block { half, .. }, Motion::Spin { .. }) => {
++            g.block(
++                Vec3::new(half.x, half.y, half.z),
++                |x, _| if ((x * 2.5).floor() as i32).rem_euclid(2) == 0 { [0.86, 0.16, 0.14] } else { [0.95, 0.93, 0.88] },
++                [0.75, 0.2, 0.16],
++                true,
++            );
++        }
++        (Surface::Wall, Shape::Block { half, .. }, Motion::Slide { .. }) => {
++            g.block(
++                Vec3::new(half.x, half.y, half.z),
++                |x, z| if (((x + z) * 3.0).floor() as i32).rem_euclid(2) == 0 { [0.98, 0.8, 0.1] } else { [0.12, 0.12, 0.12] },
++                [0.9, 0.72, 0.1],
++                true,
++            );
++        }
++        (Surface::Wall, Shape::Block { half, .. }, _) => {
++            // Timber rails with a lighter cap.
++            g.block(Vec3::new(half.x, half.y, half.z), |_, z| {
++                let plank = ((z * 1.1).floor() as i32).rem_euclid(2) as f32;
++                [0.62 + 0.04 * plank, 0.43 + 0.03 * plank, 0.25]
++            }, [0.47, 0.31, 0.17], false);
++        }
++        (surface, Shape::Block { half, pitch_t, .. }, _) => {
++            let h = Vec3::new(half.x, half.y, half.z);
++            let sides = [0.42, 0.40, 0.37];
++            match surface {
++                Surface::Sand => g.block(h, |x, z| {
++                    let j = jitter(x * 3.0, z * 3.0) * 0.06;
++                    [0.86 + j, 0.76 + j, 0.52 + j]
++                }, sides, false),
++                Surface::Ice => g.block(h, |x, z| {
++                    let j = jitter(x, z) * 0.05;
++                    [0.72 + j, 0.9 + j, 0.98]
++                }, sides, false),
++                _ => g.block(h, turf_colour, sides, false),
++            }
++            if pitch_t == 0 {
++                // The stone plinth under level ground.
++                let (x, y, z) = (h.x, h.y, h.z);
++                let (top, low) = (-y, -y - 1.2);
++                let stone = [0.46, 0.44, 0.41];
++                g.quad([Vec3::new(x, low, -z), Vec3::new(x, top, -z), Vec3::new(x, top, z), Vec3::new(x, low, z)], Vec3::X, stone);
++                g.quad([Vec3::new(-x, low, -z), Vec3::new(-x, top, -z), Vec3::new(-x, top, z), Vec3::new(-x, low, z)], -Vec3::X, stone);
++                g.quad([Vec3::new(-x, low, z), Vec3::new(x, low, z), Vec3::new(x, top, z), Vec3::new(-x, top, z)], Vec3::Z, stone);
++                g.quad([Vec3::new(-x, low, -z), Vec3::new(x, low, -z), Vec3::new(x, top, -z), Vec3::new(-x, top, -z)], -Vec3::Z, stone);
++            }
++        }
++        (_, Shape::Post { r, h }, _) => {
++            g.post(r, h, |b| if b % 2 == 0 { [0.9, 0.18, 0.16] } else { [0.96, 0.95, 0.92] }, [0.9, 0.85, 0.3]);
++        }
++    }
++    g
++}
++
++fn ball_mesh() -> Mesh {
++    // A UV sphere lit from above; the material's colour tints it per player.
++    let mut g = Geo::default();
++    let (rings, seg) = (10, 16);
++    for i in 0..rings {
++        let t0 = std::f32::consts::PI * i as f32 / rings as f32;
++        let t1 = std::f32::consts::PI * (i + 1) as f32 / rings as f32;
++        for j in 0..seg {
++            let p0 = std::f32::consts::TAU * j as f32 / seg as f32;
++            let p1 = std::f32::consts::TAU * (j + 1) as f32 / seg as f32;
++            let v = |t: f32, p: f32| Vec3::new(t.sin() * p.cos(), t.cos(), t.sin() * p.sin()) * BALL_R;
++            let n = v((t0 + t1) * 0.5, (p0 + p1) * 0.5).normalize();
++            g.quad([v(t0, p0), v(t0, p1), v(t1, p1), v(t1, p0)], n, [1.0, 1.0, 1.0]);
++        }
++    }
++    g.mesh()
++}
++
++// ------------------------------------------------------------------------------------------------
++// Building and tearing down
++
++fn mats(golf: &mut Golf, materials: &mut Assets<StandardMaterial>) -> Mats {
++    if let Some(m) = &golf.mats {
++        return m.clone();
++    }
++    let m = Mats {
++        solid: materials.add(StandardMaterial { base_color: Color::WHITE, unlit: true, ..default() }),
++        glass: materials.add(StandardMaterial {
++            base_color: Color::linear_rgba(0.16, 0.48, 0.8, 0.62),
++            unlit: true,
++            alpha_mode: AlphaMode::Blend,
++            ..default()
++        }),
++        cloth: materials.add(StandardMaterial {
++            base_color: Color::WHITE,
++            unlit: true,
++            double_sided: true,
++            cull_mode: None,
++            ..default()
++        }),
++    };
++    golf.mats = Some(m.clone());
++    m
++}
++
++fn clear(golf: &mut Golf, commands: &mut Commands) {
++    if let Some(root) = golf.root.take() {
++        commands.entity(root).despawn();
++    }
++    golf.movers.clear();
++    golf.balls.clear();
++    golf.flag = None;
++    golf.aim = None;
++    golf.roll = None;
++}
++
++fn build_hole(golf: &mut Golf, commands: &mut Commands, meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, now: f32) {
++    let m = mats(golf, materials);
++    clear(golf, commands);
++    let Some(hole) = golf.hole().cloned() else {
++        return;
++    };
++    let root = commands.spawn((Name::new("golf hole"), Transform::IDENTITY, Visibility::default())).id();
++    golf.root = Some(root);
++    let phase = golf.phase_now(now);
++    for piece in &hole.pieces {
++        let mesh = meshes.add(piece_geo(piece).mesh());
++        let (center, rot) = piece_pose(piece, phase);
++        let t = Transform { translation: golf.world(center), rotation: golf.world_rot(&rot), ..default() };
++        let e = commands.spawn((Mesh3d(mesh), MeshMaterial3d(m.solid.clone()), t, ChildOf(root))).id();
++        if piece.motion != Motion::Still {
++            golf.movers.push((e, *piece));
++        }
++    }
++    for w in &hole.water {
++        let mut g = Geo::default();
++        let (x, z) = (w.half_x, w.half_z);
++        g.quad([Vec3::new(-x, 0.0, -z), Vec3::new(x, 0.0, -z), Vec3::new(x, 0.0, z), Vec3::new(-x, 0.0, z)], Vec3::Y, [1.0, 1.0, 1.0]);
++        let t = Transform::from_translation(golf.world(w.center)).with_rotation(golf.basis());
++        commands.spawn((Mesh3d(meshes.add(g.mesh())), MeshMaterial3d(m.glass.clone()), t, ChildOf(root)));
++        // The pool floor and walls, dark, so the water reads as deep.
++        let mut bed = Geo::default();
++        bed.block(Vec3::new(x, 0.35, z), |_, _| [0.06, 0.16, 0.26], [0.3, 0.3, 0.3], false);
++        let t = Transform::from_translation(golf.world(w.center + V3::new(0.0, -0.85, 0.0))).with_rotation(golf.basis());
++        commands.spawn((Mesh3d(meshes.add(bed.mesh())), MeshMaterial3d(m.solid.clone()), t, ChildOf(root)));
++    }
++    for b in &hole.boosts {
++        let mut g = Geo::default();
++        g.block(Vec3::new(b.half_x, 0.012, b.half_z), |x, z| {
++            // Chevrons pointing forward (+z).
++            let v = (z * 2.2 - x.abs() * 2.6).rem_euclid(1.0);
++            if v < 0.45 { [1.0, 0.82, 0.15] } else { [0.85, 0.32, 0.08] }
++        }, [0.6, 0.25, 0.08], false);
++        let rot = Rot::yaw_pitch(b.yaw_t, 0);
++        let t = Transform { translation: golf.world(b.center + V3::new(0.0, 0.008, 0.0)), rotation: golf.world_rot(&rot), ..default() };
++        commands.spawn((Mesh3d(meshes.add(g.mesh())), MeshMaterial3d(m.solid.clone()), t, ChildOf(root)));
++    }
++    // The cup: a white rim and a dark hole, a flag on a pole.
++    let mut cup = Geo::default();
++    cup.post(CUP_R + 0.035, 0.006, |_| [0.95, 0.95, 0.95], [0.95, 0.95, 0.95]);
++    commands.spawn((
++        Mesh3d(meshes.add(cup.mesh())),
++        MeshMaterial3d(m.solid.clone()),
++        Transform::from_translation(golf.world(hole.cup)),
++        ChildOf(root),
++    ));
++    let mut hole_disc = Geo::default();
++    hole_disc.post(CUP_R, 0.009, |_| [0.02, 0.02, 0.02], [0.02, 0.03, 0.02]);
++    commands.spawn((
++        Mesh3d(meshes.add(hole_disc.mesh())),
++        MeshMaterial3d(m.solid.clone()),
++        Transform::from_translation(golf.world(hole.cup)),
++        ChildOf(root),
++    ));
++    let mut pole = Geo::default();
++    pole.post(0.022, 1.7, |b| if b % 3 == 0 { [0.9, 0.15, 0.12] } else { [0.97, 0.97, 0.97] }, [0.98, 0.85, 0.2]);
++    let mut cloth = Geo::default();
++    cloth.quad(
++        [Vec3::new(0.0, 1.32, 0.0), Vec3::new(0.62, 1.47, 0.0), Vec3::new(0.62, 1.47, 0.0), Vec3::new(0.0, 1.68, 0.0)],
++        Vec3::Z,
++        [0.92, 0.12, 0.1],
++    );
++    let flag = commands
++        .spawn((
++            Mesh3d(meshes.add(pole.mesh())),
++            MeshMaterial3d(m.solid.clone()),
++            Transform::from_translation(golf.world(hole.cup)),
++            ChildOf(root),
++        ))
++        .id();
++    commands.spawn((Mesh3d(meshes.add(cloth.mesh())), MeshMaterial3d(m.cloth.clone()), Transform::IDENTITY, ChildOf(flag)));
++    golf.flag = Some(flag);
++    // The tee mat.
++    let mut mat = Geo::default();
++    mat.block(Vec3::new(0.28, 0.006, 0.28), |_, _| [0.1, 0.32, 0.14], [0.08, 0.2, 0.1], false);
++    commands.spawn((
++        Mesh3d(meshes.add(mat.mesh())),
++        MeshMaterial3d(m.solid.clone()),
++        Transform::from_translation(golf.world(hole.tee + V3::new(0.0, 0.004, 0.0))).with_rotation(golf.basis()),
++        ChildOf(root),
++    ));
++    golf.flyover = Some(now);
++    golf.cam = None;
++}
++
++/// A piece's centre and rotation at a phase tick: the same arithmetic the simulation uses.
++fn piece_pose(piece: &Piece, phase: i64) -> (V3, Rot) {
++    match (piece.shape, piece.motion) {
++        (Shape::Block { yaw_t, pitch_t, .. }, Motion::Still) => (piece.center, Rot::yaw_pitch(yaw_t, pitch_t)),
++        (Shape::Block { yaw_t, .. }, Motion::Spin { deg_per_s }) => {
++            let ang = (deg_per_s as i64 * 10 * phase).div_euclid(golf::TICK_HZ as i64);
++            (piece.center, Rot::yaw_pitch(ang.rem_euclid(3600) as i32 + yaw_t, 0))
++        }
++        (Shape::Block { yaw_t, pitch_t, .. }, Motion::Slide { travel, period }) => {
++            let p = period as i64;
++            let half = p / 2;
++            let k = phase.rem_euclid(p);
++            let u = if k < half { k } else { p - k };
++            (piece.center + travel * (u as f32 / half as f32), Rot::yaw_pitch(yaw_t, pitch_t))
++        }
++        (Shape::Post { .. }, _) => (piece.center, Rot::IDENTITY),
++    }
++}
++
++fn spawn_ball(golf: &mut Golf, commands: &mut Commands, meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, name: &str, color: usize, at: V3) {
++    let Some(root) = golf.root else {
++        return;
++    };
++    let mesh = golf.ball_mesh.get_or_insert_with(|| meshes.add(ball_mesh())).clone();
++    let [r, g, b] = BALL_COLORS[color % BALL_COLORS.len()];
++    let mat = materials.add(StandardMaterial { base_color: Color::linear_rgb(r, g, b), unlit: true, ..default() });
++    if let Some(old) = golf.balls.remove(name) {
++        commands.entity(old.entity).despawn();
++    }
++    let e = commands
++        .spawn((Name::new(format!("golf ball {name}")), Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_translation(golf.world(at)), ChildOf(root)))
++        .id();
++    golf.balls.insert(name.to_string(), Ball { entity: e, pos: at, sink_at: None });
++}
++
++// ------------------------------------------------------------------------------------------------
++// Systems
++
++fn nums<const N: usize>(w: &[&str]) -> Option<[f32; N]> {
++    let mut out = [0.0; N];
++    for (i, o) in out.iter_mut().enumerate() {
++        *o = w.get(i)?.parse().ok().filter(|v: &f32| v.is_finite())?;
++    }
++    Some(out)
++}
++
++#[allow(clippy::too_many_arguments)]
++fn drain_bridge(
++    mut golf: ResMut<Golf>,
++    mut commands: Commands,
++    mut meshes: ResMut<Assets<Mesh>>,
++    mut materials: ResMut<Assets<StandardMaterial>>,
++    time: Res<Time>,
++    player: Res<Player>,
++    mut edit_cvars: Option<ResMut<crate::cvars::Cvars>>,
++    script: Option<NonSend<benilla_ui::script::UiScript>>,
++    cams: Query<&GlobalTransform, With<FlyCam>>,
++) {
++    let now = time.elapsed_secs();
++    let inbox = std::mem::take(&mut bridge().inbox);
++    // Leaving the world (a logout, a character switch) ends the session here too.
++    if !player.active && golf.active() {
++        clear(&mut golf, &mut commands);
++        golf.course = None;
++    }
++    for msg in inbox {
++        let (head, body) = msg.split_once('\n').unwrap_or((msg.as_str(), ""));
++        let w: Vec<&str> = head.split_whitespace().collect();
++        match w.first().copied() {
++            Some("load") => {
++                // "load here": practice, a step in front of you, facing the way the camera looks.
++                let here = (w.get(1) == Some(&"here")).then(|| {
++                    let f = cams.single().map(|t| t.forward().as_vec3()).unwrap_or(Vec3::NEG_Z);
++                    let flat = Vec3::new(f.x, 0.0, f.z).try_normalize().unwrap_or(Vec3::NEG_Z);
++                    let yaw = (-flat.x).atan2(-flat.z);
++                    (player.pos + flat * 1.6, yaw)
++                });
++                let at = match here {
++                    Some(h) => Some(h),
++                    None => nums::<4>(&w[1..]).map(|[x, y, z, o]| (benilla_assets::coords::wow_to_bevy([x, y, z]), o)),
++                };
++                let Some((origin, yaw)) = at else {
++                    call_hud(script.as_deref(), "OnError(\"bad load line\")");
++                    continue;
++                };
++                match golf::parse(body) {
++                    Ok(course) => {
++                        clear(&mut golf, &mut commands);
++                        golf.origin = origin;
++                        golf.yaw = yaw;
++                        golf.hole = 0;
++                        golf.zoom = 1.0;
++                        info!("golf: {} by {} ({} holes, par {})", course.title, course.author, course.holes.len(), course.par());
++                        golf.course = Some(course);
++                        // Golf and the building view don't mix.
++                        if let Some(c) = edit_cvars.as_deref_mut() {
++                            let _ = c.set(crate::player::edit_mode::EDIT_CVAR, "0");
++                        }
++                    }
++                    Err(e) => {
++                        warn!("golf: course: {e}");
++                        call_hud(script.as_deref(), &format!("OnError({})", lua_quote(&e.to_string())));
++                    }
++                }
++            }
++            Some("hole") => {
++                let n = w.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(1).max(1);
++                if golf.course.as_ref().is_some_and(|c| n <= c.holes.len()) {
++                    golf.hole = n - 1;
++                    build_hole(&mut golf, &mut commands, &mut meshes, &mut materials, now);
++                }
++            }
++            Some("ball") => {
++                let (Some(name), Some(color)) = (w.get(1), w.get(2).and_then(|s| s.parse::<usize>().ok())) else {
++                    continue;
++                };
++                if let Some([x, y, z]) = nums::<3>(&w[3..]) {
++                    spawn_ball(&mut golf, &mut commands, &mut meshes, &mut materials, name, color, V3::new(x, y, z));
++                }
++            }
++            Some("hide") => {
++                if let Some(b) = w.get(1).and_then(|n| golf.balls.remove(*n)) {
++                    commands.entity(b.entity).despawn();
++                }
++            }
++            Some("aim") => {
++                let Some(name) = w.get(1) else { continue };
++                let Some(ball) = golf.balls.get(*name).map(|b| b.pos) else { continue };
++                let Some(hole) = golf.hole() else { continue };
++                let angle = w.get(2).and_then(|s| s.parse::<i32>().ok()).unwrap_or_else(|| golf::aim_at_cup(hole, ball));
++                golf.aim = Some(Aim { name: name.to_string(), angle: angle as f32, power: 0.0, charging: None });
++                golf.flyover = None;
++            }
++            Some("noaim") => golf.aim = None,
++            Some("phase") => {
++                if let Some(p) = w.get(1).and_then(|s| s.parse::<i64>().ok()) {
++                    golf.phase = (p, now);
++                }
++            }
++            Some("shot") => {
++                let Some(name) = w.get(1) else { continue };
++                let (Some([x, y, z]), Some(angle), Some(power), Some(phase)) = (
++                    nums::<3>(&w[2..]),
++                    w.get(5).and_then(|s| s.parse::<i32>().ok()),
++                    w.get(6).and_then(|s| s.parse::<i32>().ok()),
++                    w.get(7).and_then(|s| s.parse::<i64>().ok()),
++                ) else {
++                    continue;
++                };
++                let Some(hole) = golf.hole() else { continue };
++                let start = V3::new(x, y, z);
++                let outcome = golf::simulate(hole, start, Shot { angle_t: angle, power_m: power }.clamped(), phase);
++                if !golf.balls.contains_key(*name) {
++                    spawn_ball(&mut golf, &mut commands, &mut meshes, &mut materials, name, 0, start);
++                }
++                if golf.aim.as_ref().is_some_and(|a| a.name == *name) {
++                    golf.aim = None;
++                }
++                golf.flyover = None;
++                // Spinners and sliders show the shot's own phase from here on.
++                golf.phase = (phase, now);
++                golf.roll = Some(Roll { name: name.to_string(), outcome, start: now, phase });
++            }
++            Some("end") => {
++                clear(&mut golf, &mut commands);
++                golf.course = None;
++                golf.cam = None;
++            }
++            _ => warn!("golf: unknown command {head:?}"),
++        }
++    }
++    // The snapshot `LeylineGolf("state")` answers with.
++    let aim = golf.aim.as_ref();
++    bridge().snapshot = format!(
++        "aiming={} power={} angle={} rolling={} hole={} charging={}",
++        aim.is_some() as u8,
++        aim.map(|a| a.power as i32).unwrap_or(0),
++        aim.map(|a| a.angle as i32).unwrap_or(0),
++        golf.roll.is_some() as u8,
++        if golf.active() { golf.hole + 1 } else { 0 },
++        aim.is_some_and(|a| a.charging.is_some()) as u8,
++    );
++}
++
++fn lua_quote(s: &str) -> String {
++    let clean: String = s.chars().filter(|c| !c.is_control() && *c != '"' && *c != '\\').take(160).collect();
++    format!("\"{clean}\"")
++}
++
++/// The local player's aim: A/D (or the arrows) turn, W/S zoom, hold Space to swing the power,
++/// release to shoot. The HUD's keyboard frame keeps these keys away from movement meanwhile.
++fn aim_input(
++    mut golf: ResMut<Golf>,
++    keys: Res<ButtonInput<KeyCode>>,
++    capture: Res<crate::ui_script::UiKeyboardCapture>,
++    time: Res<Time>,
++    script: Option<NonSend<benilla_ui::script::UiScript>>,
++) {
++    // Typing in a box (chat, a macro) never turns or swings the putt.
++    if golf.roll.is_some() || capture.typing {
++        return;
++    }
++    let dt = time.delta_secs().min(0.1);
++    let now = time.elapsed_secs();
++    let zoom_in = keys.pressed(KeyCode::KeyW) || keys.pressed(KeyCode::ArrowUp);
++    let zoom_out = keys.pressed(KeyCode::KeyS) || keys.pressed(KeyCode::ArrowDown);
++    if golf.aim.is_some() {
++        if zoom_in {
++            golf.zoom = (golf.zoom - dt * 0.9).max(0.55);
++        }
++        if zoom_out {
++            golf.zoom = (golf.zoom + dt * 0.9).min(2.6);
++        }
++    }
++    let Some(aim) = golf.aim.as_mut() else {
++        return;
++    };
++    let fine = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
++    let rate = AIM_RATE * if fine { 0.2 } else { 1.0 };
++    if keys.pressed(KeyCode::KeyA) || keys.pressed(KeyCode::ArrowLeft) {
++        aim.angle -= rate * dt;
++    }
++    if keys.pressed(KeyCode::KeyD) || keys.pressed(KeyCode::ArrowRight) {
++        aim.angle += rate * dt;
++    }
++    aim.angle = aim.angle.rem_euclid(3600.0);
++    if keys.just_pressed(KeyCode::Space) {
++        aim.charging = Some(now);
++    }
++    if let Some(t0) = aim.charging {
++        // Up to full and back down, again and again, until released.
++        let u = ((now - t0) / CHARGE_CYCLE).fract() * 2.0;
++        aim.power = (if u <= 1.0 { u } else { 2.0 - u } * 1000.0).clamp(0.0, 1000.0);
++        if !keys.pressed(KeyCode::Space) {
++            let power = (aim.power as i32).max(15);
++            let angle = aim.angle.round() as i32 % 3600;
++            aim.charging = None;
++            call_hud(script.as_deref(), &format!("OnShoot({angle}, {power})"));
++            // The realm answers with the shot for everyone (this client included); until then the
++            // aim is parked so a second release can't fire twice.
++            golf.aim = None;
++        }
++    }
++}
++
++/// Plays the current roll frame by frame, then reports where it ended.
++fn play_roll(
++    mut golf: ResMut<Golf>,
++    time: Res<Time>,
++    mut transforms: Query<&mut Transform, Without<FlyCam>>,
++    mut commands: Commands,
++    script: Option<NonSend<benilla_ui::script::UiScript>>,
++) {
++    let now = time.elapsed_secs();
++    // Holed balls disappear a moment after they drop.
++    let sunk: Vec<String> = golf.balls.iter().filter(|(_, b)| b.sink_at.is_some_and(|t| now >= t)).map(|(n, _)| n.clone()).collect();
++    for n in sunk {
++        if let Some(b) = golf.balls.remove(&n) {
++            commands.entity(b.entity).despawn();
++        }
++    }
++    let Some(roll) = golf.roll.as_ref() else {
++        return;
++    };
++    let frames = &roll.outcome.frames;
++    let f = ((now - roll.start) * golf::TICK_HZ as f32).max(0.0);
++    let i = (f as usize).min(frames.len() - 1);
++    let next = (i + 1).min(frames.len() - 1);
++    let frac = f.fract();
++    let a = frames[i];
++    let b = frames[next];
++    let p = a + (b - a) * frac;
++    let name = roll.name.clone();
++    let done = i + 1 >= frames.len();
++    let world = golf.world(p);
++    if let Some(ball) = golf.balls.get(&name) {
++        if let Ok(mut t) = transforms.get_mut(ball.entity) {
++            t.translation = world;
++        }
++    }
++    if !done {
++        return;
++    }
++    let roll = golf.roll.take().expect("checked above");
++    let o = &roll.outcome;
++    let rest = o.rest;
++    if let Some(ball) = golf.balls.get_mut(&name) {
++        ball.pos = rest;
++        match o.end {
++            End::Holed => ball.sink_at = Some(now + 0.7),
++            e if e.penalty() => {
++                if let Ok(mut t) = transforms.get_mut(ball.entity) {
++                    t.translation = golf.world(rest);
++                }
++            }
++            _ => {}
++        }
++    }
++    if o.end == End::Holed {
++        let at = golf.hole().map(|h| h.cup).unwrap_or(rest);
++        golf.confetti = Some((now, golf.world(at)));
++    }
++    call_hud(
++        script.as_deref(),
++        &format!(
++            "OnRest({}, \"{}\", {:.3}, {:.3}, {:.3}, \"{:016x}\")",
++            lua_str(&name),
++            o.end.word(),
++            rest.x,
++            rest.y,
++            rest.z,
++            o.hash
++        ),
++    );
++}
++
++/// Spinners and sliders, posed from the phase tick exactly as the simulation poses them.
++fn animate_movers(golf: Res<Golf>, time: Res<Time>, mut transforms: Query<&mut Transform, Without<FlyCam>>) {
++    if golf.movers.is_empty() {
++        return;
++    }
++    let phase = match &golf.roll {
++        // During a roll, the roll's own frame: the bar the ball meets is where the ball meets it.
++        Some(r) => r.phase + ((time.elapsed_secs() - r.start).max(0.0) * golf::TICK_HZ as f32) as i64,
++        None => golf.phase_now(time.elapsed_secs()),
++    };
++    for (e, piece) in &golf.movers {
++        if let Ok(mut t) = transforms.get_mut(*e) {
++            let (c, r) = piece_pose(piece, phase);
++            t.translation = golf.world(c);
++            t.rotation = golf.world_rot(&r);
++        }
++    }
++}
++
++/// The golf camera: a hole fly-over, then behind the ball along the aim, then after the roll.
++fn golf_camera(mut golf: ResMut<Golf>, time: Res<Time>, mut cams: Query<&mut Transform, With<FlyCam>>) {
++    if !golf.active() {
++        return;
++    }
++    let Some(hole) = golf.hole().cloned() else {
++        return;
++    };
++    let now = time.elapsed_secs();
++    let dt = time.delta_secs().min(0.1);
++    let mut want: Option<(Vec3, Vec3, f32)> = None; // eye, look at, follow rate
++    if let Some(t0) = golf.flyover {
++        let u = ((now - t0) / FLYOVER_SECS).clamp(0.0, 1.0);
++        if u >= 1.0 {
++            golf.flyover = None;
++        } else {
++            let e = u * u * (3.0 - 2.0 * u);
++            let cup = golf.world(hole.cup);
++            let tee = golf.world(hole.tee);
++            let back = golf.world_dir(V3::new(0.0, 0.0, -1.0));
++            let from = cup + Vec3::Y * 9.0 + back * -3.0;
++            let to = tee + back * 5.0 + Vec3::Y * 3.2;
++            let eye = from.lerp(to, e);
++            let look = cup.lerp(tee + (cup - tee) * 0.4, e);
++            want = Some((eye, look, 30.0));
++        }
++    }
++    if let Some(roll) = &golf.roll {
++        let f = ((now - roll.start) * golf::TICK_HZ as f32) as usize;
++        let frames = &roll.outcome.frames;
++        let p = golf.world(frames[f.min(frames.len() - 1)]);
++        let start = golf.world(frames[0]);
++        let mut dir = p - start;
++        dir.y = 0.0;
++        let dir = if dir.length() > 0.5 { dir.normalize() } else { golf.world_dir(V3::new(0.0, 0.0, 1.0)) };
++        let eye = p - dir * 4.2 * golf.zoom + Vec3::Y * 2.4 * golf.zoom;
++        want = Some((eye, p, 3.5));
++    } else if let Some(aim) = &golf.aim {
++        if let Some(ball) = golf.balls.get(&aim.name) {
++            let p = golf.world(ball.pos);
++            let (s, c) = benilla_mode::detmath::sin_cos_tenths(aim.angle.round() as i32);
++            let dir = golf.world_dir(V3::new(s, 0.0, c));
++            let eye = p - dir * 3.4 * golf.zoom + Vec3::Y * 1.55 * golf.zoom;
++            want = Some((eye, p + dir * 2.0, 9.0));
++        }
++    }
++    let Some((eye, look, rate)) = want else {
++        golf.cam = None;
++        return;
++    };
++    let target = Transform::from_translation(eye).looking_at(look, Vec3::Y);
++    let k = 1.0 - (-rate * dt).exp();
++    let smooth = match golf.cam {
++        Some(c) => Transform {
++            translation: c.translation.lerp(target.translation, k),
++            rotation: c.rotation.slerp(target.rotation, k),
++            ..target
++        },
++        None => target,
++    };
++    golf.cam = Some(smooth);
++    if let Ok(mut t) = cams.single_mut() {
++        t.translation = smooth.translation;
++        t.rotation = smooth.rotation;
++    }
++}
++
++/// The aim line (a short preview of the real path), the cup marker and the hole-in celebration.
++fn golf_gizmos(golf: Res<Golf>, time: Res<Time>, mut gizmos: Gizmos) {
++    let Some(hole) = golf.hole() else {
++        return;
++    };
++    let now = time.elapsed_secs();
++    let flat = Quat::from_rotation_arc(Vec3::Z, Vec3::Y);
++    // The cup glows softly so it can be found from the tee.
++    let pulse = 0.5 + 0.5 * (now * 3.0).sin();
++    gizmos
++        .circle(Isometry3d::new(golf.world(hole.cup) + Vec3::Y * 0.02, flat), CUP_R + 0.1 + 0.05 * pulse, Color::srgba(1.0, 1.0, 1.0, 0.35 + 0.3 * pulse))
++        .resolution(32);
++    if let Some(aim) = &golf.aim {
++        if let Some(ball) = golf.balls.get(&aim.name) {
++            let shot = Shot { angle_t: aim.angle.round() as i32, power_m: aim.power.max(80.0) as i32 };
++            let path = golf::simulate_for(hole, ball.pos, shot, golf.phase_now(now), PREVIEW_TICKS);
++            let p = aim.power / 1000.0;
++            let col = Color::srgba(0.4 + 0.6 * p, 1.0 - 0.7 * p * p, 0.3, 0.95);
++            let pts: Vec<Vec3> = path.frames.iter().step_by(3).map(|f| golf.world(*f) + Vec3::Y * 0.02).collect();
++            for pair in pts.chunks(2) {
++                if let [a, b] = pair {
++                    gizmos.line(*a, *b, col);
++                }
++            }
++            let (s, c) = benilla_mode::detmath::sin_cos_tenths(shot.angle_t);
++            let dir = golf.world_dir(V3::new(s, 0.0, c));
++            let at = golf.world(ball.pos);
++            gizmos.arrow(at + Vec3::Y * 0.02, at + dir * (0.6 + 1.2 * p) + Vec3::Y * 0.02, Color::srgba(1.0, 1.0, 1.0, 0.9));
++            gizmos.circle(Isometry3d::new(at - Vec3::Y * (BALL_R - 0.015), flat), BALL_R * 1.8, Color::srgba(1.0, 0.95, 0.5, 0.9));
++        }
++    }
++    if let Some((t0, at)) = golf.confetti {
++        let age = now - t0;
++        if age < 2.2 {
++            for i in 0..36 {
++                let a = i as f32 * 2.399;
++                let speed = 1.2 + (i % 5) as f32 * 0.35;
++                let r = speed * age;
++                let y = 2.6 * age - 2.2 * age * age + 0.2;
++                let p = at + Vec3::new(a.cos() * r, y.max(0.05), a.sin() * r);
++                let hue = (i as f32 * 37.0) % 360.0;
++                gizmos.sphere(Isometry3d::from_translation(p), 0.04, Color::hsla(hue, 0.9, 0.6, 1.0 - age / 2.2)).resolution(6);
++            }
++        }
++    }
++}
++
++pub(crate) struct GolfPlugin;
++
++impl Plugin for GolfPlugin {
++    fn build(&self, app: &mut App) {
++        use benilla_world::schedule::WorldStage;
++        app.init_resource::<Golf>()
++            .add_systems(
++                Update,
++                (install_bridge, drain_bridge, aim_input, play_roll, animate_movers)
++                    .chain()
++                    .in_set(WorldStage::Input)
++                    .before(crate::player::PlayerControlSet)
++                    .in_set(crate::char_select::InWorldGated),
++            )
++            // After the player's own camera, so the golf view wins while it is wanted.
++            .add_systems(
++                Update,
++                (golf_camera, golf_gizmos)
++                    .after(crate::player::PlayerControlSet)
++                    .in_set(WorldStage::Input)
++                    .in_set(crate::char_select::InWorldGated),
++            );
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn the_world_mapping_keeps_forward_forward() {
++        let golf = Golf { origin: Vec3::new(10.0, 5.0, -3.0), yaw: 0.0, ..default() };
++        // Facing WoW +X (Bevy −Z) with orientation 0: the hole's +z goes that way.
++        let p = golf.world(V3::new(0.0, 0.0, 4.0));
++        assert!((p - Vec3::new(10.0, 5.0 + LIFT, -7.0)).length() < 1e-5);
++        // Right is right: +x maps to Bevy +X (WoW −Y), right of facing +X.
++        let r = golf.world(V3::new(2.0, 0.0, 0.0));
++        assert!((r - Vec3::new(12.0, 5.0 + LIFT, -3.0)).length() < 1e-5);
++    }
++
++    #[test]
++    fn a_meshed_rotation_lands_where_the_simulation_puts_the_corners() {
++        let golf = Golf { yaw: 0.7, ..default() };
++        let r = Rot::yaw_pitch(375, -184);
++        let corner = V3::new(1.0, 0.25, 2.0);
++        let sim = golf.world(r.apply(corner)) - golf.world(V3::ZERO);
++        let mesh = golf.world_rot(&r) * flip(Vec3::new(corner.x, corner.y, corner.z));
++        assert!((sim - mesh).length() < 1e-4, "{sim} vs {mesh}");
++    }
++
++    #[test]
++    fn quads_face_outward() {
++        let mut g = Geo::default();
++        g.block(Vec3::new(1.0, 0.5, 2.0), |_, _| [1.0, 1.0, 1.0], [1.0, 1.0, 1.0], true);
++        let idx = &g.idx;
++        for t in idx.chunks(3) {
++            let p = |i: u32| Vec3::from(g.pos[i as usize]);
++            let n = (p(t[1]) - p(t[0])).cross(p(t[2]) - p(t[0]));
++            let c = (p(t[0]) + p(t[1]) + p(t[2])) / 3.0;
++            assert!(n.dot(c) > 0.0, "a face points inward");
++        }
++    }
++}
+diff --git a/crates/benilla-app/src/lib.rs b/crates/benilla-app/src/lib.rs
+index 30dbfc47..d9401acc 100644
+--- a/crates/benilla-app/src/lib.rs
++++ b/crates/benilla-app/src/lib.rs
+@@ -66,6 +66,7 @@ mod footprints;
+ mod game_plugins;
+ mod go_anim;
+ mod go_templates;
++mod golf;
+ mod graphics_plus;
+ #[cfg(feature = "dev")]
+ mod hover_log;
+diff --git a/crates/benilla-mode/Cargo.toml b/crates/benilla-mode/Cargo.toml
+new file mode 100644
+index 00000000..27f78d81
+--- /dev/null
++++ b/crates/benilla-mode/Cargo.toml
+@@ -0,0 +1,11 @@
++[package]
++name = "benilla-mode"
++version.workspace = true
++edition.workspace = true
++license.workspace = true
++description = "Leyline Modes: the play layer's deterministic simulations (minigolf first), shared by the client and any host that certifies results"
++
++[lints]
++workspace = true
++
++[dependencies]
+diff --git a/crates/benilla-mode/courses/golden.txt b/crates/benilla-mode/courses/golden.txt
+new file mode 100644
+index 00000000..919db80e
+--- /dev/null
++++ b/crates/benilla-mode/courses/golden.txt
+@@ -0,0 +1 @@
++f3d4f50b58e58ad9
+diff --git a/crates/benilla-mode/courses/meadow-nine.course b/crates/benilla-mode/courses/meadow-nine.course
+new file mode 100644
+index 00000000..f4834a7d
+--- /dev/null
++++ b/crates/benilla-mode/courses/meadow-nine.course
+@@ -0,0 +1,118 @@
++# Meadow Nine: Leyline's first-party minigolf course. Open format: see crates/benilla-mode/src/golf.rs.
++# Every hole is played on the same spot, where the session started; the tee is at 0 0 0 facing +z.
++course Meadow Nine
++by WrathUnleashed
++
++hole 2 First Putt
++tee  0 0 0
++cup  0 0 10
++turf 0 -0.25 5     1.5 0.25 6.5
++wall  1.6 0.15 5   0.1 0.4 6.6
++wall -1.6 0.15 5   0.1 0.4 6.6
++wall 0 0.15 11.6   1.7 0.4 0.1
++wall 0 0.15 -1.6   1.7 0.4 0.1
++
++hole 3 Dogleg Right
++tee  0 0 0
++cup  6.5 0 8
++turf 0 -0.25 4     1.25 0.25 5.25
++turf 4.5 -0.25 8   3.25 0.25 1.25
++wall -1.35 0.15 4      0.1 0.4 5.35
++wall  1.35 0.15 2.65   0.1 0.4 4.0
++wall 0 0.15 -1.35      1.35 0.4 0.1
++wall 3.375 0.15 9.35   4.75 0.4 0.1
++wall 4.725 0.15 6.65   3.375 0.4 0.1
++wall 8.1 0.15 8        0.1 0.4 1.35
++bump 1.35 0 6.65       0.25 0.5
++
++hole 2 Up the Ramp
++tee  0 0 0
++cup  0 1 12.8
++turf 0 -0.25 3        1.4 0.25 4
++turf 0 0.263 8.579    1.4 0.25 1.581  0 -18.4
++turf 0 0.75 12        1.4 0.25 2
++wall  1.5 0.6 6.5     0.1 0.85 7.6
++wall -1.5 0.6 6.5     0.1 0.85 7.6
++wall 0 0.15 -1.1      1.6 0.4 0.1
++wall 0 1.15 14.1      1.6 0.4 0.1
++
++hole 3 The Windmill
++tee  0 0 0
++cup  0 0 12
++turf 0 -0.25 6     1.5 0.25 7.5
++spin 0 0.3 6       1.35 0.3 0.12  90
++bump 0 0 6         0.18 0.75
++wall  1.6 0.15 6   0.1 0.4 7.6
++wall -1.6 0.15 6   0.1 0.4 7.6
++wall 0 0.15 13.6   1.7 0.4 0.1
++wall 0 0.15 -1.6   1.7 0.4 0.1
++
++hole 3 Sand Trap
++tee  0 0 0
++cup  1 0 12
++turf 0 -0.25 2       2 0.25 3
++sand 0 -0.25 6.5     1.2 0.25 1.5
++turf -1.6 -0.25 6.5  0.4 0.25 1.5
++turf  1.6 -0.25 6.5  0.4 0.25 1.5
++turf 0 -0.25 11      2 0.25 3
++wall  2.1 0.15 6.5   0.1 0.4 7.6
++wall -2.1 0.15 6.5   0.1 0.4 7.6
++wall 0 0.15 14.1     2.2 0.4 0.1
++wall 0 0.15 -1.1     2.2 0.4 0.1
++
++hole 3 Bumper Alley
++tee  0 0 0
++cup  0 0 14
++turf 0 -0.25 7      1.5 0.25 8.5
++bump -0.6 0 4       0.3 0.5
++bump  0.6 0 6.5     0.3 0.5
++bump  0 0 7.9       0.22 0.5
++bump -0.6 0 9.3     0.3 0.5
++bump  0.6 0 11.6    0.3 0.5
++wall  1.6 0.15 7    0.1 0.4 8.6
++wall -1.6 0.15 7    0.1 0.4 8.6
++wall 0 0.15 15.6    1.7 0.4 0.1
++wall 0 0.15 -1.6    1.7 0.4 0.1
++
++hole 3 Ice Bridge
++tee  0 0 0
++cup  0 0 12.5
++turf 0 -0.25 1       1.5 0.25 2.5
++ice  0 -0.25 6.5     0.6 0.25 3
++turf 0 -0.25 12      1.5 0.25 2.5
++water 0 -0.4 6.5     1.5 3
++wall  1.6 0.15 1     0.1 0.4 2.5
++wall -1.6 0.15 1     0.1 0.4 2.5
++wall  1.6 0.15 12    0.1 0.4 2.5
++wall -1.6 0.15 12    0.1 0.4 2.5
++wall 0 0.15 14.6     1.7 0.4 0.1
++wall 0 0.15 -1.6     1.7 0.4 0.1
++
++hole 3 Slider Gate
++tee  0 0 0
++cup  0 0 11.5
++turf 0 -0.25 6        1.5 0.25 7.5
++wall -1.0 0.15 6      0.5 0.4 0.12
++wall  1.0 0.15 6      0.5 0.4 0.12
++slide -0.6 0.2 6.4    0.4 0.25 0.12   1.2 0   3
++wall  1.6 0.15 6      0.1 0.4 7.6
++wall -1.6 0.15 6      0.1 0.4 7.6
++wall 0 0.15 13.6      1.7 0.4 0.1
++wall 0 0.15 -1.6      1.7 0.4 0.1
++
++hole 4 Grand Finale
++tee  0 0 0
++cup  0.8 1.5 15
++turf 0 -0.25 3        1.5 0.25 4.5
++boost 0 0 3.5         0.6 0.6  0 9
++turf 0 0.516 9.588    1.5 0.25 2.136  0 -20.6
++turf 0 1.25 14        2 0.25 2.5
++bump -0.8 1.5 14.2    0.3 0.5
++wall  1.6 0.6 4.95    0.1 0.85 6.55
++wall -1.6 0.6 4.95    0.1 0.85 6.55
++wall  2.1 1.65 14.05  0.1 0.4 2.55
++wall -2.1 1.65 14.05  0.1 0.4 2.55
++wall  1.85 1.65 11.4  0.25 0.4 0.1
++wall -1.85 1.65 11.4  0.25 0.4 0.1
++wall 0 1.65 16.6      2.2 0.4 0.1
++wall 0 0.15 -1.6      1.7 0.4 0.1
+diff --git a/crates/benilla-mode/examples/golf_probe.rs b/crates/benilla-mode/examples/golf_probe.rs
+new file mode 100644
+index 00000000..37d78c6d
+--- /dev/null
++++ b/crates/benilla-mode/examples/golf_probe.rs
+@@ -0,0 +1,38 @@
++//! Plays every hole of a course by brute-force search, stroke by stroke, and prints how many
++//! strokes the best found line takes: a playability check for course authors.
++//! `cargo run --release -p benilla-mode --example golf_probe [course-file]`
++use benilla_mode::golf::{self, End, Shot};
++
++fn main() {
++    let text = match std::env::args().nth(1) {
++        Some(p) => std::fs::read_to_string(p).expect("course file"),
++        None => golf::MEADOW_NINE.to_string(),
++    };
++    let course = golf::parse(&text).unwrap_or_else(|e| panic!("{e}"));
++    println!("{} by {} (par {})", course.title, course.author, course.par());
++    for h in &course.holes {
++        let mut ball = h.tee_ball();
++        let mut strokes = 0;
++        let mut done = false;
++        while strokes < 8 && !done {
++            strokes += 1;
++            let mut best: Option<(f32, Shot, golf::Outcome)> = None;
++            for a in (0..3600).step_by(10) {
++                for pm in (100..=1000).step_by(30) {
++                    let shot = Shot { angle_t: a, power_m: pm };
++                    let o = golf::simulate(h, ball, shot, 0);
++                    let d = if o.end == End::Holed { -1.0 } else if o.end.penalty() { 1e9 } else {
++                        let dx = o.rest.x - h.cup.x; let dz = o.rest.z - h.cup.z; let dy = o.rest.y - h.cup.y;
++                        (dx * dx + dz * dz + 4.0 * dy * dy).sqrt()
++                    };
++                    if best.as_ref().is_none_or(|b| d < b.0) { best = Some((d, shot, o)); }
++                }
++            }
++            let (d, shot, o) = best.unwrap();
++            println!("  hole {} stroke {strokes}: aim {} power {} -> {:?} (left {:.2} yd, {} ticks)", h.number, shot.angle_t, shot.power_m, o.end, d.max(0.0), o.frames.len());
++            done = o.end == End::Holed;
++            ball = o.rest;
++        }
++        println!("hole {} {} par {}: {} {}", h.number, h.name, h.par, strokes, if done { "holed" } else { "NOT HOLED" });
++    }
++}
+diff --git a/crates/benilla-mode/examples/golf_window.rs b/crates/benilla-mode/examples/golf_window.rs
+new file mode 100644
+index 00000000..1f9ea309
+--- /dev/null
++++ b/crates/benilla-mode/examples/golf_window.rs
+@@ -0,0 +1,17 @@
++//! How forgiving each hole is: the share of shots near the best line that drop first time.
++use benilla_mode::golf::{self, End, Shot};
++fn main() {
++    let c = golf::parse(golf::MEADOW_NINE).unwrap();
++    for h in &c.holes {
++        let (mut tot, mut ace, mut water) = (0, 0, 0);
++        let mut powers = (2000, 0);
++        let mut aims = (99999, -99999);
++        for a in -300..300 { for pm in (100..=1000).step_by(5) {
++            let o = golf::simulate(h, h.tee_ball(), Shot { angle_t: a, power_m: pm }, 0);
++            tot += 1;
++            if o.end == End::Holed { ace += 1; powers.0 = powers.0.min(pm); powers.1 = powers.1.max(pm); aims.0 = aims.0.min(a); aims.1 = aims.1.max(a); }
++            if o.end.penalty() { water += 1; }
++        }}
++        println!("hole {} {:14} aces {:5.2}%  penalty {:5.1}%  power {:?} aim {:?}", h.number, h.name, ace as f32 * 100.0 / tot as f32, water as f32 * 100.0 / tot as f32, powers, aims);
++    }
++}
+diff --git a/crates/benilla-mode/src/detmath.rs b/crates/benilla-mode/src/detmath.rs
+new file mode 100644
+index 00000000..47c7f2d1
+--- /dev/null
++++ b/crates/benilla-mode/src/detmath.rs
+@@ -0,0 +1,163 @@
++//! Deterministic math: a small vector type and integer-angle trig built from `+ − ×` only.
++
++use core::ops::{Add, AddAssign, Mul, Neg, Sub, SubAssign};
++
++/// A 3-vector in a mode's local frame: x right, y up, z forward (Bevy's axes).
++#[derive(Clone, Copy, PartialEq, Debug, Default)]
++pub struct V3 {
++    pub x: f32,
++    pub y: f32,
++    pub z: f32,
++}
++
++impl V3 {
++    pub const ZERO: V3 = V3 { x: 0.0, y: 0.0, z: 0.0 };
++    pub const UP: V3 = V3 { x: 0.0, y: 1.0, z: 0.0 };
++
++    pub const fn new(x: f32, y: f32, z: f32) -> V3 {
++        V3 { x, y, z }
++    }
++    pub fn dot(self, o: V3) -> f32 {
++        self.x * o.x + self.y * o.y + self.z * o.z
++    }
++    pub fn len(self) -> f32 {
++        self.dot(self).sqrt()
++    }
++    pub fn flat_len(self) -> f32 {
++        (self.x * self.x + self.z * self.z).sqrt()
++    }
++    pub fn bits(self) -> [u32; 3] {
++        [self.x.to_bits(), self.y.to_bits(), self.z.to_bits()]
++    }
++}
++
++impl Add for V3 {
++    type Output = V3;
++    fn add(self, o: V3) -> V3 {
++        V3::new(self.x + o.x, self.y + o.y, self.z + o.z)
++    }
++}
++impl Sub for V3 {
++    type Output = V3;
++    fn sub(self, o: V3) -> V3 {
++        V3::new(self.x - o.x, self.y - o.y, self.z - o.z)
++    }
++}
++impl Mul<f32> for V3 {
++    type Output = V3;
++    fn mul(self, s: f32) -> V3 {
++        V3::new(self.x * s, self.y * s, self.z * s)
++    }
++}
++impl Neg for V3 {
++    type Output = V3;
++    fn neg(self) -> V3 {
++        V3::new(-self.x, -self.y, -self.z)
++    }
++}
++impl AddAssign for V3 {
++    fn add_assign(&mut self, o: V3) {
++        *self = *self + o;
++    }
++}
++impl SubAssign for V3 {
++    fn sub_assign(&mut self, o: V3) {
++        *self = *self - o;
++    }
++}
++
++/// Tenths of a degree in a full turn.
++pub const TURN_TENTHS: i32 = 3600;
++/// π/1800 as an `f32` literal: radians per tenth of a degree.
++const RAD_PER_TENTH: f32 = 0.001_745_329_3;
++
++/// `sin x` for |x| ≤ π/4, Taylor to x⁹ (error below 4e-7 at π/4), Horner form.
++fn sin_poly(x: f32) -> f32 {
++    let x2 = x * x;
++    x * (1.0 + x2 * (-1.0 / 6.0 + x2 * (1.0 / 120.0 + x2 * (-1.0 / 5040.0 + x2 * (1.0 / 362_880.0)))))
++}
++
++/// `cos x` for |x| ≤ π/4, Taylor to x⁸.
++fn cos_poly(x: f32) -> f32 {
++    let x2 = x * x;
++    1.0 + x2 * (-0.5 + x2 * (1.0 / 24.0 + x2 * (-1.0 / 720.0 + x2 * (1.0 / 40_320.0))))
++}
++
++/// `(sin, cos)` of an angle in tenths of a degree, identical on every IEEE-754 target: the angle
++/// is reduced with integer arithmetic to [0°, 45°] and evaluated by fixed polynomials.
++pub fn sin_cos_tenths(t: i32) -> (f32, f32) {
++    let t = t.rem_euclid(TURN_TENTHS);
++    let (quadrant, r) = (t / 900, t % 900);
++    let (s, c) = if r <= 450 {
++        let x = r as f32 * RAD_PER_TENTH;
++        (sin_poly(x), cos_poly(x))
++    } else {
++        let x = (900 - r) as f32 * RAD_PER_TENTH;
++        (cos_poly(x), sin_poly(x))
++    };
++    match quadrant {
++        0 => (s, c),
++        1 => (c, -s),
++        2 => (-s, -c),
++        _ => (-c, s),
++    }
++}
++
++/// A rotation: yaw about +y, then pitch about the yawed +x. `world = m · local`.
++#[derive(Clone, Copy, PartialEq, Debug)]
++pub struct Rot {
++    pub m: [[f32; 3]; 3],
++}
++
++impl Rot {
++    pub const IDENTITY: Rot = Rot { m: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]] };
++
++    pub fn yaw_pitch(yaw_t: i32, pitch_t: i32) -> Rot {
++        let (s, c) = sin_cos_tenths(yaw_t);
++        let (sp, cp) = sin_cos_tenths(pitch_t);
++        // Ry · Rx
++        Rot { m: [[c, s * sp, s * cp], [0.0, cp, -sp], [-s, c * sp, c * cp]] }
++    }
++    pub fn apply(&self, v: V3) -> V3 {
++        let m = &self.m;
++        V3::new(
++            m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z,
++            m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z,
++            m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z,
++        )
++    }
++    /// The inverse (transpose) applied: world to local.
++    pub fn unapply(&self, v: V3) -> V3 {
++        let m = &self.m;
++        V3::new(
++            m[0][0] * v.x + m[1][0] * v.y + m[2][0] * v.z,
++            m[0][1] * v.x + m[1][1] * v.y + m[2][1] * v.z,
++            m[0][2] * v.x + m[1][2] * v.y + m[2][2] * v.z,
++        )
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn integer_trig_tracks_the_real_thing() {
++        for t in (-7200..7200).step_by(7) {
++            let (s, c) = sin_cos_tenths(t);
++            let a = (t as f64) * core::f64::consts::PI / 1800.0;
++            assert!((s as f64 - a.sin()).abs() < 2e-6, "sin {t}");
++            assert!((c as f64 - a.cos()).abs() < 2e-6, "cos {t}");
++        }
++        assert_eq!(sin_cos_tenths(0), (0.0, 1.0));
++        assert_eq!(sin_cos_tenths(900).0, 1.0);
++    }
++
++    #[test]
++    fn rotation_round_trips() {
++        let r = Rot::yaw_pitch(375, -120);
++        let v = V3::new(1.5, -2.0, 0.25);
++        let back = r.unapply(r.apply(v));
++        assert!((back - v).len() < 1e-5);
++    }
++}
+diff --git a/crates/benilla-mode/src/golf.rs b/crates/benilla-mode/src/golf.rs
+new file mode 100644
+index 00000000..9fab88b6
+--- /dev/null
++++ b/crates/benilla-mode/src/golf.rs
+@@ -0,0 +1,823 @@
++//! Minigolf: course text, and a deterministic ball simulation.
++//!
++//! # Course text
++//!
++//! One instruction per line, `#` starts a comment, numbers in yards and degrees, in the hole's local
++//! frame (x right, y up, z forward; the client places the frame in the world where the session
++//! started). Every hole is played on the same spot: holes replace each other.
++//!
++//! ```text
++//! course Meadow Nine
++//! by WrathUnleashed
++//! hole 2 Straight Start                 # par, then the hole's name
++//! tee  0 0 0                            # ball start, on the surface
++//! cup  0 0 12                           # the cup, on the surface
++//! turf 0 -0.25 6   1.5 0.25 7.5         # block: centre x y z, half sizes x y z, [yaw] [pitch]
++//! sand | ice   (same as turf)           # other ground
++//! wall 1.6 0.15 6  0.1 0.4 7.5          # walls bounce
++//! bump 0 0 6  0.35 0.6                  # round bumper post: base x y z, radius, height (springy)
++//! water 0 -0.2 6  1.5 2                 # hazard: surface height y, half sizes x z; ball in = +1, back
++//! boost 0 0 3  0.6 0.6 0 9              # speed pad: centre, half x z, yaw, speed (yd/s)
++//! spin 0 0.3 8  1.4 0.12 0.12 90        # turning bar: centre, half sizes, degrees per second
++//! slide 0 0.2 8  0.4 0.2 0.1  2 0 3     # sliding block: centre, half sizes, travel x z, seconds
++//! ```
++//!
++//! # Simulation
++//!
++//! [`simulate`] steps the ball at [`TICK_HZ`] from a start position, a [`Shot`] (integer aim and
++//! power) and the session's phase tick (for spinners and sliders) until it rests, drops in the cup,
++//! falls out or hits water. Every client gets the same [`Outcome`], frame for frame.
++
++use crate::detmath::{sin_cos_tenths, Rot, V3};
++
++pub const TICK_HZ: u32 = 120;
++pub const DT: f32 = 1.0 / 120.0;
++/// WoW's own gravity (yd/s²), so the ball falls like everything else in the world.
++pub const GRAVITY: f32 = 19.291_105;
++pub const BALL_R: f32 = 0.11;
++pub const CUP_R: f32 = 0.24;
++/// Launch speed at full power (yd/s) and at zero power.
++pub const MAX_SPEED: f32 = 12.5;
++pub const MIN_SPEED: f32 = 0.45;
++/// A ball over the cup slower than this drops; faster, it lips out.
++pub const SINK_SPEED: f32 = 3.4;
++/// A shot is cut off after this many ticks (20 s) wherever the ball is.
++pub const MAX_TICKS: u32 = TICK_HZ * 20;
++/// Collision passes per tick.
++const SOLVER_PASSES: usize = 4;
++/// Below this approach speed a contact doesn't bounce (no jitter on the ground).
++const BOUNCE_FLOOR: f32 = 0.9;
++/// Ticks of stillness that count as rest.
++const REST_TICKS: u32 = 15;
++/// Speed under which the ball counts as still.
++const REST_SPEED: f32 = 0.03;
++
++pub const MAX_HOLES: usize = 18;
++pub const MAX_PIECES: usize = 160;
++pub const MAX_TEXT: usize = 24 * 1024;
++const MAX_COORD: f32 = 80.0;
++const MAX_HALF: f32 = 40.0;
++
++/// What a piece's surface does to the ball.
++#[derive(Clone, Copy, PartialEq, Eq, Debug)]
++pub enum Surface {
++    Turf,
++    Sand,
++    Ice,
++    Wall,
++    Bumper,
++}
++
++impl Surface {
++    /// Rolling deceleration (yd/s²) while the ball sits on it.
++    pub fn roll(self) -> f32 {
++        match self {
++            Surface::Turf | Surface::Wall | Surface::Bumper => 1.9,
++            Surface::Sand => 7.5,
++            Surface::Ice => 0.32,
++        }
++    }
++    /// Restitution against it.
++    pub fn bounce(self) -> f32 {
++        match self {
++            Surface::Turf => 0.3,
++            Surface::Sand => 0.05,
++            Surface::Ice => 0.35,
++            Surface::Wall => 0.74,
++            Surface::Bumper => 1.08,
++        }
++    }
++    pub fn word(self) -> &'static str {
++        match self {
++            Surface::Turf => "turf",
++            Surface::Sand => "sand",
++            Surface::Ice => "ice",
++            Surface::Wall => "wall",
++            Surface::Bumper => "bump",
++        }
++    }
++}
++
++/// How a piece moves with the session's phase tick.
++#[derive(Clone, Copy, PartialEq, Debug)]
++pub enum Motion {
++    Still,
++    /// Turns about its own vertical axis, degrees per second (any integer, either sign).
++    Spin { deg_per_s: i32 },
++    /// Slides from its centre to centre + `travel` and back, a full cycle every `period` ticks.
++    Slide { travel: V3, period: u32 },
++}
++
++#[derive(Clone, Copy, PartialEq, Debug)]
++pub enum Shape {
++    /// A box: half sizes, a yaw and a pitch (tenths of a degree).
++    Block { half: V3, yaw_t: i32, pitch_t: i32 },
++    /// An upright cylinder standing on its centre point.
++    Post { r: f32, h: f32 },
++}
++
++#[derive(Clone, Copy, PartialEq, Debug)]
++pub struct Piece {
++    pub surface: Surface,
++    pub center: V3,
++    pub shape: Shape,
++    pub motion: Motion,
++}
++
++/// A flat hazard: the ball dropping into it costs a stroke and goes back.
++#[derive(Clone, Copy, PartialEq, Debug)]
++pub struct Water {
++    pub center: V3,
++    pub half_x: f32,
++    pub half_z: f32,
++}
++
++/// A flat pad that pushes the ball along its yaw up to `speed`.
++#[derive(Clone, Copy, PartialEq, Debug)]
++pub struct Boost {
++    pub center: V3,
++    pub half_x: f32,
++    pub half_z: f32,
++    pub yaw_t: i32,
++    pub speed: f32,
++}
++
++#[derive(Clone, PartialEq, Debug, Default)]
++pub struct Hole {
++    pub number: u32,
++    pub name: String,
++    pub par: u32,
++    /// Surface point of the tee; the ball sits [`BALL_R`] above it.
++    pub tee: V3,
++    /// Surface point of the cup.
++    pub cup: V3,
++    pub pieces: Vec<Piece>,
++    pub water: Vec<Water>,
++    pub boosts: Vec<Boost>,
++    /// Lowest piece bottom: below this (less a margin) the ball is out.
++    pub floor: f32,
++}
++
++impl Hole {
++    /// Where the ball rests on the tee.
++    pub fn tee_ball(&self) -> V3 {
++        self.tee + V3::new(0.0, BALL_R, 0.0)
++    }
++}
++
++#[derive(Clone, PartialEq, Debug, Default)]
++pub struct Course {
++    pub title: String,
++    pub author: String,
++    pub holes: Vec<Hole>,
++}
++
++impl Course {
++    pub fn par(&self) -> u32 {
++        self.holes.iter().map(|h| h.par).sum()
++    }
++}
++
++#[derive(Debug, PartialEq, Eq, Clone)]
++pub struct ParseError {
++    pub line: usize,
++    pub message: String,
++}
++
++impl core::fmt::Display for ParseError {
++    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
++        write!(f, "line {}: {}", self.line, self.message)
++    }
++}
++
++fn err(line: usize, message: impl Into<String>) -> ParseError {
++    ParseError { line, message: message.into() }
++}
++
++/// Degrees (decimal allowed) to whole tenths, through `f64` parse and round (exact for any course).
++fn tenths(word: &str, line: usize) -> Result<i32, ParseError> {
++    let v: f64 = word.parse().map_err(|_| err(line, format!("not a number: {word}")))?;
++    if !v.is_finite() || v.abs() > 3600.0 {
++        return Err(err(line, format!("angle out of range: {word}")));
++    }
++    Ok((v * 10.0).round() as i32)
++}
++
++fn num(word: Option<&&str>, line: usize, what: &str) -> Result<f32, ParseError> {
++    let word = word.ok_or_else(|| err(line, format!("missing {what}")))?;
++    let v: f32 = word.parse().map_err(|_| err(line, format!("{what} is not a number: {word}")))?;
++    if !v.is_finite() || v.abs() > MAX_COORD {
++        return Err(err(line, format!("{what} out of range: {word}")));
++    }
++    Ok(v)
++}
++
++fn half(word: Option<&&str>, line: usize, what: &str) -> Result<f32, ParseError> {
++    let v = num(word, line, what)?;
++    if v <= 0.0 || v > MAX_HALF {
++        return Err(err(line, format!("{what} must be between 0 and {MAX_HALF}")));
++    }
++    Ok(v)
++}
++
++fn point(w: &[&str], at: usize, line: usize) -> Result<V3, ParseError> {
++    Ok(V3::new(num(w.get(at), line, "x")?, num(w.get(at + 1), line, "y")?, num(w.get(at + 2), line, "z")?))
++}
++
++/// Parses course text (see the module docs). Every hole needs a tee, a cup and at least one piece.
++pub fn parse(text: &str) -> Result<Course, ParseError> {
++    if text.len() > MAX_TEXT {
++        return Err(err(0, format!("course text is over {} KB", MAX_TEXT / 1024)));
++    }
++    let mut course = Course::default();
++    let mut have: Vec<(bool, bool)> = Vec::new();
++    for (i, raw) in text.lines().enumerate() {
++        let line = i + 1;
++        let body = raw.split('#').next().unwrap_or("").trim();
++        if body.is_empty() {
++            continue;
++        }
++        let w: Vec<&str> = body.split_whitespace().collect();
++        let rest = || body[w[0].len()..].trim().to_string();
++        let word = w[0].to_ascii_lowercase();
++        if word == "course" {
++            course.title = rest().chars().take(48).collect();
++            continue;
++        }
++        if word == "by" {
++            course.author = rest().chars().take(32).collect();
++            continue;
++        }
++        if word == "hole" {
++            if course.holes.len() >= MAX_HOLES {
++                return Err(err(line, format!("more than {MAX_HOLES} holes")));
++            }
++            let par: u32 = w
++                .get(1)
++                .and_then(|p| p.parse().ok())
++                .filter(|p| (1..=9).contains(p))
++                .ok_or_else(|| err(line, "hole needs a par from 1 to 9"))?;
++            let name: String = w[2.min(w.len())..].join(" ").chars().take(40).collect();
++            let number = course.holes.len() as u32 + 1;
++            course.holes.push(Hole {
++                number,
++                name: if name.is_empty() { format!("Hole {number}") } else { name },
++                par,
++                floor: f32::MAX,
++                ..Hole::default()
++            });
++            have.push((false, false));
++            continue;
++        }
++        let Some(hole) = course.holes.last_mut() else {
++            return Err(err(line, format!("'{}' before the first hole", w[0])));
++        };
++        let flags = have.last_mut().expect("one per hole");
++        let mut piece = |surface: Surface, center: V3, shape: Shape, motion: Motion| -> Result<(), ParseError> {
++            if hole.pieces.len() >= MAX_PIECES {
++                return Err(err(line, format!("more than {MAX_PIECES} pieces in one hole")));
++            }
++            let bottom = match shape {
++                Shape::Block { half, .. } => center.y - half.len(),
++                Shape::Post { .. } => center.y,
++            };
++            hole.floor = hole.floor.min(bottom);
++            hole.pieces.push(Piece { surface, center, shape, motion });
++            Ok(())
++        };
++        match word.as_str() {
++            "tee" => {
++                hole.tee = point(&w, 1, line)?;
++                flags.0 = true;
++            }
++            "cup" => {
++                hole.cup = point(&w, 1, line)?;
++                flags.1 = true;
++            }
++            "turf" | "sand" | "ice" | "wall" => {
++                let surface = match word.as_str() {
++                    "turf" => Surface::Turf,
++                    "sand" => Surface::Sand,
++                    "ice" => Surface::Ice,
++                    _ => Surface::Wall,
++                };
++                let center = point(&w, 1, line)?;
++                let h = V3::new(half(w.get(4), line, "half x")?, half(w.get(5), line, "half y")?, half(w.get(6), line, "half z")?);
++                let yaw_t = w.get(7).map(|s| tenths(s, line)).transpose()?.unwrap_or(0);
++                let pitch_t = w.get(8).map(|s| tenths(s, line)).transpose()?.unwrap_or(0);
++                if pitch_t.abs() > 450 {
++                    return Err(err(line, "pitch is limited to 45 degrees"));
++                }
++                piece(surface, center, Shape::Block { half: h, yaw_t, pitch_t }, Motion::Still)?;
++            }
++            "bump" => {
++                let center = point(&w, 1, line)?;
++                let r = half(w.get(4), line, "radius")?;
++                let h = half(w.get(5), line, "height")?;
++                piece(Surface::Bumper, center, Shape::Post { r, h }, Motion::Still)?;
++            }
++            "spin" => {
++                let center = point(&w, 1, line)?;
++                let h = V3::new(half(w.get(4), line, "half x")?, half(w.get(5), line, "half y")?, half(w.get(6), line, "half z")?);
++                let deg: i32 = w
++                    .get(7)
++                    .and_then(|s| s.parse().ok())
++                    .filter(|d: &i32| d.abs() <= 720)
++                    .ok_or_else(|| err(line, "spin needs whole degrees per second, up to 720"))?;
++                piece(Surface::Wall, center, Shape::Block { half: h, yaw_t: 0, pitch_t: 0 }, Motion::Spin { deg_per_s: deg })?;
++            }
++            "slide" => {
++                let center = point(&w, 1, line)?;
++                let h = V3::new(half(w.get(4), line, "half x")?, half(w.get(5), line, "half y")?, half(w.get(6), line, "half z")?);
++                let travel = V3::new(num(w.get(7), line, "travel x")?, 0.0, num(w.get(8), line, "travel z")?);
++                let secs = num(w.get(9), line, "seconds")?;
++                if !(0.5..=30.0).contains(&secs) {
++                    return Err(err(line, "slide seconds must be between 0.5 and 30"));
++                }
++                // Even, so the half cycle is whole.
++                let period = (((secs as f64) * TICK_HZ as f64 / 2.0).round() as u32) * 2;
++                piece(Surface::Wall, center, Shape::Block { half: h, yaw_t: 0, pitch_t: 0 }, Motion::Slide { travel, period })?;
++            }
++            "water" => {
++                let center = point(&w, 1, line)?;
++                hole.water.push(Water { center, half_x: half(w.get(4), line, "half x")?, half_z: half(w.get(5), line, "half z")? });
++            }
++            "boost" => {
++                let center = point(&w, 1, line)?;
++                let half_x = half(w.get(4), line, "half x")?;
++                let half_z = half(w.get(5), line, "half z")?;
++                let yaw_t = tenths(w.get(6).ok_or_else(|| err(line, "missing yaw"))?, line)?;
++                let speed = num(w.get(7), line, "speed")?;
++                if !(0.5..=MAX_SPEED * 1.5).contains(&speed) {
++                    return Err(err(line, "boost speed out of range"));
++                }
++                hole.boosts.push(Boost { center, half_x, half_z, yaw_t, speed });
++            }
++            other => return Err(err(line, format!("unknown instruction '{other}'"))),
++        }
++    }
++    if course.holes.is_empty() {
++        return Err(err(0, "the course has no holes"));
++    }
++    for (hole, (tee, cup)) in course.holes.iter_mut().zip(have) {
++        if !tee || !cup {
++            return Err(err(0, format!("hole {} needs a tee and a cup", hole.number)));
++        }
++        if hole.pieces.is_empty() {
++            return Err(err(0, format!("hole {} has nothing to roll on", hole.number)));
++        }
++    }
++    if course.title.is_empty() {
++        course.title = "Untitled course".into();
++    }
++    Ok(course)
++}
++
++/// A shot input: aim in tenths of a degree (0 = +z, 900 = +x) and power in permille.
++#[derive(Clone, Copy, PartialEq, Eq, Debug)]
++pub struct Shot {
++    pub angle_t: i32,
++    pub power_m: i32,
++}
++
++impl Shot {
++    pub fn clamped(self) -> Shot {
++        Shot { angle_t: self.angle_t.rem_euclid(3600), power_m: self.power_m.clamp(0, 1000) }
++    }
++    /// Launch velocity: power is squared for touch on short putts.
++    pub fn velocity(self) -> V3 {
++        let s = self.clamped();
++        let (sin, cos) = sin_cos_tenths(s.angle_t);
++        let p = s.power_m as f32 / 1000.0;
++        let speed = MIN_SPEED + (MAX_SPEED - MIN_SPEED) * (p * p);
++        V3::new(sin * speed, 0.0, cos * speed)
++    }
++}
++
++/// How a shot ended.
++#[derive(Clone, Copy, PartialEq, Eq, Debug)]
++pub enum End {
++    Rest,
++    Holed,
++    /// Fell off the course: one stroke penalty, back to where it was hit from.
++    Out,
++    /// Into water: one stroke penalty, back to where it was hit from.
++    Water,
++    /// Still moving at the time limit: stays where it is.
++    Timeout,
++}
++
++impl End {
++    pub fn word(self) -> &'static str {
++        match self {
++            End::Rest => "rest",
++            End::Holed => "holed",
++            End::Out => "out",
++            End::Water => "water",
++            End::Timeout => "rest",
++        }
++    }
++    pub fn penalty(self) -> bool {
++        matches!(self, End::Out | End::Water)
++    }
++}
++
++#[derive(Clone, PartialEq, Debug)]
++pub struct Outcome {
++    /// The ball's centre, one entry per tick, the start first.
++    pub frames: Vec<V3>,
++    /// Where the next shot is played from.
++    pub rest: V3,
++    pub end: End,
++    pub hash: u64,
++}
++
++/// A piece's pose at a tick: centre, rotation, and the surface velocity at a point.
++struct Pose {
++    center: V3,
++    rot: Rot,
++    /// Linear velocity of the whole piece (slides).
++    vel: V3,
++    /// Angular speed about +y, radians per second (spins).
++    omega: f32,
++}
++
++const RAD_PER_TENTH: f32 = 0.001_745_329_3;
++
++fn pose(piece: &Piece, tick: i64) -> Pose {
++    match (piece.shape, piece.motion) {
++        (Shape::Block { yaw_t, pitch_t, .. }, Motion::Still) => {
++            Pose { center: piece.center, rot: Rot::yaw_pitch(yaw_t, pitch_t), vel: V3::ZERO, omega: 0.0 }
++        }
++        (Shape::Block { yaw_t, .. }, Motion::Spin { deg_per_s }) => {
++            // Whole tenths of a degree at this tick, by integer arithmetic.
++            let ang = (deg_per_s as i64 * 10 * tick).div_euclid(TICK_HZ as i64);
++            let a = (ang.rem_euclid(3600)) as i32 + yaw_t;
++            let omega = (deg_per_s * 10) as f32 * RAD_PER_TENTH;
++            Pose { center: piece.center, rot: Rot::yaw_pitch(a, 0), vel: V3::ZERO, omega }
++        }
++        (Shape::Block { yaw_t, pitch_t, .. }, Motion::Slide { travel, period }) => {
++            let p = period as i64;
++            let halfp = p / 2;
++            let k = tick.rem_euclid(p);
++            let (u, dir) = if k < halfp { (k, 1.0) } else { (p - k, -1.0) };
++            let f = u as f32 / halfp as f32;
++            let rate = dir / (halfp as f32 * DT);
++            Pose {
++                center: piece.center + travel * f,
++                rot: Rot::yaw_pitch(yaw_t, pitch_t),
++                vel: travel * rate,
++                omega: 0.0,
++            }
++        }
++        (Shape::Post { .. }, _) => Pose { center: piece.center, rot: Rot::IDENTITY, vel: V3::ZERO, omega: 0.0 },
++    }
++}
++
++/// The contact of a ball at `p` with a piece in pose: outward normal and depth.
++fn contact(piece: &Piece, pose: &Pose, p: V3) -> Option<(V3, f32)> {
++    match piece.shape {
++        Shape::Block { half, .. } => {
++            let l = pose.rot.unapply(p - pose.center);
++            let q = V3::new(l.x.clamp(-half.x, half.x), l.y.clamp(-half.y, half.y), l.z.clamp(-half.z, half.z));
++            let d = l - q;
++            let dist2 = d.dot(d);
++            if dist2 > BALL_R * BALL_R {
++                return None;
++            }
++            if dist2 > 1e-12 {
++                let dist = dist2.sqrt();
++                let n = pose.rot.apply(d * (1.0 / dist));
++                return Some((n, BALL_R - dist));
++            }
++            // The centre is inside: out through the nearest face.
++            let gaps = [half.x - l.x.abs(), half.y - l.y.abs(), half.z - l.z.abs()];
++            let mut axis = 0;
++            for a in 1..3 {
++                if gaps[a] < gaps[axis] {
++                    axis = a;
++                }
++            }
++            let sign = |v: f32| if v < 0.0 { -1.0 } else { 1.0 };
++            let nl = match axis {
++                0 => V3::new(sign(l.x), 0.0, 0.0),
++                1 => V3::new(0.0, sign(l.y), 0.0),
++                _ => V3::new(0.0, 0.0, sign(l.z)),
++            };
++            Some((pose.rot.apply(nl), gaps[axis] + BALL_R))
++        }
++        Shape::Post { r, h } => {
++            let l = p - pose.center;
++            let rad = l.flat_len();
++            let y = l.y.clamp(0.0, h);
++            let q = if rad > r {
++                V3::new(l.x * (r / rad), y, l.z * (r / rad))
++            } else if l.y > h || l.y < 0.0 {
++                V3::new(l.x, y, l.z)
++            } else if rad > 1e-6 {
++                // Inside the post: push out sideways.
++                let n = V3::new(l.x / rad, 0.0, l.z / rad);
++                return Some((n, r - rad + BALL_R));
++            } else {
++                return Some((V3::new(1.0, 0.0, 0.0), r + BALL_R));
++            };
++            let d = l - q;
++            let dist2 = d.dot(d);
++            if dist2 > BALL_R * BALL_R || dist2 <= 1e-12 {
++                return None;
++            }
++            let dist = dist2.sqrt();
++            Some((d * (1.0 / dist), BALL_R - dist))
++        }
++    }
++}
++
++/// Surface velocity of a moving piece at a world point.
++fn surface_velocity(pose: &Pose, at: V3) -> V3 {
++    if pose.omega != 0.0 {
++        let r = at - pose.center;
++        // ω ŷ × r = (ω r.z, 0, −ω r.x)
++        return V3::new(pose.omega * r.z, 0.0, -pose.omega * r.x) + pose.vel;
++    }
++    pose.vel
++}
++
++fn fnv(hash: &mut u64, word: u32) {
++    for b in word.to_le_bytes() {
++        *hash ^= b as u64;
++        *hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
++    }
++}
++
++fn over(center: V3, half_x: f32, half_z: f32, p: V3) -> bool {
++    (p.x - center.x).abs() <= half_x && (p.z - center.z).abs() <= half_z
++}
++
++/// Plays one shot from `start` (the ball's centre). `phase` is the session tick at which the shot
++/// was struck (spinners and sliders are where that tick puts them). Deterministic: the same inputs
++/// give the same [`Outcome`] on every platform.
++pub fn simulate(hole: &Hole, start: V3, shot: Shot, phase: i64) -> Outcome {
++    simulate_for(hole, start, shot, phase, MAX_TICKS)
++}
++
++/// [`simulate`] cut off after `max_ticks` (the aim preview plays a short piece of the path).
++pub fn simulate_for(hole: &Hole, start: V3, shot: Shot, phase: i64, max_ticks: u32) -> Outcome {
++    let mut p = start;
++    let mut v = shot.velocity();
++    let mut frames = Vec::with_capacity(512);
++    frames.push(p);
++    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
++    let mut still = 0;
++    let mut end = End::Timeout;
++    let mut rest = p;
++    let low = hole.floor.min(hole.cup.y) - 3.0;
++    let cap = MAX_SPEED * 1.6;
++    for tick in 1..=max_ticks {
++        let now = phase + tick as i64;
++        v.y -= GRAVITY * DT;
++        p += v * DT;
++
++        // Boost pads push along their yaw while the ball is on them.
++        for b in &hole.boosts {
++            if over(b.center, b.half_x, b.half_z, p) && (p.y - (b.center.y + BALL_R)).abs() < 0.08 {
++                let (s, c) = sin_cos_tenths(b.yaw_t);
++                let dir = V3::new(s, 0.0, c);
++                let along = v.dot(dir);
++                if along < b.speed {
++                    v += dir * ((b.speed - along).min(40.0 * DT));
++                }
++            }
++        }
++
++        let mut ground: Option<(V3, Surface)> = None;
++        for _ in 0..SOLVER_PASSES {
++            let mut touched = false;
++            for piece in &hole.pieces {
++                let pose = pose(piece, now);
++                let Some((n, depth)) = contact(piece, &pose, p) else {
++                    continue;
++                };
++                touched = true;
++                p += n * depth;
++                let sv = surface_velocity(&pose, p - n * BALL_R);
++                let rel = v - sv;
++                let vn = rel.dot(n);
++                if vn < 0.0 {
++                    let e = if -vn < BOUNCE_FLOOR { 0.0 } else { piece.surface.bounce() };
++                    v -= n * ((1.0 + e) * vn);
++                }
++                if n.y > 0.55 && ground.is_none_or(|(g, _)| n.y > g.y) {
++                    ground = Some((n, piece.surface));
++                }
++            }
++            if !touched {
++                break;
++            }
++        }
++
++        // Rolling resistance, and rest on a slope that can't keep the ball going.
++        if let Some((n, surface)) = ground {
++            let vt = v - n * v.dot(n);
++            let speed = vt.len();
++            let decel = surface.roll() * DT;
++            let slope = GRAVITY * (1.0 - n.y * n.y).max(0.0).sqrt();
++            if speed <= decel {
++                if slope < surface.roll() {
++                    v = V3::ZERO;
++                } else {
++                    v -= vt;
++                }
++            } else {
++                v -= vt * (decel / speed);
++            }
++        }
++
++        // The cup: slow enough over it, the ball drops; near it, the lip pulls a little.
++        let to_cup = V3::new(hole.cup.x - p.x, 0.0, hole.cup.z - p.z);
++        let d = to_cup.flat_len();
++        let level = p.y - (hole.cup.y + BALL_R);
++        if level.abs() < 0.12 {
++            let flat_speed = v.flat_len();
++            if d < CUP_R && flat_speed < SINK_SPEED {
++                end = End::Holed;
++                // A short drop into the cup for the frames, then done.
++                let sink = hole.cup + V3::new(0.0, BALL_R - 0.2, 0.0);
++                for k in 1..=12u32 {
++                    let f = k as f32 / 12.0;
++                    let q = p + (sink - p) * f;
++                    frames.push(q);
++                    for w in q.bits() {
++                        fnv(&mut hash, w);
++                    }
++                }
++                rest = hole.cup;
++                break;
++            }
++            if d < CUP_R * 1.6 && d > 1e-4 && flat_speed < SINK_SPEED * 1.4 {
++                v += to_cup * (2.4 * DT / d);
++            }
++        }
++
++        if v.len() > cap {
++            v = v * (cap / v.len());
++        }
++
++        frames.push(p);
++        for w in p.bits() {
++            fnv(&mut hash, w);
++        }
++
++        if hole.water.iter().any(|w| over(w.center, w.half_x, w.half_z, p) && p.y < w.center.y + BALL_R * 0.5) {
++            end = End::Water;
++            rest = start;
++            break;
++        }
++        if p.y < low {
++            end = End::Out;
++            rest = start;
++            break;
++        }
++        if ground.is_some() && v.len() < REST_SPEED {
++            still += 1;
++            if still >= REST_TICKS {
++                end = End::Rest;
++                rest = p;
++                break;
++            }
++        } else {
++            still = 0;
++        }
++        rest = p;
++    }
++    fnv(&mut hash, frames.len() as u32);
++    fnv(&mut hash, end as u32);
++    Outcome { frames, rest, end, hash }
++}
++
++/// The aim that points straight from `from` at the cup, in whole tenths (a starting aim only).
++pub fn aim_at_cup(hole: &Hole, from: V3) -> i32 {
++    let dx = (hole.cup.x - from.x) as f64;
++    let dz = (hole.cup.z - from.z) as f64;
++    let a = dx.atan2(dz).to_degrees() * 10.0;
++    (a.round() as i32).rem_euclid(3600)
++}
++
++/// A fingerprint of 72 shots across the shipped course (every hole, many aims, powers and phases),
++/// for checking that a platform simulates bit-identically: the native tests pin its value.
++pub fn fingerprint() -> u64 {
++    let c = parse(MEADOW_NINE).expect("the shipped course parses");
++    let mut all: u64 = 0;
++    for (i, h) in c.holes.iter().enumerate() {
++        for k in 0..8 {
++            let shot = Shot { angle_t: (i as i32 * 131 + k * 457) % 3600, power_m: 150 + k * 110 };
++            all ^= simulate(h, h.tee_ball(), shot, k as i64 * 97).hash.rotate_left(k as u32 + i as u32);
++        }
++    }
++    all
++}
++
++/// The first-party course the client ships for practice and the realm offers by default.
++pub const MEADOW_NINE: &str = include_str!("../courses/meadow-nine.course");
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn straight() -> Hole {
++        parse(
++            "course T\nhole 2 Straight\ntee 0 0 0\ncup 0 0 10\nturf 0 -0.25 5 1.5 0.25 7\nwall 1.6 0.15 5 0.1 0.4 7\nwall -1.6 0.15 5 0.1 0.4 7\nwall 0 0.15 12.1 1.7 0.4 0.1\nwall 0 0.15 -2.1 1.7 0.4 0.1\n",
++        )
++        .unwrap()
++        .holes
++        .remove(0)
++    }
++
++    #[test]
++    fn the_shipped_course_parses() {
++        let c = parse(MEADOW_NINE).expect("meadow nine");
++        assert_eq!(c.holes.len(), 9);
++        assert!(c.par() >= 18 && c.par() <= 30, "par {}", c.par());
++    }
++
++    #[test]
++    fn a_gentle_putt_rests_on_the_green() {
++        let h = straight();
++        let o = simulate(&h, h.tee_ball(), Shot { angle_t: 0, power_m: 300 }, 0);
++        assert_eq!(o.end, End::Rest);
++        assert!(o.rest.z > 0.5 && o.rest.z < 10.0, "rest {:?}", o.rest);
++        assert!((o.rest.y - BALL_R).abs() < 0.01, "on the surface: {:?}", o.rest);
++    }
++
++    #[test]
++    fn the_right_putt_drops() {
++        let h = straight();
++        let holed = (200..1000).step_by(10).any(|power_m| {
++            simulate(&h, h.tee_ball(), Shot { angle_t: 0, power_m }, 0).end == End::Holed
++        });
++        assert!(holed, "some power holes a straight putt");
++    }
++
++    #[test]
++    fn a_hard_shot_bounces_off_the_back_wall_and_stays_in() {
++        let h = straight();
++        let o = simulate(&h, h.tee_ball(), Shot { angle_t: 0, power_m: 1000 }, 0);
++        assert!(o.rest.z < 12.0 && o.rest.z > -2.0, "{:?} {:?}", o.end, o.rest);
++    }
++
++    #[test]
++    fn off_the_edge_is_out_and_back_to_the_start() {
++        let h = parse("hole 1\ntee 0 0 0\ncup 0 0 5\nturf 0 -0.25 2 1 0.25 4\n").unwrap().holes.remove(0);
++        let o = simulate(&h, h.tee_ball(), Shot { angle_t: 900, power_m: 900 }, 0);
++        assert_eq!(o.end, End::Out);
++        assert_eq!(o.rest, h.tee_ball());
++    }
++
++    #[test]
++    fn water_costs_a_stroke() {
++        let h = parse("hole 2\ntee 0 0 0\ncup 0 0 9\nturf 0 -0.25 1 1 0.25 2\nturf 0 -0.25 8 1 0.25 2\nwater 0 -0.3 4.5 1 1.5\n").unwrap().holes.remove(0);
++        let o = simulate(&h, h.tee_ball(), Shot { angle_t: 0, power_m: 600 }, 0);
++        assert_eq!(o.end, End::Water);
++        assert!(o.end.penalty());
++    }
++
++    #[test]
++    fn it_is_deterministic_and_the_hash_sees_every_input() {
++        let c = parse(MEADOW_NINE).unwrap();
++        for h in &c.holes {
++            let a = simulate(h, h.tee_ball(), Shot { angle_t: 37, power_m: 640 }, 1234);
++            let b = simulate(h, h.tee_ball(), Shot { angle_t: 37, power_m: 640 }, 1234);
++            assert_eq!(a, b);
++            let other = simulate(h, h.tee_ball(), Shot { angle_t: 38, power_m: 640 }, 1234);
++            assert_ne!(a.hash, other.hash, "hole {}", h.number);
++        }
++    }
++
++    #[test]
++    fn spinners_move_with_the_phase() {
++        let h = parse("hole 3\ntee 0 0 0\ncup 0 0 9\nturf 0 -0.25 4.5 1.5 0.25 6\nspin 0 0.3 4.5 1.4 0.3 0.12 120\n").unwrap().holes.remove(0);
++        let a = simulate(&h, h.tee_ball(), Shot { angle_t: 0, power_m: 700 }, 0);
++        let b = simulate(&h, h.tee_ball(), Shot { angle_t: 0, power_m: 700 }, 90);
++        assert_ne!(a.hash, b.hash);
++    }
++
++    #[test]
++    fn bad_text_says_where() {
++        let e = parse("hole 2\ntee 0 0 0\ncup 0 0 9\nturf 0 0 0 1 1\n").unwrap_err();
++        assert_eq!(e.line, 4);
++        assert!(parse("tee 0 0 0").is_err());
++        assert!(parse("hole 2\ncup 0 0 1\nturf 0 0 0 1 1 1").is_err(), "no tee");
++        assert!(parse("hole 2\ntee 0 0 0\ncup 0 0 1\nturf 0 0 0 1 1 1 0 60").is_err(), "pitch cap");
++    }
++
++    /// Pinned on x86_64; `scripts/golf-determinism.sh` checks the wasm client computes the same.
++    #[test]
++    fn golden_hash() {
++        let all = fingerprint();
++        println!("golden {all:016x}");
++        assert_eq!(format!("{all:016x}"), golden_value());
++    }
++
++    fn golden_value() -> &'static str {
++        include_str!("../courses/golden.txt").trim()
++    }
++}
+diff --git a/crates/benilla-mode/src/lib.rs b/crates/benilla-mode/src/lib.rs
+new file mode 100644
+index 00000000..05d9f29c
+--- /dev/null
++++ b/crates/benilla-mode/src/lib.rs
+@@ -0,0 +1,18 @@
++//! Leyline Modes: the play layer that sits beside the persistent world.
++//!
++//! World props are real realm gameobjects; mode entities (a golf ball, a course) exist only for
++//! the players in a session and are simulated on every client from the same inputs. That only
++//! works if every client computes bit-identical results, so everything here is deterministic:
++//!
++//! * fixed timestep ([`golf::DT`]), fixed iteration order (pieces in course order);
++//! * `f32` with `+ − × ÷` and `sqrt` only, which IEEE-754 rounds exactly on every target the client
++//!   runs on (wasm32, x86_64, aarch64). No `sin`/`cos`/`powf` from the platform's libm: angles
++//!   come in as integers and go through [`detmath::sin_cos_tenths`], a fixed polynomial;
++//! * inputs are integers (aim in tenths of a degree, power in permille), course text is parsed
++//!   with Rust's correctly rounded float parser.
++//!
++//! A shot's [`golf::Outcome::hash`] covers every frame of the ball's path, so two clients (or a
++//! future certifying host) can compare one number to know they saw the same shot.
++
++pub mod detmath;
++pub mod golf;
+diff --git a/scripts/golf-det/.gitignore b/scripts/golf-det/.gitignore
+new file mode 100644
+index 00000000..ea8c4bf7
+--- /dev/null
++++ b/scripts/golf-det/.gitignore
+@@ -0,0 +1 @@
++/target
+diff --git a/scripts/golf-det/Cargo.toml b/scripts/golf-det/Cargo.toml
+new file mode 100644
+index 00000000..1842f4cc
+--- /dev/null
++++ b/scripts/golf-det/Cargo.toml
+@@ -0,0 +1,17 @@
++[package]
++name = "golf-det"
++version = "0.0.0"
++edition = "2021"
++publish = false
++
++[workspace]
++
++[lib]
++crate-type = ["cdylib"]
++path = "lib.rs"
++
++[dependencies]
++benilla-mode = { path = "../../crates/benilla-mode" }
++
++[profile.release]
++panic = "abort"
+diff --git a/scripts/golf-det/lib.rs b/scripts/golf-det/lib.rs
+new file mode 100644
+index 00000000..04712211
+--- /dev/null
++++ b/scripts/golf-det/lib.rs
+@@ -0,0 +1,10 @@
++//! The minigolf determinism probe as a bare wasm module: `fingerprint_hi`/`fingerprint_lo` export
++//! `benilla_mode::golf::fingerprint()`, which `scripts/golf-determinism.sh` compares to the pin.
++#[no_mangle]
++pub extern "C" fn fingerprint_hi() -> u32 {
++    (benilla_mode::golf::fingerprint() >> 32) as u32
++}
++#[no_mangle]
++pub extern "C" fn fingerprint_lo() -> u32 {
++    benilla_mode::golf::fingerprint() as u32
++}
+diff --git a/scripts/golf-determinism.sh b/scripts/golf-determinism.sh
+new file mode 100755
+index 00000000..5bd20c2c
+--- /dev/null
++++ b/scripts/golf-determinism.sh
+@@ -0,0 +1,22 @@
++#!/usr/bin/env bash
++# Minigolf determinism: the wasm build (as the browser client compiles it: simd128, debug and
++# release) must compute the same shot fingerprint as the native tests pin
++# (crates/benilla-mode/courses/golden.txt). Needs node and rust-src (build-std).
++set -euo pipefail
++cd "$(dirname "$0")/golf-det"
++want=$(tr -d '[:space:]' < ../../crates/benilla-mode/courses/golden.txt)
++export RUSTC_BOOTSTRAP=1 CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-/tmp/golf-det-target}
++export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS="-C target-feature=+simd128"
++status=0
++for profile in dev release; do
++  cargo build -q --profile "$profile" -Z build-std=std,panic_abort --target wasm32-unknown-unknown
++  dir=$([ "$profile" = dev ] && echo debug || echo release)
++  got=$(node -e '
++    const b = require("fs").readFileSync(process.argv[1]);
++    WebAssembly.instantiate(b, {}).then(({instance: i}) => {
++      const h = i.exports.fingerprint_hi() >>> 0, l = i.exports.fingerprint_lo() >>> 0;
++      console.log(h.toString(16).padStart(8, "0") + l.toString(16).padStart(8, "0"));
++    });' "$CARGO_TARGET_DIR/wasm32-unknown-unknown/$dir/golf_det.wasm")
++  if [ "$got" = "$want" ]; then echo "wasm $profile: $got matches"; else echo "wasm $profile: $got, expected $want"; status=1; fi
++done
++exit $status

@@ -1,6 +1,6 @@
 ## Interface: 30300
 ## Title: WrathUnleashed UI
-## Notes: WrathUnleashed's defaults for the browser realm: modern UI size, every action bar on, a level 80's bars filled, Esc > Mods & Workshop, Collections (Shift-P), the Builder (/builder), edit mode (F7 or /edit) and the Leyline realms (/leyline).
+## Notes: WrathUnleashed's defaults for the browser realm: modern UI size, every action bar on, a level 80's bars filled, Esc > Mods & Workshop, Collections (Shift-P), the Builder (/builder), edit mode (F7 or /edit), minigolf (/golf) and the Leyline realms (/leyline).
 ## Author: WrathUnleashed
 ## OptionalDeps: ForeverUI
 ## SavedVariables: WrathUnleashedUIDB
@@ -11,4 +11,5 @@ Collections.lua
 BarLayout.lua
 Builder.lua
 EditMode.lua
+Golf.lua
 Leyline.lua

@@ -126,3 +126,7 @@
 1036h leyline  Update the public orionopenwow/Leyline repo
 1037a signin  Site: the realm list falls back to the relay's public address (it had gone stale for an hour; the Dalaran Hangout now shows)
 1037b ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1037a-golf scripts  Minigolf on the realm (ov_golf.lua): /golf sessions, party invites, turns, shot relay, scorecard, course publishing; plus the Builder's edit-mode tools (ov_build.lua)
+1037b-golf foreverui  Minigolf HUD (Golf.lua: /golf, Practice, scorecard, power meter, course editor UI) and the edit mode HUD
+1037c-golf client  Client 20261025i: Leyline minigolf (deterministic course physics, Meadow Nine, aim and roll camera) on top of 20261025h edit mode tools
+1037d-golf ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline minigolf, edit mode tools, course guide
