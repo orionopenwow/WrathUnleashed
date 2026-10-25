@@ -20,7 +20,7 @@ SCRIPTS = ["ownfiles.js", "ownfiles-worker.js", "mpq.js", "chain.js", "sections.
 
 # The page layer (wrath-page.js): optional, copied when www-files/ has them all.
 PAGE_LAYER = ["wrath-early.js", "wrath-page.js", "stages.js", "input.js", "touch.js", "touch-driver.js",
-              "ahead.js", "sw-register.js", "wrath-sw.js", "wu-diag.js", "wu-loading.js", "wu-loading.css"]
+              "ahead.js", "sw-register.js", "wrath-sw.js", "wu-diag.js", "wu-loading.js", "wu-loading.css", "tab.html"]
 # the loading screens' art and font (www-files/art/ -> www/art/), the 1.12 boot screen's
 PAGE_ART = ["wu-load-bg.webp", "wu-load-orion.webp", "wu-corner-tl.webp", "wu-corner-tr.webp", "wu-corner-bl.webp",
             "wu-corner-br.webp", "wu-divider.webp", "wu-dragon-l.webp", "wu-dragon-r.webp",
