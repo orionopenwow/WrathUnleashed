@@ -143,7 +143,8 @@ check("lfg: refuses a non-DBC", bad)
 dp = load("dp", os.path.join(HERE, "server/displays.py"))
 K = {t["key"]: n for n, t in ordered}
 sql = dp.build_sql(doc, {1, K["violet-hold-toc"]})
-check("displays: Dalaran by its box", "c.map = 571 AND c.position_x BETWEEN 5500.0 AND 6150.0" in sql and "c.position_z >= 450.0" in sql)
+check("displays: Dalaran by its box, the forest below it included", "c.map = 571 AND c.position_x BETWEEN 5500.0 AND 6150.0" in sql and "c.position_z" not in sql)
+check("displays: a box's z min still works", "c.position_z >= 450.0" in dp.entry_cond("c", {"id": 571, "spawnBox": [0, 1, 0, 1, 450]}))
 check("displays: Violet Hold tier maps", "c.map = 608" in sql and "g.map = 650" in sql)
 check("displays: rows carry their tier", f"'{K['violet-hold-toc']}' FROM creature" in sql and "'1' FROM gameobject" in sql)
 check("displays: other tiers left out", "533" not in sql)
@@ -156,6 +157,123 @@ check("displays: old schema fallback", "modelid4" in dp.build_sql(doc, {K["viole
 inst = dp.build_sql(doc, set(), instances=True)
 check("displays: --instances is every non-continent map, tier '-'", "c.map NOT IN (0, 1, 530, 571)" in inst and "'-'" in inst)
 check("displays: tier list", dp.tiers_arg("0-2,5") == {0, 1, 2, 5})
+
+# 5. displays.py: player mounts (synthetic 3.3.5a Spell.dbc / SkillLineAbility.dbc / TaxiNodes.dbc)
+def wdbc(fields, recs, strings=b"\0"):
+    body = b"".join(struct.pack(f"<{fields}i", *r) for r in recs)
+    return b"WDBC" + struct.pack("<4I", len(recs), fields, fields * 4, len(strings)) + body + strings
+
+
+def spell(sid, name_off=0, eff=(0, 0, 0), aura=(0, 0, 0), misc=(0, 0, 0), trig=(0, 0, 0)):
+    r = [0] * 234
+    r[0] = sid
+    r[71:74], r[95:98], r[110:113], r[116:119] = eff, aura, misc, trig
+    r[136 + 3] = name_off  # a non-enUS locale column: the first non-empty one is the name
+    return r
+
+
+names = b"\0Swift Ram\0Big Bear\0Learning\0NPC Wolf\0Trainer Horse\0"
+off = {n: names.index(n.encode() + b"\0") for n in ("Swift Ram", "Big Bear", "Learning", "NPC Wolf", "Trainer Horse")}
+SPELLS = wdbc(234, [
+    spell(1000, off["Swift Ram"], eff=(6, 0, 0), aura=(78, 0, 0), misc=(500, 0, 0)),     # spellbook (777)
+    spell(1001, off["NPC Wolf"], eff=(6, 0, 0), aura=(78, 0, 0), misc=(501, 0, 0)),      # NPC only
+    spell(1002, off["Learning"], eff=(36, 0, 0), trig=(1003, 0, 0)),                     # an item's learn spell
+    spell(1003, off["Big Bear"], eff=(6, 6, 0), aura=(78, 32, 0), misc=(502, 0, 0)),     # what it teaches
+    spell(1004, off["Big Bear"], eff=(6, 0, 0), aura=(78, 0, 0), misc=(503, 0, 0)),      # a speed variant
+    spell(1005, eff=(6, 0, 0), aura=(78, 0, 0)),                                         # no creature
+    spell(1006, aura=(78, 0, 0), misc=(504, 0, 0)),                                      # no effect
+    spell(1007, off["Trainer Horse"], eff=(0, 0, 6), aura=(0, 0, 78), misc=(0, 0, 505)), # trainer, 3rd effect
+    spell(1009, eff=(56, 0, 0), misc=(701, 0, 0)),                                       # Summon Voidwalker
+    spell(1010, eff=(6, 0, 0), aura=(23, 0, 0), trig=(1011, 0, 0)),                      # a channel...
+    spell(1011, eff=(28, 0, 0), misc=(702, 0, 0)),                                       # ...summons ghouls
+    spell(1012, eff=(28, 0, 0), misc=(703, 0, 0)),                                       # an NPC's summon
+    spell(1013, eff=(50, 0, 0), misc=(800, 0, 0)),                                       # a portal object
+], names)
+SLA = wdbc(14, [[i, 777, sp_] + [0] * 11 for i, sp_ in enumerate((1000, 1009, 1010, 1013), 1)])
+TAXI = wdbc(24, [[1] + [0] * 21 + [600, 601], [2] + [0] * 23])
+sp = dp.parse_spells(SPELLS)
+check("mounts: Spell.dbc columns (effect 71, aura 95, misc 110, trigger 116, name 136+)",
+      sp[1003] == ((6, 6, 0), (78, 32, 0), (502, 0, 0), (0, 0, 0), "Big Bear") and sp[1002][3] == (1003, 0, 0), sp.get(1003))
+check("mounts: SkillLineAbility spell column", dp.parse_column(SLA, dp.SLA_FIELDS, (dp.SLA_SPELL,), "s") == {1000, 1009, 1010, 1013})
+check("mounts: TaxiNodes MountCreatureID columns 22, 23", dp.parse_column(TAXI, dp.TAXI_FIELDS, dp.TAXI_MOUNT, "t") == {600, 601})
+ent, n = dp.mount_entries(sp, {1000, 1002, 1007, 99999})
+check("mounts: player spells, what they learn, same-name variants; not NPC-only, no-creature or no-effect",
+      ent == {500, 502, 503, 505} and n == 4, (ent, n))
+check("mounts: --all-mounts takes every aura-78 spell", dp.mount_entries(sp, None)[0] == {500, 501, 502, 503, 505})
+player = {1000, 1002, 1007, 1009, 1010, 1013}
+check("summons: pets and what a channel triggers, not an NPC's", dp.summon_entries(sp, player) == ({701, 702}, 2), dp.summon_entries(sp, player))
+check("summons: summoned objects", dp.summon_entries(sp, player, dp.OBJECT_SUMMONS)[0] == {800})
+osql = dp.objects_sql({800}, "0")
+check("summons: object displays from gameobject_template", "'g', 0, t.displayId, '0'" in osql and "IN (800)" in osql)
+tsql = dp.transports_sql(doc, {0, 1}, "0")
+check("transports: type 15 to the base, type-11 elevators on the tier's whole map",
+      "t.type = 15" in tsql and "g.map IN (571)" in tsql and "t.type = 11" in tsql and "'1' FROM gameobject g" in tsql
+      and "position_x" not in tsql, tsql)
+check("transports: none without tiers", "WHERE FALSE" in dp.transports_sql(doc, set(), None))
+for bad, what in ((b"nope" + bytes(20), "not a DBC"), (wdbc(233, [[0] * 233]), "wrong column count")):
+    try:
+        dp.parse_spells(bad); refused = False
+    except ValueError:
+        refused = True
+    check(f"mounts: refuses a Spell.dbc that is {what}", refused)
+msql = dp.mounts_sql({502, 500}, "0")
+check("mounts: models of the mounts and their passengers, tier 0, map unused",
+      "creature_template_model m WHERE m.CreatureID IN (500, 502)" in msql and "vehicle_template_accessory WHERE entry IN (500, 502)" in msql
+      and "SELECT DISTINCT 'c', 0, x.d, '0'" in msql)
+check("mounts: the other-gender model too", "DisplayID_Other_Gender" in msql)
+check("mounts: old schema and no accessory table",
+      "t.modelid4" in dp.mounts_sql({1}, "0", False, False) and "vehicle_template_accessory" not in dp.mounts_sql({1}, "0", False, False))
+check("mounts: none, empty query", "WHERE FALSE" in dp.mounts_sql(set(), "0"))
+check("mounts: mini.json puts them in the base (tier 0)", dp.mounts_tier(doc, set(range(100)), False) == "0" == str(K["base"]))
+check("mounts: not when the base tier is not asked for", dp.mounts_tier(doc, {1, 2}, False) is None)
+
+# main() end to end: a fake docker (the database answers, no worldserver), the DBCs in --dbc.
+dbcdir = os.path.join(tmp, "dbc"); os.makedirs(dbcdir, exist_ok=True)
+for fn, b in (("Spell.dbc", SPELLS), ("skilllineability.dbc", SLA), ("TaxiNodes.dbc", TAXI)):
+    open(os.path.join(dbcdir, fn), "wb").write(b)
+fakebin = os.path.join(tmp, "fakebin"); os.makedirs(fakebin, exist_ok=True)
+open(os.path.join(fakebin, "docker"), "w").write(r'''#!/usr/bin/env python3
+import re, sys
+a = sys.argv[1:]
+if a[:1] == ["ps"] or "ov-ac-database" not in a:
+    sys.exit(0)
+q = sys.stdin.read()
+if "SHOW TABLES LIKE 'creature_template_model'" in q: print("creature_template_model")
+elif "SHOW TABLES LIKE 'vehicle_template_accessory'" in q: print("vehicle_template_accessory")
+elif "SHOW COLUMNS FROM creature" in q: print("id1\tint")
+elif "FROM spell_dbc" in q: sys.exit(1)
+elif "FROM item_template" in q: print("1002\n0\n-5")
+elif "FROM trainer_spell" in q: print("1007")
+elif "FROM npc_trainer" in q: sys.exit(1)
+elif "taxinodes_dbc" in q: print("0")
+elif "t.type = 1" in q:
+    if "t.type = 15" in q: print("g\t0\t900\t0")
+    if "t.type = 11" in q: print("g\t571\t901\t1")
+elif "player_totem_model" in q: print("c\t0\t4589\t0")
+elif "gameobject_template t WHERE t.entry IN" in q: print("g\t0\t8000\t0")
+elif "x.d" in q:
+    for e in re.search(r"CreatureID IN \(([0-9, ]+)\)", q).group(1).split(", "): print(f"c\t0\t{int(e) * 10}\t0")
+elif "FROM creature c" in q: print("c\t571\t100\t1")
+''')
+os.chmod(os.path.join(fakebin, "docker"), 0o755)
+env = dict(os.environ, PATH=fakebin + os.pathsep + os.environ["PATH"])
+env.pop("WU_DBC_DIR", None)
+slice_file = os.path.join(HERE, "slices/mini.json")
+r = subprocess.run([sys.executable, "-I", os.path.join(HERE, "server/displays.py"), slice_file, "--tiers", "0-1", "--dbc", dbcdir],
+                   capture_output=True, text=True, env=env)
+lines = sorted(r.stdout.split("\n")[:-1])
+check("mounts: main() prints the spawns, then the mounts as tier-0 lines", r.returncode == 0 and lines == sorted(
+    ["c\t571\t100\t1", "g\t0\t900\t0", "g\t571\t901\t1", "c\t0\t4589\t0", "g\t0\t8000\t0"]
+    + [f"c\t0\t{e * 10}\t0" for e in (500, 502, 503, 505, 600, 601, 701, 702)]), (r.returncode, lines, r.stderr[-300:]))
+check("mounts: says what it read", "mounts:" in r.stderr and "4 mount spells" in r.stderr, r.stderr.strip()[-200:])
+r = subprocess.run([sys.executable, "-I", os.path.join(HERE, "server/displays.py"), slice_file, "--tiers", "0-1", "--dbc", dbcdir, "--no-mounts"],
+                   capture_output=True, text=True, env=env)
+check("mounts: --no-mounts (no mounts or summons; transports of tier 1 only)", r.returncode == 0 and r.stdout == "c\t571\t100\t1\ng\t571\t901\t1\n", r.stdout)
+r = subprocess.run([sys.executable, "-I", os.path.join(HERE, "server/displays.py"), slice_file, "--tiers", "0-1", "--dbc", os.path.join(tmp, "nowhere")],
+                   capture_output=True, text=True, env=dict(env, WU_DBC_DIR=os.path.join(tmp, "nowhere2")))
+check("mounts: no Spell.dbc anywhere fails soft (spawns kept, exit 0, a clear message naming the places tried)",
+      r.returncode == 0 and r.stdout.startswith("c\t571\t100\t1\n") and "c\t0\t5000" not in r.stdout and "mounts: NOT included" in r.stderr and "nowhere2" in r.stderr
+      and dp.HOST_DBC in r.stderr, (r.returncode, r.stdout, r.stderr[-300:]))
 
 print(f"\n{count - fails}/{count} passed")
 sys.exit(1 if fails else 0)

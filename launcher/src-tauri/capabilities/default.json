@@ -1,7 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window: core events only. Folder picking and opening the browser client go through Leyline's own commands, not the plugins' web APIs.",
-  "windows": ["main"],
-  "permissions": ["core:default"]
+  "description": "The main window. Its title bar is the launcher's own, so it may move, minimise, maximise and close itself. Folder picking, links and the browser client go through Leyline's own commands, not the plugins' web APIs.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close"
+  ]
 }

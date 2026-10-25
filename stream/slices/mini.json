@@ -98,10 +98,18 @@
     "Sound\\Item\\",
     "Sound\\Universal\\",
     "Sound\\Music\\GlueScreenMusic\\",
-    "World\\Generic\\"
+    "World\\Generic\\",
+    "Textures\\*",
+    "Textures\\Footsteps\\",
+    "Textures\\Weather\\",
+    "Textures\\SpellChainEffects\\",
+    "Textures\\Splash\\",
+    "Textures\\GuildEmblems\\"
    ],
+   "prefixesNote": "Textures\\* is only the files directly in Textures\\ (unitselecttexture, shadowblob, waterpoop02, the sun and moon, minimapmask): the textures the client names in its own code. Footprints, weather, spell chain beams (ropebeam), water splashes and guild emblems (tabards) are small and needed everywhere. The base also gets every liquid loop and the ghost and underwater ambience by walking (wenilla-host --deps), and the minimap index md5translate.trs below.",
    "names": [
     "World\\Maps\\Northrend\\Northrend.wdl",
+    "Textures\\Minimap\\md5translate.trs",
     "WTF\\DefaultBindings.wtf"
    ],
    "maps": [],
@@ -110,6 +118,8 @@
     "Log in, open character create, click through every race, both genders and every class, rotate the model.",
     "Create one character of each armor type if you can (cloth, leather, mail, plate) and log each in once."
    ],
+   "mounts": true,
+   "mountsNote": "Every player mount's model and skins (horses, rams, wolves, kodos, raptors, mechanostriders, hawkstriders, elekks, gryphons, wyverns, drakes, mammoths, motorcycles...), the flight masters' mounts and a vehicle mount's passengers: displays.py reads Spell.dbc for aura 78 and prints those displays for this tier. Mounts are ridden everywhere and are not spawned anywhere, and the client seats a rider only once the mount's model has loaded, so they belong in the base. About 100-250 MB.",
    "measuredMB": null
   },
   {
@@ -131,10 +141,9 @@
       5500,
       6150,
       250,
-      1100,
-      450
+      1100
      ],
-     "spawnBoxNote": "x min, x max, y min, y max, z min: the creature and object spawns displays.py reads for Dalaran (the city floats above Crystalsong Forest, so z keeps the forest out)"
+     "spawnBoxNote": "x min, x max, y min, y max: the creature and object spawns displays.py reads for Dalaran. No z min: the city floats above Crystalsong Forest, whose tiles stream with it, and the stags, herb nodes and taxi birds below are seen from the city (the live capture asked for them)."
     }
    ],
    "prefixes": [

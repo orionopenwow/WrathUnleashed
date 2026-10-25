@@ -6,6 +6,7 @@ rem (play.openvanilla.app, /srv/wrath/stream/slices/mini). No playing needed:
 rem   1 uploads the streaming kit (scripts, the Linux host, the realm rule, the sign-in gate, the
 rem     browser additions in www-files: "Play with my own game files" and "Download this section")
 rem   2 asks the server which creatures and objects are spawned in the slice's places
+rem     and the models of every player mount (from its Spell.dbc; tier 0, the base)
 rem   3 wenilla-host --deps   walks the game data: maps, tiles, models, textures, per tier
 rem   4 wenilla-host --export copies those files out (item textures "lite"), tier by tier, until
 rem     the 3 GB budget, and prints the size of each tier
@@ -78,7 +79,7 @@ if "%WWW%"=="1" echo uploaded> "www\.uploaded"
 echo [2/5] Asking the server what is spawned in the slice...
 if not exist "%W%" mkdir "%W%"
 %SSH% "cd /srv/wrath/stream && python3 -I displays.py slices/mini.json --tiers 0-%MAXTIER%" > "%W%\displays.tsv" || goto fail
-for /f %%n in ('find /c /v "" ^< "%W%\displays.tsv"') do echo        %%n creature and object displays
+for /f %%n in ('find /c /v "" ^< "%W%\displays.tsv"') do echo        %%n creature, object and mount displays
 
 echo [3/5] Walking the game data (wenilla-host --deps)...
 if exist "%W%\names" rmdir /s /q "%W%\names"

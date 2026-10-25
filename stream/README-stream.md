@@ -87,15 +87,15 @@ in game: lua/ov_slices.lua                  a marked account that leaves the sli
 
 Each tier in `slices/mini.json` has a stable `key`. The top-level **`order`** list is the priority:
 a tier's number is its position there. **To reorder, move a key; to drop a tier, delete its key from
-`order`.** Each tier is exported separately, and the slice grows until the budget (`budgetMB`:
-3072) is reached. The realm reads the same file: `stream-up.sh` and every slice upload run
+`order`.** Each tier is exported separately, and the slice grows until the budget (`budgetMB`,
+6144 now) is reached. The realm reads the same file: `stream-up.sh` and every slice upload run
 `lua/tiers_lua.py` to make `ov_slices_tiers.lua`, so nothing is listed twice.
 
 The kit's order (the owner's priority; tier numbers are positions, so they follow any change):
 
 | tiers | key(s) | what | maps |
 |---|---|---|---|
-| 0 | `base` | login, character create (all races/classes), UI, spell effects, sounds, item models (lite textures) | DBC, Interface, Character, Item, Spells... |
+| 0 | `base` | login, character create (all races/classes), UI, spell effects, sounds, item models (lite textures), every player mount | DBC, Interface, Character, Item, Spells..., `"mounts": true` |
 | 1 | `dalaran` | Dalaran, the Underbelly, the Violet Citadel | 571, tiles under zone 4395 + 1 margin |
 | 2 | `arenas` | the five arenas | 559, 562, 572, 617, 618 |
 | 3 | `violet-hold-toc` | Violet Hold, Trial of the Champion | 608, 650 |
@@ -136,13 +136,53 @@ this. The export report shows the MB saved and the full size per tier.
    textures, doodads and skybox, and every M2's skins, `.anim` files and textures, using the repo's
    parsers. It also adds the creatures and objects spawned on those maps (from the server's
    `creature`/`gameobject` tables, via `displays.py`, then CreatureDisplayInfo, CreatureModelData,
-   baked NPC skins and GameObjectDisplayInfo).
+   baked NPC skins and GameObjectDisplayInfo), and every player mount (below).
+   **Player mounts** are not spawned anywhere, and the client seats a rider only once the mount's
+   model has loaded (`entities/mount.rs`), so without them mounting shows nothing. The tier with
+   `"mounts": true` (the base) gets them: `displays.py` reads the server's own `Spell.dbc` (the
+   spells applying aura 78, `SPELL_AURA_MOUNTED`, whose EffectMiscValue is the mount's
+   creature_template entry), keeps those players have (in SkillLineAbility.dbc, i.e. the Mounts
+   skill 777 and the class mounts, or taught by an item, trainer, quest or
+   playercreateinfo_spell_custom, or learned or triggered by one of those, plus same-name speed
+   variants), adds the flight masters' mounts (TaxiNodes.dbc) and the passengers a vehicle mount
+   carries (vehicle_template_accessory), and prints their models (creature_template_model and the
+   other-gender model) as `c 0 <display> 0` lines; for a numbered tier the map column is not used.
+   It finds the DBCs in `--dbc DIR`, `$WU_DBC_DIR`, `/srv/wrath/client-data/dbc` (the
+   ov-client-data volume) or inside `ov-ac-worldserver` (its `AC_DATA_DIR`, else `DataDir` in
+   worldserver.conf, else `/azerothcore/env/dist/data`) + `/dbc`. Without them it prints
+   `mounts: NOT included (...)` and the places it tried, and the slice is made without mounts.
+   `--no-mounts` leaves them out, `--all-mounts` takes NPC and quest mounts too. Roughly 100-250 MB
+   (models, skins and skin textures, unlite), a few percent of the budget.
+
+   **Player summons** go with them, by the same player-spell filter: every creature a player spell
+   summons (SPELL_EFFECT_SUMMON 28, SUMMON_PET 56: warlock demons, ghouls and Army of the Dead,
+   the water elemental, shadowfiend, treants, totems, companion pets...), following what a spell
+   triggers or a channel casts; the object summons (portals, soulwells, fishing bobbers: effects 50,
+   76, 104-107); and the race totem models (`player_totem_model`). Hunter pets are whatever beast
+   was tamed (thousands of displays), so they are left to the tiers that spawn them.
+   **Transports**: every type-15 game object (ships, zeppelins, gunships, the icebreaker) goes to
+   the base, because the server shows a continent's transports to everyone on it; elevators and
+   lifts (type 11) go to the tier whose map they are on, the whole map rather than its spawnBox.
+
+   **Sounds and minimaps** (in `wenilla-host --deps`, the way the client resolves them): each
+   ADT's MCNK area ids and each map entry's `zone` give `AreaTable` → ZoneMusic (day and night),
+   ZoneIntroMusicTable and SoundAmbience, parents inherited; each WMO root's `wmoID` gives every
+   `WMOAreaTable` row of that WMO (the Underbelly's DalaranSewers ambience and sewer music); every
+   M2's `$DSL`/`$DSO`/`$SND` events and every game object display's sound slots give their
+   SoundEntries files (TorchFireLoop, WaterFallSmall, TechArches, herb-node loops). The base takes
+   every LiquidType loop and the ghost and underwater beds. Minimap: every streamed tile's
+   `md5translate.trs` entry and, for every WMO, its interior tiles (`wmo\...\<name>_<group>_<x>_<y>`):
+   Dalaran's minimap is the city WMO's own tiles, which the walk used to skip, so it showed black.
+   A base prefix ending in `*` (`Textures\*`) takes only the files directly in that folder (the
+   target circle, unit shadows, sun and moon). These need a `wenilla-host.exe` built from the
+   current `wenilla-host-stream.patch`; an older one ignores `Textures\*` and walks no sounds.
 2. **Record, the accuracy check**: "Record a capture.bat dalaran" runs the browser client locally from
    your own game files against the live realm and writes every file it actually asks for to
    `record\names-dalaran.txt`. "Make mini slice.bat" adds every `record\*.txt` at the end, so whatever
    the walk missed is included next time. Each tier in `mini.json` has a `capture` list of where to
-   go, with GM `.go xyz` lines for the instances. Known gaps of the walk: sounds (zone music,
-   ambience, voices), instance map art, scripted summons and NPC equipment variants.
+   go, with GM `.go xyz` lines for the instances. Known gaps of the walk: creature voices and
+   footsteps, instance map art, scripted (non-player) summons, hunter pets and NPC equipment
+   variants.
 
 ## What you do
 

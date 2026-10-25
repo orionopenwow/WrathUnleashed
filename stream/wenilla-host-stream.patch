@@ -850,10 +850,10 @@ index b43f024d..dcb4ecd5 100644
  
 diff --git a/crates/wenilla-host/src/deps.rs b/crates/wenilla-host/src/deps.rs
 new file mode 100644
-index 00000000..0f80e1e6
+index 00000000..9689c2a0
 --- /dev/null
 +++ b/crates/wenilla-host/src/deps.rs
-@@ -0,0 +1,1002 @@
+@@ -0,0 +1,1469 @@
 +//! `--deps`: work out, without playing, which game files a "mini" slice needs — a static walk of
 +//! the game data from a slice description (`slices/mini.json`), tier by tier.
 +//!
@@ -876,12 +876,27 @@ index 00000000..0f80e1e6
 +//! WMO's groups, textures, doodads (MODN) and skybox (MOSB); an M2's skin profiles, `.anim`
 +//! files and file-named textures. Only names the chain actually holds are emitted.
 +//!
-+//! Known gaps, which a `--record` session of the slice finds: sounds (zone music, ambience,
-+//! creature voices), the world-map and dungeon-map art of instances, spell visuals that are not
-+//! under the tier's prefixes, creatures summoned by scripts rather than spawned, and textures a
-+//! model only gets at run time (equipment on NPCs, through the item prefixes).
++//! Sounds and minimaps are walked the way the client resolves them:
++//! - an ADT's MCNK `areaId`s and a map entry's `zone` → `AreaTable` → `ZoneMusic` (day and night),
++//!   `ZoneIntroMusicTable` and `SoundAmbience` (day and night), parents inherited
++//!   (`AreaSoundCatalog::resolve`) → `SoundEntries` files;
++//! - a WMO root's `MOHD.wmoID` → every `WMOAreaTable` row of that WMO (the whole-WMO row and each
++//!   group's: the Underbelly's ambience and music) → the same tables, and the row's `AreaTableID`;
++//! - an M2's `$DSL`/`$DSO`/`$SND` events (the data is a `SoundEntries` id: a torch's
++//!   `TorchFireLoop`, a waterfall's loop) and a game object display's ten sound slots;
++//! - the base (tier 0) also takes every `LiquidType` loop and the ghost and underwater beds;
++//! - minimap: each streamed tile's `md5translate.trs` entry, and for every WMO root every
++//!   interior tile `wmo\<path>\<name>_<group>_<x>_<y>.blp` (Dalaran's city minimap is the city
++//!   WMO's tiles, not the ADTs').
++//!
++//! A prefix ending in `*` (`Textures\*`) takes only the files directly in that folder.
++//!
++//! Known gaps, which a `--record` session of the slice finds: creature voices and footsteps, the
++//! world-map and dungeon-map art of instances, spell visuals that are not under the tier's
++//! prefixes, creatures summoned by scripts rather than spawned, and textures a model only gets at
++//! run time (equipment on NPCs, through the item prefixes).
 +
-+use std::collections::{HashSet, VecDeque};
++use std::collections::{HashMap, HashSet, VecDeque};
 +use std::io::Cursor;
 +
 +use anyhow::{bail, Context, Result};
@@ -1112,6 +1127,22 @@ index 00000000..0f80e1e6
 +    pub gameobject: std::collections::HashMap<u32, String>,
 +    /// lower-case `<dir>\map<x>_<y>.blp` → hashed minimap file name.
 +    pub minimap: Option<benilla_formats::MinimapTranslate>,
++    /// WMO minimap stem (`wmo\northrend\dalaran\nd_dalaran`, lower case) → the hashed files of
++    /// its interior tiles (`<stem>_<group>_<x>_<y>.blp` in `md5translate.trs`).
++    pub wmo_minimap: HashMap<String, Vec<String>>,
++    /// `SoundEntries` id → its files (`DirectoryBase` + `File[i]`, as the client joins them).
++    pub kit_files: HashMap<u32, Vec<String>>,
++    /// `AreaTable` id → the kits of its music (day, night), intro and ambience (day, night),
++    /// each inherited from the nearest parent that has one.
++    pub area_kits: HashMap<u32, Vec<u32>>,
++    /// `WMOAreaTable.WMOID` → the kits of all its rows (ambience, music, intro) and the
++    /// `AreaTable` areas those rows count as.
++    pub wmo_kits: HashMap<u32, (Vec<u32>, Vec<u32>)>,
++    /// game-object display → its non-zero `GameObjectDisplayInfo` sound slots.
++    pub gameobject_kits: HashMap<u32, Vec<u32>>,
++    /// What the base takes whatever it walks: every `LiquidType` loop, the ghost and underwater
++    /// beds.
++    pub base_kits: Vec<u32>,
 +    /// Catalogs that failed to load (the walk goes on without them; printed by `--deps`).
 +    pub warnings: Vec<String>,
 +}
@@ -1175,8 +1206,170 @@ index 00000000..0f80e1e6
 +            Ok(m) => c.minimap = Some(m),
 +            Err(e) => c.warnings.push(format!("minimap md5translate: {e:#}")),
 +        }
++        if let Ok(b) = chain.read_file("Textures\\Minimap\\md5translate.trs") {
++            c.wmo_minimap = wmo_minimap_index(&String::from_utf8_lossy(&b));
++        }
++        c.load_sounds(chain);
 +        Ok(c)
 +    }
++
++    /// The sound lookups (see the module doc). Each table that fails is a warning: the walk goes
++    /// on without those sounds.
++    fn load_sounds(&mut self, chain: &mut Chain) {
++        let mut raw = |chain: &mut Chain, name: &str| -> Option<Vec<u8>> {
++            match chain.read_file(&format!("DBFilesClient\\{name}")) {
++                Ok(b) if RawDbc::new(&b).is_some() => Some(b),
++                Ok(_) => {
++                    self.warnings.push(format!("{name}: not a DBC"));
++                    None
++                }
++                Err(e) => {
++                    self.warnings.push(format!("{name}: {e:#}"));
++                    None
++                }
++            }
++        };
++        let entries = raw(chain, "SoundEntries.dbc");
++        let areas = raw(chain, "AreaTable.dbc");
++        let wmo_areas = raw(chain, "WMOAreaTable.dbc");
++        let liquids = raw(chain, "LiquidType.dbc");
++        match benilla_formats::load_sound_kit_catalog(chain) {
++            Err(e) => self.warnings.push(format!("SoundEntries.dbc: {e:#}")),
++            Ok(kits) => {
++                if let Some(d) = entries.as_deref().and_then(RawDbc::new) {
++                    for r in 0..d.rows() {
++                        let id = d.u32(r, 0);
++                        if let Some(k) = kits.get(id) {
++                            if !k.files.is_empty() {
++                                self.kit_files.insert(id, k.files.iter().map(|(f, _)| f.clone()).collect());
++                            }
++                        }
++                    }
++                }
++                self.base_kits.extend(kits.ghost_bed());
++                self.base_kits.extend(kits.underwater_bed());
++            }
++        }
++        let area_cat = match benilla_formats::load_area_sound_catalog(chain) {
++            Ok(a) => Some(a),
++            Err(e) => {
++                self.warnings.push(format!("area sounds: {e:#}"));
++                None
++            }
++        };
++        if let (Some(cat), Some(d)) = (&area_cat, areas.as_deref().and_then(RawDbc::new)) {
++            for r in 0..d.rows() {
++                let id = d.u32(r, 0);
++                if let Some(a) = cat.resolve(id) {
++                    let mut k = Vec::new();
++                    k.extend(a.music.map(|m| m.sounds).into_iter().flatten());
++                    k.extend(a.intro.map(|i| i.sound_id));
++                    k.extend(a.ambience.map(|m| m.kits).into_iter().flatten());
++                    k.retain(|&x| x != 0);
++                    if !k.is_empty() {
++                        self.area_kits.insert(id, k);
++                    }
++                }
++            }
++        }
++        // WMOAreaTable (12340, 28 columns): 1 WMOID, 6 AmbienceID, 7 ZoneMusic, 8 IntroSound,
++        // 10 AreaTableID, as benilla_formats::wmo_area reads them.
++        if let (Some(cat), Some(d)) = (&area_cat, wmo_areas.as_deref().and_then(RawDbc::new)) {
++            if d.fields > 10 {
++                for r in 0..d.rows() {
++                    let e = self.wmo_kits.entry(d.u32(r, 1)).or_default();
++                    e.0.extend(cat.ambience_row(d.u32(r, 6)).map(|a| a.kits).into_iter().flatten());
++                    e.0.extend(cat.zone_music(d.u32(r, 7)).map(|m| m.sounds).into_iter().flatten());
++                    e.0.extend(cat.intro(d.u32(r, 8)).map(|i| i.sound_id));
++                    e.0.retain(|&x| x != 0);
++                    let area = d.u32(r, 10);
++                    if area != 0 && !e.1.contains(&area) {
++                        e.1.push(area);
++                    }
++                }
++            }
++        }
++        match benilla_formats::load_liquid_types(chain) {
++            Err(e) => self.warnings.push(format!("LiquidType.dbc: {e:#}")),
++            Ok(lt) => {
++                if let Some(d) = liquids.as_deref().and_then(RawDbc::new) {
++                    for r in 0..d.rows() {
++                        if let Some((kit, _)) = lt.sound(d.u32(r, 0)) {
++                            self.base_kits.push(kit);
++                        }
++                    }
++                }
++            }
++        }
++        match benilla_formats::load_gameobject_sounds(chain) {
++            Err(e) => self.warnings.push(format!("game object sounds: {e:#}")),
++            Ok(go) => {
++                for &id in self.gameobject.keys() {
++                    if let Some(slots) = go.slots(id) {
++                        self.gameobject_kits.insert(id, slots.iter().copied().filter(|&k| k != 0).collect());
++                    }
++                }
++            }
++        }
++        self.base_kits.sort_unstable();
++        self.base_kits.dedup();
++    }
++}
++
++/// A WDBC file's rows read as raw 4-byte columns: only for row ids and plain `u32` columns the
++/// client's own loaders have no iterator for.
++struct RawDbc<'b> {
++    b: &'b [u8],
++    n: usize,
++    fields: usize,
++    size: usize,
++}
++
++impl<'b> RawDbc<'b> {
++    fn new(b: &'b [u8]) -> Option<Self> {
++        if b.get(0..4) != Some(b"WDBC") {
++            return None;
++        }
++        let (n, fields, size) = (u32_at(b, 4)? as usize, u32_at(b, 8)? as usize, u32_at(b, 12)? as usize);
++        (size >= fields * 4 && 20 + n.checked_mul(size)? <= b.len()).then_some(Self { b, n, fields, size })
++    }
++    fn rows(&self) -> usize {
++        self.n
++    }
++    fn u32(&self, row: usize, col: usize) -> u32 {
++        if col >= self.fields {
++            return 0;
++        }
++        u32_at(self.b, 20 + row * self.size + col * 4).unwrap_or(0)
++    }
++}
++
++/// `md5translate.trs`'s WMO interior tiles grouped by WMO: `wmo\..\name_GGG_XX_YY.blp` →
++/// stem `wmo\..\name` (lower case) → hashed names.
++pub fn wmo_minimap_index(trs: &str) -> HashMap<String, Vec<String>> {
++    let mut out: HashMap<String, Vec<String>> = HashMap::new();
++    for line in trs.lines() {
++        let Some((left, hash)) = line.trim_end_matches('\r').split_once('\t') else {
++            continue;
++        };
++        let left = left.trim().to_ascii_lowercase();
++        let Some(stem) = left.strip_suffix(".blp").filter(|_| left.starts_with("wmo\\")) else {
++            continue;
++        };
++        // strip `_GGG_XX_YY`
++        let mut s = stem;
++        let mut ok = true;
++        for _ in 0..3 {
++            match s.rsplit_once('_') {
++                Some((head, num)) if !num.is_empty() && num.bytes().all(|b| b.is_ascii_digit()) => s = head,
++                _ => ok = false,
++            }
++        }
++        if ok {
++            out.entry(s.to_owned()).or_default().push(hash.trim().to_owned());
++        }
++    }
++    out
 +}
 +
 +/// The walk's result: one ordered list of names per tier, each without the names of earlier
@@ -1262,22 +1455,54 @@ index 00000000..0f80e1e6
 +    (views, tex)
 +}
 +
-+/// A WMO root's textures (MOTX), doodads (MODN) plus skybox (MOSB), and group count (MOHD +4).
-+pub fn wmo_refs(root: &[u8]) -> (Vec<String>, Vec<String>, u32) {
++/// A WMO root's textures (MOTX), doodads (MODN) plus skybox (MOSB), group count (MOHD +4) and
++/// `wmoID` (MOHD +0x20, the `WMOAreaTable` key; `benilla_formats::wmo_root_id`).
++pub fn wmo_refs(root: &[u8]) -> (Vec<String>, Vec<String>, u32, u32) {
 +    let mut tex = Vec::new();
 +    let mut doodads = Vec::new();
 +    let mut groups = 0;
++    let mut id = 0;
 +    for (magic, data) in chunks(root) {
 +        match &magic {
 +            b"XTOM" => tex.extend(strings(data)),
 +            // The skybox model (MOSB) is followed like a doodad.
 +            b"NDOM" | b"BSOM" => doodads.extend(strings(data)),
-+            b"DHOM" => groups = u32_at(data, 4).unwrap_or(0).min(512),
++            b"DHOM" => {
++                groups = u32_at(data, 4).unwrap_or(0).min(512);
++                id = u32_at(data, 0x20).unwrap_or(0);
++            }
 +            _ => {}
 +        }
 +    }
-+    (tex, doodads, groups)
++    (tex, doodads, groups, id)
 +}
++
++/// The `SoundEntries` ids of an M2's sound events (version 264: the event array at header
++/// `0x100`, `0x24`-byte records `ident[4], data u32`): `$DSL` (a placed doodad's ambient loop),
++/// `$DSO` and `$SND` (one-shots), as `benilla-app`'s `sound::anim_events` plays them.
++pub fn m2_sound_kits(m2: &[u8]) -> Vec<u32> {
++    let mut out = Vec::new();
++    if m2.get(0..4) != Some(b"MD20") {
++        return out;
++    }
++    let (Some(n), Some(ofs)) = (u32_at(m2, 0x100), u32_at(m2, 0x104)) else {
++        return out;
++    };
++    for i in 0..n.min(4096) as usize {
++        let e = ofs as usize + i * 0x24;
++        let (Some(ident), Some(data)) = (m2.get(e..e + 4), u32_at(m2, e + 4)) else {
++            break;
++        };
++        if data != 0 && matches!(ident, b"$DSL" | b"$DSO" | b"$SND") && !out.contains(&data) {
++            out.push(data);
++        }
++    }
++    out
++}
++
++/// What a model refers to that is not a file, resolved through the catalogs by the walker:
++/// `#kit:<SoundEntries id>`, `#area:<AreaTable id>`, `#wmo:<WMOID>`, `#mm:<WMO minimap stem>`.
++const TOKEN: char = '#';
 +
 +/// The names a model refers to (candidates: the walker keeps those the data has). M2: skin
 +/// profiles, file-named textures, `.anim` files. WMO root: textures, groups, doodads, skybox
@@ -1295,6 +1520,7 @@ index 00000000..0f80e1e6
 +        if let Ok(anims) = benilla_m2::anim_paths(bytes, name) {
 +            out.extend(anims.into_iter().map(|(_, a)| a));
 +        }
++        out.extend(m2_sound_kits(bytes).into_iter().map(|k| format!("{TOKEN}kit:{k}")));
 +    } else if key.ends_with(".wmo") {
 +        let stem = &name[..name.len() - 4];
 +        let is_group = stem.len() > 4
@@ -1303,7 +1529,15 @@ index 00000000..0f80e1e6
 +        if is_group {
 +            return out;
 +        }
-+        let (tex, doodads, groups) = wmo_refs(bytes);
++        let (tex, doodads, groups, wmo_id) = wmo_refs(bytes);
++        if wmo_id != 0 {
++            out.push(format!("{TOKEN}wmo:{wmo_id}"));
++        }
++        // The minimap's interior key: the path without `World\` and `.wmo` (`wmo_minimap_stem`).
++        let lower = stem.replace('/', "\\").to_ascii_lowercase();
++        if let Some((_, rest)) = lower.split_once("world\\") {
++            out.push(format!("{TOKEN}mm:{rest}"));
++        }
 +        // The repo's parser agrees on the texture list; it is the one the renderer trusts.
 +        if let Ok(benilla_wmo::ParsedWmo::Root(root)) =
 +            benilla_wmo::parse_wmo(&mut Cursor::new(bytes))
@@ -1329,6 +1563,11 @@ index 00000000..0f80e1e6
 +        }
 +        out.extend(adt.models.iter().map(|m| m2_name(m)));
 +        out.extend(adt.wmos.iter().cloned());
++        // The areas its chunks are in: their music and ambience (the client's `CurrentArea`).
++        let mut areas: Vec<u32> = adt.mcnk_chunks.iter().map(|c| c.header.area_id).filter(|&a| a != 0).collect();
++        areas.sort_unstable();
++        areas.dedup();
++        out.extend(areas.into_iter().map(|a| format!("{TOKEN}area:{a}")));
 +    }
 +    out
 +}
@@ -1385,6 +1624,11 @@ index 00000000..0f80e1e6
 +    current: Vec<String>,
 +    queue: VecDeque<String>,
 +    refs: Option<&'a RefsCache>,
++    /// Resolves the model tokens (sounds, WMO minimaps); without it they are dropped.
++    cat: Option<&'a Catalogs>,
++    tokens: HashSet<String>,
++    /// Sound files added since the last [`Walker::take`].
++    pub sound_files: usize,
 +    pub notes: Vec<String>,
 +}
 +
@@ -1396,7 +1640,84 @@ index 00000000..0f80e1e6
 +            current: Vec::new(),
 +            queue: VecDeque::new(),
 +            refs: None,
++            cat: None,
++            tokens: HashSet::new(),
++            sound_files: 0,
 +            notes: Vec::new(),
++        }
++    }
++
++    /// Resolve sounds and WMO minimaps through `cat` while walking.
++    pub fn with_catalogs(mut self, cat: &'a Catalogs) -> Self {
++        self.cat = Some(cat);
++        self
++    }
++
++    /// A sound kit's files.
++    pub fn add_kit(&mut self, cat: &Catalogs, kit: u32) {
++        if !self.tokens.insert(format!("kit:{kit}")) {
++            return;
++        }
++        for f in cat.kit_files.get(&kit).into_iter().flatten() {
++            let new = !self.seen.contains(&name_key(f));
++            if self.add(f) && new {
++                self.sound_files += 1;
++            }
++        }
++    }
++
++    /// An area's music, intro and ambience (parents inherited).
++    pub fn add_area(&mut self, cat: &Catalogs, area: u32) {
++        if !self.tokens.insert(format!("area:{area}")) {
++            return;
++        }
++        for &k in cat.area_kits.get(&area).into_iter().flatten() {
++            self.add_kit(cat, k);
++        }
++    }
++
++    /// What the base takes whatever it walks: liquid loops, the ghost and underwater beds.
++    pub fn add_base_sounds(&mut self, cat: &Catalogs) {
++        for &k in &cat.base_kits {
++            self.add_kit(cat, k);
++        }
++    }
++
++    fn token(&mut self, cat: &Catalogs, tok: &str) {
++        let Some((kind, v)) = tok.split_once(':') else { return };
++        match kind {
++            "kit" => {
++                if let Ok(k) = v.parse() {
++                    self.add_kit(cat, k);
++                }
++            }
++            "area" => {
++                if let Ok(a) = v.parse() {
++                    self.add_area(cat, a);
++                }
++            }
++            "wmo" => {
++                if !self.tokens.insert(tok.to_owned()) {
++                    return;
++                }
++                if let Some((kits, areas)) = v.parse().ok().and_then(|id: u32| cat.wmo_kits.get(&id)) {
++                    for &k in kits {
++                        self.add_kit(cat, k);
++                    }
++                    for &a in areas {
++                        self.add_area(cat, a);
++                    }
++                }
++            }
++            "mm" => {
++                if !self.tokens.insert(tok.to_owned()) {
++                    return;
++                }
++                for h in cat.wmo_minimap.get(v).into_iter().flatten() {
++                    self.add(&format!("Textures\\Minimap\\{h}"));
++                }
++            }
++            _ => {}
 +        }
 +    }
 +
@@ -1458,7 +1779,13 @@ index 00000000..0f80e1e6
 +                }
 +            };
 +            for r in refs {
-+                self.add(&r);
++                match (r.strip_prefix(TOKEN), self.cat) {
++                    (Some(tok), Some(cat)) => self.token(cat, tok),
++                    (Some(_), None) => {}
++                    (None, _) => {
++                        self.add(&r);
++                    }
++                }
 +            }
 +        }
 +    }
@@ -1466,9 +1793,19 @@ index 00000000..0f80e1e6
 +    /// Everything listed under `prefix` (any case).
 +    pub fn add_prefix(&mut self, all: &[String], prefix: &str) -> usize {
 +        let p = name_key(prefix);
++        // `Textures\*`: only the files directly in the folder.
++        let (p, flat) = match p.strip_suffix('*') {
++            Some(p) => (p.to_owned(), true),
++            None => (p, false),
++        };
 +        let mut n = 0;
 +        for name in all {
-+            if name_key(name).starts_with(&p) && self.add(name) {
++            let k = name_key(name);
++            let Some(rest) = k.strip_prefix(&p) else { continue };
++            if flat && rest.contains('\\') {
++                continue;
++            }
++            if self.add(name) {
 +                n += 1;
 +            }
 +        }
@@ -1482,6 +1819,10 @@ index 00000000..0f80e1e6
 +            self.notes.push(format!("map {}: not in Map.dbc", m.id));
 +            return;
 +        };
++        // The zone's own music and ambience (Dalaran's, over the Crystalsong chunks below it).
++        if let Some(zone) = m.zone {
++            self.add_area(cat, zone);
++        }
 +        let base = format!("World\\Maps\\{dir}\\{dir}");
 +        self.add(&format!("{base}.wdl"));
 +        if let Some(ls) = cat.loading_screen.get(&m.id) {
@@ -1518,6 +1859,11 @@ index 00000000..0f80e1e6
 +        let mut tiles = 0;
 +        for y in y0..=y1 {
 +            for x in x0..=x1 {
++                // The minimap tile whether or not the tile has terrain (md5translate lists only
++                // authored art).
++                if let Some(h) = cat.minimap.as_ref().and_then(|t| t.tile(&dir, x, y)) {
++                    self.add(&format!("Textures\\Minimap\\{h}"));
++                }
 +                if !wdt
 +                    .get_tile(x as usize, y as usize)
 +                    .is_some_and(|t| t.has_adt)
@@ -1526,9 +1872,6 @@ index 00000000..0f80e1e6
 +                }
 +                if self.add(&format!("{base}_{x}_{y}.adt")) {
 +                    tiles += 1;
-+                }
-+                if let Some(h) = cat.minimap.as_ref().and_then(|t| t.tile(&dir, x, y)) {
-+                    self.add(&format!("Textures\\Minimap\\{h}"));
 +                }
 +            }
 +        }
@@ -1562,10 +1905,14 @@ index 00000000..0f80e1e6
 +        if let Some(model) = cat.gameobject.get(&display) {
 +            self.add_model(model);
 +        }
++        for &k in cat.gameobject_kits.get(&display).into_iter().flatten() {
++            self.add_kit(cat, k);
++        }
 +    }
 +
 +    /// Close the current tier: its names, in discovery order.
 +    pub fn take(&mut self) -> Vec<String> {
++        self.sound_files = 0;
 +        std::mem::take(&mut self.current)
 +    }
 +}
@@ -1578,7 +1925,7 @@ index 00000000..0f80e1e6
 +    tiers: &[u32],
 +    displays: &[Display],
 +) -> Vec<TierNames> {
-+    let mut w = Walker::new(src);
++    let mut w = Walker::new(src).with_catalogs(cat);
 +    let mut listed: Option<Vec<String>> = None;
 +    let mut out = Vec::new();
 +    for t in spec.tiers.iter().filter(|t| tiers.contains(&t.tier)) {
@@ -1616,7 +1963,13 @@ index 00000000..0f80e1e6
 +            w.notes
 +                .push(format!("{c} creature and {g} object displays"));
 +        }
++        if t.tier == 0 {
++            w.add_base_sounds(cat);
++        }
 +        w.drain();
++        if w.sound_files > 0 {
++            w.notes.push(format!("{} sound files (music, ambience, emitters)", w.sound_files));
++        }
 +        out.push(TierNames {
 +            tier: t.tier,
 +            name: t.name.clone(),
@@ -1820,6 +2173,120 @@ index 00000000..0f80e1e6
 +        }
 +        // Env\Sky.blp is not in the data: never emitted.
 +        assert!(!got.contains("env\\sky.blp"));
++    }
++
++    /// `m2` plus sound events `(4CC, SoundEntries id)`.
++    fn m2_with_events(views: u32, texture: &str, events: &[(&[u8; 4], u32)]) -> Vec<u8> {
++        let mut b = m2(views, texture);
++        let at = b.len() as u32;
++        b[0x100..0x104].copy_from_slice(&(events.len() as u32).to_le_bytes());
++        b[0x104..0x108].copy_from_slice(&at.to_le_bytes());
++        for (ident, data) in events {
++            let mut e = vec![0u8; 0x24];
++            e[0..4].copy_from_slice(&ident[..]);
++            e[4..8].copy_from_slice(&data.to_le_bytes());
++            b.extend(e);
++        }
++        b
++    }
++
++    #[test]
++    fn sound_events_wmo_areas_and_wmo_minimaps_are_walked() {
++        assert_eq!(
++            m2_sound_kits(&m2_with_events(1, "", &[(b"$DSL", 12602), (b"$CSL", 5), (b"$SND", 7), (b"$DSL", 12602)])),
++            [12602, 7]
++        );
++        // MOHD: nGroups 1, wmoID 77 at +0x20
++        let mut mohd = vec![0u8; 0x40];
++        mohd[4] = 1;
++        mohd[0x20] = 77;
++        let mut root = chunk(b"DHOM", &mohd);
++        root.extend(chunk(b"NDOM", b"World\\D\\Torch.mdx\0"));
++        let trs = "dir: WMO\\Northrend\\Dalaran\r\n\
++            WMO\\Northrend\\Dalaran\\ND_Dalaran_000_00_01.blp\taaaa.blp\r\n\
++            WMO\\Northrend\\Dalaran\\ND_Dalaran_012_03_00.blp\tbbbb.blp\r\n\
++            WMO\\Northrend\\Dalaran\\ND_DalaranSewer_000_00_00.blp\tcccc.blp\r\n\
++            Northrend\\map30_21.blp\tdddd.blp\r\n";
++        let idx = wmo_minimap_index(trs);
++        assert_eq!(idx["wmo\\northrend\\dalaran\\nd_dalaran"], ["aaaa.blp", "bbbb.blp"]);
++        assert_eq!(idx.len(), 2, "ADT tiles are not WMO tiles: {idx:?}");
++        let src = Fake::new(&[
++            ("World\\wmo\\Northrend\\Dalaran\\ND_Dalaran.wmo", root),
++            ("World\\wmo\\Northrend\\Dalaran\\ND_Dalaran_000.wmo", vec![1]),
++            ("World\\D\\Torch.m2", m2_with_events(1, "", &[(b"$DSL", 12602)])),
++            ("World\\D\\Torch00.skin", vec![1]),
++            ("Sound\\Doodad\\TorchFireLoop.wav", vec![1]),
++            ("Sound\\Music\\ZoneMusic\\Dalaran\\DC_SewerWalkUni01.mp3", vec![1]),
++            ("Sound\\Ambience\\WMOAmbience\\DalaranSewers.wav", vec![1]),
++            ("Sound\\Music\\ZoneMusic\\Dalaran\\DC_GeneralWalkUni01.mp3", vec![1]),
++            ("Sound\\Ambience\\Water\\River_LakeStillA.wav", vec![1]),
++            ("Textures\\Minimap\\aaaa.blp", vec![1]),
++            ("Textures\\Minimap\\bbbb.blp", vec![1]),
++            ("Textures\\unitselecttexture.blp", vec![1]),
++            ("Textures\\Minimap\\cccc.blp", vec![1]),
++        ]);
++        let mut cat = Catalogs { wmo_minimap: idx, ..Catalogs::default() };
++        cat.kit_files.insert(12602, vec!["Sound\\Doodad\\TorchFireLoop.wav".into()]);
++        cat.kit_files.insert(1, vec!["Sound\\Music\\ZoneMusic\\Dalaran\\DC_SewerWalkUni01.mp3".into()]);
++        cat.kit_files.insert(2, vec!["Sound\\Ambience\\WMOAmbience\\DalaranSewers.wav".into(), "Sound\\Missing.wav".into()]);
++        cat.kit_files.insert(3, vec!["Sound\\Music\\ZoneMusic\\Dalaran\\DC_GeneralWalkUni01.mp3".into()]);
++        cat.kit_files.insert(4, vec!["Sound\\Ambience\\Water\\River_LakeStillA.wav".into()]);
++        cat.wmo_kits.insert(77, (vec![1, 2], vec![4395]));
++        cat.area_kits.insert(4395, vec![3]);
++        cat.base_kits = vec![4];
++        let spec = SliceSpec::parse(
++            r#"{"order":["base","dalaran"],"tiers":[{"key":"base","prefixes":["Textures\\*"]},
++                {"key":"dalaran","names":["World\\wmo\\Northrend\\Dalaran\\ND_Dalaran.wmo"]}]}"#,
++        )
++        .unwrap();
++        let out = walk(&src, &cat, &spec, &[0, 1], &[]);
++        let names = |t: usize| -> HashSet<String> { out[t].names.iter().map(|n| name_key(n)).collect() };
++        let (t0, t1) = (names(0), names(1));
++        // `Textures\*`: the root's files only, not Textures\Minimap\; the base's liquid loop
++        assert!(t0.contains("textures\\unitselecttexture.blp") && !t0.contains("textures\\minimap\\cccc.blp"), "{t0:?}");
++        assert!(t0.contains("sound\\ambience\\water\\river_lakestilla.wav"));
++        for want in [
++            "sound\\doodad\\torchfireloop.wav",
++            "sound\\music\\zonemusic\\dalaran\\dc_sewerwalkuni01.mp3",
++            "sound\\ambience\\wmoambience\\dalaransewers.wav",
++            "sound\\music\\zonemusic\\dalaran\\dc_generalwalkuni01.mp3",
++            "textures\\minimap\\aaaa.blp",
++            "textures\\minimap\\bbbb.blp",
++        ] {
++            assert!(t1.contains(want), "missing {want}: {t1:?}");
++        }
++        assert!(!t1.contains("textures\\minimap\\cccc.blp"), "another WMO's tiles");
++        assert!(out[1].notes.iter().any(|n| n.contains("4 sound files")), "{:?}", out[1].notes);
++        // without catalogs the tokens are dropped, never looked up as files
++        let mut w = Walker::new(&src);
++        w.add("World\\D\\Torch.m2");
++        w.drain();
++        assert_eq!(w.take().len(), 2);
++    }
++
++    #[test]
++    fn a_zone_brings_its_music_and_game_objects_their_sounds() {
++        let src = Fake::new(&[
++            ("Sound\\Music\\CS.mp3", vec![1]),
++            ("Sound\\Doodad\\Door.wav", vec![1]),
++            ("World\\G\\Door.m2", m2(1, "")),
++            ("World\\G\\Door00.skin", vec![1]),
++        ]);
++        let mut cat = Catalogs::default();
++        cat.map_dir.insert(571, "Northrend".into());
++        cat.area_kits.insert(2817, vec![9]);
++        cat.kit_files.insert(9, vec!["Sound\\Music\\CS.mp3".into()]);
++        cat.kit_files.insert(10, vec!["Sound\\Doodad\\Door.wav".into()]);
++        cat.gameobject.insert(5, "World\\G\\Door.mdx".into());
++        cat.gameobject_kits.insert(5, vec![10]);
++        let mut w = Walker::new(&src).with_catalogs(&cat);
++        // no WDT in the fake: the zone's audio is still taken before the tiles
++        w.add_map(&cat, &MapSpec { zone: Some(2817), ..MapSpec::whole(571) });
++        w.add_gameobject(&cat, 5);
++        w.drain();
++        let got: HashSet<String> = w.take().iter().map(|n| name_key(n)).collect();
++        assert!(got.contains("sound\\doodad\\door.wav") && got.contains("world\\g\\door.m2"), "{got:?}");
++        assert!(got.contains("sound\\music\\cs.mp3"), "{got:?}");
 +    }
 +
 +    #[test]
@@ -2514,10 +2981,10 @@ index 00000000..4529b621
 +}
 diff --git a/crates/wenilla-host/src/size.rs b/crates/wenilla-host/src/size.rs
 new file mode 100644
-index 00000000..af00101f
+index 00000000..8cb7d4f4
 --- /dev/null
 +++ b/crates/wenilla-host/src/size.rs
-@@ -0,0 +1,538 @@
+@@ -0,0 +1,539 @@
 +//! `--size-report`: how much disk every part of the game would take on the stream server, measured
 +//! from the game data without writing any game file. The same static walk as `--deps` (this
 +//! module only adds the bookkeeping), so a number here is what `--export` would write.
@@ -2689,13 +3156,14 @@ index 00000000..af00101f
 +    let mut units = Vec::new();
 +    // The base: tier 0 + the boot lists.
 +    let base_tier = spec.tiers.iter().find(|t| t.tier == 0);
-+    let mut w = Walker::seeded(src, &HashSet::new(), Some(&refs));
++    let mut w = Walker::seeded(src, &HashSet::new(), Some(&refs)).with_catalogs(cat);
 +    for n in boot {
 +        w.add(n);
 +    }
 +    if let Some(t) = base_tier {
 +        walk_tier(&mut w, src, cat, t, displays);
 +    }
++    w.add_base_sounds(cat);
 +    w.drain();
 +    let names = w.take();
 +    let base_seen = w.seen().clone();
@@ -2726,7 +3194,7 @@ index 00000000..af00101f
 +    // The slice's own tiers (cities, starter areas, Dalaran, and the instance tiers again: the
 +    // instance list below measures each instance map once more, alone).
 +    for t in spec.tiers.iter().filter(|t| t.tier != 0) {
-+        let mut w = Walker::seeded(src, &base_seen, Some(&refs));
++        let mut w = Walker::seeded(src, &base_seen, Some(&refs)).with_catalogs(cat);
 +        walk_tier(&mut w, src, cat, t, displays);
 +        w.drain();
 +        let names = w.take();
@@ -2749,7 +3217,7 @@ index 00000000..af00101f
 +    let mut inst: Vec<&MapRow> = maps.iter().filter(|m| (1..=4).contains(&m.instance_type)).collect();
 +    inst.sort_by_key(|m| m.id);
 +    for m in inst {
-+        let mut w = Walker::seeded(src, &base_seen, Some(&refs));
++        let mut w = Walker::seeded(src, &base_seen, Some(&refs)).with_catalogs(cat);
 +        w.add_map(cat, &MapSpec::whole(m.id));
 +        for d in displays.iter().filter(|d| d.map == m.id) {
 +            if d.kind == 'c' {

@@ -234,6 +234,9 @@ Leyline's own code is MIT licensed (`LICENSE`). These parts come from elsewhere 
 
 - **Leyline display font** (`stream/www-files/art/leyline-display.woff2`): Big Shoulders Display,
   SIL Open Font License 1.1. The license is next to it: `stream/www-files/art/leyline-display-OFL.txt`.
+- **Launcher fonts** (`launcher/ui/art/fonts/`): Cinzel and Inter, SIL Open Font License 1.1. The licenses are
+  next to them: `Cinzel-OFL.txt` and `Inter-OFL.txt`.
+- **Launcher art** (`launcher/ui/art/kit/`): cut from the owner's own Leyline asset sheet; no game art.
 - **Ed25519 fallback** (`hosting/kit/tools/wunet/ed25519_pure.py`): from the Open Vanilla launcher, the same
   project, MIT.
 - **SRP6 test vectors** (`hosting/tests/test_crypto.py`): from a public MIT-licensed SRP test corpus.

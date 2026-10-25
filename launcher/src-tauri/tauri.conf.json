@@ -11,11 +11,12 @@
     "windows": [
       {
         "title": "Leyline",
-        "width": 1100,
-        "height": 720,
-        "minWidth": 820,
-        "minHeight": 560,
-        "backgroundColor": "#05060f"
+        "width": 1240,
+        "height": 760,
+        "minWidth": 1000,
+        "minHeight": 660,
+        "backgroundColor": "#1a1d22",
+        "decorations": false
       }
     ],
     "security": {

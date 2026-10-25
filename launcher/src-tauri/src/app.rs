@@ -3,7 +3,7 @@
 use crate::clients::{self, ClientProfile, Detection};
 use crate::net::Listing;
 use crate::settings::{self, Settings, Wine};
-use crate::{catalog, launch, realms, BROWSER_PLAY_URL, OFFICIAL_REALM};
+use crate::{catalog, launch, realms, status, BROWSER_PLAY_URL, OFFICIAL_REALM};
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -168,6 +168,24 @@ fn open_browser_play(app: AppHandle) -> Result<(), String> {
     app.opener().open_url(BROWSER_PLAY_URL, None::<&str>).map_err(|e| e.to_string())
 }
 
+/// Ping the realm's login port and, for the official realm, read its status file (players, bots).
+#[tauri::command]
+async fn realm_status(realm: String) -> Result<status::RealmStatus, String> {
+    let realm = realm.trim().to_string();
+    if !clients::valid_realm_address(&realm) {
+        return Err("That realm address does not look right.".into());
+    }
+    let url = (status::host_port(&realm).0 == OFFICIAL_REALM).then_some(status::OFFICIAL_STATUS_URL);
+    tauri::async_runtime::spawn_blocking(move || status::check(&realm, url)).await.map_err(|e| e.to_string())
+}
+
+/// Open one of the launcher's fixed pages (`crate::LINKS`) by name: Discord, support, news, docs, the site.
+#[tauri::command]
+fn open_link(app: AppHandle, name: String) -> Result<(), String> {
+    let url = crate::link(&name).ok_or("Unknown link.")?;
+    app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
+}
+
 pub fn run() {
     let dir = settings::app_dir();
     let s = settings::load(&dir);
@@ -188,7 +206,9 @@ pub fn run() {
             play,
             catalog_listing,
             realm_listing,
-            open_browser_play
+            open_browser_play,
+            realm_status,
+            open_link
         ])
         .run(tauri::generate_context!())
         .expect("error while running Leyline");
