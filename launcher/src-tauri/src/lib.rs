@@ -1,19 +1,25 @@
-//! Leyline's core: game clients, launching, settings, the mod catalog and the realm list.
+//! Leyline's core: game clients, launching, settings, the mod catalog and mod manager, the realm list,
+//! hosting through the host kit, and the launcher's own update check.
 //!
 //! Everything here is plain Rust with no webview, so `cargo test --no-default-features` runs it anywhere.
 //! The desktop app (`app` feature) wraps these modules in Tauri commands; see `app.rs`.
 //!
-//! Leyline never downloads game files: a client is the player's own folder. It sends no telemetry; the only
-//! network calls are the two read-only listings in `catalog` and `realms`.
+//! Leyline never downloads game files: a client is the player's own folder. It sends no telemetry. Its network
+//! calls: the Workshop catalog and mod zips (`catalog`, `mods`), the relay's realm list, realm lookup and
+//! invite knock (`realms`, `host`), the official realm's status file (`status`) and GitHub's release list
+//! (`update`). Each has an 8 second timeout; the listings fall back to a cached copy.
 
 pub mod catalog;
 pub mod clients;
+pub mod host;
 pub mod launch;
+pub mod mods;
 pub mod net;
 pub mod pe_version;
 pub mod realms;
 pub mod settings;
 pub mod status;
+pub mod update;
 
 #[cfg(feature = "app")]
 mod app;
@@ -35,6 +41,10 @@ pub const LINKS: &[(&str, &str)] = &[
     ("discord", "https://discord.gg/hVeUxYwbkr"),
     ("support", "https://ko-fi.com/orionvanilla"),
     ("github", "https://github.com/orionopenwow/Leyline"),
+    ("host", host::HOST_PAGE),
+    ("hostguide", "https://github.com/orionopenwow/WrathUnleashed/blob/main/hosting/INSTALL-OPERATE.md"),
+    ("modders", "https://github.com/orionopenwow/WrathUnleashed/blob/main/mods/README-modders.md"),
+    ("releases", update::RELEASES_PAGE),
 ];
 
 /// The address for a named link, if it is one of `LINKS`.

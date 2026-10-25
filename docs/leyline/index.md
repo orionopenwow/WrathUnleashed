@@ -33,7 +33,7 @@ Wrath is the flagship realm. It runs the 3.3.5a game on AzerothCore, and you can
 | Play in the browser with your own game folder | Built, behind a switch | [Play](play.md#in-the-browser-with-your-own-game-folder) |
 | Goldshire Inn guest pass (no sign-up) | Built, off by default | [Play](play.md#guest-pass) |
 | Realm claims with a Hero Key | Listing side built; website side planned | [Hero Key](hero-key.md) |
-| Leyline Launcher (desktop app) | Planned, being built now | [Launcher](launcher.md) |
+| Leyline Launcher (desktop app): clients, mods, realms, hosting | Built (0.2), no release yet | [Launcher](launcher.md) |
 | `wu-mod test` on a local test realm | Planned | [Mod format](mods.md#what-is-planned) |
 | Signed mod packages | Planned | [Mod format](mods.md#what-is-planned) |
 | Hopping between realms from the in-game list | Planned | [Hosting](hosting.md#the-realm-list) |

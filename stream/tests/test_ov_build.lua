@@ -45,6 +45,7 @@ function PerformIngameSpawn(kind, entry, map, inst, x, y, z, o, save, dur, phase
     objects[go.guid] = go
     return go
 end
+function GetGUIDLow(g) return g end
 local function liveCount() local n = 0; for _ in pairs(objects) do n = n + 1 end; return n end
 
 -- the fake characters database: the statements, and the builds table for real
@@ -399,7 +400,9 @@ bob.addon = {}
 onAddon(30, bob, 7, "OVMOD", "wubuild\tcatalog\t1/1\t", bob)
 local catMsg, stateMsg
 for _, a in ipairs(bob.addon) do
-    if a[2]:find("^wubuild\tcatalog\t") then catMsg = a[2] end
+    -- The catalog may come in several parts (i/n): join their data in order.
+    local i, n, data = a[2]:match("^wubuild\tcatalog\t(%d+)/(%d+)\t(.*)$")
+    if i then catMsg = (i == "1" and "" or (catMsg or "")) .. data end
     if a[2]:find("^wubuild\tstate\t") then stateMsg = a[2] end
 end
 check("catalog over OVMOD", catMsg and catMsg:find("2413,chair,seating,Wooden Chair", 1, true) and not catMsg:find(tostring(MISSING)))
@@ -410,6 +413,57 @@ onAddon(30, bob, 7, "OVMOD", "wubuild\tcmd\t1/1\tspawn keg", bob)
 check("a command over OVMOD runs as the dot command", propsOf(3) == n3 + 1 and bob.addon[#bob.addon][2]:find("sel=%d+,180575,Keg;mine=2/50"))
 onAddon(30, far, 7, "OVMOD", "wubuild\tcmd\t1/1\tpurge Bob", far)
 check("GM-only stays GM-only over OVMOD", propsOf(3) == n3 + 1 and last(far):find("Only GMs"))
+
+-- edit mode: pick, spawnat, placeat, dup -------------------------------------------------------------------------
+do
+    local ed = player({ guid = 40, name = "Edda", x = AREA.x + 2, y = AREA.y + 2 })
+    cmd(gm, "build grant Edda")
+    clock = clock + 5
+    cmd(ed, string.format("build spawnat chair %.2f %.2f %.2f", AREA.x + 6, AREA.y - 3, AREA.z + 0.5))
+    local e1 = only(40)
+    check("spawnat: a prop at the exact point", e1 and math.abs(e1.x - (AREA.x + 6)) < 0.01 and math.abs(e1.y - (AREA.y - 3)) < 0.01
+        and math.abs(e1.z - (AREA.z + 0.5)) < 0.01 and liveOf(e1) ~= nil)
+    clock = clock + 5
+    cmd(ed, string.format("build spawnat chair %.2f %.2f %.2f", AREA.x + 70, AREA.y, AREA.z))
+    check("spawnat: outside the build area refused", last(ed):find("outside the build area") and propsOf(40) == 1)
+    clock = clock + 5
+    cmd(ed, string.format("build spawnat chair %.2f %.2f %.2f", AREA.x + 400, AREA.y, AREA.z))
+    check("spawnat: too far from the character refused", last(ed):find("too far") and propsOf(40) == 1)
+    cmd(ed, "build spawnat chair 1 2")
+    check("spawnat: bad numbers get the usage", last(ed):find("Usage"))
+
+    T.selected[40] = nil
+    cmd(ed, "build pick " .. T.live[e1.id])
+    check("pick: the clicked prop becomes the selection", T.selected[40] == e1.id and last(ed):find("selected"))
+    local annProp = only(2)
+    if annProp and T.live[annProp.id] then
+        cmd(ed, "build pick " .. T.live[annProp.id])
+        check("pick: someone else's prop is refused", last(ed):find("Ann's") and T.selected[40] == e1.id)
+    end
+    cmd(ed, "build pick 99999999")
+    check("pick: not a Builder prop", last(ed):find("isn't a Builder prop"))
+
+    clock = clock + 5
+    local oldO = e1.o
+    cmd(ed, string.format("build placeat %.2f %.2f %.2f 90", AREA.x - 4, AREA.y + 4, AREA.z + 1))
+    check("placeat: moved to the exact point and turned 90 degrees", math.abs(e1.x - (AREA.x - 4)) < 0.01 and math.abs(e1.z - (AREA.z + 1)) < 0.01
+        and math.abs(((e1.o - oldO) % (2 * math.pi)) - math.pi / 2) < 1e-6 and liveOf(e1) and math.abs(liveOf(e1).x - e1.x) < 0.01)
+    cmd(ed, "build undo")
+    check("placeat: undo puts it back", math.abs(e1.z - AREA.z - 0.5) < 0.01)
+    clock = clock + 5
+    cmd(ed, string.format("build placeat %.2f %.2f %.2f 0", AREA.x + 80, AREA.y, AREA.z))
+    check("placeat: outside the area refused", last(ed):find("too far") or last(ed):find("out of the build area"))
+
+    clock = clock + 5
+    cmd(ed, "build dup")
+    check("dup: a copy beside it becomes the selection", propsOf(40) == 2 and T.selected[40] ~= e1.id
+        and T.props[T.selected[40]].entry == e1.entry and liveOf(T.props[T.selected[40]]) ~= nil)
+    cmd(ed, "build dup")
+    check("dup: one a second", last(ed):find("One prop a second") and propsOf(40) == 2)
+    clock = clock + 5
+    cmd(ed, "build undo")
+    check("dup: undo removes the copy", propsOf(40) == 1)
+end
 
 -- switch off ------------------------------------------------------------------------------------------------
 env.OV_BUILD = "0"

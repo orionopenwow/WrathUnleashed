@@ -1,0 +1,400 @@
+diff --git a/crates/benilla-app/src/cvars/table.rs b/crates/benilla-app/src/cvars/table.rs
+index 78ec28d4..f0e5b697 100644
+--- a/crates/benilla-app/src/cvars/table.rs
++++ b/crates/benilla-app/src/cvars/table.rs
+@@ -157,6 +157,8 @@ pub(crate) const REGISTERED_GRAPHICS: &[Registered] = &[
+     ),
+     ours("colorContrast", "1", "the combine's contrast, 1 neutral"),
+     ours("leylineEditMode", "0", "Leyline edit mode: the free building camera (F7 or the Builder window)"),
++    ours("leylineEditGrid", "0", "Leyline edit mode: the snap grid in yards, 0 off"),
++    ours("leylineEditAngle", "15", "Leyline edit mode: the turn step in degrees"),
+     ours(
+         "colorSaturation",
+         "1",
+diff --git a/crates/benilla-app/src/player/edit_mode.rs b/crates/benilla-app/src/player/edit_mode.rs
+index 70ca7c9a..11524fcd 100644
+--- a/crates/benilla-app/src/player/edit_mode.rs
++++ b/crates/benilla-app/src/player/edit_mode.rs
+@@ -87,12 +87,31 @@ fn clamp_to(p: Vec3, centre: Vec3, radius: f32) -> Vec3 {
+ 
+ /// Grab key: pick up the selected prop and carry it on the cursor; again (or a click) to drop it.
+ pub(crate) const GRAB_KEY: KeyCode = KeyCode::KeyG;
+-/// Turn the carried prop 15 degrees left / right.
++/// Turn the carried prop one angle step left / right.
+ pub(crate) const TURN_LEFT: KeyCode = KeyCode::KeyQ;
+ pub(crate) const TURN_RIGHT: KeyCode = KeyCode::KeyE;
+ /// Put the carried prop back where it was.
+ pub(crate) const CANCEL_KEY: KeyCode = KeyCode::Backspace;
+-const TURN_STEP_DEG: f32 = 15.0;
++/// Duplicate the selection beside itself.
++pub(crate) const DUPLICATE_KEY: KeyCode = KeyCode::KeyV;
++/// Remove the selection.
++pub(crate) const DELETE_KEY: KeyCode = KeyCode::Delete;
++/// With Ctrl: take back the last change.
++pub(crate) const UNDO_KEY: KeyCode = KeyCode::KeyZ;
++/// The grid and angle steps the HUD's Snap button cycles (`leylineEditGrid`, `leylineEditAngle`).
++pub(crate) const GRID_CVAR: &str = "leylineEditGrid";
++pub(crate) const ANGLE_CVAR: &str = "leylineEditAngle";
++/// One mouse-wheel notch raises or lowers the carried prop this far (yards); Shift turns instead.
++const LIFT_STEP: f32 = 0.25;
++const LIFT_LIMIT: f32 = 20.0;
++
++/// A carry in progress: the pose to put back, the turn so far (degrees) and the lift (yards).
++#[derive(Clone, Copy, Debug)]
++struct Carry {
++    start: Transform,
++    turn: f32,
++    lift: f32,
++}
+ 
+ /// The prop the builder last clicked in edit mode, and the carry in progress.
+ #[derive(Resource, Default)]
+@@ -100,8 +119,7 @@ pub(crate) struct EditGrab {
+     /// The last clicked GameObject (the server is told to select it; it refuses props not ours).
+     pub(crate) entity: Option<Entity>,
+     pub(crate) guid: Option<u64>,
+-    /// Carrying: the pose to put back on cancel, and the turn so far in degrees.
+-    carry: Option<(Transform, f32)>,
++    carry: Option<Carry>,
+ }
+ 
+ /// The counter part of a GameObject guid, as the realm's `GetGUIDLow` reads it.
+@@ -109,6 +127,21 @@ fn guid_counter(guid: u64) -> u64 {
+     guid & 0x00FF_FFFF
+ }
+ 
++/// `v` rounded to the nearest multiple of `step`; unchanged with no step.
++fn snap(v: f32, step: f32) -> f32 {
++    if step > 0.0 {
++        (v / step).round() * step
++    } else {
++        v
++    }
++}
++
++/// A ground point snapped to the grid on the two flat axes (the same grid in WoW's x/y, since
++/// Bevy's x/z are WoW's −y/−x).
++fn snap_flat(p: Vec3, grid: f32) -> Vec3 {
++    Vec3::new(snap(p.x, grid), p.y, snap(p.z, grid))
++}
++
+ /// Calls the edit HUD (WrathUnleashedUI's EditMode.lua) if it is loaded.
+ fn call_hud(script: Option<&benilla_ui::script::UiScript>, chunk: &str) {
+     if let Some(script) = script {
+@@ -116,62 +149,104 @@ fn call_hud(script: Option<&benilla_ui::script::UiScript>, chunk: &str) {
+     }
+ }
+ 
+-/// Clicks, grab, turn and drop while editing. A click hands the HUD the ground point and the prop
+-/// under the cursor (it decides: place the prop chosen in the palette, or select the clicked one);
+-/// G carries the selected prop on the cursor, Q/E turn it, a click or G drops it (sent to the
+-/// realm as an exact place, which it checks), X puts it back.
++fn hud_note(script: Option<&benilla_ui::script::UiScript>, text: &str) {
++    let text = text.replace('\'', "");
++    call_hud(
++        script,
++        &format!("local E = WrathUnleashedUI and WrathUnleashedUI.EditMode; if E and E.Note then E.Note('{text}') end"),
++    );
++}
++
++fn hud_cmd(script: Option<&benilla_ui::script::UiScript>, cmd: &str) {
++    call_hud(
++        script,
++        &format!("local E = WrathUnleashedUI and WrathUnleashedUI.EditMode; if E and E.Cmd then E.Cmd('{cmd}') end"),
++    );
++}
++
++/// Clicks, carry, snap, lift, turn, duplicate, delete and undo while editing. A click hands the
++/// HUD the ground point and the prop under the cursor (it decides: place the prop chosen in the
++/// palette, or select the clicked one). G carries the selection on the cursor: Q/E or Shift+wheel
++/// turn it by the angle step, the wheel lifts it, the grid snaps it, and a click or G drops it
++/// (sent to the realm as an exact place, which it checks); Backspace puts it back. V duplicates,
++/// Delete removes, Ctrl+Z undoes.
+ #[allow(clippy::too_many_arguments)]
+ pub(super) fn edit_tools(
+     edit: Res<EditMode>,
+     mut clicks: MessageReader<benilla_world::interact::WorldClick>,
+     hovered: Res<crate::target::HoveredObject>,
+     occlusion: Res<crate::target::PickOcclusion>,
+-    keys: Res<ButtonInput<KeyCode>>,
+-    capture: Res<crate::ui_script::UiKeyboardCapture>,
++    input: (
++        Res<ButtonInput<KeyCode>>,
++        Res<bevy::input::mouse::AccumulatedMouseScroll>,
++        Res<crate::ui_script::UiKeyboardCapture>,
++    ),
++    cvars: Option<Res<Cvars>>,
+     mut grab: ResMut<EditGrab>,
+     mut transforms: Query<&mut Transform, Without<FlyCam>>,
+     script: Option<NonSend<benilla_ui::script::UiScript>>,
+ ) {
++    let (keys, scroll, capture) = (&input.0, &input.1, &input.2);
+     let script = script.as_deref();
+     if !edit.on {
+         clicks.clear();
+-        if let Some((start, _)) = grab.carry.take() {
++        if let Some(c) = grab.carry.take() {
+             if let Some(mut t) = grab.entity.and_then(|e| transforms.get_mut(e).ok()) {
+-                *t = start;
++                *t = c.start;
+             }
+         }
+         return;
+     }
++    let grid = cvars.as_deref().and_then(|c| c.num(GRID_CVAR)).unwrap_or(0.0).clamp(0.0, 10.0);
++    let angle = cvars.as_deref().and_then(|c| c.num(ANGLE_CVAR)).unwrap_or(15.0).clamp(1.0, 90.0);
+     let typing = capture.typing;
+     let pressed = |k: KeyCode| !typing && keys.just_pressed(k);
++    let held = |k: KeyCode| !typing && keys.pressed(k);
++    let shift = held(KeyCode::ShiftLeft) || held(KeyCode::ShiftRight);
++    let ctrl = held(KeyCode::ControlLeft) || held(KeyCode::ControlRight);
+     let point = occlusion.point;
++    // One notch, whatever the device's unit: only the sign and a whole step count.
++    let notches = if scroll.delta.y > 0.0 {
++        1.0
++    } else if scroll.delta.y < 0.0 {
++        -1.0
++    } else {
++        0.0
++    };
+ 
+-    // Carrying: follow the cursor's ground point, turn on Q/E.
+-    if let Some((start, mut turn)) = grab.carry {
++    // Carrying: follow the cursor's ground point, snapped; turn and lift.
++    if let Some(mut c) = grab.carry {
+         if pressed(TURN_LEFT) {
+-            turn += TURN_STEP_DEG;
++            c.turn += angle;
+         }
+         if pressed(TURN_RIGHT) {
+-            turn -= TURN_STEP_DEG;
++            c.turn -= angle;
+         }
+-        grab.carry = Some((start, turn));
++        if notches != 0.0 {
++            if shift {
++                c.turn += angle * notches;
++            } else {
++                c.lift = (c.lift + LIFT_STEP * notches).clamp(-LIFT_LIMIT, LIFT_LIMIT);
++            }
++        }
++        c.turn = snap(c.turn, angle);
++        grab.carry = Some(c);
+         if let Some(mut t) = grab.entity.and_then(|e| transforms.get_mut(e).ok()) {
+             if let Some(p) = point {
+-                t.translation = p;
++                t.translation = snap_flat(p, grid) + Vec3::Y * c.lift;
+             }
+-            t.rotation = Quat::from_rotation_y(turn.to_radians()) * start.rotation;
++            t.rotation = Quat::from_rotation_y(c.turn.to_radians()) * c.start.rotation;
+         }
+         if pressed(CANCEL_KEY) {
+             if let Some(mut t) = grab.entity.and_then(|e| transforms.get_mut(e).ok()) {
+-                *t = start;
++                *t = c.start;
+             }
+             grab.carry = None;
+-            call_hud(script, "local E = WrathUnleashedUI and WrathUnleashedUI.EditMode; if E and E.Note then E.Note('Put back.') end");
++            hud_note(script, "Put back.");
+             clicks.clear();
+             return;
+         }
+-        let drop = pressed(GRAB_KEY) || clicks.read().count() > 0;
+-        if drop {
++        if pressed(GRAB_KEY) || clicks.read().count() > 0 {
+             grab.carry = None;
+             let at = grab
+                 .entity
+@@ -184,7 +259,7 @@ pub(super) fn edit_tools(
+                     script,
+                     &format!(
+                         "local E = WrathUnleashedUI and WrathUnleashedUI.EditMode; if E and E.Drop then E.Drop({:.3}, {:.3}, {:.3}, {:.1}) end",
+-                        w[0], w[1], w[2], turn
++                        w[0], w[1], w[2], c.turn
+                     ),
+                 );
+             }
+@@ -192,19 +267,31 @@ pub(super) fn edit_tools(
+         return;
+     }
+ 
+-    // Not carrying: G picks the selection up.
++    // Not carrying: G picks the selection up; the edit hotkeys act on it.
+     if pressed(GRAB_KEY) {
+-        if let Some(e) = grab.entity {
+-            if let Ok(t) = transforms.get(e) {
+-                grab.carry = Some((*t, 0.0));
+-                call_hud(script, "local E = WrathUnleashedUI and WrathUnleashedUI.EditMode; if E and E.Note then E.Note('Carrying: move the mouse, Q/E to turn, click or G to drop, Backspace to put back.') end");
+-            }
++        if let Some(t) = grab.entity.and_then(|e| transforms.get(e).ok()) {
++            grab.carry = Some(Carry { start: *t, turn: 0.0, lift: 0.0 });
++            hud_note(
++                script,
++                "Carrying: move the mouse, wheel to lift, Q/E or Shift+wheel to turn, click or G to drop, Backspace to put back.",
++            );
+         } else {
+-            call_hud(script, "local E = WrathUnleashedUI and WrathUnleashedUI.EditMode; if E and E.Note then E.Note('Click one of your props first, then G to carry it.') end");
++            hud_note(script, "Click one of your props first, then G to carry it.");
+         }
+     }
++    if pressed(DUPLICATE_KEY) {
++        hud_cmd(script, "dup");
++    }
++    if pressed(DELETE_KEY) {
++        hud_cmd(script, "delete");
++        grab.entity = None;
++        grab.guid = None;
++    }
++    if ctrl && pressed(UNDO_KEY) {
++        hud_cmd(script, "undo");
++    }
+ 
+-    // A click: tell the HUD where, and which prop (if any) was under the cursor.
++    // A click: tell the HUD where (snapped), and which prop (if any) was under the cursor.
+     for _ in clicks.read() {
+         let go = hovered.target.zip(hovered.guid);
+         if let Some((e, g)) = go {
+@@ -213,7 +300,7 @@ pub(super) fn edit_tools(
+         }
+         let pt = point
+             .map(|p| {
+-                let w = benilla_assets::coords::bevy_to_wow(p);
++                let w = benilla_assets::coords::bevy_to_wow(snap_flat(p, grid));
+                 format!("{:.3}, {:.3}, {:.3}", w[0], w[1], w[2])
+             })
+             .unwrap_or_else(|| "nil, nil, nil".into());
+@@ -227,25 +314,90 @@ pub(super) fn edit_tools(
+     }
+ }
+ 
+-/// Draws the edit view's markers: a gold ring and a facing arrow on the selected prop (cyan while
+-/// carried), and a small ring where the cursor meets the ground, which is where a click places.
++/// The world-space box around an entity's meshes (itself and every descendant with bounds).
++fn world_bounds(
++    root: Entity,
++    children: &Query<&Children>,
++    bounds: &Query<(&bevy::camera::primitives::Aabb, &GlobalTransform)>,
++) -> Option<(Vec3, Vec3)> {
++    let mut lo = Vec3::splat(f32::MAX);
++    let mut hi = Vec3::splat(f32::MIN);
++    let mut any = false;
++    let mut stack = vec![root];
++    let mut seen = 0;
++    while let Some(e) = stack.pop() {
++        seen += 1;
++        if seen > 512 {
++            break;
++        }
++        if let Ok((aabb, gt)) = bounds.get(e) {
++            let c = Vec3::from(aabb.center);
++            let h = Vec3::from(aabb.half_extents);
++            for i in 0..8 {
++                let corner = c + Vec3::new(
++                    if i & 1 == 0 { -h.x } else { h.x },
++                    if i & 2 == 0 { -h.y } else { h.y },
++                    if i & 4 == 0 { -h.z } else { h.z },
++                );
++                let w = gt.transform_point(corner);
++                lo = lo.min(w);
++                hi = hi.max(w);
++            }
++            any = true;
++        }
++        if let Ok(kids) = children.get(e) {
++            stack.extend(kids.iter());
++        }
++    }
++    any.then_some((lo, hi))
++}
++
++/// Draws the edit view's markers: the selected prop's box, ring and facing arrow (gold, cyan
++/// while carried, with a drop line to the ground under it), the grid around the cursor when
++/// snapping, and a small ring where the cursor meets the ground, which is where a click places.
+ pub(super) fn edit_gizmos(
+     edit: Res<EditMode>,
+     grab: Res<EditGrab>,
+     occlusion: Res<crate::target::PickOcclusion>,
++    cvars: Option<Res<Cvars>>,
+     globals: Query<&GlobalTransform>,
++    children: Query<&Children>,
++    bounds: Query<(&bevy::camera::primitives::Aabb, &GlobalTransform)>,
+     mut gizmos: Gizmos,
+ ) {
+     if !edit.on {
+         return;
+     }
++    let grid = cvars.as_deref().and_then(|c| c.num(GRID_CVAR)).unwrap_or(0.0).clamp(0.0, 10.0);
+     let flat = Quat::from_rotation_arc(Vec3::Z, Vec3::Y);
+     if let Some(p) = occlusion.point {
++        let at = snap_flat(p, grid);
+         gizmos
+-            .circle(Isometry3d::new(p + Vec3::Y * 0.05, flat), 0.35, Color::srgba(1.0, 1.0, 1.0, 0.8))
++            .circle(Isometry3d::new(at + Vec3::Y * 0.05, flat), 0.35, Color::srgba(1.0, 1.0, 1.0, 0.85))
+             .resolution(24);
++        if grid > 0.0 {
++            // A 7x7 patch of the grid around the cursor.
++            let faint = Color::srgba(0.85, 0.9, 1.0, 0.25);
++            let n = 3.0;
++            for i in -3..=3 {
++                let o = i as f32 * grid;
++                gizmos.line(
++                    at + Vec3::new(o, 0.04, -n * grid),
++                    at + Vec3::new(o, 0.04, n * grid),
++                    faint,
++                );
++                gizmos.line(
++                    at + Vec3::new(-n * grid, 0.04, o),
++                    at + Vec3::new(n * grid, 0.04, o),
++                    faint,
++                );
++            }
++        }
+     }
+-    let Some(gt) = grab.entity.and_then(|e| globals.get(e).ok()) else {
++    let Some(entity) = grab.entity else {
++        return;
++    };
++    let Ok(gt) = globals.get(entity) else {
+         return;
+     };
+     let carrying = grab.carry.is_some();
+@@ -255,14 +407,23 @@ pub(super) fn edit_gizmos(
+         Color::srgb(0.89, 0.72, 0.36)
+     };
+     let at = gt.translation();
++    if let Some((lo, hi)) = world_bounds(entity, &children, &bounds) {
++        let centre = (lo + hi) * 0.5;
++        let size = (hi - lo).max(Vec3::splat(0.2));
++        gizmos.cube(Transform::from_translation(centre).with_scale(size), color);
++    }
+     gizmos.circle(Isometry3d::new(at + Vec3::Y * 0.05, flat), 1.4, color).resolution(48);
+-    gizmos.circle(Isometry3d::new(at + Vec3::Y * 0.05, flat), 1.55, color).resolution(48);
+     // The prop's facing, flat on the ground.
+     let fwd = (gt.rotation() * Vec3::NEG_Z).with_y(0.0).normalize_or_zero();
+     if fwd != Vec3::ZERO {
+         gizmos.arrow(at + Vec3::Y * 0.1, at + Vec3::Y * 0.1 + fwd * 2.2, color);
+     }
+-    gizmos.line(at, at + Vec3::Y * 2.5, color);
++    // Lifted: a line down to the ground point under it.
++    if let (true, Some(p)) = (carrying, occlusion.point) {
++        if (at.y - p.y).abs() > 0.05 {
++            gizmos.line(at, Vec3::new(at.x, p.y, at.z), Color::srgba(0.22, 0.74, 0.97, 0.6));
++        }
++    }
+ }
+ 
+ #[cfg(test)]
+@@ -277,6 +438,13 @@ mod tests {
+         assert!((far - Vec3::new(60.0, 0.0, 0.0)).length() < 1e-4);
+     }
+ 
++    #[test]
++    fn the_grid_snaps_the_flat_axes_only() {
++        assert_eq!(snap_flat(Vec3::new(1.26, 3.3, -0.74), 0.5), Vec3::new(1.5, 3.3, -0.5));
++        assert_eq!(snap_flat(Vec3::new(1.26, 3.3, -0.74), 0.0), Vec3::new(1.26, 3.3, -0.74));
++        assert_eq!(snap(44.0, 15.0), 45.0);
++    }
++
+     #[test]
+     fn the_guid_counter_is_the_low_24_bits() {
+         assert_eq!(guid_counter(0xF110_0007_6D00_1234), 0x00_1234);

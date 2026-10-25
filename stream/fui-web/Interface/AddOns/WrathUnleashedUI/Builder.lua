@@ -18,7 +18,7 @@ local WIN_W, WIN_H, ROW_H, ROWS = 520, 520, 20, 9
 local ANSWER_WAIT = 6
 local STEPS = { 0.25, 1, 3 }
 local TURN = 15
-local CATS = { "all", "seating", "tables", "barrels", "crates", "lights", "banners", "tents", "fires", "fences" }
+local CATS = { "all", "seating", "tables", "barrels", "crates", "lights", "banners", "tents", "fires", "fences", "nature", "decor" }
 
 local win
 local B = { catalog = {}, shown = {}, offset = 0, cat = 1, step = 2, search = "", state = {}, parts = {} }
@@ -71,7 +71,7 @@ local function parseCatalog(data)
     local list = {}
     for item in data:gmatch("[^;]+") do
         local id, key, cat, name = item:match("^(%d+),([%w]+),(%a+),(.+)$")
-        if id and #list < 200 then
+        if id and #list < 600 then
             list[#list + 1] = { id = tonumber(id), key = key, cat = cat, name = name:gsub("|", "") }
         end
     end

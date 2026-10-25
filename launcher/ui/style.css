@@ -403,3 +403,53 @@ fieldset:disabled { opacity: 0.6; }
   .search { width: 260px; }
   .news h1 { font-size: 42px; }
 }
+
+/* ---------------------------------------------------------------- mods, realms, host (L1) */
+.panel.wide { max-width: 1120px; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 4px 0 10px; }
+.toolbar input[type="search"] { flex: 1; min-width: 200px; width: auto; }
+label.inline { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+label.inline select { width: auto; min-width: 220px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+.chip-btn {
+  height: 26px; padding: 0 10px; border-radius: 13px; cursor: pointer;
+  border: 1px solid #4b5360; background: #121418; color: #d9d2bf; font: 600 11.5px Inter, sans-serif;
+}
+.chip-btn:hover { border-color: var(--bronze-hi); color: #fff3d0; }
+.chip-btn.on { border-color: var(--gold); color: var(--gold-hi); background: rgba(226, 184, 92, 0.12); }
+.mod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; margin: 6px 0 4px; }
+.mod-card, .realm-card {
+  display: grid; gap: 6px; align-content: start; padding: 12px 14px; border-radius: 6px;
+  background: #121418; border: 1px solid var(--bronze); user-select: text;
+}
+.realm-card.on { border-color: var(--gold); box-shadow: 0 0 0 1px rgba(226, 184, 92, 0.35); }
+.mod-card .top, .realm-card .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.mod-card .name, .realm-card .name { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.ver-s { font: 700 11px Cinzel, serif; color: var(--gold); letter-spacing: 0.05em; white-space: nowrap; }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag { font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 9px; background: #1d2127; color: #b8af96; border: 1px solid #343a44; }
+.tag.gold { color: var(--gold-hi); border-color: var(--bronze-hi); }
+.tag.warn { color: var(--warn); border-color: #6b5420; }
+.desc { margin: 0; font-size: 13px; color: #d9d2bf; overflow-wrap: anywhere; }
+.credit { margin: 0; font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+.facts { font-size: 12px; color: var(--muted); }
+.mod-card .acts, .realm-card .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 2px; }
+.link-s { border: 0; background: none; padding: 0; cursor: pointer; color: var(--gold-hi); font: 600 12px Inter, sans-serif; }
+.link-s:hover { text-decoration: underline; }
+.realm-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+.realm-card .state { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; }
+.rules { margin: 0; padding-left: 18px; font-size: 12px; color: #cfc6ad; }
+.drop {
+  display: grid; justify-items: center; gap: 2px; padding: 18px 14px; margin: 4px 0 6px;
+  border: 2px dashed #5b5240; border-radius: 8px; background: rgba(20, 22, 26, 0.6); text-align: center;
+}
+.drop b { font: 700 15px Cinzel, serif; color: var(--gold-hi); letter-spacing: 0.05em; }
+.drop span { font-size: 12px; color: var(--muted); }
+.drop.over { border-color: var(--gold); background: rgba(226, 184, 92, 0.10); }
+.row.center { justify-content: center; }
+.problems { margin: 4px 0 8px; padding-left: 18px; color: var(--bad); font-size: 12px; max-height: 180px; overflow: auto; user-select: text; }
+.cards .card.off { opacity: 0.65; }
+.steps { margin: 6px 0 10px; padding-left: 22px; display: grid; gap: 12px; color: #d9d2bf; }
+.steps b { color: var(--gold-hi); }
+#host-card { max-width: 520px; margin-top: 10px; border-radius: 6px; }
+.pill.upd { cursor: pointer; border-color: var(--gold); color: var(--gold-hi); font: 600 12px Inter, sans-serif; }

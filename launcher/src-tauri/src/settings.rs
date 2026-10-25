@@ -39,6 +39,8 @@ pub struct Settings {
     /// The realm address chosen on the Play page.
     pub selected_realm: String,
     pub wine: Wine,
+    /// The host kit folder chosen on the Host page (empty: none yet).
+    pub host_kit: String,
 }
 
 impl Default for Settings {
@@ -49,6 +51,7 @@ impl Default for Settings {
             selected_client: None,
             selected_realm: crate::OFFICIAL_REALM.into(),
             wine: Wine::default(),
+            host_kit: String::new(),
         }
     }
 }

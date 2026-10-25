@@ -41,6 +41,20 @@ impl Build {
             Build::V1121 => "WoW.exe",
         }
     }
+    /// The `## Interface:` number an addon for this build has in its .toc.
+    pub fn interface(self) -> &'static str {
+        match self {
+            Build::V335a => "30300",
+            Build::V1121 => "11200",
+        }
+    }
+    /// The build as the Workshop catalog names it (`builds` in all.json).
+    pub fn catalog_tag(self) -> &'static str {
+        match self {
+            Build::V335a => "3.3.5a",
+            Build::V1121 => "1.12",
+        }
+    }
     fn from_version(v: FileVersion) -> Option<Build> {
         match (v.major, v.minor, v.patch, v.build) {
             (3, 3, 5, 12340) => Some(Build::V335a),
@@ -385,6 +399,26 @@ fn config_wtf_with_realmlist(text: &str, addr: &str) -> Option<String> {
     hit.then(|| lines.join("\r\n") + "\r\n")
 }
 
+/// Put back the realmlist.wtf (and Config.wtf) the player had before Leyline first changed them. Returns false
+/// when there is no backup (Leyline never changed this client's realmlist).
+pub fn restore_realmlist(profile: &ClientProfile) -> io::Result<bool> {
+    let rl = realmlist_path(&profile.path, profile.build, profile.locale.as_deref());
+    let bak = backup_path(&rl);
+    if !bak.is_file() {
+        return Ok(false);
+    }
+    crate::settings::write_atomic(&rl, &fs::read(&bak)?)?;
+    if profile.build == Build::V335a {
+        if let Some(cfg) = find_rel(&profile.path, "WTF/Config.wtf") {
+            let cbak = backup_path(&cfg);
+            if cbak.is_file() {
+                crate::settings::write_atomic(&cfg, &fs::read(&cbak)?)?;
+            }
+        }
+    }
+    Ok(true)
+}
+
 /// Read the realm address a client is pointed at now.
 pub fn read_realmlist(profile: &ClientProfile) -> Option<String> {
     let rl = realmlist_path(&profile.path, profile.build, profile.locale.as_deref());
@@ -564,6 +598,35 @@ mod tests {
         assert_eq!(rl, v.path().join("realmlist.wtf"));
         assert_eq!(read_realmlist(&p).as_deref(), Some("play.openvanilla.app"));
         assert!(backup_path(&rl).exists());
+    }
+
+    #[test]
+    fn hopping_realms_and_back_then_restoring_the_original() {
+        let d = tempfile::tempdir().unwrap();
+        fake_335a(d.path(), true);
+        touch(d.path(), "WTF/Config.wtf", b"SET realmList \"logon.example.org\"\r\nSET gxApi \"d3d9\"\r\n");
+        let p = new_profile(d.path(), &detect(d.path()).unwrap(), &[]);
+        // Official, then a Beacon on the relay (host:port), then back to the official realm.
+        for addr in ["play.openvanilla.app", "relay.openvanilla.app:40002", "play.openvanilla.app"] {
+            write_realmlist(&p, addr).unwrap();
+            assert_eq!(read_realmlist(&p).as_deref(), Some(addr));
+            let cfg = fs::read_to_string(d.path().join("WTF/Config.wtf")).unwrap();
+            assert!(cfg.contains(&format!("SET realmList \"{addr}\"")) && cfg.contains("gxApi"), "{cfg}");
+        }
+        // The player's own files come back, Config.wtf too.
+        assert!(restore_realmlist(&p).unwrap());
+        assert_eq!(read_realmlist(&p).as_deref(), Some("logon.example.org"));
+        assert!(fs::read_to_string(d.path().join("WTF/Config.wtf")).unwrap().contains("logon.example.org"));
+
+        let v = tempfile::tempdir().unwrap();
+        fake_1121(v.path(), true);
+        let p = new_profile(v.path(), &detect(v.path()).unwrap(), &[]);
+        assert!(!restore_realmlist(&p).unwrap(), "nothing to restore before Leyline changed it");
+        write_realmlist(&p, "beacon.example.org:40010").unwrap();
+        assert!(restore_realmlist(&p).unwrap());
+        assert_eq!(read_realmlist(&p).as_deref(), Some("old.example.org"));
+        assert_eq!(Build::V1121.interface(), "11200");
+        assert_eq!(Build::V335a.catalog_tag(), "3.3.5a");
     }
 
     #[test]

@@ -173,10 +173,13 @@ check("Spawn waits for a pick", win.spawn.enabled == false)
 
 -- search and categories
 win.search:SetText("lant"); win.search:Fire("OnTextChanged")
-check("search filters", #shown() == 2 and shown()[1].name:GetText():find("Lantern"))
+local function countWhere(fn) local n = 0; for _, c in ipairs(T.CATALOG()) do if fn(c) then n = n + 1 end end; return n end
+local lanterns = countWhere(function(c) return c.name:lower():find("lant", 1, true) or c.key:find("lant", 1, true) end)
+check("search filters", lanterns >= 2 and #shown() == math.min(lanterns, #win.rows) and shown()[1].name:GetText():lower():find("lant"))
 win.search:SetText(""); win.search:Fire("OnTextChanged")
 win.catBtn:Fire("OnClick")
-check("category: seating", win.catBtn:GetText() == "Category: seating" and #shown() == 5)
+local seats = countWhere(function(c) return c.cat == "seating" end)
+check("category: seating", win.catBtn:GetText() == "Category: seating" and seats >= 5 and #shown() == math.min(seats, #win.rows))
 for _ = 1, #B.CATS - 1 do win.catBtn:Fire("OnClick") end
 check("categories go round to all", win.catBtn:GetText() == "Category: all")
 win.list:Fire("OnMouseWheel", -1)

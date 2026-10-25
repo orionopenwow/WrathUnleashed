@@ -81,7 +81,8 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "Leyline ${{ github.ref_name }}"
           releaseBody: |
-            Leyline desktop launcher. Pick your own installed client (3.3.5a or 1.12.1), point it at a realm and play.
+            Leyline desktop launcher. Pick your own installed client (3.3.5a or 1.12.1), install and manage Workshop mods,
+            play on the official realm or a community Beacon, and host your own realm with the host kit.
             Builds are not code-signed yet: on Windows choose "More info, Run anyway"; on macOS right-click the app and choose Open.
           releaseDraft: false
           prerelease: true

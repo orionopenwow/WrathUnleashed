@@ -21,6 +21,7 @@
 --   .build pick <object id>           selects the clicked prop (its GUID counter)
 --   .build spawnat <id> <x> <y> <z>   a prop at an exact point you clicked (within 100 yards, in the area)
 --   .build placeat <x> <y> <z> <deg>  moves the selection to an exact point and turns it <deg> (a drag-and-drop)
+--   .build dup                        a copy of the selection 1.5 yards beside it; the copy becomes the selection
 --   GM only: .build grant <name> | revoke <name> | purge <name>
 --
 -- Who builds: GMs always; others once a GM runs .build grant <name> (stored in mod_builder_roles). Building
@@ -114,8 +115,330 @@ local CATALOG = {
     { id = 211063, key = "woodfence2",  cat = "fences",  name = "Wooden Fence, short" },
     { id = 19455,  key = "stonefence",  cat = "fences",  name = "Stone Fence" },
     { id = 19434,  key = "fencesegment", cat = "fences", name = "Fence Segment" },
+
+    -- Added 2026-10-25 for edit mode: decorative, script-free entries (type 5 generic / 7 chair) picked by name
+    -- from AzerothCore's gameobject_template.sql (no AIName, no ScriptName, size 0.2-3, one per model).
+    { id = 19478, key = "karazahnthrone", cat = "seating", name = "Karazahn Throne" },   -- type 5, display 9478
+    { id = 28611, key = "dwarvenhighbac", cat = "seating", name = "Dwarven High Back Chair" },   -- type 7, display 648
+    { id = 48403, key = "shortwoodensea", cat = "seating", name = "Short Wooden Seat" },   -- type 7, display 138
+    { id = 61919, key = "woodenchair", cat = "seating", name = "Wooden Chair" },   -- type 7, display 380
+    { id = 92703, key = "bench2", cat = "seating", name = "Bench" },   -- type 7, display 682
+    { id = 112068, key = "woodenchair2", cat = "seating", name = "Wooden Chair" },   -- type 7, display 92
+    { id = 126050, key = "bench3", cat = "seating", name = "Bench" },   -- type 7, display 1569
+    { id = 136924, key = "bench4", cat = "seating", name = "Bench" },   -- type 7, display 987
+    { id = 136929, key = "chair2", cat = "seating", name = "Chair" },   -- type 7, display 988
+    { id = 136930, key = "chair3", cat = "seating", name = "Chair" },   -- type 7, display 989
+    { id = 136931, key = "bench5", cat = "seating", name = "Bench" },   -- type 7, display 990
+    { id = 142947, key = "stonechair", cat = "seating", name = "Stone Chair" },   -- type 7, display 2087
+    { id = 160846, key = "bench6", cat = "seating", name = "Bench" },   -- type 7, display 673
+    { id = 170592, key = "imperialthrone", cat = "seating", name = "Imperial Throne" },   -- type 7, display 2810
+    { id = 171674, key = "stonechair2", cat = "seating", name = "Stone Chair" },   -- type 7, display 2088
+    { id = 176004, key = "subwaybench", cat = "seating", name = "Subway Bench" },   -- type 7, display 4091
+    { id = 176561, key = "krastinovswork", cat = "seating", name = "Krastinov's Work Bench" },   -- type 5, display 4391
+    { id = 178934, key = "thechair", cat = "seating", name = "The Chair" },   -- type 7, display 5551
+    { id = 179118, key = "throne", cat = "seating", name = "Throne" },   -- type 7, display 5592
+    { id = 182077, key = "nightelfstool", cat = "seating", name = "Night Elf Stool" },   -- type 5, display 6912
+    { id = 182598, key = "chair4", cat = "seating", name = "Chair" },   -- type 7, display 6975
+    { id = 182608, key = "bench7", cat = "seating", name = "Bench" },   -- type 7, display 6979
+    { id = 182654, key = "chair5", cat = "seating", name = "Chair" },   -- type 7, display 6981
+    { id = 182762, key = "chair6", cat = "seating", name = "Chair" },   -- type 7, display 6997
+    { id = 183753, key = "chair7", cat = "seating", name = "Chair" },   -- type 7, display 7070
+    { id = 184038, key = "bench8", cat = "seating", name = "Bench" },   -- type 7, display 7134
+    { id = 184671, key = "chair8", cat = "seating", name = "Chair" },   -- type 7, display 6980
+    { id = 184733, key = "chair9", cat = "seating", name = "Chair" },   -- type 7, display 4678
+    { id = 186475, key = "fishingchair", cat = "seating", name = "Fishing Chair" },   -- type 7, display 7467
+    { id = 186695, key = "chair10", cat = "seating", name = "Chair" },   -- type 7, display 7504
+    { id = 187118, key = "zulamaneagleth", cat = "seating", name = "Zul'Aman - Eagle Throne" },   -- type 7, display 7594
+    { id = 188227, key = "agmarsthrone", cat = "seating", name = "Agmar's Throne" },   -- type 7, display 7744
+    { id = 190694, key = "apothecarybenc", cat = "seating", name = "Apothecary Bench" },   -- type 5, display 7986
+    { id = 191475, key = "chair11", cat = "seating", name = "Chair" },   -- type 7, display 8095
+    { id = 191476, key = "bench9", cat = "seating", name = "Bench" },   -- type 7, display 8096
+    { id = 191886, key = "chair12", cat = "seating", name = "Chair" },   -- type 7, display 7074
+    { id = 191887, key = "chair13", cat = "seating", name = "Chair" },   -- type 7, display 8204
+    { id = 192199, key = "bench10", cat = "seating", name = "Bench" },   -- type 7, display 8248
+    { id = 192722, key = "throne2", cat = "seating", name = "Throne" },   -- type 5, display 8323
+    { id = 192723, key = "throne3", cat = "seating", name = "Throne" },   -- type 5, display 8324
+    { id = 192724, key = "throne4", cat = "seating", name = "Throne" },   -- type 5, display 8325
+    { id = 2686, key = "apothecarytabl", cat = "tables", name = "Apothecary Table" },   -- type 5, display 234
+    { id = 19477, key = "karazahntable", cat = "tables", name = "Karazahn Table" },   -- type 5, display 9477
+    { id = 19624, key = "shopcounter", cat = "tables", name = "Shop Counter" },   -- type 5, display 9624
+    { id = 174681, key = "jdsworktable", cat = "tables", name = "J.D.'s Work Table" },   -- type 5, display 3371
+    { id = 177724, key = "dredanstable", cat = "tables", name = "Dredan's Table" },   -- type 5, display 221
+    { id = 181246, key = "icoketable", cat = "tables", name = "iCoke Table" },   -- type 5, display 581
+    { id = 182093, key = "bloodelftables", cat = "tables", name = "Blood Elf Table - Small" },   -- type 5, display 6916
+    { id = 184657, key = "ironridgetable", cat = "tables", name = "Ironridge Table" },   -- type 5, display 7209
+    { id = 187114, key = "alchemytable", cat = "tables", name = "Alchemy Table" },   -- type 5, display 7591
+    { id = 189289, key = "table2", cat = "tables", name = "Table" },   -- type 5, display 7838
+    { id = 190190, key = "onslaughttable", cat = "tables", name = "Onslaught Table" },   -- type 5, display 7867
+    { id = 190665, key = "labtable", cat = "tables", name = "Lab Table" },   -- type 5, display 7977
+    { id = 190689, key = "apothecaryta2", cat = "tables", name = "Apothecary Table Round" },   -- type 5, display 7094
+    { id = 192547, key = "apprenticesalc", cat = "tables", name = "Apprentice's Alchemy Table" },   -- type 5, display 8109
+    { id = 192548, key = "apprenticessur", cat = "tables", name = "Apprentice's Surgical Table" },   -- type 5, display 8074
+    { id = 202564, key = "gnometable", cat = "tables", name = "Gnome Table" },   -- type 5, display 9366
+    { id = 1670, key = "barrelofpowder", cat = "barrels", name = "Barrel of Powder" },   -- type 5, display 33
+    { id = 2130, key = "thewinecask", cat = "barrels", name = "The Wine Cask" },   -- type 5, display 170
+    { id = 19897, key = "caskoffoolssto", cat = "barrels", name = "Cask of Fool's Stout" },   -- type 5, display 32
+    { id = 181245, key = "icokekeg", cat = "barrels", name = "iCoke Keg" },   -- type 5, display 1727
+    { id = 184863, key = "barrela", cat = "barrels", name = "Barrel A" },   -- type 5, display 288
+    { id = 186173, key = "brewfestkegbre", cat = "barrels", name = "Brewfest Keg Breakable" },   -- type 5, display 3152
+    { id = 186281, key = "intactbarrel", cat = "barrels", name = "Intact Barrel" },   -- type 5, display 6366
+    { id = 186709, key = "standingbrewfe", cat = "barrels", name = "Standing Brewfest Keg" },   -- type 5, display 7414
+    { id = 186808, key = "brokenkeg", cat = "barrels", name = "Broken Keg" },   -- type 5, display 7525
+    { id = 186809, key = "brokenkeg2", cat = "barrels", name = "Broken Keg" },   -- type 5, display 7526
+    { id = 200337, key = "forsakenplague", cat = "barrels", name = "Forsaken Plague Barrel" },   -- type 5, display 7470
+    { id = 200338, key = "forsakenplag2", cat = "barrels", name = "Forsaken Plague Barrel Empty" },   -- type 5, display 9162
+    { id = 201774, key = "quenchingbarre", cat = "barrels", name = "Quenching Barrel" },   -- type 5, display 5112
+    { id = 202218, key = "druganskeg", cat = "barrels", name = "Drugan's Keg" },   -- type 5, display 7549
+    { id = 26491, key = "pithwicksbagsa", cat = "crates", name = "Pithwick's Bags and Supplies" },   -- type 5, display 637
+    { id = 58624, key = "bagvendor", cat = "crates", name = "Bag Vendor" },   -- type 5, display 745
+    { id = 92527, key = "bags", cat = "crates", name = "Bags" },   -- type 5, display 954
+    { id = 178304, key = "boxosquirrels", cat = "crates", name = "Box o' Squirrels" },   -- type 5, display 528
+    { id = 180853, key = "dukesbox", cat = "crates", name = "Duke's Box" },   -- type 5, display 6606
+    { id = 181128, key = "frontlinescrat", cat = "crates", name = "Front Lines Crate" },   -- type 5, display 6448
+    { id = 181962, key = "dustbag", cat = "crates", name = "Dust Bag" },   -- type 5, display 6895
+    { id = 182076, key = "elfcrate", cat = "crates", name = "Elf Crate" },   -- type 5, display 6035
+    { id = 183992, key = "amadicrate", cat = "crates", name = "Amadi Crate" },   -- type 5, display 31
+    { id = 183993, key = "amadisack", cat = "crates", name = "Amadi Sack" },   -- type 5, display 5511
+    { id = 184854, key = "boxa", cat = "crates", name = "Box A" },   -- type 5, display 285
+    { id = 184855, key = "boxb", cat = "crates", name = "Box B" },   -- type 5, display 286
+    { id = 184856, key = "boxc", cat = "crates", name = "Box C" },   -- type 5, display 1988
+    { id = 184857, key = "boxd", cat = "crates", name = "Box D" },   -- type 5, display 5271
+    { id = 184858, key = "baga", cat = "crates", name = "Bag A" },   -- type 5, display 323
+    { id = 185004, key = "stranglekelpsa", cat = "crates", name = "Stranglekelp Sack" },   -- type 5, display 7224
+    { id = 185007, key = "jhangssack", cat = "crates", name = "Jhang's Sack" },   -- type 5, display 2890
+    { id = 186307, key = "zulamanexterio", cat = "crates", name = "Zul'Aman Exterior Crate B" },   -- type 5, display 347
+    { id = 188076, key = "salvagecrate", cat = "crates", name = "Salvage Crate" },   -- type 5, display 335
+    { id = 190094, key = "suspiciousgrai", cat = "crates", name = "Suspicious Grain Crate" },   -- type 5, display 7856
+    { id = 190095, key = "plaguedgraincr", cat = "crates", name = "Plagued Grain Crate" },   -- type 5, display 7857
+    { id = 190117, key = "cratehighlight", cat = "crates", name = "Crate Highlight" },   -- type 5, display 2233
+    { id = 195192, key = "basketofcorn", cat = "crates", name = "Basket of Corn" },   -- type 5, display 8961
+    { id = 202891, key = "closedweaponcr", cat = "crates", name = "Closed Weapon Crate" },   -- type 5, display 6959
+    { id = 202892, key = "openweaponcrat", cat = "crates", name = "Open Weapon Crate" },   -- type 5, display 8703
+    { id = 1558, key = "candleofbeckon", cat = "lights", name = "Candle of Beckoning" },   -- type 5, display 100
+    { id = 19466, key = "karazahnchande", cat = "lights", name = "Karazahn Chandelier" },   -- type 5, display 9466
+    { id = 19469, key = "karazahnsconce", cat = "lights", name = "Karazahn Sconce" },   -- type 5, display 9469
+    { id = 176093, key = "beacontorch", cat = "lights", name = "Beacon Torch" },   -- type 5, display 4095
+    { id = 180473, key = "brazier", cat = "lights", name = "Brazier" },   -- type 5, display 475
+    { id = 180766, key = "lantern3", cat = "lights", name = "Lantern" },   -- type 5, display 6538
+    { id = 180767, key = "lantern4", cat = "lights", name = "Lantern" },   -- type 5, display 6539
+    { id = 180768, key = "lantern5", cat = "lights", name = "Lantern" },   -- type 5, display 6540
+    { id = 181959, key = "cavetorch", cat = "lights", name = "Cave Torch" },   -- type 5, display 4094
+    { id = 182014, key = "darkbrazier", cat = "lights", name = "Dark Brazier" },   -- type 5, display 474
+    { id = 184284, key = "ammenvaletorch", cat = "lights", name = "Ammen Vale Torch" },   -- type 5, display 7160
+    { id = 184613, key = "doomclawsbrazi", cat = "lights", name = "Doomclaw's Brazier" },   -- type 5, display 7204
+    { id = 185003, key = "shadowcouncilt", cat = "lights", name = "Shadow Council Torch" },   -- type 5, display 7255
+    { id = 185005, key = "jhangslantern", cat = "lights", name = "Jhang's Lantern" },   -- type 5, display 6038
+    { id = 186678, key = "bindersbrazier", cat = "lights", name = "Binder's Brazier" },   -- type 5, display 3411
+    { id = 187457, key = "brazierofdanci", cat = "lights", name = "Brazier of Dancing Flames" },   -- type 5, display 7692
+    { id = 187708, key = "torchtargetbra", cat = "lights", name = "Torch Target Brazier" },   -- type 5, display 6765
+    { id = 187988, key = "twilighttorch", cat = "lights", name = "Twilight Torch" },   -- type 5, display 4771
+    { id = 188287, key = "drakurusbrazie", cat = "lights", name = "Drakuru's Brazier" },   -- type 5, display 2570
+    { id = 188436, key = "magnataurworsh", cat = "lights", name = "Magnataur Worship Candles" },   -- type 5, display 7773
+    { id = 188437, key = "magnataurwor2", cat = "lights", name = "Magnataur Worship Candles" },   -- type 5, display 7774
+    { id = 188438, key = "magnataurwor3", cat = "lights", name = "Magnataur Worship Candle" },   -- type 5, display 7772
+    { id = 188439, key = "magnataurwor4", cat = "lights", name = "Magnataur Worship Candle" },   -- type 5, display 7775
+    { id = 188701, key = "snowplaintorch", cat = "lights", name = "Snowplain Torch" },   -- type 5, display 6370
+    { id = 190215, key = "humanbrazierco", cat = "lights", name = "Human Brazier Corrupt" },   -- type 5, display 3971
+    { id = 190692, key = "apothecaryskul", cat = "lights", name = "Apothecary Skull Candle" },   -- type 5, display 6406
+    { id = 191706, key = "hellfiredwfloo", cat = "lights", name = "Hellfire DW Floor Brazier" },   -- type 5, display 7185
+    { id = 194237, key = "drakmarbrazier", cat = "lights", name = "Drak'Mar Brazier" },   -- type 5, display 8563
+    { id = 195318, key = "mistcallersbra", cat = "lights", name = "Mistcaller's Brazier" },   -- type 5, display 8303
+    { id = 202924, key = "celebrationtor", cat = "lights", name = "Celebration Torch" },   -- type 5, display 9464
+    { id = 19665, key = "nightelftreeba", cat = "banners", name = "Night Elf Tree Banner" },   -- type 5, display 9665
+    { id = 152080, key = "kadraksflag", cat = "banners", name = "Kadrak's Flag" },   -- type 5, display 2552
+    { id = 180432, key = "forsakenbanner", cat = "banners", name = "Forsaken Banner" },   -- type 5, display 6388
+    { id = 180776, key = "banner4", cat = "banners", name = "Banner" },   -- type 5, display 6548
+    { id = 180777, key = "banner5", cat = "banners", name = "Banner" },   -- type 5, display 6549
+    { id = 180778, key = "banner6", cat = "banners", name = "Banner" },   -- type 5, display 6550
+    { id = 181058, key = "bannerofprovoc", cat = "banners", name = "Banner of Provocation" },   -- type 5, display 6663
+    { id = 181505, key = "bannerofthebla", cat = "banners", name = "Banner of the Blackrock Clan" },   -- type 5, display 6783
+    { id = 181506, key = "bannerofthewar", cat = "banners", name = "Banner of the Warsong Clan" },   -- type 5, display 6707
+    { id = 181507, key = "bannerofthedra", cat = "banners", name = "Banner of the Dragonmaw Clan" },   -- type 5, display 6784
+    { id = 181509, key = "bannerofthefro", cat = "banners", name = "Banner of the Frostwol Clan" },   -- type 5, display 6387
+    { id = 181917, key = "draeneibanner", cat = "banners", name = "Draenei Banner" },   -- type 5, display 6882
+    { id = 182353, key = "warmaulogreban", cat = "banners", name = "Warmaul Ogre Banner" },   -- type 5, display 6957
+    { id = 182354, key = "kilsorrowbanne", cat = "banners", name = "Kil'sorrow Banner" },   -- type 5, display 6958
+    { id = 182366, key = "warmaulbannero", cat = "banners", name = "Warmaul Banner of Conquering" },   -- type 5, display 6960
+    { id = 184493, key = "netherstormfla", cat = "banners", name = "Netherstorm Flag" },   -- type 5, display 7153
+    { id = 185106, key = "bloodelfbanner", cat = "banners", name = "Blood Elf Banner" },   -- type 5, display 6796
+    { id = 185107, key = "draeneibanne2", cat = "banners", name = "Draenei Banner" },   -- type 5, display 7268
+    { id = 186717, key = "brewfestbanner", cat = "banners", name = "Brewfest Banner" },   -- type 5, display 7508
+    { id = 186983, key = "standardofkael", cat = "banners", name = "Standard of Kael'Thas" },   -- type 5, display 6794
+    { id = 187083, key = "pirateflag", cat = "banners", name = "Pirate Flag" },   -- type 5, display 7589
+    { id = 187123, key = "shatteredsunba", cat = "banners", name = "Shattered Sun Banner" },   -- type 5, display 7617
+    { id = 187771, key = "warsongbanner", cat = "banners", name = "Warsong Banner" },   -- type 5, display 5111
+    { id = 188020, key = "campbanner", cat = "banners", name = "Camp Banner" },   -- type 5, display 7682
+    { id = 190589, key = "flagofownershi", cat = "banners", name = "Flag of Ownership" },   -- type 5, display 7953
+    { id = 190670, key = "apothecarybann", cat = "banners", name = "Apothecary Banner" },   -- type 5, display 7979
+    { id = 192123, key = "theshadowvault", cat = "banners", name = "The Shadow Vault Banner" },   -- type 5, display 8225
+    { id = 194008, key = "voldrunebanner", cat = "banners", name = "Voldrune Banner" },   -- type 5, display 8528
+    { id = 194279, key = "gnomereganbann", cat = "banners", name = "Gnomeregan Banner" },   -- type 5, display 8619
+    { id = 194281, key = "senjinbanner", cat = "banners", name = "Sen'jin Banner" },   -- type 5, display 8615
+    { id = 195319, key = "kvaldirbanner", cat = "banners", name = "Kvaldir Banner" },   -- type 5, display 9009
+    { id = 196871, key = "silvercovenant", cat = "banners", name = "Silver Covenant Banner" },   -- type 5, display 9050
+    { id = 19637, key = "humanvendorten", cat = "tents", name = "Human Vendor Tent" },   -- type 5, display 9637
+    { id = 180030, key = "fortunetellers", cat = "tents", name = "Fortune Teller's Tent" },   -- type 5, display 6138
+    { id = 180031, key = "foodtent", cat = "tents", name = "Food Tent" },   -- type 5, display 6139
+    { id = 180032, key = "souvenirtent", cat = "tents", name = "Souvenir Tent" },   -- type 5, display 6141
+    { id = 180034, key = "ticketmasterte", cat = "tents", name = "Ticket Master Tent" },   -- type 5, display 6142
+    { id = 180039, key = "animaltrainert", cat = "tents", name = "Animal Trainer Tent" },   -- type 5, display 6147
+    { id = 180042, key = "targetpractice", cat = "tents", name = "Target Practice Tent" },   -- type 5, display 6149
+    { id = 181244, key = "icoketent", cat = "tents", name = "iCoke Tent" },   -- type 5, display 6703
+    { id = 181301, key = "camppavilion", cat = "tents", name = "Camp Pavilion" },   -- type 5, display 6738
+    { id = 183355, key = "shattrathsoupt", cat = "tents", name = "Shattrath Soup Tent" },   -- type 5, display 7170
+    { id = 184696, key = "apothecaryzela", cat = "tents", name = "Apothecary Zelana Tent" },   -- type 5, display 7211
+    { id = 186680, key = "brewfestcanopy", cat = "tents", name = "Brewfest Canopy" },   -- type 5, display 7498
+    { id = 186681, key = "brewfestfoodte", cat = "tents", name = "Brewfest Food Tent" },   -- type 5, display 7499
+    { id = 186682, key = "brewfestbeerte", cat = "tents", name = "Brewfest Beer Tent" },   -- type 5, display 7500
+    { id = 188021, key = "camppavilion2", cat = "tents", name = "Camp Pavilion" },   -- type 5, display 7683
+    { id = 190666, key = "apothecarytent", cat = "tents", name = "Apothecary Tent" },   -- type 5, display 7978
+    { id = 193215, key = "orctent", cat = "tents", name = "Orc Tent" },   -- type 5, display 8184
+    { id = 193216, key = "orctent2", cat = "tents", name = "Orc Tent" },   -- type 5, display 8397
+    { id = 193217, key = "orctent3", cat = "tents", name = "Orc Tent" },   -- type 5, display 8421
+    { id = 193218, key = "orctent4", cat = "tents", name = "Orc Tent" },   -- type 5, display 8422
+    { id = 193219, key = "orctent5", cat = "tents", name = "Orc Tent" },   -- type 5, display 8423
+    { id = 211022, key = "commanderstent", cat = "tents", name = "Commander's Tent" },   -- type 5, display 4176
+    { id = 2552, key = "cauldronsteam", cat = "fires", name = "Cauldron Steam" },   -- type 5, display 431
+    { id = 19522, key = "cauldron", cat = "fires", name = "Cauldron" },   -- type 5, display 9522
+    { id = 19604, key = "undeadcampfire", cat = "fires", name = "Undead Campfire" },   -- type 5, display 9604
+    { id = 59850, key = "boucherscauldr", cat = "fires", name = "Boucher's Cauldron" },   -- type 5, display 751
+    { id = 173016, key = "borstansfirepi", cat = "fires", name = "Borstan's Firepit" },   -- type 5, display 709
+    { id = 180414, key = "cauldron2", cat = "fires", name = "Cauldron" },   -- type 5, display 216
+    { id = 181289, key = "midsummerbonfi", cat = "fires", name = "Midsummer Bonfire Large" },   -- type 5, display 680
+    { id = 182059, key = "campfire2", cat = "fires", name = "Campfire" },   -- type 5, display 396
+    { id = 184717, key = "cauldronsmoke", cat = "fires", name = "Cauldron Smoke" },   -- type 5, display 5071
+    { id = 184866, key = "bladesedgebonf", cat = "fires", name = "Blade's Edge Bonfire" },   -- type 5, display 200
+    { id = 188073, key = "ahunebonfire", cat = "fires", name = "Ahune Bonfire" },   -- type 5, display 1967
+    { id = 188468, key = "zortscauldron", cat = "fires", name = "Zort's Cauldron" },   -- type 5, display 7409
+    { id = 190395, key = "cauldronsmok2", cat = "fires", name = "Cauldron Smoke" },   -- type 5, display 4852
+    { id = 202926, key = "celebrationbon", cat = "fires", name = "Celebration Bonfire" },   -- type 5, display 6411
+    { id = 19028, key = "scarletwatchpo", cat = "fences", name = "Scarlet Watch Post" },   -- type 5, display 22
+    { id = 19392, key = "pvpwall", cat = "fences", name = "PvP Wall" },   -- type 5, display 9392
+    { id = 19395, key = "spikewall", cat = "fences", name = "Spike Wall" },   -- type 5, display 9395
+    { id = 19435, key = "gate", cat = "fences", name = "Gate" },   -- type 5, display 9435
+    { id = 19436, key = "cementerygate", cat = "fences", name = "Cementery Gate" },   -- type 5, display 9436
+    { id = 19439, key = "gatesegment", cat = "fences", name = "Gate Segment" },   -- type 5, display 9439
+    { id = 19444, key = "rockwall", cat = "fences", name = "Rock Wall" },   -- type 5, display 9444
+    { id = 19454, key = "fence2", cat = "fences", name = "Fence" },   -- type 5, display 9454
+    { id = 19626, key = "humansignpost", cat = "fences", name = "Human Sign Post" },   -- type 5, display 9626
+    { id = 19638, key = "greatwallportc", cat = "fences", name = "Great Wall Portcullis" },   -- type 5, display 9638
+    { id = 19640, key = "crimsonwallshi", cat = "fences", name = "Crimson Wall Shield" },   -- type 5, display 9640
+    { id = 19658, key = "wallshield", cat = "fences", name = "Wall Shield" },   -- type 5, display 9658
+    { id = 19659, key = "wallsword", cat = "fences", name = "Wall Sword" },   -- type 5, display 9659
+    { id = 19840, key = "freewindpost", cat = "fences", name = "Freewind Post" },   -- type 5, display 308
+    { id = 19863, key = "maestraspost", cat = "fences", name = "Maestra's Post" },   -- type 5, display 386
+    { id = 175444, key = "maingate", cat = "fences", name = "Main Gate" },   -- type 5, display 26
+    { id = 177905, key = "mercutiopost", cat = "fences", name = "Mercutio Post" },   -- type 5, display 1287
+    { id = 179694, key = "deathpost", cat = "fences", name = "Death Post" },   -- type 5, display 5834
+    { id = 180007, key = "excavationstak", cat = "fences", name = "Excavation Stake" },   -- type 5, display 2270
+    { id = 180322, key = "ghostgate", cat = "fences", name = "Ghost Gate" },   -- type 5, display 6391
+    { id = 182186, key = "sungate", cat = "fences", name = "Sun Gate" },   -- type 5, display 6927
+    { id = 182314, key = "swampratpost", cat = "fences", name = "Swamprat Post" },   -- type 5, display 6953
+    { id = 182341, key = "magistersgate", cat = "fences", name = "Magister's Gate" },   -- type 5, display 6954
+    { id = 183200, key = "sunspringpost", cat = "fences", name = "Sunspring Post" },   -- type 5, display 7029
+    { id = 185318, key = "warpgatesmoke", cat = "fences", name = "Warp-Gate Smoke" },   -- type 5, display 45
+    { id = 187912, key = "gate2", cat = "fences", name = "Gate" },   -- type 5, display 3614
+    { id = 190664, key = "walllight", cat = "fences", name = "Wall Light" },   -- type 5, display 7976
+    { id = 192044, key = "steelgate", cat = "fences", name = "Steel Gate" },   -- type 5, display 7468
+    { id = 193007, key = "metalpost", cat = "fences", name = "Metal Post" },   -- type 5, display 8380
+    { id = 193612, key = "barricade", cat = "fences", name = "Barricade" },   -- type 5, display 8477
+    { id = 193613, key = "barricade2", cat = "fences", name = "Barricade" },   -- type 5, display 8478
+    { id = 193614, key = "barricade3", cat = "fences", name = "Barricade" },   -- type 5, display 8479
+    { id = 202835, key = "senjinbatroost", cat = "fences", name = "Sen'jin Bat Roost Fence" },   -- type 5, display 9423
+    { id = 202839, key = "senjinbatroo2", cat = "fences", name = "Sen'jin Bat Roost Fence Post" },   -- type 5, display 8721
+    { id = 211064, key = "rockwallfence", cat = "fences", name = "Rockwall Fence" },   -- type 5, display 134
+    { id = 2109, key = "fragrantflower", cat = "nature", name = "Fragrant Flowers" },   -- type 5, display 169
+    { id = 2711, key = "chargingstone", cat = "nature", name = "Charging Stone" },   -- type 5, display 236
+    { id = 19413, key = "rockbridge", cat = "nature", name = "Rock Bridge" },   -- type 5, display 9413
+    { id = 19416, key = "rockarch", cat = "nature", name = "Rock Arch" },   -- type 5, display 9416
+    { id = 19429, key = "haystack", cat = "nature", name = "Hay Stack" },   -- type 5, display 9429
+    { id = 19430, key = "haywagon", cat = "nature", name = "Hay Wagon" },   -- type 5, display 9430
+    { id = 19445, key = "warningtree", cat = "nature", name = "Warning Tree" },   -- type 5, display 9445
+    { id = 19458, key = "rockmonument", cat = "nature", name = "Rock Monument" },   -- type 5, display 9458
+    { id = 19461, key = "stonepyre", cat = "nature", name = "Stone Pyre" },   -- type 5, display 9461
+    { id = 19494, key = "emeralddreamfo", cat = "nature", name = "Emerald Dream Fountain Tree" },   -- type 5, display 9494
+    { id = 19532, key = "meetingstone", cat = "nature", name = "Meeting Stone" },   -- type 5, display 9532
+    { id = 19537, key = "gemrock", cat = "nature", name = "Gem Rock" },   -- type 5, display 9537
+    { id = 19583, key = "sunrockretreat", cat = "nature", name = "Sun Rock Retreat" },   -- type 5, display 309
+    { id = 20939, key = "bogbeanplant", cat = "nature", name = "Bogbean Plant" },   -- type 5, display 148
+    { id = 175471, key = "thestonecrowta", cat = "nature", name = "The Stone Crow Tavern" },   -- type 5, display 3671
+    { id = 177140, key = "frostsaberrock", cat = "nature", name = "Frostsaber Rock" },   -- type 5, display 388
+    { id = 177684, key = "stoneofshyrota", cat = "nature", name = "Stone of Shy-Rotam" },   -- type 5, display 362
+    { id = 178425, key = "christmastreel", cat = "nature", name = "Christmas Tree (Large)" },   -- type 5, display 5253
+    { id = 178557, key = "christmastreem", cat = "nature", name = "Christmas Tree (Medium)" },   -- type 5, display 5315
+    { id = 178558, key = "christmastre2", cat = "nature", name = "Christmas Tree (Large Snowy)" },   -- type 5, display 5316
+    { id = 178647, key = "christmastree", cat = "nature", name = "Christmas Tree" },   -- type 5, display 5371
+    { id = 178904, key = "healedcelebria", cat = "nature", name = "Healed Celebrian Vine" },   -- type 5, display 2991
+    { id = 181063, key = "flowersfortony", cat = "nature", name = "Flowers for Tony" },   -- type 5, display 6646
+    { id = 181064, key = "flowersforto2", cat = "nature", name = "Flowers for Tony" },   -- type 5, display 6647
+    { id = 181065, key = "flowersforto3", cat = "nature", name = "Flowers for Tony" },   -- type 5, display 63
+    { id = 181066, key = "flowersforto4", cat = "nature", name = "Flowers for Tony" },   -- type 5, display 6648
+    { id = 181067, key = "flowersforto5", cat = "nature", name = "Flowers for Tony" },   -- type 5, display 6313
+    { id = 181087, key = "plant", cat = "nature", name = "Plant" },   -- type 5, display 6642
+    { id = 181103, key = "flower", cat = "nature", name = "Flower" },   -- type 5, display 6662
+    { id = 181361, key = "nightelfmooncr", cat = "nature", name = "Night Elf Moon Crystal" },   -- type 5, display 6749
+    { id = 181824, key = "concealingbush", cat = "nature", name = "Concealing Bush" },   -- type 5, display 6857
+    { id = 182036, key = "naaruroomcryst", cat = "nature", name = "Naaru Room Crystal" },   -- type 5, display 6905
+    { id = 182079, key = "nightelfstoner", cat = "nature", name = "Nightelf Stone Rune" },   -- type 5, display 6914
+    { id = 182080, key = "nightelfston2", cat = "nature", name = "Nightelf Stone Rune" },   -- type 5, display 247
+    { id = 182251, key = "thecrystalhall", cat = "nature", name = "The Crystal Hall" },   -- type 5, display 6824
+    { id = 183492, key = "redridinghoodt", cat = "nature", name = "Red Riding Hood Tree" },   -- type 5, display 7062
+    { id = 183496, key = "wizardofozhay", cat = "nature", name = "Wizard of Oz Hay" },   -- type 5, display 7065
+    { id = 184306, key = "darkcrystal", cat = "nature", name = "Dark Crystal" },   -- type 5, display 5811
+    { id = 184731, key = "demoniccrystal", cat = "nature", name = "Demonic Crystal" },   -- type 5, display 6706
+    { id = 185294, key = "mountedboulder", cat = "nature", name = "Mounted Boulder'mok Head" },   -- type 5, display 3081
+    { id = 185542, key = "invisravenston", cat = "nature", name = "Invis Raven Stone" },   -- type 5, display 2770
+    { id = 185901, key = "ogrilacrystals", cat = "nature", name = "Ogri'la Crystal Smoke Image" },   -- type 5, display 7380
+    { id = 187591, key = "thestonecrow2", cat = "nature", name = "The Stone Crow Tavern" },   -- type 5, display 538
+    { id = 188048, key = "twilightcrysta", cat = "nature", name = "Twilight Crystal Base" },   -- type 5, display 7684
+    { id = 188050, key = "twilightcrys2", cat = "nature", name = "Twilight Crystal Base" },   -- type 5, display 7685
+    { id = 2148, key = "thecheesecutte", cat = "decor", name = "The Cheese Cutters" },   -- type 5, display 178
+    { id = 2371, key = "headhunterskul", cat = "decor", name = "Headhunter Skull" },   -- type 5, display 226
+    { id = 2562, key = "bakedbread", cat = "decor", name = "Baked Bread" },   -- type 5, display 229
+    { id = 2687, key = "bottle", cat = "decor", name = "Bottle" },   -- type 5, display 225
+    { id = 2695, key = "book", cat = "decor", name = "Book" },   -- type 5, display 107
+    { id = 13948, key = "fancybed", cat = "decor", name = "Fancy Bed" },   -- type 7, display 392
+    { id = 19397, key = "goblinstatue", cat = "decor", name = "Goblin Statue" },   -- type 5, display 9397
+    { id = 19404, key = "burntgiantwhee", cat = "decor", name = "Burnt Giant Wheel" },   -- type 5, display 9404
+    { id = 19410, key = "lotharstatue", cat = "decor", name = "Lothar Statue" },   -- type 5, display 9410
+    { id = 19412, key = "goblinmeltingp", cat = "decor", name = "Goblin Melting Pot" },   -- type 5, display 9412
+    { id = 19419, key = "wagon", cat = "decor", name = "Wagon" },   -- type 5, display 9419
+    { id = 19459, key = "ruinedfountain", cat = "decor", name = "Ruined Fountain" },   -- type 5, display 9459
+    { id = 19460, key = "lionstatue", cat = "decor", name = "Lion Statue" },   -- type 5, display 9460
+    { id = 19483, key = "holyspringwell", cat = "decor", name = "Holy Spring Well" },   -- type 5, display 9483
+    { id = 19485, key = "snakestatue", cat = "decor", name = "Snake Statue" },   -- type 5, display 9485
+    { id = 19504, key = "bed", cat = "decor", name = "Bed" },   -- type 5, display 9504
+    { id = 19506, key = "mountainkingst", cat = "decor", name = "Mountain King Statue" },   -- type 5, display 9506
+    { id = 19507, key = "fountain", cat = "decor", name = "Fountain" },   -- type 5, display 9507
+    { id = 19508, key = "frangerstatue", cat = "decor", name = "Franger Statue" },   -- type 5, display 9508
+    { id = 19509, key = "magestatue", cat = "decor", name = "Mage Statue" },   -- type 5, display 9509
+    { id = 19510, key = "spearmanstatue", cat = "decor", name = "Spearman Statue" },   -- type 5, display 9510
+    { id = 19511, key = "sunshieldstatu", cat = "decor", name = "Sunshield Statue" },   -- type 5, display 9511
+    { id = 19513, key = "twinbladesstat", cat = "decor", name = "Twinblades Statue" },   -- type 5, display 9513
+    { id = 19514, key = "captainstatue", cat = "decor", name = "Captain Statue" },   -- type 5, display 9514
+    { id = 19516, key = "crusaderstatue", cat = "decor", name = "Crusader Statue" },   -- type 5, display 9516
+    { id = 19519, key = "humanstatue", cat = "decor", name = "Human Statue" },   -- type 5, display 9519
+    { id = 19520, key = "paladinstatue", cat = "decor", name = "Paladin Statue" },   -- type 5, display 9520
+    { id = 19521, key = "prieststatue", cat = "decor", name = "Priest Statue" },   -- type 5, display 9521
+    { id = 19607, key = "plaguedfountai", cat = "decor", name = "Plagued Fountain" },   -- type 5, display 9607
+    { id = 19608, key = "snowfountain", cat = "decor", name = "Snow Fountain" },   -- type 5, display 9608
+    { id = 19609, key = "humanfountain", cat = "decor", name = "Human Fountain" },   -- type 5, display 9609
+    { id = 19610, key = "undeadfountain", cat = "decor", name = "Undead Fountain" },   -- type 5, display 9610
+    { id = 19619, key = "gypsywagon", cat = "decor", name = "Gypsy Wagon" },   -- type 5, display 9619
+    { id = 19627, key = "alleriastatue", cat = "decor", name = "Alleria Statue" },   -- type 5, display 9627
+    { id = 19628, key = "danathstatue", cat = "decor", name = "Danath Statue" },   -- type 5, display 9628
+    { id = 19629, key = "khadgarstatue", cat = "decor", name = "Khadgar Statue" },   -- type 5, display 9629
+    { id = 19630, key = "kurdranstatue", cat = "decor", name = "Kurdran Statue" },   -- type 5, display 9630
+    { id = 19631, key = "lionstatue2", cat = "decor", name = "Lion Statue" },   -- type 5, display 9631
+    { id = 19632, key = "turalyonstatue", cat = "decor", name = "Turalyon Statue" },   -- type 5, display 9632
+    { id = 19633, key = "utherstatue", cat = "decor", name = "Uther Statue" },   -- type 5, display 9633
+    { id = 19635, key = "rack", cat = "decor", name = "Rack" },   -- type 5, display 9635
+    { id = 20724, key = "dordanilpillar", cat = "decor", name = "Dor'Danil Pillar" },   -- type 5, display 249
+    { id = 20818, key = "nightelfmoonwe", cat = "decor", name = "Night Elf Moon Well" },   -- type 5, display 4691
+    { id = 26480, key = "craghelmsplate", cat = "decor", name = "Craghelm's Plate and Chain" },   -- type 5, display 635
+    { id = 32372, key = "thegreatforge", cat = "decor", name = "The Great Forge" },   -- type 5, display 660
 }
-local CATEGORIES = { "seating", "tables", "barrels", "crates", "lights", "banners", "tents", "fires", "fences" }
+local CATEGORIES = { "seating", "tables", "barrels", "crates", "lights", "banners", "tents", "fires", "fences", "nature", "decor" }
 
 local NEAR_RANGE = 40         -- .build near
 local SYNC_RANGE = 150        -- props put back around a player
@@ -931,6 +1254,28 @@ local function placeAtCommand(player, words)
     say(player, propName(p) .. " placed.")
 end
 
+local function dupCommand(player)
+    local p = selection(player)
+    if not p then return end
+    local guid, now = player:GetGUIDLow(), os.time()
+    if lastSpawn[guid] == now then return say(player, "One prop a second.") end
+    if countOwner(guid) >= perPlayer() then return say(player, string.format("You have %s, the most allowed.", plural(countOwner(guid), "prop"))) end
+    if countArea(p.area) >= perArea() then return say(player, string.format("This area is full (%d props).", perArea())) end
+    -- Beside it, along its own facing's right-hand side; inside the area or not at all.
+    local x, y = p.x + math.cos(p.o - math.pi / 2) * 1.5, p.y + math.sin(p.o - math.pi / 2) * 1.5
+    if not insideArea(p.area, p.map, x, y, p.z) then return say(player, "No room for a copy inside the build area there.") end
+    lastSpawn[guid] = now
+    local c = addProp(guid, player:GetName(), p.area, p.entry, p.map, x, y, p.z, p.o)
+    if not live[c.id] then
+        props[c.id] = nil
+        exec(string.format("DELETE FROM mod_builder_props WHERE id = %d", c.id))
+        return say(player, "The realm couldn't place the copy there.")
+    end
+    selected[guid] = c.id
+    pushUndo(guid, { kind = "spawn", id = c.id })
+    say(player, string.format("%s copied (%d/%d).", propName(c), countOwner(guid), perPlayer()))
+end
+
 local function showHelp(player)
     say(player, "Builder: place props in build areas and share builds as codes. /builder opens the window.")
     say(player, "  |cffffff00.build catalog [word]|r  |cffffff00.build spawn <id|name>|r  |cffffff00.build near|r  |cffffff00.build select <n>|r")
@@ -965,6 +1310,7 @@ local function run(player, text)
     elseif sub == "spawnat" then spawnAtCommand(player, words)
     elseif sub == "placeat" then placeAtCommand(player, words)
     elseif sub == "pick" then pickCommand(player, words[2])
+    elseif sub == "dup" or sub == "duplicate" or sub == "copy" then dupCommand(player)
     elseif sub == "near" or sub == "list" then nearCommand(player)
     elseif sub == "select" or sub == "sel" then selectCommand(player, words[2])
     elseif sub == "move" then moveCommand(player, (words[2] or ""):lower(), words[3])

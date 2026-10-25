@@ -17,6 +17,7 @@
     <input id="search" type="search" placeholder="Search mods, realms and players" aria-label="Search mods, realms and players" autocomplete="off" spellcheck="false">
   </form>
   <div class="tb-fill" data-tauri-drag-region></div>
+  <button type="button" class="pill upd" id="tb-update" hidden>Update available</button>
   <div class="pill" id="tb-status"><span class="dot"></span><span id="tb-status-text">Checking…</span></div>
   <button type="button" class="chip" id="tb-account" title="Your account lives on the website: sign in with Google or your Hero Key">
     <span class="chip-crest"><img src="art/kit/crest.png" alt=""><b>L</b></span>
@@ -83,7 +84,7 @@
           <div class="card-head"><span>GAME CLIENT</span></div>
           <div id="play-empty" class="empty" hidden>Add your game client first. Leyline uses the client already on your PC; it never downloads game files.</div>
           <div class="client-now" id="client-now"></div>
-          <button type="button" class="btn wide" id="client-change" data-page-go="clients">CHANGE WOW FOLDER</button>
+          <button type="button" class="btn wide" id="client-change" data-page-go="clients">CHANGE GAME FOLDER</button>
         </section>
       </div>
 
@@ -97,7 +98,7 @@
     </div>
   </section>
 
-  <!-- CLIENTS (from CHANGE WOW FOLDER) -->
+  <!-- CLIENTS (from CHANGE GAME FOLDER) -->
   <section class="page" id="page-clients">
     <div class="panel">
       <h2>Game Clients</h2>
@@ -115,30 +116,62 @@
 
   <!-- MY MODS -->
   <section class="page" id="page-mods">
-    <div class="panel">
+    <div class="panel wide">
       <h2>My Mods</h2>
-      <p class="soon-big">Coming in the next release</p>
-      <p class="lede">Installing, updating and switching mods on and off for each client arrives in the next Leyline release.
-        Until then, mods for Wrath install from the Workshop on the website.</p>
-      <div class="row"><button type="button" class="btn" data-link="mods">OPEN THE WORKSHOP</button></div>
+      <div class="toolbar">
+        <label class="inline">Client <select class="client-pick" data-for="mods"></select></label>
+        <span class="hint" id="mods-client-note"></span>
+      </div>
+      <div class="drop" id="drop">
+        <b>Drop a mod here</b>
+        <span>a .zip, an addon folder, or a client patch (.MPQ)</span>
+        <div class="row center">
+          <button type="button" class="btn small" id="mods-pick-file">CHOOSE A ZIP OR PATCH…</button>
+          <button type="button" class="btn small" id="mods-pick-folder">CHOOSE A FOLDER…</button>
+        </div>
+      </div>
+      <p class="status" id="mods-status" role="status"></p>
+      <ul class="problems" id="mods-problems" hidden></ul>
+      <div id="mods-list" class="cards"></div>
+      <p class="hint">Every mod is allowed for now: there is no review or signing yet, so only add mods from people you trust.
+        Addons go to <code>Interface\AddOns</code>, patches to a free <code>Data\patch-X.MPQ</code> slot. Removing a mod
+        takes out exactly the files Leyline put in; an addon's saved settings in <code>WTF</code> stay, as the game keeps them.</p>
     </div>
   </section>
 
-  <!-- DISCOVER -->
+  <!-- DISCOVER: the Workshop catalog -->
   <section class="page" id="page-discover">
-    <div class="panel">
+    <div class="panel wide">
       <h2>Discover</h2>
-      <div class="stat"><span class="n" id="mods-count">…</span><span class="l">mods in the catalog</span></div>
-      <p class="status" id="mods-status"></p>
-      <ul class="names" id="mods-names"></ul>
-      <div class="row"><button type="button" class="btn" data-link="mods">OPEN THE WORKSHOP</button></div>
+      <div class="toolbar">
+        <label class="inline">Install into <select class="client-pick" data-for="discover"></select></label>
+        <input id="cat-q" type="search" placeholder="Search the Workshop" autocomplete="off" spellcheck="false">
+        <label class="check"><input type="checkbox" id="cat-fit" checked> Only mods for this client</label>
+      </div>
+      <div class="chips" id="cat-chips" role="group" aria-label="Categories"></div>
+      <p class="status" id="cat-status" role="status"></p>
+      <div class="mod-grid" id="cat-grid"></div>
+      <div class="row"><button type="button" class="btn" data-link="mods">OPEN THE WORKSHOP</button><button type="button" class="btn" data-link="modders">MAKE A MOD</button></div>
     </div>
   </section>
 
   <!-- REALMS -->
   <section class="page" id="page-realms">
-    <div class="panel">
+    <div class="panel wide">
       <h2>Realms</h2>
+      <div class="toolbar">
+        <label class="inline">Play with <select class="client-pick" data-for="realms"></select></label>
+        <button type="button" class="btn small" id="rl-back">BACK TO WRATH</button>
+        <button type="button" class="btn small" id="rl-restore" title="Put back the realmlist you had before Leyline">MY OWN REALMLIST</button>
+        <button type="button" class="btn small" id="rl-refresh">REFRESH</button>
+      </div>
+      <p class="status" id="rl-status" role="status"></p>
+      <div class="realm-list" id="rl-list"></div>
+      <h3>A private realm</h3>
+      <p class="lede">Got an invite link from a friend? Paste it here: Leyline opens the realm for this PC and points your client at it.
+        Make your account on the link's page in your browser first (your password never leaves it).</p>
+      <div class="row"><input id="rl-invite" placeholder="https://relay.openvanilla.app/join/…#…" autocomplete="off" spellcheck="false"><button type="button" class="btn" id="rl-join">JOIN</button></div>
+      <h3>Another realm</h3>
       <div class="form">
         <label>Play on
           <select id="play-realm">
@@ -151,21 +184,34 @@
         </label>
         <p class="hint" id="play-hint"></p>
       </div>
-      <h3>Community realms</h3>
-      <div class="stat"><span class="n" id="realms-count">…</span><span class="l">listed on the Leyline network</span></div>
-      <p class="status" id="realms-status"></p>
-      <ul class="names" id="realms-names"></ul>
     </div>
   </section>
 
   <!-- HOST -->
   <section class="page" id="page-host">
-    <div class="panel">
+    <div class="panel wide">
       <h2>Host</h2>
-      <p class="soon-big">Coming in a later release</p>
-      <p class="lede">Hosting a realm from your own PC, with no port forwarding, is planned for a later Leyline release.
-        Until then the host kit (<code>leyline host</code>) does it from a terminal.</p>
-      <div class="row"><button type="button" class="btn" data-link="docs">READ THE HOSTING GUIDE</button></div>
+      <p class="lede">Run your own realm on this PC and let friends, or everyone, play on it. Your PC runs the server in Docker
+        using your own 3.3.5a game files; it talks out to the Leyline relay, and players reach it through the relay.
+        No port forwarding, and nobody sees your home address. We don't host realms for you: it runs only while your PC does.</p>
+      <ol class="steps">
+        <li><b>Make your realm on the website.</b> Sign in, pick a name, a ruleset and your house rules, then download your realm file.
+          <div class="row"><button type="button" class="btn" data-link="host">HOST A REALM</button></div></li>
+        <li><b>Get the host kit</b> and unzip it, then show Leyline where it is. You also need Docker Desktop.
+          <div class="row"><button type="button" class="btn" id="host-pick">CHOOSE THE KIT FOLDER…</button><button type="button" class="btn" data-link="hostguide">GET THE HOST KIT</button></div>
+          <p class="hint" id="host-kit"></p>
+          <ul class="problems" id="host-problems" hidden></ul></li>
+        <li><b>Start it.</b> The first start takes 5 to 20 minutes. Leave the window it opens running.
+          <div id="host-seeds" class="cards"></div>
+          <div class="row"><button type="button" class="btn" id="host-start" disabled>START MY REALM</button></div></li>
+      </ol>
+      <p class="status" id="host-status-line" role="status"></p>
+      <section class="card stone" id="host-card" hidden>
+        <div class="card-head"><span>YOUR REALM</span><button type="button" class="btn small" id="host-refresh">REFRESH</button></div>
+        <div class="srv-name" id="host-name"></div>
+        <div class="srv-state" id="host-state"><span class="dot"></span><span id="host-state-text">CHECKING…</span></div>
+        <div class="hint" id="host-detail"></div>
+      </section>
     </div>
   </section>
 
@@ -198,9 +244,15 @@
     <div class="panel">
       <h2>Help</h2>
       <h3>Playing</h3>
-      <p class="lede">Add your game folder under CHANGE WOW FOLDER, pick a realm, press PLAY. Leyline writes the realm into
+      <p class="lede">Add your game folder under CHANGE GAME FOLDER, pick a realm, press PLAY. Leyline writes the realm into
         realmlist.wtf (your original is kept as realmlist.wtf.leyline-backup) and starts the game.
         BROWSER plays Wrath in your web browser instead, with nothing to install.</p>
+      <h3>Mods</h3>
+      <p class="lede">Discover lists the Workshop. INSTALL puts a mod into the client you picked; My Mods turns it off and on,
+        updates it and removes it. You can also drop a .zip, an addon folder or a .MPQ patch on My Mods.</p>
+      <h3>Realms and hosting</h3>
+      <p class="lede">Realms lists the official realm and the community's Beacons. PLAY sets your realmlist and starts the game;
+        BACK TO WRATH points it at the official realm again. Host walks you through running your own.</p>
       <h3>Guides</h3>
       <div class="row"><button type="button" class="btn" data-link="docs">OPEN THE LEYLINE DOCS</button><button type="button" class="btn" data-link="discord">ASK ON DISCORD</button></div>
     </div>
@@ -225,9 +277,14 @@
         <div class="row"><button class="btn" type="submit">SAVE</button><button class="btn" type="button" data-page-go="clients">GAME CLIENTS</button></div>
         <p class="status" id="set-status" role="status"></p>
       </form>
+      <h3>Updates</h3>
+      <p class="lede">Leyline checks GitHub for a newer release and links it. It never installs anything by itself.</p>
+      <div class="row"><button type="button" class="btn" id="upd-check">CHECK FOR UPDATES</button><button type="button" class="btn" id="upd-open" hidden>OPEN THE RELEASE PAGE</button></div>
+      <p class="status" id="upd-status" role="status"></p>
       <h3>Privacy</h3>
-      <p class="lede">No telemetry and no accounts in the launcher. It fetches the mod catalog, the realm list and the
-        official realm's status, keeps copies so it works offline, and opens a few fixed pages in your browser.</p>
+      <p class="lede">No telemetry and no accounts in the launcher. It fetches the Workshop catalog and the mods you install,
+        the realm list and realm status, and GitHub's release list; it keeps copies of the lists so it works offline, and opens
+        only pages it listed itself in your browser. Each request gives up after 8 seconds.</p>
       <h3>Your data</h3>
       <p class="lede">Settings and caches live in <code id="data-dir"></code>.</p>
     </div>
