@@ -53,3 +53,5 @@
 1026m scripts  Same wording in .guide
 1026n relay  Same wording on the join page
 1026o ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1026p signin  New page: play.openvanilla.app/wrath/leyline, what Leyline is (play, host, mod, open), linked from the realm list
+1026q ship  Save to GitHub (orionopenwow/WrathUnleashed)

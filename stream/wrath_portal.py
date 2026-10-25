@@ -863,9 +863,59 @@ def realms_page() -> bytes:
             + official +
             '<h2 class="eyebrow">Community realms</h2>'
             + community +
-            '<p class="fine foot">Community realms are run by players on their own PCs, through the relay '
-            '(nobody sees anyone\'s home address). Each host sets their own house rules and is the GM there.</p>')
+            '<p class="fine foot">Community realms are run by players on their own PCs, through the Leyline relay '
+            '(nobody sees anyone\'s home address). Each host sets their own house rules and is the GM there. '
+            '<a href="/wrath/leyline">What is Leyline?</a></p>')
     return render(body, wide=True, meta=card_meta("/wrath/realms", f"Realms · {REALM_NAME}"))
+
+
+LEYLINE_REPO = "https://github.com/orionopenwow/WrathUnleashed"
+
+
+def leyline_page() -> bytes:
+    """/wrath/leyline: what Leyline is, in plain facts (what's live today, and what's coming, marked so).
+    TODO(owner): the opening line under the heading is a plain description, to be replaced with the owner's words."""
+    st = realm_status()
+    live = _players_text(_nonneg(st.get("players")), _nonneg(st.get("bots")), bool(st.get("online")))
+
+    def card(title: str, text: str, link: str = "", label: str = "", primary: bool = False) -> str:
+        btn = (f'<p><a class="btn{" primary" if primary else ""}" href="{html.escape(link)}"'
+               + (' rel="noopener noreferrer"' if link.startswith("http") else '') + f'>{html.escape(label)}</a></p>') if link else ''
+        return f'<div class="realm"><h2>{html.escape(title)}</h2>{text}{btn}</div>'
+
+    body = (f'<style>{REALM_CSS}</style>'
+            f'<div class="top"><span class="eyebrow">Leyline</span><a class="keylink" href="/wrath">Back</a></div>'
+            f'{crest("Leyline")}<p class="sub">An open network of realms and mods</p>{RULE}'
+            '<p>Leyline links game realms that anyone can host, with open mods and open source code. '
+            'You can play in the browser, host your own realm from your own PC, and share mods with everyone on the network.</p>'
+            + card("Play", f'<div class="tags"><span class="tag">WrathUnleashed</span>{live}</div>'
+                   '<p>The flagship realm runs in your browser: no install, sign in with a Hero Key. '
+                   'Hang out in Dalaran, start at level 1 or boost to 80, and queue for dungeons; bots fill the group '
+                   'and are always labelled as bots.</p>', "/wrath", "Play now", primary=True)
+            + card("Host",
+                   '<p>Run your own realm on your own PC with the host kit. You get your own GM login, your own '
+                   'house rules and a world preset (main, brawl, progression or a Dalaran hangout).</p>'
+                   '<ul><li><b>Private:</b> friends join with your invite link.</li>'
+                   '<li><b>Public:</b> your realm appears on the realm list beside the official one.</li>'
+                   '<li><b>Safe:</b> players connect through the Leyline relay, so your home address stays hidden '
+                   'and you open no ports.</li></ul>',
+                   f"{LEYLINE_REPO}/blob/main/hosting/INSTALL-OPERATE.md", "How to host")
+            + card("Mod",
+                   '<p>In the game, Esc &rarr; <b>Mods &amp; Workshop</b> sets your UI size, turns addons on and off '
+                   'and links to the open repos. Mods use one open format that anyone can publish to.</p>',
+                   f"{LEYLINE_REPO}/tree/main/mods", "The mod format")
+            + card("Open",
+                   '<p>The code is open source, and every project it builds on is credited.</p>',
+                   LEYLINE_REPO, "Source code")
+            + '<h2 class="eyebrow">Coming next</h2>'
+            '<ul class="fine"><li>Host a realm from a browser tab, with a link to share.</li>'
+            '<li>One-click mod installs from the Workshop.</li>'
+            '<li>Hop between realms from the in-game menu, with friends across realms.</li>'
+            '<li>A Goldshire Inn demo you can try right here, with no sign-up.</li></ul>'
+            '<p class="fine foot">The full world needs your own 3.3.5a game files; the browser streams only small '
+            'areas (Dalaran, the starting zones, dungeons). No shop, nothing to buy. '
+            '<a href="/wrath/realms">See all realms</a>.</p>')
+    return render(body, wide=True, meta=card_meta("/wrath/leyline", "Leyline · an open network of realms and mods"))
 
 
 class _Window:
@@ -1273,6 +1323,12 @@ class PageHandler(BaseHTTPRequestHandler):
             return
         if path.startswith("/wrath/art/"):
             self.art(urllib.parse.unquote(path[len("/wrath/art/"):]))
+            return
+        if path == "/wrath/leyline":
+            if not page_limit.hit(self.ip(), 120):
+                self.send(429, busy_page())
+                return
+            self.send(200, leyline_page())
             return
         if path == "/wrath/realms":
             if not page_limit.hit(self.ip(), 120):
