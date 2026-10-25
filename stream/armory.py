@@ -310,17 +310,12 @@ def _char_link(c: dict) -> str:
     return (f'<a href="/wrath/armory/{e(c["name"])}" style="color:{CLASS_COLOR[c["class"]]}">{e(c["name"])}</a>')
 
 
-def _nav() -> str:
-    return ('<nav class="ly-nav" aria-label="Leyline"><div class="grp">'
-            '<a href="/wrath/leyline">Hub</a><a href="/wrath/realms">Realms</a><a href="/wrath/armory">Armory</a></div>'
-            '<div class="grp"><a href="/login?next=%2Fwrath">Sign in</a><a class="hot" href="/wrath">Play now</a></div></nav>')
-
-
 def _page(title: str, body: str, css: str, meta: str) -> bytes:
+    """The page; the site's nav and footer are put in by the portal as it is sent (wrath_portal.site_chrome)."""
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">'
             f'<title>{e(title)}</title>{meta}<style>{css}{ARMORY_CSS}</style></head>'
-            f'<body class="ly"><div class="ly-glow"></div>{_nav()}<div class="ly-wrap">{body}</div></body></html>').encode("utf-8")
+            f'<body class="ly"><div class="ly-glow"></div><div class="ly-wrap">{body}</div></body></html>').encode("utf-8")
 
 
 def _search_form(q: str = "") -> str:
@@ -440,7 +435,7 @@ def char_page(name: str, css: str, card_meta, realm_name: str, public_host: str,
             f'<div class="ar-box"><h3>Player vs player</h3>{pvp}</div>'
             f'<div class="ar-box"><h3>Professions</h3>{prof}</div></div>'
             f'<div class="ar-share"><a class="ly-btn" href="{e(share_path)}">Share</a>'
-            f'<code>https://{e(public_host)}{e(share_path)}</code></div>'
+            f'<code tabindex="0" title="Tap to select, then copy">https://{e(public_host)}{e(share_path)}</code></div>'
             + _footer(st))
     title = f"{n} · Armory · {realm_name}"
     return 200, _page(title, body, css, card_meta(f"/wrath/armory/{n}", f"{n}, {card_line(n, st)['line']} · {realm_name}"))

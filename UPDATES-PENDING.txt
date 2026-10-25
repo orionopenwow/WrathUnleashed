@@ -94,3 +94,5 @@
 1028b mods  Workshop: the twelve categories (addons, shaders, sandbox, custom maps, builds, encounters, models, realm scripts, presets, sounds, tools, total conversions)
 1028c signin  /wrath/mods shows the category grid, category pages and search
 1028d ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1028e signin  Site: one nav and footer on every page (phone menu), "Right now" strip on the Leyline page, share boxes, styled 404, a next step on every page
+1028f ship  Save to GitHub (orionopenwow/WrathUnleashed)

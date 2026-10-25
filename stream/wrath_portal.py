@@ -601,15 +601,21 @@ def card_meta(path: str, title: str = "") -> str:
             + "".join(f'<meta {k}="{n}" content="{e(v)}">' for k, n, v in tags))
 
 
-def render(body: str, nonce: str = "", script: str = "", wide: bool = False, meta: str = "") -> bytes:
+def render(body: str, nonce: str = "", script: str = "", wide: bool = False, meta: str = "", title: str = "",
+           current: str = "", next_step: str = "", signed_in: bool = False, chrome: bool = True) -> bytes:
+    """A page in the gold look. With chrome (the default) it carries the site's one nav (current marks the item
+    for this page) and footer, and next_step ("play" or "host") adds the closing call to action."""
     s = f'<script nonce="{nonce}">{script}</script>' if script else ""
     v = theme_version()
     theme = f'<link rel="stylesheet" href="{art_url("wu-theme.css")}?v={v}">' if v else ""
+    full = f"{title} · {REALM_NAME}" if title else REALM_NAME
+    top = (SKIP_LINK + site_nav(current, signed_in)) if chrome else ""
+    end = ((next_block(next_step) if next_step else "") + site_footer()) if chrome else ""
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<meta name="color-scheme" content="dark">'
-            f'<title>{html.escape(REALM_NAME)}</title>{meta}<style>{STYLE}</style>{theme}</head>'
-            f'<body class="wu"><main class="wu-panel{" wide" if wide else ""}">{body}</main>{s}</body></html>').encode("utf-8")
+            f'<title>{html.escape(full)}</title>{meta}<style>{STYLE}{SITE_CSS if chrome else ""}</style>{theme}</head>'
+            f'<body class="wu">{top}<main id="main" class="wu-panel{" wide" if wide else ""}">{body}</main>{end}{s}</body></html>').encode("utf-8")
 
 
 def crest(title: str) -> str:
@@ -627,7 +633,7 @@ def signed_out_page() -> bytes:
         '<p class="fine center">Played here before? Use the same sign-in. Your Wrath login appears here.</p>'
         '<p class="fine center"><a href="/wrath/realms">All realms</a>, including community realms hosted by players · '
         '<a href="/wrath/leyline">What is Leyline?</a></p>',
-        meta=card_meta("/wrath"))
+        meta=card_meta("/wrath"), title="Sign in", current="play")
 
 
 def stream_off_page() -> bytes:
@@ -636,7 +642,7 @@ def stream_off_page() -> bytes:
         '<p class="center">Streaming is off right now — play with your own game files.</p>'
         '<p class="center"><a class="btn primary" href="/wrath">Get your game login</a></p>'
         f'<p class="fine">{html.escape(DISCORD_HELP.split(DISCORD_URL)[0])}'
-        f'<a href="{DISCORD_URL}">{DISCORD_URL}</a></p>')
+        f'<a href="{DISCORD_URL}">{DISCORD_URL}</a></p>', title="Streaming is off", current="play")
 
 
 def stream_ended_page() -> bytes:
@@ -645,7 +651,7 @@ def stream_ended_page() -> bytes:
         '<p class="center">Your browser pass has ended. Your account can go anywhere again with your own game files.</p>'
         '<p class="center"><a class="btn" href="/wrath/account">Back</a></p>'
         f'<p class="fine">{html.escape(DISCORD_HELP.split(DISCORD_URL)[0])}'
-        f'<a href="{DISCORD_URL}">{DISCORD_URL}</a></p>')
+        f'<a href="{DISCORD_URL}">{DISCORD_URL}</a></p>', title="Browser pass ended", current="play")
 
 
 def busy_page(wait: int = 15, back: str = "/wrath") -> bytes:
@@ -654,14 +660,14 @@ def busy_page(wait: int = 15, back: str = "/wrath") -> bytes:
     body = (f'{crest(REALM_NAME)}<p class="sub">Lots of sign-ins from your network right now.</p>{RULE}'
             f'<p class="center">Trying again in {int(wait)} seconds…</p>'
             f'<p class="center"><a class="btn" href="{html.escape(back)}">Try now</a></p>')
-    page = render(body).decode("utf-8")
+    page = render(body, title="One moment", current=nav_key(back)).decode("utf-8")
     # back to the page that was busy (a browsing page must not bounce people into the game at /wrath)
     return page.replace("<head>", f'<head><meta http-equiv="refresh" content="{int(wait)};url={html.escape(back)}">', 1).encode("utf-8")
 
 
 def error_page(msg: str) -> bytes:
     return render(f'{crest(REALM_NAME)}{RULE}<p class="err">{html.escape(msg)}</p>'
-                  '<p class="center"><a class="btn" href="/wrath">Try again</a></p>')
+                  '<p class="center"><a class="btn" href="/wrath">Try again</a></p>', title="Something went wrong")
 
 
 COPY_JS = """
@@ -702,7 +708,7 @@ def auto_signin_page(nonce: str) -> bytes:
     return render(
         f'{crest(REALM_NAME)}<p class="sub">Signing you in…</p>{RULE}'
         f'<p class="fine center"><a href="{SIGN_IN_URL}">Sign in another way</a></p>',
-        nonce, AUTO_SIGNIN_JS, meta=card_meta("/wrath"))
+        nonce, AUTO_SIGNIN_JS, meta=card_meta("/wrath"), title="Sign in", current="play")
 
 REALM_CSS = """
 .realm{position:relative;border:1px solid #4a3b1c;border-radius:4px;padding:16px 18px;margin:14px 0;background:rgba(5,4,12,.55);box-shadow:inset 0 0 0 1px rgba(0,0,0,.4)}
@@ -783,7 +789,7 @@ def account_page(display: str, user: str, password: str, nonce: str) -> bytes:
         f'{html.escape(DISCORD_HELP.split(DISCORD_URL)[0])}<a href="{DISCORD_URL}">{html.escape(DISCORD_URL.split("//")[-1])}</a></p>'
         '<p class="fine"><a href="/wrath/realms">Community realms</a>: Dalaran hangouts and realms hosted by players</p>'
         '<p class="fine"><a href="/wrath/modes">Modes</a>: duels, boss fights, dungeons and hangouts, one click each</p>')
-    return render(body, nonce, COPY_JS, wide=True)
+    return render(body, nonce, COPY_JS, wide=True, title="Choose a realm", current="play", signed_in=True)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -811,7 +817,7 @@ REALM_ID_RE = re.compile(r"^[a-z2-7]{16}$")
 RULESET_LABELS = {"main": "Level 1 or boost to 80", "brawl": "Brawl: everyone 80",
                   "progression": "Progression", "casual": "Casual", "dalaran": "Dalaran hangout",
                   "custom": "Custom rules"}
-_listing: dict = {"at": -1e9, "ok": False, "realms": [], "fetched": False}
+_listing: dict = {"at": -1e9, "ok": False, "realms": [], "fetched": False, "when": 0.0}   # when: wall clock of the last good fetch
 _listing_lock = threading.Lock()
 _listing_busy = threading.Lock()
 _listing_done = threading.Event()
@@ -887,6 +893,7 @@ def _refresh_listing() -> None:
         _listing["fetched"] = True
         if ok:
             _listing["realms"] = realms
+            _listing["when"] = time.time()
     _listing_busy.release()
     _listing_done.set()
 
@@ -923,7 +930,8 @@ def realms_page() -> bytes:
         '<div class="tags"><span class="tag">Official</span><span class="tag">Level 1 or boost to 80</span>'
         f'{_players_text(_nonneg(st.get("players")), _nonneg(st.get("bots")), bool(st.get("online")))}</div>'
         '<p>The WrathUnleashed realm: Dalaran in your browser, or the whole world with your own game files.</p>'
-        '<p><a class="btn primary" href="/wrath">Play</a></p></div>')
+        '<p><a class="btn primary" href="/wrath">Play</a></p>'
+        + share_box("/wrath/r/wrath") + '</div>')
     realms, ok = community_realms()
     rows = []
     for r in realms:
@@ -938,7 +946,8 @@ def realms_page() -> bytes:
             + (f'<p>{html.escape(r["tagline"])}</p>' if r["tagline"] else '')
             + ('<details><summary>House rules</summary><ol>'
                + "".join(f'<li>{html.escape(x)}</li>' for x in r["rules"]) + '</ol></details>' if r["rules"] else '')
-            + f'<p><a class="btn" href="{html.escape(join)}" rel="noopener noreferrer">Join</a></p></div>')
+            + f'<p><a class="btn" href="{html.escape(join)}" rel="noopener noreferrer">Join</a></p>'
+            + share_box(f'/wrath/r/{r["id"]}') + '</div>')
     if rows:
         community = "".join(rows)
         if not ok:
@@ -948,17 +957,21 @@ def realms_page() -> bytes:
                      'a private realm for friends or a public Dalaran hangout, with their own GM login and rules.</p>')
     else:
         community = '<p class="fine">The community realm list isn\'t reachable right now. Try again in a minute.</p>'
+    with _listing_lock:
+        when = _listing["when"]
+    stamps = [x for x in (updated_text(st.get("updated_at"), "Realm status"),
+                          updated_text(when, "Community list") if ok else "") if x]
     body = (f'<style>{REALM_CSS}</style>'
-            f'<div class="top"><span class="eyebrow">{html.escape(REALM_NAME)}</span>'
-            '<a class="keylink" href="/wrath">Back</a></div>'
             f'{crest("Realms")}<p class="sub">Wrath · on the Leyline network</p>{RULE}'
             + official +
             '<h2 class="eyebrow">Community realms</h2>'
             + community +
             '<p class="fine foot">Community realms are run by players on their own PCs, through the Leyline relay '
             '(nobody sees anyone\'s home address). Each host sets their own house rules and is the GM there. '
-            '<a href="/wrath/leyline">What is Leyline?</a></p>')
-    return render(body, wide=True, meta=card_meta("/wrath/realms", f"Realms · {REALM_NAME}"))
+            '<a href="/wrath/leyline">What is Leyline?</a></p>'
+            + (f'<p class="fine">{" · ".join(stamps)}</p>' if stamps else ''))
+    return render(body, wide=True, meta=card_meta("/wrath/realms", f"Realms · {REALM_NAME}"), title="Realms",
+                  current="realms", next_step="host")
 
 
 LEYLINE_REPO = "https://github.com/orionopenwow/WrathUnleashed"
@@ -984,7 +997,7 @@ radial-gradient(2px 2px at 520px 340px,#fff,transparent),radial-gradient(1.5px 1
 radial-gradient(2px 2px at 600px 180px,#fff,transparent);background-size:680px 680px;opacity:.7}
 .ly-glow{position:fixed;inset:0;pointer-events:none;z-index:0;
 background:radial-gradient(40% 30% at 50% 22%,rgba(140,90,255,.18),transparent 70%),radial-gradient(30% 25% at 78% 28%,rgba(60,200,255,.12),transparent 70%)}
-.ly-nav,.ly-wrap{position:relative;z-index:1}
+.ly-wrap{position:relative;z-index:1}
 @media (prefers-reduced-motion:no-preference){
 body.ly::before{animation:ly-drift 180s linear infinite,ly-twinkle 5s ease-in-out infinite alternate}
 body.ly::after{animation:ly-drift 120s linear infinite reverse,ly-twinkle 7s ease-in-out infinite alternate-reverse}
@@ -993,13 +1006,6 @@ body.ly::after{animation:ly-drift 120s linear infinite reverse,ly-twinkle 7s eas
 @keyframes ly-twinkle{from{opacity:.35}to{opacity:.85}}
 @keyframes ly-pulse{50%{opacity:.6}}
 .ly a{color:var(--ly-cyan)}
-.ly-nav{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between;
-padding:10px 16px;background:rgba(6,8,22,.82);backdrop-filter:blur(6px);border-bottom:1px solid var(--ly-line)}
-.ly-nav .grp{display:flex;gap:6px;flex-wrap:wrap}
-.ly-nav a{font:600 12px/1 system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;color:var(--ly-dim);
-padding:8px 11px;border:1px solid var(--ly-line);border-radius:4px;background:rgba(20,24,60,.6)}
-.ly-nav a:hover,.ly-nav a:focus-visible{color:var(--ly-ink);border-color:var(--ly-cyan);box-shadow:var(--ly-glow)}
-.ly-nav a.hot{color:#1a1030;background:linear-gradient(180deg,#9ff0ff,var(--ly-cyan));border-color:#9ff0ff}
 .ly-wrap{max-width:1040px;margin:0 auto;padding:24px 16px 56px}
 .ly-hero{text-align:center;padding:12px 0 8px}
 .ly-emblem{width:min(300px,70vw);height:auto;mix-blend-mode:screen;filter:drop-shadow(0 0 28px rgba(150,110,255,.55));
@@ -1071,6 +1077,325 @@ def leyline_css() -> str:
     return css
 
 
+# ----------------------------------------------------------------------------------------------
+# The site's one nav and footer (every public page), the closing call to action, share boxes
+# ----------------------------------------------------------------------------------------------
+#
+# Every page, in either look (the gold render() pages and the Leyline ones), carries the same nav: Leyline (the
+# hub), Play, Realms, Modes, Mods, Armory, Server (host guide), Discord, then Sign in and Play now. The item for
+# the page is marked (class "on", aria-current="page"). On a phone the links fold behind a Menu button: a
+# checkbox and its label, so it works with no script (the public pages allow none: script-src 'none').
+# The pages of the modules beside this file (modes.py, armory.py, workshop.py, demo.py) get the nav and footer
+# from site_chrome() as they are sent, so they stay one place without each module knowing the site's links.
+
+HOST_URL = f"{LEYLINE_REPO}/blob/main/hosting/INSTALL-OPERATE.md"
+BUG_URL = f"{LEYLINE_REPO}/issues/new"
+SKIP_LINK = '<a class="ly-skip" href="#main">Skip to content</a>'
+
+SITE_CSS = """
+@font-face{font-family:'Leyline Display';src:url(/wrath/art/leyline-display.woff2) format('woff2');font-display:swap}
+.ly-skip{position:absolute;left:8px;top:-80px;z-index:30;padding:9px 14px;border-radius:4px;background:#5fe3ff;color:#0a0d24!important;
+font:600 14px system-ui,sans-serif;text-decoration:none}
+.ly-skip:focus{top:8px}
+.ly-nav{--n-ink:#e8ecff;--n-dim:#a9b0d6;--n-cyan:#5fe3ff;--n-line:rgba(120,150,255,.28);position:sticky;top:0;z-index:20;
+display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;padding:8px 16px;box-sizing:border-box;width:100%;
+background:rgba(6,8,22,.9);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);border-bottom:1px solid var(--n-line);
+font:600 12px/1 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;text-align:left}
+.ly-nav a,.ly-menu-b{display:inline-flex;align-items:center;min-height:34px;box-sizing:border-box;padding:0 10px;border:1px solid transparent;
+border-radius:4px;color:var(--n-dim);text-decoration:none;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+.ly-nav a:hover{color:var(--n-ink);border-color:var(--n-line)}
+.ly-nav a.on{color:var(--n-ink);border-color:var(--n-cyan);background:rgba(95,227,255,.12)}
+.ly-nav a.ly-brand{order:0;font:600 21px/1 'Leyline Display','OW Cinzel',Impact,sans-serif;letter-spacing:.14em;color:#bff6ff;padding:0 8px}
+.ly-nav .ly-links{order:1;display:flex;flex-wrap:wrap;gap:2px;flex:1 1 auto}
+.ly-nav .ly-end{order:2;display:flex;gap:6px;margin-left:auto}
+.ly-nav a.ly-hot{order:3;color:#1a1030;background:linear-gradient(180deg,#9ff0ff,#5fe3ff);border-color:#9ff0ff}
+.ly-nav a.ly-hot:hover{box-shadow:0 0 18px rgba(95,227,255,.45)}
+.ly-menu-t{position:absolute;width:1px;height:1px;margin:0;opacity:0;pointer-events:none}
+.ly-menu-b{display:none;cursor:pointer;border-color:var(--n-line);color:var(--n-ink)}
+.ly-menu-b::before{content:"";width:14px;height:10px;margin-right:8px;border-top:2px solid;border-bottom:2px solid;
+background:linear-gradient(currentColor,currentColor) center/100% 2px no-repeat}
+@media (max-width:820px){
+.ly-nav a.ly-hot{order:1;margin-left:auto}.ly-menu-b{display:inline-flex;order:2}
+.ly-nav .ly-links,.ly-nav .ly-end{display:none;order:3;flex:1 0 100%;flex-direction:column;gap:2px;margin:4px 0 2px}
+.ly-nav .ly-end{order:4;flex-direction:row;margin-left:0}
+.ly-menu-t:checked~.ly-links,.ly-menu-t:checked~.ly-end{display:flex}
+.ly-nav .ly-links a{min-height:42px;font-size:13px}}
+.ly-menu-t:focus-visible+.ly-menu-b{outline:2px solid #5fe3ff;outline-offset:2px}
+.ly-nav a:focus-visible,.ly-foot a:focus-visible,.ly-next a:focus-visible,.ly-share summary:focus-visible,.ly-share code:focus-visible,
+.ly :where(a,button,summary,input,select,textarea,[tabindex]):focus-visible{outline:2px solid #5fe3ff;outline-offset:2px}
+.ly-next,.ly-foot{position:relative;z-index:1;box-sizing:border-box;width:100%;font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.ly-next{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px 18px;max-width:1040px;margin:8px auto 0;padding:22px 16px;
+text-align:center;color:#e8ecff}
+.ly-next p{margin:0;color:#a9b0d6}.ly-next p a{color:#5fe3ff}
+a.ly-next-go{display:inline-flex;align-items:center;min-height:48px;padding:0 26px;border-radius:6px;text-decoration:none;
+font:600 20px/1 'Leyline Display','OW Cinzel',Impact,sans-serif;letter-spacing:.12em;text-transform:uppercase;
+color:#1a1030!important;background:linear-gradient(180deg,#9ff0ff,#5fe3ff);border:1px solid #9ff0ff;box-shadow:0 6px 18px rgba(0,0,0,.4)}
+a.ly-next-go:hover{box-shadow:0 0 22px rgba(95,227,255,.5)}
+.ly-foot{margin-top:18px;padding:18px 16px 26px;border-top:1px solid rgba(120,150,255,.22);background:rgba(4,5,14,.78);color:#a9b0d6;text-align:center;font-size:14px}
+.ly-foot nav{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 18px;margin-bottom:8px}
+.ly-foot a{color:#cfd6ff;text-decoration:none;padding:4px 0}.ly-foot a:hover{color:#fff;text-decoration:underline}
+.ly-foot p{margin:0}
+body:has(>.ly-nav):not(.ly){justify-content:flex-start;padding-top:0;padding-bottom:0}
+body:has(>.ly-nav):not(.ly)>.ly-nav{width:calc(100% + 32px);margin:0 -16px 28px}
+body:has(>.ly-nav):not(.ly)>main{margin-bottom:auto}
+body:has(>.ly-nav):not(.ly)>.ly-next{margin-top:18px}
+body:has(>.ly-nav):not(.ly)>.ly-foot{width:calc(100% + 32px);margin:18px -16px 0}
+.ly-share{margin:8px 0 0;font:13px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.ly-share>summary{display:inline-flex;align-items:center;min-height:30px;padding:0 10px;cursor:pointer;list-style:none;border-radius:4px;
+border:1px solid rgba(120,150,255,.35);color:#cfd6ff;font-weight:600;font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+.ly-share>summary::-webkit-details-marker{display:none}
+.ly-share>summary::before{content:"\\2197";margin-right:6px}
+.ly-share[open]>summary{border-color:#5fe3ff;color:#fff}
+.ly-share code{display:block;margin:6px 0 0;padding:7px 9px;border-radius:4px;border:1px solid rgba(120,150,255,.35);background:rgba(5,6,20,.9);
+color:#e8ecff;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere;-webkit-user-select:all;user-select:all;cursor:text}
+.ly-share small{display:block;margin-top:4px;color:#a9b0d6;font-size:12px}
+.ly-now{position:relative;z-index:1;max-width:900px;margin:0 auto 26px;padding:12px 16px;border:1px solid rgba(120,150,255,.3);border-radius:8px;
+background:rgba(10,12,34,.78);box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.ly .ly-now h2{margin:0 0 8px;font:600 13px/1 system-ui,sans-serif;letter-spacing:.18em;text-align:left;color:#5ef0a0;text-shadow:none}
+.ly-now ul{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}
+.ly-now li{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:7px 12px;border-radius:999px;border:1px solid rgba(120,150,255,.25);
+background:rgba(20,24,60,.6);font-size:14px}
+.ly-now li>a.all{color:#e8ecff;text-decoration:none;font-weight:600}
+.ly-now b{font:600 18px/1 'Leyline Display','OW Cinzel',Impact,sans-serif;letter-spacing:.06em;color:#bff6ff}
+.ly-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#5ef0a0;box-shadow:0 0 8px #5ef0a0}
+.ly-now p{margin:8px 0 0;font-size:12px;color:#a9b0d6}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}.ly-dot{animation:ly-live 2.4s ease-in-out infinite}}
+@keyframes ly-live{50%{opacity:.35;box-shadow:none}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+"""
+
+
+def _nav_item(key: str, label: str, href: str, current: str, cls: str = "", external: bool = False) -> str:
+    on = key == current
+    c = " ".join(x for x in (cls, "on" if on else "") if x)
+    return (f'<a href="{html.escape(href)}"' + (f' class="{c}"' if c else "") + (' aria-current="page"' if on else "")
+            + (' rel="noopener noreferrer"' if external else "") + f'>{html.escape(label)}</a>')
+
+
+def site_nav(current: str = "", signed_in: bool = False) -> str:
+    """The one nav (see above). current: leyline, play, realms, modes, mods or armory ("" marks nothing)."""
+    items = [("play", "Play", "/wrath/account"), ("realms", "Realms", "/wrath/realms")]
+    if modes is not None:
+        items.append(("modes", "Modes", "/wrath/modes"))
+    if workshop_mod is not None:
+        items.append(("mods", "Mods", "/wrath/mods"))
+    if armory is not None:
+        items.append(("armory", "Armory", "/wrath/armory"))
+    links_html = "".join(_nav_item(k, label, href, current) for k, label, href in items)
+    links_html += _nav_item("server", "Server", HOST_URL, current, external=True)
+    links_html += _nav_item("discord", "Discord", DISCORD_URL, current, external=True)
+    end = "" if signed_in else _nav_item("signin", "Sign in", "/login?next=%2Fwrath", current)
+    return ('<nav class="ly-nav" id="ly-site-nav" aria-label="Leyline">'
+            + _nav_item("leyline", "Leyline", "/wrath/leyline", current, "ly-brand")
+            + '<a class="ly-hot" href="/wrath">Play now</a>'
+            '<input type="checkbox" id="ly-menu" class="ly-menu-t"><label for="ly-menu" class="ly-menu-b">Menu</label>'
+            f'<div class="ly-links">{links_html}</div>'
+            + (f'<div class="ly-end">{end}</div>' if end else "") + '</nav>')
+
+
+def site_footer() -> str:
+    e = html.escape
+    return ('<footer class="ly-foot"><nav aria-label="About Leyline">'
+            f'<a href="{e(LEYLINE_REPO)}" rel="noopener noreferrer">Source on GitHub</a>'
+            f'<a href="{e(DISCORD_URL)}" rel="noopener noreferrer">Discord</a>'
+            f'<a href="{e(BUG_URL)}" rel="noopener noreferrer">Report a bug</a>'
+            '<a href="/wrath/leyline">About Leyline</a></nav>'
+            '<p>No shop. Bots are labelled.</p></footer>')
+
+
+def next_block(kind: str = "play") -> str:
+    """The one clear next step at the end of a page: Play now (the default) or Host a realm."""
+    e = html.escape
+    if kind == "host":
+        return ('<aside class="ly-next" aria-label="Next step">'
+                f'<a class="ly-next-go" href="{e(HOST_URL)}" rel="noopener noreferrer">Host a realm</a>'
+                '<p>Your own realm on your own PC: your rules, your GM login, on the realm list in minutes. '
+                'Or <a href="/wrath">play now</a>.</p></aside>')
+    return ('<aside class="ly-next" aria-label="Next step"><a class="ly-next-go" href="/wrath">Play now</a>'
+            '<p>In your browser, nothing to download and nothing to buy. '
+            f'Or <a href="{e(HOST_URL)}" rel="noopener noreferrer">host a realm</a>.</p></aside>')
+
+
+def share_box(path: str) -> str:
+    """A Share control for a card, with no script: it opens on the full link, which one tap selects for copying."""
+    url = html.escape(f"https://{PUBLIC_HOST}{path}")
+    return (f'<details class="ly-share"><summary>Share</summary><code tabindex="0">{url}</code>'
+            '<small>Tap the link to select it, then copy. It opens with a preview card.</small></details>')
+
+
+_ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T(\d{2}):(\d{2}):\d{2}Z$")
+
+
+def updated_text(when, label: str = "Updated") -> str:
+    """'<label> <time>12:34 UTC</time>' for an ISO time (status.json's updated_at) or a Unix time; "" when unknown."""
+    if isinstance(when, str):
+        m = _ISO_RE.fullmatch(when)
+        if not m:
+            return ""
+        iso, hm = when, f"{m.group(1)}:{m.group(2)}"
+    elif isinstance(when, (int, float)) and not isinstance(when, bool) and when > 0:
+        t = time.gmtime(when)
+        iso, hm = time.strftime("%Y-%m-%dT%H:%M:%SZ", t), time.strftime("%H:%M", t)
+    else:
+        return ""
+    return f'{html.escape(label)} <time datetime="{iso}">{hm} UTC</time>'
+
+
+def nav_key(path: str) -> str:
+    """Which nav item a path belongs to ("" for none)."""
+    p = (path or "").split("?", 1)[0].rstrip("/") or "/"
+    if p in ("/wrath", "/wrath/account") or p.startswith("/wrath/play"):
+        return "play"
+    if p == "/wrath/leyline":
+        return "leyline"
+    for key, roots in (("realms", ("/wrath/realms", "/wrath/r", "/r")), ("modes", ("/wrath/modes", "/wrath/h", "/wrath/q", "/wrath/b", "/h", "/q", "/b")),
+                       ("mods", ("/wrath/mods", "/wrath/m", "/m")), ("armory", ("/wrath/armory", "/wrath/u", "/u"))):
+        if any(p == r or p.startswith(r + "/") for r in roots):
+            return key
+    return ""
+
+
+_MODULE_NAV_RE = re.compile(r'<nav class="ly-nav" aria-label="Leyline">.*?</nav>', re.S)
+_IMG_NO_LOADING_RE = re.compile(r"<img(?![^>]*\bloading=)")
+
+
+def site_chrome(page: bytes, path: str, next_step: str = "play") -> bytes:
+    """A Leyline-look page from a module beside this file, with the site's nav, footer and closing step put in
+    (any nav of its own taken out), its link card filled in when it has none, and images lazy-loaded. A page that
+    already has the site nav, or isn't a page, is returned as it is. Never raises."""
+    try:
+        s = page.decode("utf-8")
+        if 'id="ly-site-nav"' in s or "<body" not in s or "</head>" not in s:
+            return page
+        s = _MODULE_NAV_RE.sub("", s, count=1)
+        head = f"<style>{SITE_CSS}</style>"
+        if 'property="og:title"' not in s:
+            t = re.search(r"<title>([^<]*)</title>", s)
+            head = card_meta(path, html.unescape(t.group(1)) if t else "Leyline") + head
+        s = s.replace("</head>", head + "</head>", 1)
+        s = re.sub(r'<body[^>]*>(?:<div class="ly-glow"></div>)?', lambda m: m.group(0) + SKIP_LINK + site_nav(nav_key(path)), s, count=1)
+        s = s.replace('<div class="ly-wrap">', '<div class="ly-wrap" id="main">', 1)
+        s = _IMG_NO_LOADING_RE.sub('<img loading="lazy" decoding="async"', s)
+        i = s.rfind("</body>")
+        if i >= 0:
+            s = s[:i] + (next_block(next_step) if next_step else "") + site_footer() + s[i:]
+        return s.encode("utf-8")
+    except Exception:  # noqa: BLE001: the page itself still goes out
+        return page
+
+
+def ly_shell(title: str, body: str, path: str, current: str, next_step: str = "play", css: str = "",
+             meta: str | None = None, noindex: bool = False) -> bytes:
+    """A whole page in the Leyline look, with the site's nav, footer and closing step."""
+    meta = card_meta(path, title) if meta is None else meta
+    if noindex:
+        meta += '<meta name="robots" content="noindex">'
+    return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            f'<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">'
+            f'<title>{html.escape(title)}</title>{meta}<style>{leyline_css()}{css}{SITE_CSS}</style></head>'
+            f'<body class="ly"><div class="ly-glow"></div>{SKIP_LINK}{site_nav(current)}'
+            f'<div class="ly-wrap" id="main">{body}</div>{next_block(next_step) if next_step else ""}{site_footer()}'
+            '</body></html>').encode("utf-8")
+
+
+# ----------------------------------------------------------------------------------------------
+# "Right now" on /wrath/leyline: real numbers only, cached 60 s
+# ----------------------------------------------------------------------------------------------
+#
+# Players on Wrath (this service's own status), live community realms (the relay listing), the latest mods
+# (the Workshop catalog, newest zip first) and recent level 80s (the armory index). A source that is missing,
+# failing or says zero is left out: the strip never shows a made-up number or a 0 dressed up as live.
+
+RIGHT_NOW_TTL = 60
+_right_now: dict = {"at": -1e9, "items": [], "when": 0.0}
+_right_now_lock = threading.Lock()
+
+
+def latest_mods(n: int = 3) -> list[dict]:
+    """The Workshop's mods, newest published zip first ([] without a Workshop or a catalog)."""
+    if workshop is None:
+        return []
+    try:
+        mods, _ = workshop.load()
+        root = getattr(workshop, "dir", "")
+
+        def published(m):
+            try:
+                return os.stat(os.path.join(root, "files", m["zip"])).st_mtime if m.get("zip") else 0.0
+            except (OSError, TypeError):
+                return 0.0
+        return sorted(mods, key=lambda m: (-published(m), m["name"].lower()))[:n]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _right_now_items() -> list[dict]:
+    items = []
+    try:
+        st = realm_status()
+    except Exception:  # noqa: BLE001
+        st = {}
+    players = _nonneg(st.get("players")) if isinstance(st, dict) and st.get("online") else None
+    if players:
+        items.append({"kind": "players", "n": players})
+    try:
+        realms, ok = community_realms()
+    except Exception:  # noqa: BLE001
+        realms, ok = [], False
+    live = sum(1 for r in realms if r.get("live")) if ok else 0
+    if live:
+        items.append({"kind": "realms", "n": live})
+    mods = latest_mods(3)
+    if mods:
+        items.append({"kind": "mods", "list": [(m["name"], f'/wrath/mods/{m["id"]}') for m in mods]})
+    if armory is not None:
+        try:
+            recent = armory.store.showcase()["recent80"][:3]
+        except Exception:  # noqa: BLE001
+            recent = []
+        if recent:
+            items.append({"kind": "eighties", "list": [(c["name"], f'/wrath/armory/{c["name"]}') for c in recent]})
+    return items
+
+
+def right_now(fresh: bool = False) -> tuple[list[dict], float]:
+    """(items, when they were read): read at most once per RIGHT_NOW_TTL seconds."""
+    with _right_now_lock:
+        if not fresh and time.monotonic() - _right_now["at"] < RIGHT_NOW_TTL:
+            return list(_right_now["items"]), _right_now["when"]
+    items = _right_now_items()
+    with _right_now_lock:
+        _right_now.update(at=time.monotonic(), items=items, when=time.time())
+    return list(items), _right_now["when"]
+
+
+def right_now_html() -> str:
+    """The "Right now" strip, or "" when there is nothing real to show."""
+    e = html.escape
+    items, when = right_now()
+    lis = []
+    for it in items:
+        k = it["kind"]
+        if k == "players":
+            n = it["n"]
+            lis.append(f'<li><span class="ly-dot" aria-hidden="true"></span><a class="all" href="/wrath/realms">'
+                       f'<b>{n}</b> {"player" if n == 1 else "players"} on {e(REALM_NAME)}</a></li>')
+        elif k == "realms":
+            n = it["n"]
+            lis.append(f'<li><span class="ly-dot" aria-hidden="true"></span><a class="all" href="/wrath/realms">'
+                       f'<b>{n}</b> community {"realm" if n == 1 else "realms"} live</a></li>')
+        else:
+            label, more = (("Latest mods", "/wrath/mods") if k == "mods" else ("Recent level 80s", "/wrath/armory"))
+            names = ", ".join(f'<a href="{e(href)}">{e(name)}</a>' for name, href in it["list"])
+            lis.append(f'<li><a class="all" href="{more}">{label}:</a> {names}</li>')
+    if not lis:
+        return ""
+    stamp = updated_text(when)
+    return ('<section class="ly-now" aria-labelledby="ly-now-h"><h2 id="ly-now-h">Right now</h2>'
+            f'<ul>{"".join(lis)}</ul>' + (f'<p>{stamp}. Bots are never counted as players.</p>' if stamp else "")
+            + '</section>')
+
+
 def remember_go(user: str, query: dict) -> None:
     """A signed-in player came with ?go=<kind>:<id>: record it for their game account on the realm
     ("ovgo set", realm/custom/lua_scripts/ov_go.lua), at most 20 a minute per account. Never fails the page."""
@@ -1091,7 +1416,11 @@ def leyline_page() -> bytes:
     st = realm_status()
     rows = [(REALM_NAME, "Official · level 1 or boost to 80", "PvE", _nonneg(st.get("players")), _nonneg(st.get("bots")),
              bool(st.get("online")), "/wrath")]
-    realms, _ok = community_realms()
+    realms, ok = community_realms()
+    with _listing_lock:
+        when = _listing["when"]
+    stamps = [x for x in (updated_text(st.get("updated_at"), "Realm status"),
+                          updated_text(when, "community list") if ok else "") if x]
     for r in realms[:20]:
         rows.append((r["name"], RULESET_LABELS[r["ruleset"]], r["type"], r["players"], r["bots"], r["live"],
                      f'{JOIN_BASE}/join/{r["id"]}'))
@@ -1112,16 +1441,10 @@ def leyline_page() -> bytes:
     def feat(title, text, soon=False):
         return (f'<div class="ly-feat"><h3>{e(title)}{"<span class=soon>planned</span>" if soon else ""}</h3>'
                 f'<p>{text}</p></div>')
-    css = leyline_css()
     body = (
-        '<nav class="ly-nav" aria-label="Leyline"><div class="grp">'
-        '<a href="/wrath/leyline">Hub</a><a href="/wrath/modes">Modes</a><a href="/wrath/realms">Realms</a>'
-        + ('<a href="/wrath/armory">Armory</a>' if armory is not None else '') +
-        '<a href="/wrath/mods">Mods</a>'
-        f'<a href="{e(LEYLINE_REPO)}/blob/main/hosting/INSTALL-OPERATE.md" rel="noopener noreferrer">Server</a></div>'
-        '<div class="grp"><a href="/login?next=%2Fwrath">Sign in</a><a class="hot" href="/wrath">Play now</a></div></nav>'
-        '<div class="ly-wrap"><header class="ly-hero">'
-        f'<img class="ly-emblem" src="{art_url("leyline-emblem.webp")}" alt="" width="300" height="248">'
+        '<header class="ly-hero">'
+        f'<img class="ly-emblem" src="{art_url("leyline-emblem.webp")}" alt="" width="300" height="248" '
+        'decoding="async" fetchpriority="high">'
         '<h1>Leyline</h1>'
         '<p class="ly-lede">An open-source, community-built MMO project. Play in your browser or a client, '
         'build and share mods, and host your own realm.</p>'
@@ -1129,13 +1452,15 @@ def leyline_page() -> bytes:
         '<div class="ly-cta">'
         f'<a class="ly-btn" href="/wrath">{icon_play}Play now</a>'
         f'<a class="ly-btn" href="/wrath#desktop">{icon_rocket}Client launcher</a>'
-        f'<a class="ly-btn violet" href="{e(LEYLINE_REPO)}/blob/main/hosting/INSTALL-OPERATE.md" rel="noopener noreferrer">{icon_portal}Host realm</a>'
+        f'<a class="ly-btn violet" href="{e(HOST_URL)}" rel="noopener noreferrer">{icon_portal}Host realm</a>'
         '</div>'
+        + right_now_html() +
         '<section class="ly-panel" aria-labelledby="ly-realms"><h2 id="ly-realms">Realm list</h2>'
         '<table class="ly-table"><thead><tr><th>Realm</th><th>Type</th><th>Players</th><th>Status</th></tr></thead>'
         f'<tbody>{"".join(trs)}</tbody></table>'
         '<p class="ly-fine">Community realms run on their hosts\' own PCs and join through the Leyline relay. '
-        '<a href="/wrath/realms">All realms and house rules</a></p></section>'
+        '<a href="/wrath/realms">All realms and house rules</a>'
+        + (f'<br>{" · ".join(stamps)}' if stamps else '') + '</p></section>'
         '<section class="ly-panel" aria-labelledby="ly-shots"><h2 id="ly-shots">See it running</h2><div class="ly-shots">'
         + shot("dalaran", "Dalaran hangout", "The flagship realm's meeting place, streamed into a browser tab.")
         + shot("start", "Your choice at the start", "Begin at level 1, or take a boost to 80 with gear, professions and a trip to Dalaran.")
@@ -1169,21 +1494,41 @@ def leyline_page() -> bytes:
         + '</div></section>'
         '<p class="ly-fine">The full world needs your own 3.3.5a game files; the browser streams only small areas '
         '(Dalaran, the starting zones, dungeons). '
-        f'<a href="{e(LEYLINE_REPO)}" rel="noopener noreferrer">Source code</a></p></div>')
+        f'<a href="{e(LEYLINE_REPO)}" rel="noopener noreferrer">Source code</a></p>')
     meta = card_meta("/wrath/leyline", "Leyline · an open-source, community-built MMO project")
-    return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
-            f'<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">'
-            f'<title>Leyline</title>{meta}<style>{css}</style></head><body class="ly"><div class="ly-glow"></div>{body}</body></html>').encode("utf-8")
+    return ly_shell("Leyline", body, "/wrath/leyline", "leyline", "play", meta=meta)
 
 
-def leyline_css() -> str:
-    """LEYLINE_CSS with its art placeholders pointing at /wrath/art/."""
-    css = LEYLINE_CSS
-    for k, f in (("ART_BG", "leyline-bg.webp"), ("ART_LYF", "leyline-display.woff2"), ("ART_FONT", "Cinzel-SemiBold.woff2"),
-                 ("ART_CTL", "leyline-corner-tl.webp"), ("ART_CTR", "leyline-corner-tr.webp"), ("ART_CBL", "leyline-corner-bl.webp"),
-                 ("ART_CBR", "leyline-corner-br.webp"), ("ART_DIV", "leyline-divider.webp")):
-        css = css.replace(k, art_url(f))
-    return css
+NOT_FOUND_CSS = """
+a.ly-feat{display:block;text-decoration:none;color:inherit}
+a.ly-feat:hover,a.ly-feat:focus-visible{border-color:var(--ly-cyan);box-shadow:var(--ly-glow)}
+.ly .nf h1{font-size:clamp(44px,9vw,84px)}
+"""
+
+
+def not_found_page() -> bytes:
+    """The 404 for any page this service doesn't have: the site nav and a way on to every main page."""
+    e = html.escape
+
+    def card(href, title, text, external=False):
+        rel = ' rel="noopener noreferrer"' if external else ""
+        return f'<a class="ly-feat" href="{e(href)}"{rel}><h3>{e(title)}</h3><p>{e(text)}</p></a>'
+    cards = [card("/wrath", "Play now", "Straight into the game, in your browser."),
+             card("/wrath/leyline", "Leyline", "The hub: what's live, who's on, and where it's going."),
+             card("/wrath/realms", "Realms", "The official realm and every community realm.")]
+    if modes is not None:
+        cards.append(card("/wrath/modes", "Modes", "Duels, boss fights, dungeons and hangouts, one click each."))
+    if workshop_mod is not None:
+        cards.append(card("/wrath/mods", "Mods", "The Workshop: addons and realm scripts."))
+    if armory is not None:
+        cards.append(card("/wrath/armory", "Armory", "Look up any character on the realm."))
+    cards += [card(HOST_URL, "Host a realm", "Run your own realm on your own PC.", True),
+              card(DISCORD_URL, "Discord", "Ask for help, or tell us which link brought you here.", True)]
+    body = ('<header class="ly-hero nf"><h1>Not found</h1>'
+            '<p class="ly-lede">Nothing lives at this address. The link may be old or mistyped. Everything else is one click away.</p>'
+            '</header><section class="ly-panel" aria-labelledby="nf-go"><h2 id="nf-go">Where to next</h2>'
+            f'<div class="ly-grid">{"".join(cards)}</div></section>')
+    return ly_shell(f"Not found · {REALM_NAME}", body, "/wrath/leyline", "", "play", NOT_FOUND_CSS, noindex=True)
 
 
 workshop = None
@@ -1576,7 +1921,7 @@ class PageHandler(BaseHTTPRequestHandler):
             self.send(404, error_page("Guest passes aren't set up here."))
             return
         if path == "/wrath/demo":
-            self.send(200, guest.preview())
+            self.send(200, site_chrome(guest.preview(), path))
             return
         if self.command == "HEAD":
             self.send(200, b"")
@@ -1585,7 +1930,7 @@ class PageHandler(BaseHTTPRequestHandler):
         if kind == "redirect":
             self.redirect(rest[0])
         else:
-            self.send(rest[0], rest[1])
+            self.send(rest[0], site_chrome(rest[1], path) if isinstance(rest[1], bytes) else rest[1])
 
     def do_HEAD(self):  # noqa: N802
         self.do_GET()
@@ -1644,13 +1989,15 @@ class PageHandler(BaseHTTPRequestHandler):
                 self.send(429, busy_page(back=path))
                 return
             status, body = armory.page(path, query, leyline_css(), card_meta, REALM_NAME, PUBLIC_HOST)
-            self.send(status, body)
+            self.send(status, site_chrome(body, path))
             return
         if links is not None and links.match(path):   # share links (stream/links.py), same limit as /wrath/leyline
             if not browse_limit.hit(self.ip(), 600):
                 self.send(429, busy_page(back=path))
                 return
-            self.send(200, links.share_page(path, card_meta, render, REALM_NAME, community_realms,
+            key = nav_key(path)
+            self.send(200, links.share_page(path, card_meta, lambda body, **kw: render(body, current=key, **kw),
+                                            REALM_NAME, community_realms,
                                             who=armory.card_line if armory is not None else None,
                                             mods=workshop.mod if workshop else None))
             return
@@ -1658,7 +2005,8 @@ class PageHandler(BaseHTTPRequestHandler):
             if not browse_limit.hit(self.ip(), 600):
                 self.send(429, busy_page(back=path))
                 return
-            self.send(200, modes.page(leyline_css(), art_url, art_present, card_meta, REALM_NAME))
+            self.send(200, site_chrome(modes.page(leyline_css(), art_url, art_present, card_meta, REALM_NAME,
+                                                  public_host=PUBLIC_HOST), path))
             return
         if workshop is not None and workshop_mod.match(path):   # the mods Workshop (stream/workshop.py)
             dl = "/download" in path
@@ -1666,6 +2014,8 @@ class PageHandler(BaseHTTPRequestHandler):
                 self.send(429, busy_page(back=path))
                 return
             status, body, ctype, extra = workshop.serve(path, query)
+            if ctype.startswith("text/html"):
+                body = site_chrome(body, path)
             self.send(status, body, ctype, headers=extra)
             return
         if path == "/wrath/realms":
@@ -1678,7 +2028,7 @@ class PageHandler(BaseHTTPRequestHandler):
             self.demo(path)
             return
         if path not in ("/wrath", "/wrath/account"):
-            self.send(404, b"not found\n", "text/plain")
+            self.send(404, not_found_page())
             return
         # /wrath is "Play now": signed in, straight into the game (the streamed realm in the browser).
         # /wrath/account is the page with the game login and the other ways to play.

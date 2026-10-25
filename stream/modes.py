@@ -92,12 +92,22 @@ def _levels(lv) -> str:
     return f"Level {lo}" if lo == hi else f"Levels {lo}-{hi}"
 
 
+_host = {"name": "play.openvanilla.app"}   # the public host, for the full link in a Share box (set by page())
+
+
+def _share(href: str) -> str:
+    """A Share box with no script (the page allows none): it opens on the full link, which one tap selects."""
+    url = html.escape(f'https://{_host["name"]}{href}')
+    return (f'<details class="ly-share"><summary>Share</summary><code tabindex="0">{url}</code>'
+            '<small>Tap the link to select it, then copy. It opens with a preview card.</small></details>')
+
+
 def _card(name: str, line: str, tags: list[str], href: str, go_label: str = "Go") -> str:
     e = html.escape
     return (f'<div class="md-card"><h3>{e(name)}</h3>'
             + (f'<p>{e(line)}</p>' if line else "")
             + f'<div class="md-tags">{"".join(tags)}</div>'
-            f'<a class="md-go" href="{e(href)}">{e(go_label)}</a></div>')
+            f'<a class="md-go" href="{e(href)}">{e(go_label)}</a>{_share(href)}</div>')
 
 
 def _shot(key: str, art_url, have) -> str:
@@ -108,7 +118,8 @@ def _shot(key: str, art_url, have) -> str:
     except Exception:
         ok = False
     if ok:
-        img = f'<img src="{html.escape(art_url(name))}" alt="{html.escape(alt)}" loading="lazy" decoding="async">'
+        img = (f'<img src="{html.escape(art_url(name))}" alt="{html.escape(alt)}" width="1280" height="720" '
+               'loading="lazy" decoding="async">')
     return f'<div class="md-shot">{img}</div>'
 
 
@@ -116,11 +127,15 @@ def link(kind: str, ident: str) -> str:
     return f"/wrath/{kind}/{ident}"
 
 
-def page(css: str, art_url, have, card_meta, realm_name: str = "WrathUnleashed") -> bytes:
+def page(css: str, art_url, have, card_meta, realm_name: str = "WrathUnleashed",
+         public_host: str = "play.openvanilla.app") -> bytes:
     """The /wrath/modes page. css is the portal's LEYLINE_CSS with its art filled in, art_url(name) the
-    art route, have(name) whether that art file is there, card_meta(path, title) the link-preview tags."""
+    art route, have(name) whether that art file is there, card_meta(path, title) the link-preview tags,
+    public_host the site's name for the full links in the Share boxes. The site's nav and footer are put
+    in by the portal (wrath_portal.site_chrome)."""
     e = html.escape
     D = data
+    _host["name"] = public_host
     regions = {k: (n, sub) for k, n, sub in D.EXPANSIONS}
 
     # Duels
@@ -146,13 +161,13 @@ def page(css: str, art_url, have, card_meta, realm_name: str = "WrathUnleashed")
         for r in rows:
             tags = [_tag(f"Level {r['level']}"), _tag(f"{r['size']} players")]
             head = (f'<div class="top"><h3>{e(r["name"])}</h3><div class="md-tags">{"".join(tags)}</div>'
-                    f'<a class="md-go" href="{e(link("b", r["id"]))}">Go</a></div>')
+                    f'<a class="md-go" href="{e(link("b", r["id"]))}">Go</a>{_share(link("b", r["id"]))}</div>')
             if r.get("wings"):
                 wings = "".join(
                     '<div class="md-card">'
                     f'<h3>{e(w["name"])}</h3>'
                     '<ul class="md-bosses">' + "".join(f"<li>{e(b)}</li>" for b in w["bosses"]) + "</ul>"
-                    f'<a class="md-go" href="{e(link("b", w["id"]))}">Go</a></div>'
+                    f'<a class="md-go" href="{e(link("b", w["id"]))}">Go</a>{_share(link("b", w["id"]))}</div>'
                     for w in r["wings"])
                 body = f'<div class="md-cards">{wings}</div>'
             else:
@@ -201,9 +216,6 @@ def page(css: str, art_url, have, card_meta, realm_name: str = "WrathUnleashed")
         f'<div class="md-cards">{"".join(hang_cards)}</div></section>')
 
     body = (
-        '<nav class="ly-nav" aria-label="Leyline"><div class="grp">'
-        '<a href="/wrath/leyline">Hub</a><a href="/wrath/modes">Modes</a><a href="/wrath/realms">Realms</a></div>'
-        '<div class="grp"><a href="/login?next=%2Fwrath">Sign in</a><a class="hot" href="/wrath">Play now</a></div></nav>'
         '<div class="ly-wrap"><header class="ly-hero"><h1>Modes</h1>'
         f'<p class="ly-lede">Duels, boss fights, dungeons and hangouts on {e(realm_name)}. Every card is one click: '
         'sign in, and your character is taken there.</p>'
