@@ -7,6 +7,7 @@
 #      the Deadmines (36) and Shadowfang Keep (33), normal difficulty.
 #   3. Profile: DungeonAccessRequirements.LFGLevelDBCOverride = 1 (the finder uses that table's levels
 #      instead of LFGDungeons.dbc's 15), AllowTwoSide.Interaction.Group = 1 (friends on either side can group).
+#      OV_AUTOLEARN = 1: ov_qol.lua's instant spell learn on level up (the profile had it at 0).
 #   4. Announces a restart (SERVERPASS_WARN_MIN, default 5) and recreates the world server; if only the Lua
 #      changed, a live "reload ale" instead.
 # Never prints a password: MySQL runs in its container with the container's own root password.
@@ -48,7 +49,7 @@ missing=$(sqlq "SELECT COUNT(*) FROM (SELECT 389 m UNION SELECT 43 UNION SELECT 
 echo "== 3. profile"
 sed -i 's/\r$//' "$PF"
 need=0
-for kv in AC_DUNGEON_ACCESS_REQUIREMENTS_LFGLEVEL_DBCOVERRIDE=1 AC_ALLOW_TWO_SIDE_INTERACTION_GROUP=1; do
+for kv in AC_DUNGEON_ACCESS_REQUIREMENTS_LFGLEVEL_DBCOVERRIDE=1 AC_ALLOW_TWO_SIDE_INTERACTION_GROUP=1 OV_AUTOLEARN=1; do
   k=${kv%%=*}; v=${kv#*=}
   if grep -qE "^$k=" "$PF"; then sed -i "s#^$k=.*#$k=$v#" "$PF"; else printf '%s=%s\n' "$k" "$v" >> "$PF"; fi
   [ "$(docker exec ov-ac-worldserver printenv "$k" 2>/dev/null || true)" = "$v" ] || need=1

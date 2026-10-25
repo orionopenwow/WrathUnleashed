@@ -45,3 +45,5 @@
 1026e signin  New look for the play page and realm list (Orion art, gold frames, Cinzel), link-preview cards for X / Discord / Reddit
 1026f gm  GM console in the same look
 1026g ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1026h realm  Instant spell learn on level up (.learnall), .respec, .xp off/on, .hearth, .summon, rested note: world server restart with a 5-minute warning
+1026i ship  Save to GitHub (orionopenwow/WrathUnleashed)

@@ -20,7 +20,11 @@ Chat commands:
 | Command | Does |
 |---|---|
 | `.qol` | Lists which features are on for this realm, plus the commands |
-| `.qol learn` | Learns every class spell you qualify for now. Only when auto-learn is on |
+| `.learnall`, `.qol learn` | Learns every class spell you qualify for now (once a minute). Only when instant spell learn is on |
+| `.respec confirm` | Resets the active spec's talents, free, no cost escalation (`ResetTalents(true)`) |
+| `.xp off`, `.xp on`, `.xp` | Freezes / resumes experience (`PLAYER_FLAGS_NO_XP_GAIN`, saved with the character) |
+| `.hearth` | Clears the hearthstone cooldown, once an hour |
+| `.summon` | Teleports the playerbots in your group to you, open world only (`.summon bots` for GMs; a GM's `.summon <name>` is the core's) |
 | `.qol repair` | Repairs all gear for free, anywhere, out of combat (5 s cooldown). Only when free repair is on |
 | `.qol hub <place>`, `.hub <place>` | Teleports you to `dalaran`, `gurubashi`, `maul`, `circle` or `amphitheater` |
 | `.tele <place>` | Same as `.hub`, for **non-GM players only** and only for those five names. A GM's `.tele` is never intercepted |
@@ -30,11 +34,10 @@ Events:
 
 | Event | Behaviour |
 |---|---|
-| Login (3) | Welcome message naming the realm, `.ov`, `.armory` and `.qol` |
-| Level change (13) | Auto-learn class spells |
-| First login (30) | Auto-learn class spells. This covers characters that start at 80 in Dalaran, which never fire a level change |
+| Login (3) | Welcome message, the rested-XP / frozen-XP line, and the instant spell learn catch-up (3 s later, quiet when nothing is new) |
+| Level change (13) | Instant spell learn, in batches over a few ticks, one summary line |
 | Duel end (11) | Both players get full health and mana/energy, rage and runic power go back to 0, and `ResetAllCooldowns()` runs |
-| Command (42) | Handles `.qol`, `.hub` and the player `.tele` shortcuts. Returns `false` to consume the command, the same as `ov_services.lua` |
+| Command (42) | Handles `.qol`, `.learnall`, `.respec`, `.xp`, `.hearth`, `.summon`, `.hub` and the player `.tele` shortcuts. Returns `false` to consume the command, the same as `ov_services.lua` |
 
 No gossip menu is used, so there's no clash with menu 61000 in `ov_services.lua`. The script doesn't use the `OVARM` addon prefix either.
 
@@ -46,8 +49,13 @@ No gossip menu is used, so there's no clash with menu 61000 in `ov_services.lua`
 |---|---|---|
 | `OV_REALM_NAME` | `WrathUnleashed` | Name in the welcome message |
 | `OV_QOL_WELCOME` | on | Login welcome |
-| `OV_AUTOLEARN` | on if `OV_BRAWL=1`, else off | Auto-learn on level up, first login and `.qol learn` |
-| `OV_DUEL_RESET` | on | Duel-end restore |
+| `OV_AUTOLEARN` | on | Instant spell learn on level up, at login and `.learnall` |
+| `OV_FREE_RESPEC` | on | `.respec` |
+| `OV_XP_TOGGLE` | on | `.xp` |
+| `OV_RESTED_NOTE` | on | Rested-XP line at login |
+| `OV_HEARTH_RESET` | on | `.hearth` |
+| `OV_BOT_SUMMON` | on | `.summon` |
+| `OV_DUEL_RESET` | on if `OV_BRAWL=1`, else off | Duel-end restore |
 | `OV_QOL_HUB` | on if `OV_BRAWL=1`, else off | `.qol hub`, `.hub`, player `.tele` |
 | `OV_FREE_REPAIR` | on if `OV_BRAWL=1`, else off | `.qol repair` |
 | `OV_QOL_BOTHELP` | on | `.qol bots` text |
@@ -55,11 +63,11 @@ No gossip menu is used, so there's no clash with menu 61000 in `ov_services.lua`
 
 ### How auto-learn works
 
-1. On first use, it checks `information_schema` to find which trainer schema the world DB has:
+1. At script load, it checks `information_schema` to find which trainer schema the world DB has:
    - **New (AzerothCore master):** `trainer` with `Type = 0` (class trainer) and `Requirement = <class id>`, joined to `trainer_spell`. This path is used whenever those tables exist.
    - **Legacy:** `npc_trainer` on creatures with `creature_template.trainer_type = 0 AND trainer_class = <class>`, plus one level of negative-`SpellID` template references. `ReqSpell` is used if the column exists.
-   - **Neither:** auto-learn is disabled and the worldserver log says so (`[ov_qol] auto-learn trainer schema: none`).
-2. Results are cached per class in Lua memory, roughly 100 to 300 rows per class.
+   - **Neither:** auto-learn is disabled and the worldserver log says so (`[ov_qol] instant spell learn: trainer schema none, 0 class spells`). The full rules (teach spells, ranks, talents, faction) are in the header of `ov_qol.lua`.
+2. One query loads every class; results are cached per class in Lua memory, roughly 100 to 300 rows per class.
 3. A spell is taught only if:
    - `ReqLevel` is at or below the player's level;
    - the player already knows every `ReqAbility1..3` spell;

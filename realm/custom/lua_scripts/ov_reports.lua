@@ -3,7 +3,8 @@
 --   .bug <what happened>    files a bug report with where you are (map, zone, position, level), stored in
 --                           acore_characters.ov_bug_reports for the GM console; .report is the same.
 --   .stuck                  hearths you home when you are stuck (not in combat; once per 10 minutes).
---   .wu (or .commands)      lists the WrathUnleashed commands.
+--   .wu (or .commands)      lists the WrathUnleashed commands (ov_qol.lua's .learnall, .respec, .xp, .hearth,
+--                           .summon and .qol on a second line).
 --   .guide                  the level 80 guide: what to do at 80 on this realm. Shown by itself when a
 --                           character reaches 80 (the boost included); 80s get a one-line pointer at login.
 --   .mounts                 every mount for level 80s: learns every mount spell (ground and flying) the player
@@ -213,6 +214,8 @@ local GUIDE = {
         .. "(Shift-P: Collections).",
     "6. |cffffff00Your screen|r: Esc > Mods & Workshop for UI size, every action bar, and addons. "
         .. "|cffffff00/wubars|r puts spells you just learned on your bars.",
+    "7. |cffffff00Quality of life|r: |cffffff00.respec confirm|r resets your talents free, |cffffff00.hearth|r "
+        .. "readies your hearthstone (hourly), |cffffff00.summon|r brings your bots to you.",
     "Hang out in Dalaran. Found a bug? |cffffff00.bug|r and what happened. All commands: |cffffff00.wu|r",
 }
 
@@ -224,6 +227,9 @@ local function listCommands(player)
     say(player, "Commands: |cffffff00.boost|r (level 80 boost, new characters), |cffffff00.play|r (places and dungeons), "
         .. "|cffffff00.bug <text>|r (report a bug), |cffffff00.stuck|r (go home if stuck), "
         .. "|cffffff00.guide|r (what to do at 80), |cffffff00.mounts|r (every mount, at 80).")
+    say(player, "Quality of life: |cffffff00.learnall|r (class spells; they come by themselves on level up), "
+        .. "|cffffff00.respec confirm|r (free talent reset), |cffffff00.xp off|r / |cffffff00.xp on|r (freeze XP), "
+        .. "|cffffff00.hearth|r (hearthstone ready, hourly), |cffffff00.summon|r (your bots), |cffffff00.qol|r (what's on).")
 end
 
 local function onCommand(event, player, command)
