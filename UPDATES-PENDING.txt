@@ -184,3 +184,5 @@
 1054a scripts  Building: plots with co-builders, budgets and trust tiers, group select, copy and paste, prefabs, properties, GM op log and rollback
 1054b foreverui  Building: spawn menu (favourites, recents, search, prefabs), budget meter, properties panel, box select
 1054c ship  Save to GitHub (orionopenwow/WrathUnleashed): building suite (M3)
+1055a foreverui  Windows get solid backgrounds (they showed the world through them); Workshop panel rows no longer overlap
+1055b ship  Save to GitHub (orionopenwow/WrathUnleashed): solid window backgrounds

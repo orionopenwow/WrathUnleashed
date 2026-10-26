@@ -1,12 +1,9 @@
 {
- "at": "2026-10-26 00:27:56",
+ "at": "2026-10-26 00:39:25",
  "ids": [
-  "1052a",
-  "1052b",
-  "1052c",
-  "1052c-leyline"
+  "1054a"
  ],
- "ok": true,
- "failed_step": null,
+ "ok": false,
+ "failed_step": "scripts",
  "autopilot": true
 }

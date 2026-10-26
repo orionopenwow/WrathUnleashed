@@ -381,9 +381,10 @@ local function showResults(text)
         results:SetWidth(360); results:SetHeight(240)
         results:SetPoint("CENTER", 0, 60)
         results:SetFrameStrata("DIALOG")
-        results:SetBackdrop({ bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        results:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
             edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32,
             insets = { left = 11, right = 12, top = 12, bottom = 11 } })
+        results:SetBackdropColor(0.05, 0.06, 0.08, 0.95)   -- solid: the dialog texture draws see-through in the browser client
         results.title = label(results, "", "GameFontNormalLarge", "TOP", 0, -20)
         results.body = label(results, "", "GameFontHighlight", "TOPLEFT", 26, -52)
         results.body:SetWidth(310)
@@ -1070,9 +1071,10 @@ local function build()
     win:RegisterForDrag("LeftButton")
     win:SetScript("OnDragStart", win.StartMoving)
     win:SetScript("OnDragStop", win.StopMovingOrSizing)
-    win:SetBackdrop({ bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+    win:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32,
         insets = { left = 11, right = 12, top = 12, bottom = 11 } })
+    win:SetBackdropColor(0.05, 0.06, 0.08, 0.95)   -- solid: the dialog texture draws see-through in the browser client
     label(win, "Minigolf", "GameFontNormalLarge", "TOP", 0, -18)
     local close = CreateFrame("Button", nil, win, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", -6, -6)

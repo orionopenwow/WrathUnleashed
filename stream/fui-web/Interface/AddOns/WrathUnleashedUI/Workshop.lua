@@ -229,24 +229,25 @@ function W.BuildWorkshopItems(p)
     button(p, "Prev", 56, function() if S.page > 1 then S.page = S.page - 1; S.Ask() end end, "TOPLEFT", 10, by)
     button(p, "Next", 56, function() if S.page < S.pages then S.page = S.page + 1; S.Ask() end end, "TOPLEFT", 70, by)
     p.count = label(p, "", "GameFontHighlightSmall", "TOPLEFT", 134, by - 4)
-    label(p, "On the web: " .. SITE:gsub("^https://", ""), "GameFontDisableSmall", "TOPLEFT", 210, by - 4)
 
     local py = by - 30
     label(p, "Publish a build:", "GameFontHighlightSmall", "TOPLEFT", 12, py - 4)
     local code = CreateFrame("EditBox", nil, p, "InputBoxTemplate")
-    code:SetWidth(70); code:SetHeight(20); code:SetPoint("TOPLEFT", 112, py)
+    code:SetWidth(70); code:SetHeight(20); code:SetPoint("TOPLEFT", 124, py)
     code:SetAutoFocus(false); code:SetMaxLetters(6)
     code:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     local title = CreateFrame("EditBox", nil, p, "InputBoxTemplate")
-    title:SetWidth(150); title:SetHeight(20); title:SetPoint("TOPLEFT", 192, py)
+    title:SetWidth(140); title:SetHeight(20); title:SetPoint("TOPLEFT", 202, py)
     title:SetAutoFocus(false); title:SetMaxLetters(40)
     title:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    button(p, "Publish", 70, function() S.Publish(code:GetText(), title:GetText()) end, "TOPLEFT", 350, py)
-    label(p, "code from .build share, then a title", "GameFontDisableSmall", "TOPLEFT", 112, py - 20)
+    button(p, "Publish", 70, function() S.Publish(code:GetText(), title:GetText()) end, "TOPLEFT", 352, py)
+    label(p, "code from .build share, then a title", "GameFontDisableSmall", "TOPLEFT", 124, py - 22)
     p.code, p.title = code, title
 
-    p.status = label(p, S.status, "GameFontHighlightSmall", "TOPLEFT", 12, py - 40)
-    p.status:SetWidth(PAGE_W - 20)
+    p.status = label(p, S.status, "GameFontHighlightSmall", "TOPLEFT", 12, py - 44)
+    p.status:SetWidth(PAGE_W - 20); p.status:SetJustifyH("LEFT")
+    -- its own line: next to the page count it ran into "Page 1 of 1" at larger UI sizes (live, 2026-10-26)
+    label(p, "On the web: " .. SITE:gsub("^https://", ""), "GameFontDisableSmall", "TOPLEFT", 12, py - 64)
     p:SetScript("OnUpdate", function()
         if S.waiting and S.askedAt and now() - S.askedAt > ANSWER_WAIT then
             S.waiting = nil
