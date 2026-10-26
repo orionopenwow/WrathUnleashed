@@ -15,7 +15,7 @@
 
 local W = WrathUnleashedUI
 local PREFIX, MOD = "OVMOD", "wugolf"
-local WIN_W, WIN_H = 460, 360
+local WIN_W, WIN_H = 460, 400
 local ANSWER_WAIT = 6
 local COLORS = { "ffffff", "ff8c1f", "40ccff", "ff66bf", "ffe033", "8cff4d", "b380ff", "ff4d40" }
 local PRACTICE_COURSE = [==[

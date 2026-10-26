@@ -524,6 +524,8 @@ local function startCommand(player, key)
     local map = try(player, "GetMap")
     if map and (try(map, "IsBattleground") or try(map, "IsArena")) then return say(player, "Not in a battleground or arena.") end
     local x, y, z, o = player:GetX(), player:GetY(), player:GetZ(), player:GetO()
+    -- The tee goes a few steps ahead of the host, so the putting camera isn't inside anyone's body.
+    x, y = x + math.cos(o) * 4.5, y + math.sin(o) * 4.5
     local s = { id = nextId, key = key, course = entry.course, text = entry.text, state = "lobby", t0 = now(),
         players = { seat(player, 0) }, checks = {}, watchers = {}, map = player:GetMapId(), x = x, y = y, z = z, o = o, hole = 1, turn = 1 }
     s.par = 0

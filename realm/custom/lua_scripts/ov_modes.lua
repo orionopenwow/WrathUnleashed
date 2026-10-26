@@ -339,7 +339,9 @@ local function hostCommand(player, key)
     if bySeat[player:GetGUIDLow()] then leave(player) end
     if try(player, "IsInCombat") then return say(player, "Not in combat.") end
     local s = { id = nextId, mode = m, state = "lobby", t0 = now(), players = { seat(player) },
-        map = player:GetMapId(), x = player:GetX(), y = player:GetY(), z = player:GetZ(), o = player:GetO() }
+        map = player:GetMapId(), z = player:GetZ(), o = player:GetO() }
+    -- The arena goes ahead of the host, not around them.
+    s.x, s.y = player:GetX() + math.cos(s.o) * 14, player:GetY() + math.sin(s.o) * 14
     nextId = nextId + 1
     sessions[s.id] = s
     bySeat[player:GetGUIDLow()] = s.id

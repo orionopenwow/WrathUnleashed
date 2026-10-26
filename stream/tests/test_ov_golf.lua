@@ -138,7 +138,7 @@ inbox(bo)
 toServer(ann, "go", "")
 local a2, b2 = inbox(ann), inbox(bo)
 local session = find(a2, "session") or ""
-check("tee off sends the session at the host's spot", session:match("^1 100%.000 200%.000 50%.000 1%.2500 Meadow_Nine$") ~= nil)
+check("tee off sends the session a few steps ahead of the host", session:match("^1 101%.419 204%.270 50%.000 1%.2500 Meadow_Nine$") ~= nil)
 local course = find(b2, "course") or ""
 check("everyone gets the whole course text", #course > 2000 and course:find("hole 4 Grand Finale", 1, true) ~= nil)
 check("hole 1 starts", (find(a2, "hole") or "") == "1 2 First Putt")
@@ -328,7 +328,7 @@ check("Play here opens a lobby with Ann as host", G.lobby and G.lobby.host == "A
 send = nil
 G.lobby = G.lobby
 SendAddonMessage("OVMOD", "wugolf\tgo\t1/1\t", "WHISPER", "Ann"); deliver()
-check("tee off loads the realm's course at the realm's spot", (called("load ") or ""):match("^load 100%.000 200%.000 50%.000 1%.2500\n") ~= nil)
+check("tee off loads the realm's course at the realm's spot", (called("load ") or ""):match("^load 101%.419 204%.270 50%.000 1%.2500\n") ~= nil)
 check("and it's Ann's turn", called("aim ") == "aim Ann")
 G.OnShoot(25, 610); deliver()
 check("the shot comes back from the realm and plays", (called("shot ") or ""):match("^shot Ann 0%.000 0%.110 0%.000 25 610 ") ~= nil)

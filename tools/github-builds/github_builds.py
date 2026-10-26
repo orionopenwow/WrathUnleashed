@@ -66,8 +66,18 @@ class Fail(Exception):
     pass
 
 
+LOG_PATH = Path(__file__).resolve().parents[2] / "logs" / "github-builds.log"
+
+
 def say(msg=""):
     print(msg, flush=True)
+    # Also kept in logs\github-builds.log, so the result can be read back without the window.
+    try:
+        LOG_PATH.parent.mkdir(exist_ok=True)
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + str(msg) + "\n")
+    except OSError:
+        pass
 
 
 class GitHub:
@@ -429,4 +439,11 @@ def main(argv=None, gh: GitHub | None = None, sleep=time.sleep, now=time.time, o
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except SystemExit:
+        raise
+    except BaseException:
+        import traceback
+        say("STOPPED with an error:\n" + traceback.format_exc())
+        sys.exit(1)

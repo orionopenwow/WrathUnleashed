@@ -160,3 +160,7 @@
 1043e check  Server check (with the relay port check)
 1044a client  Client 20261025m (on top of l): faster Dalaran load (colliders in small pieces, no long freezes, shader warm-up), no reveal before the city is built, Dalaran zone and chat, dismount, character select/create and loading art fill the window, no logout hitch, smoother frames
 1044b ship  Save to GitHub (orionopenwow/WrathUnleashed): client 20261025m
+1045a-golf scripts  Minigolf tees and mode arenas open a few steps ahead of the host (no camera inside anyone's body)
+1045b-golf foreverui  Minigolf window: the help text no longer overlaps the buttons
+1045c-golf client  Client 20261025n (20261025m + minigolf camera): the hole fly-over plays, practice tees off clear of you
+1045d-golf ship  Save to GitHub (orionopenwow/WrathUnleashed): client 20261025n, golf camera fixes
