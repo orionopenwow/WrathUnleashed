@@ -1,7 +1,9 @@
 -- lua5.1 stream/tests/test_ov_build.lua [ov_build.lua] [ov_modapi.lua]
 -- ov_build.lua under a fake mod-ale: roles, build areas, the catalog check, spawn / move / turn / undo / delete /
 -- clear, the limits and rates, save / share / load codes, the GM-only commands, props coming back after a grid
--- unload and a restart, the OVMOD channel, and no game-brand names in anything players saw.
+-- unload and a restart, the OVMOD channel, and no game-brand names in anything players saw. M3: plots and their
+-- roles and GM tools, budgets and trust tiers, multi-select and group ops, copy and paste, exact numbers and size,
+-- prefabs and the OVBuild functions, the op log and GM rollback, and a restart reading all of it back.
 local file = arg[1] or "realm/custom/lua_scripts/ov_build.lua"
 local modapi = arg[2] or file:gsub("ov_build%.lua$", "ov_modapi.lua")
 
@@ -42,6 +44,7 @@ function PerformIngameSpawn(kind, entry, map, inst, x, y, z, o, save, dur, phase
     local go = { guid = nextGuid, entry = entry, map = map, x = x, y = y, z = z, o = o }
     function go:GetGUID() return self.guid end
     function go:RemoveFromWorld(del) objects[self.guid] = nil; self.removed = true end
+    function go:SetScale(sc) self.scale = sc end
     objects[go.guid] = go
     return go
 end
@@ -50,6 +53,7 @@ local function liveCount() local n = 0; for _ in pairs(objects) do n = n + 1 end
 
 -- the fake characters database: the statements, and the builds table for real
 local sqlLog, buildsDb, propRows, roleRows = {}, {}, nil, nil
+local extraRows = {}   -- [table name] = rows a restart reads back (plots, members, prefabs, trust, sizes)
 function CharDBExecute(sql)
     sqlLog[#sqlLog + 1] = sql
     local owner, oname, name, props = sql:match("^INSERT INTO mod_builder_builds %(owner, owner_name, name, props, created_at%) VALUES %((%d+), '(%w*)', '([%w_%-]+)', '([^']*)'")
@@ -73,6 +77,8 @@ end
 function CharDBQuery(sql)
     if sql:match("FROM mod_builder_props$") then return result(propRows) end
     if sql:match("FROM mod_builder_roles$") then return result(roleRows) end
+    local t = sql:match("FROM (mod_builder_[%w_]+)$")
+    if t and extraRows[t] then return result(extraRows[t]) end
     local o, n = sql:match("SELECT props, code FROM mod_builder_builds WHERE owner = (%d+) AND name = '([%w_%-]+)'")
     if o then local b = buildsDb[o .. "/" .. n]; return b and result({ { b.props, b.code or "" } }) end
     local c = sql:match("SELECT owner, name, props FROM mod_builder_builds WHERE code = '(%w+)'")
@@ -145,6 +151,10 @@ check("every category has props", (function()
     local seen = {}; for _, c in ipairs(cat) do seen[c.cat] = true end
     for _, k in ipairs({ "seating", "tables", "barrels", "crates", "lights", "banners", "tents", "fires", "fences" }) do if not seen[k] then return false end end
     return true end)())
+check("tables: plots, plot members, prefabs, op log, trust, sizes", sqlHas("^CREATE TABLE IF NOT EXISTS mod_builder_plots ")
+    and sqlHas("^CREATE TABLE IF NOT EXISTS mod_builder_plot_members") and sqlHas("^CREATE TABLE IF NOT EXISTS mod_builder_prefabs")
+    and sqlHas("^CREATE TABLE IF NOT EXISTS mod_builder_oplog") and sqlHas("^CREATE TABLE IF NOT EXISTS mod_builder_trust")
+    and sqlHas("^CREATE TABLE IF NOT EXISTS mod_builder_prop_scale"))
 check("the default build area is Goldshire's game_tele spot", #T.BUILD_AREAS == 1 and T.BUILD_AREAS[1].map == 0 and T.BUILD_AREAS[1].r == 45)
 
 -- roles ------------------------------------------------------------------------------------------------
@@ -463,6 +473,455 @@ do
     clock = clock + 5
     cmd(ed, "build undo")
     check("dup: undo removes the copy", propsOf(40) == 1)
+end
+
+-- M3: plots and permissions ------------------------------------------------------------------------------------
+local function at(p, dx, dy, dz) return string.format("%.2f %.2f %.2f", AREA.x + dx, AREA.y + dy, AREA.z + (dz or 0)) end
+local function count(fn) local n = 0; for _, p in pairs(T.props) do if fn(p) then n = n + 1 end end; return n end
+local function near(a, b) return math.abs(a - b) < 0.02 end
+local function step() clock = clock + 1 end
+do
+    local pia = player({ guid = 50, name = "Pia", x = AREA.x, y = AREA.y + 25 })
+    local quin = player({ guid = 51, name = "Quin", x = AREA.x + 3, y = AREA.y + 25 })
+    local vic = player({ guid = 52, name = "Vic", x = AREA.x - 3, y = AREA.y + 25 })
+    local rex = player({ guid = 53, name = "Rex", x = AREA.x + 6, y = AREA.y + 20 })
+    cmd(gm, "build grant Pia"); cmd(gm, "build grant Quin"); cmd(gm, "build grant Rex")
+
+    cmd(vic, "build plot claim")
+    check("plot: claiming needs the builder role", last(vic):find("builder role") and next(T.plots) == nil)
+    cmd(pia, "build plot")
+    check("plot: none yet says how to claim", last(pia):find("plot claim"))
+    cmd(pia, "build plot claim")
+    local plot = (function() for _, pl in pairs(T.plots) do if pl.owner == 50 then return pl end end end)()
+    check("plot: claimed where you stand, stored", plot and near(plot.x, AREA.x) and plot.r == 12 and plot.area == "1"
+        and sqlHas("^REPLACE INTO mod_builder_plots %(id, owner, owner_name, area, map, x, y, z, r, created_at%) VALUES %(%d+, 50, 'Pia', '1', 0,")
+        and last(pia):find("Plot claimed: 24 yards across"))
+    cmd(pia, "build plot claim")
+    check("plot: one each", last(pia):find("You have a plot already"))
+    rex.x, rex.y = AREA.x + 20, AREA.y + 25
+    cmd(rex, "build plot claim")
+    check("plot: not over someone else's", last(rex):find("Too close to Pia's plot"))
+    rex.x, rex.y = AREA.x + 40, AREA.y
+    cmd(rex, "build plot claim")
+    check("plot: inside the build area", last(rex):find("edge of the build area"))
+    rex.x, rex.y = AREA.x + 5, AREA.y
+    cmd(rex, "build plot claim")
+    check("plot: not over other builders' props", last(rex):find("Someone else's props are here"))
+    rex.x, rex.y = AREA.x + 6, AREA.y + 20
+
+    -- Pia builds on her plot; Rex (a builder, not a member) can't
+    step(); cmd(pia, "build spawnat chair " .. at(pia, 2, 26))
+    local pc = T.props[T.selected[50]]
+    check("plot: the owner builds on it", pc and pc.owner == 50)
+    step(); cmd(rex, "build spawnat chair " .. at(rex, -2, 26))
+    check("plot: a non-member can't build on it", last(rex):find("That's Pia's plot") and count(function(p) return p.owner == 53 end) == 0)
+    T.selected[53] = pc.id
+    cmd(rex, "build move z 1")
+    check("plot: a non-member can't move its props", last(rex):find("Pia's plot") and near(pc.z, AREA.z))
+    cmd(rex, "build pick " .. T.live[pc.id])
+    check("plot: nor select them", last(rex):find("Pia's plot"))
+    T.selected[53] = nil
+    -- moving your own prop from the commons into her plot is refused too
+    step(); cmd(rex, "build spawnat chair " .. at(rex, 6, 12))
+    local rp = T.props[T.selected[53]]
+    step(); cmd(rex, "build placeat " .. at(rex, 4, 26) .. " 0")
+    check("plot: can't carry a prop into someone else's plot", rp and near(rp.y, AREA.y + 12) and last(rex):find("Pia's plot"))
+
+    -- co-builders
+    cmd(quin, "build plot add Pia")
+    check("plot: only an owner adds people", last(quin):find("You have no plot"))
+    cmd(pia, "build plot add Vic")
+    check("plot: a builder needs the builder role", last(pia):find("Vic needs the builder role"))
+    cmd(pia, "build plot add Quin")
+    check("plot: add a builder by name (stored)", plot.members[51] and plot.members[51].role == "builder"
+        and sqlHas("^REPLACE INTO mod_builder_plot_members %(plot, guid, name, role%) VALUES %(%d+, 51, 'Quin', 'builder'%)")
+        and last(quin):find("You're a builder on Pia's plot"))
+    step(); cmd(quin, "build spawnat stool " .. at(quin, 4, 27))
+    local qp = T.props[T.selected[51]]
+    check("plot: a builder builds there", qp and qp.owner == 51)
+    T.selected[51] = pc.id
+    step(); cmd(quin, "build move z 0.5")
+    check("plot: a builder moves the owner's props there", near(pc.z, AREA.z + 0.5))
+    cmd(pia, "build plot add Vic visitor")
+    check("plot: add a visitor", plot.members[52] and plot.members[52].role == "visitor")
+    cmd(gm, "build grant Vic")
+    step(); cmd(vic, "build spawnat stool " .. at(vic, -4, 27))
+    check("plot: visitors can't build", last(vic):find("visitor on Pia's plot") and count(function(p) return p.owner == 52 end) == 0)
+    cmd(vic, "build pick " .. T.live[pc.id])
+    check("plot: visitors may select", T.selected[52] == pc.id)
+    step(); cmd(vic, "build move z 1")
+    check("plot: visitors can't edit", last(vic):find("visitor") and near(pc.z, AREA.z + 0.5))
+    cmd(vic, "build delete")
+    check("plot: visitors can't delete", T.props[pc.id] ~= nil)
+    cmd(vic, "build copy")
+    check("plot: visitors may copy", T.clip[52] and #T.clip[52].rel == 1)
+    cmd(quin, "build plot")
+    check("plot: info lists builders and visitors", said(quin, "Builders: Quin") and said(quin, "Visitors: Vic") and last(quin):find("You: builder"))
+    cmd(pia, "build plot remove quin")
+    check("plot: remove a co-builder by name", plot.members[51] == nil and sqlHas("^DELETE FROM mod_builder_plot_members WHERE plot = %d+ AND guid = 51$"))
+    step(); cmd(quin, "build spawnat stool " .. at(quin, 5, 28))
+    check("plot: removed, can't build there any more", last(quin):find("That's Pia's plot"))
+
+    -- the plot's budget
+    env.OV_BUILD_PLOT_PROPS = "2"
+    step(); cmd(pia, "build spawnat stool " .. at(pia, -3, 22))
+    check("plot: its own prop limit", last(pia):find("Pia's plot is full") and count(function(p) return p.owner == 50 end) == 1)
+    env.OV_BUILD_PLOT_PROPS = nil
+
+    -- state over OVMOD carries the plot and the budget
+    pia.addon = {}
+    serverEvents[30](30, pia, 7, "OVMOD", "wubuild\tcmd\t1/1\tplot", pia)
+    local st = pia.addon[#pia.addon][2]
+    check("state: plot, your role, its use; points and tier", st:find("plot=%d+,Pia,owner,2/150,2/300") and st:find("pts=1/100;tier=builder"))
+
+    -- GM tools
+    cmd(pia, "build plot list")
+    check("plot list is GM only", last(pia):find("Only GMs"))
+    cmd(gm, "build plot list")
+    check("GM: plot list", said(gm, "#" .. plot.id .. " Pia, Goldshire green"))
+    cmd(gm, "build plot transfer " .. plot.id .. " Quin")
+    check("GM: transfer a plot", plot.owner == 51 and plot.ownerName == "Quin" and last(gm):find("is Quin's now"))
+    step(); cmd(pia, "build spawnat stool " .. at(pia, -3, 22))
+    check("the old owner can't build there now", last(pia):find("That's Quin's plot"))
+    cmd(gm, "build plot transfer " .. plot.id .. " Pia")
+    cmd(gm, "build plot remove " .. plot.id)
+    check("GM: remove a plot (props stay)", T.plots[plot.id] == nil and T.props[pc.id] ~= nil
+        and sqlHas("^DELETE FROM mod_builder_plots WHERE id = " .. plot.id .. "$"))
+    pia.x, pia.y = AREA.x + 20, AREA.y + 20
+    cmd(pia, "build plot claim")
+    plot = (function() for _, pl in pairs(T.plots) do if pl.owner == 50 then return pl end end end)()
+    cmd(pia, "build plot abandon")
+    check("abandon your plot", plot and T.plots[plot.id] == nil and last(pia):find("Your plot is gone"))
+
+    -- plots only
+    env.OV_BUILD_PLOTS_ONLY = "1"
+    step(); cmd(rex, "build spawnat chair " .. at(rex, 6, 14))
+    check("OV_BUILD_PLOTS_ONLY=1: no building in the commons", last(rex):find("Claim a plot first"))
+    env.OV_BUILD_PLOTS_ONLY = nil
+end
+
+-- M3: budgets and trust tiers ------------------------------------------------------------------------------------
+do
+    local nia = player({ guid = 54, name = "Nia", x = AREA.x - 20, y = AREA.y - 5, played = 600 })
+    function nia:GetTotalPlayedTime() return self.played end
+    cmd(gm, "build grant Nia")
+    local b = T.budgetOf(nia)
+    check("tiers: a new character gets less (40%)", b.tier == "new" and b.props == 20 and b.points == 40)
+    nia.played = 3 * 3600
+    check("tiers: after 2 hours played, builder", T.budgetOf(nia).tier == "builder" and T.budgetOf(nia).props == 50)
+    nia.played = 600
+    cmd(nia, "build trust Nia master")
+    check("trust is GM only", last(nia):find("Only GMs"))
+    cmd(gm, "build trust Nia trusted")
+    b = T.budgetOf(nia)
+    check("GM sets a tier (stored)", b.tier == "trusted" and b.props == 150 and b.points == 300
+        and sqlHas("^REPLACE INTO mod_builder_trust %(guid, name, tier, set_by, set_at%) VALUES %(54, 'Nia', 3, 'Keeper'")
+        and last(nia):find("150 props and 300 points"))
+    cmd(gm, "build trust Nia auto")
+    check("trust auto: back to the played-time rule", T.budgetOf(nia).tier == "new" and sqlHas("^DELETE FROM mod_builder_trust WHERE guid = 54$"))
+    cmd(gm, "build trust Nia boss")
+    check("trust: unknown tier gets the usage", last(gm):find("Usage"))
+
+    check("points: lights 2, tents 3, a chair 1, the Great Forge 6", T.costOf(180043) == 2 and T.costOf(184592) == 3
+        and T.costOf(2413) == 1 and T.costOf(32372) == 6)
+    env.OV_BUILD_POINTS = "10"     -- new tier: 4 points
+    step(); cmd(nia, "build spawnat tent " .. at(nia, -20, -5))
+    check("points: a 3-point tent fits in 4", count(function(p) return p.owner == 54 end) == 1)
+    step(); cmd(nia, "build spawnat bigtent " .. at(nia, -22, -5))
+    check("points: the next 3 don't, with a plain message", count(function(p) return p.owner == 54 end) == 1
+        and last(nia):find("needs 3 build points; you have 1 of 4 left"))
+    step(); cmd(nia, "build spawnat chair " .. at(nia, -22, -6))
+    check("points: a 1-point chair still fits", count(function(p) return p.owner == 54 end) == 2)
+    step(); cmd(nia, "build dup")
+    check("points: dup is checked too", last(nia):find("build points") and count(function(p) return p.owner == 54 end) == 2)
+    env.OV_BUILD_POINTS = nil
+    cmd(nia, "build clear")
+end
+
+-- M3: multi-select, group ops, copy and paste ----------------------------------------------------------------------
+do
+    local gus = player({ guid = 60, name = "Gus", x = AREA.x - 15, y = AREA.y + 5 })
+    cmd(gm, "build grant Gus")
+    local ids = {}
+    for i, dx in ipairs({ -2, 2, 0 }) do
+        step(); cmd(gus, "build spawnat " .. (i == 3 and "barrel" or "chair") .. " " .. at(gus, -15 + dx, 5 + (i == 3 and 2 or 0)))
+        ids[i] = T.selected[60]
+    end
+    local A, Bp, Cp = T.props[ids[1]], T.props[ids[2]], T.props[ids[3]]
+    check("group: three props to work with", A and Bp and Cp)
+    cmd(gus, "build pick " .. T.live[A.id])
+    cmd(gus, "build pick " .. T.live[Bp.id] .. " add")
+    check("Shift-click: adds to the selection", T.group[60] and #T.group[60] == 2 and last(gus):find("added %(2 selected%)"))
+    cmd(gus, "build pick " .. T.live[Cp.id] .. " add")
+    cmd(gus, "build pick " .. T.live[Cp.id] .. " add")
+    check("Shift-click again: takes it out", #T.group[60] == 2 and last(gus):find("taken out"))
+    cmd(gus, "build pick " .. T.live[A.id])
+    check("a plain click: just that one", T.group[60] == nil and T.selected[60] == A.id)
+    cmd(gus, "build selall")
+    check("select all of mine in range", T.group[60] and #T.group[60] == 3 and last(gus):find("3 props selected"))
+    cmd(gus, "build selclear")
+    check("clear the selection", T.group[60] == nil and T.selected[60] == nil)
+    cmd(gus, string.format("build selbox %.2f %.2f %.2f %.2f", AREA.x - 18, AREA.y + 4, AREA.x - 14.5, AREA.y + 8))
+    check("box select: what's inside the box", T.group[60] and #T.group[60] == 2)
+    cmd(gus, string.format("build selbox %.2f %.2f %.2f %.2f add", AREA.x - 13.5, AREA.y + 4, AREA.x - 12, AREA.y + 6))
+    check("box select add: keeps the old ones", #T.group[60] == 3)
+    cmd(gus, string.format("build selbox %.2f %.2f %.2f %.2f", AREA.x + 300, AREA.y, AREA.x + 310, AREA.y + 10))
+    check("box select: too far", last(gus):find("too far"))
+    cmd(gus, "build selall")
+
+    local undo0 = #(T.undo[60] or {})
+    step(); cmd(gus, "build move z 1")
+    check("group move: all three, one undo entry", near(A.z, AREA.z + 1) and near(Bp.z, AREA.z + 1) and near(Cp.z, AREA.z + 1)
+        and #T.undo[60] == undo0 + 1 and last(gus):find("3 props moved"))
+    cmd(gus, "build undo")
+    check("group undo: all back at once", near(A.z, AREA.z) and near(Bp.z, AREA.z) and near(Cp.z, AREA.z) and #T.undo[60] == undo0)
+    local cx, cy = (A.x + Bp.x + Cp.x) / 3, (A.y + Bp.y + Cp.y) / 3
+    local ax, ay, ao = A.x - cx, A.y - cy, A.o
+    step(); cmd(gus, "build turn 90")
+    check("group turn: around the middle, each prop turns too", near(A.x - cx, -ay) and near(A.y - cy, ax)
+        and math.abs(A.o - (ao + math.pi / 2)) < 1e-6)
+    cmd(gus, "build undo")
+    check("group turn undo", near(A.x - cx, ax) and near(A.y - cy, ay))
+    step(); cmd(gus, "build move x 9"); cmd(gus, "build move x 9"); step(); cmd(gus, "build move x 9"); cmd(gus, "build move x 9")
+    cmd(gus, "build move x 9"); step(); cmd(gus, "build move x 9"); cmd(gus, "build move x 9")
+    check("group move: all or none at the area's edge", math.abs((A.x - Bp.x) + 4) < 0.05 and said(gus, "out of the build area"))
+    for _ = 1, 10 do if #T.undo[60] > undo0 then cmd(gus, "build undo") else break end end
+    -- placeat with a group: the last-picked goes to the point, the rest keep their place around it
+    cmd(gus, "build selall")
+    local pp = T.props[T.selected[60]]
+    local offs = {}
+    for _, id in ipairs(T.group[60]) do offs[id] = { T.props[id].x - pp.x, T.props[id].y - pp.y } end
+    step(); cmd(gus, "build placeat " .. at(gus, -10, 0, 0.5) .. " 0")
+    check("group drop: the group keeps its shape", near(pp.x, AREA.x - 10) and near(pp.z, AREA.z + 0.5) and (function()
+        for id, o in pairs(offs) do local p = T.props[id]; if not (near(p.x - pp.x, o[1]) and near(p.y - pp.y, o[2])) then return false end end
+        return true end)())
+    cmd(gus, "build undo")
+    -- exact numbers: setpos, setturn, setscale
+    cmd(gus, "build pick " .. T.live[A.id])
+    step(); cmd(gus, "build setpos " .. at(gus, -16, 9, 0.25))
+    check("setpos: exactly there", near(A.x, AREA.x - 16) and near(A.y, AREA.y + 9) and near(A.z, AREA.z + 0.25))
+    cmd(gus, "build setturn 90")
+    check("setturn: facing 90 degrees", math.abs(A.o - math.pi / 2) < 1e-4)
+    cmd(gus, "build setscale 1.5")
+    check("setscale: size on the object, stored", A.s == 1.5 and objects[T.live[A.id]].scale == 1.5
+        and sqlHas(string.format("^REPLACE INTO mod_builder_prop_scale %%(id, scale%%) VALUES %%(%d, 1%%.50%%)", A.id)))
+    local real = objects[T.live[A.id]]
+    objects[T.live[A.id]] = { guid = real.guid, map = real.map, GetGUID = real.GetGUID, RemoveFromWorld = real.RemoveFromWorld }
+    step(); cmd(gus, "build setscale 2")
+    check("setscale: a realm without object sizes says so", last(gus):find("isn't supported") and A.s == 1.5)
+    objects[T.live[A.id]] = real
+    step(); cmd(gus, "build setscale 9")
+    check("setscale: within limits", last(gus):find("Size goes from") and A.s == 1.5)
+    cmd(gus, "build undo")
+    check("undo a size", A.s == nil and sqlHas(string.format("^DELETE FROM mod_builder_prop_scale WHERE id = %d$", A.id)))
+    gus.addon = {}
+    serverEvents[30](30, gus, 7, "OVMOD", "wubuild\tcmd\t1/1\tnear", gus)
+    check("state: exact numbers for the properties panel", gus.addon[#gus.addon][2]:find(string.format("pos=%.2f,%.2f,%.2f,90,1.00", A.x, A.y, A.z), 1, true))
+    cmd(gus, "build undo"); cmd(gus, "build undo")
+
+    -- dup and delete a group
+    cmd(gus, "build selall")
+    step(); cmd(gus, "build dup")
+    check("group dup: copies of all three, selected", count(function(p) return p.owner == 60 end) == 6 and #T.group[60] == 3
+        and T.group[60][1] ~= A.id)
+    cmd(gus, "build undo")
+    check("group dup undo", count(function(p) return p.owner == 60 end) == 3)
+    cmd(gus, "build selall")
+    cmd(gus, "build delete")
+    check("group delete", count(function(p) return p.owner == 60 end) == 0 and last(gus):find("3 props removed"))
+    cmd(gus, "build undo")
+    check("group delete undo", count(function(p) return p.owner == 60 end) == 3 and T.props[A.id] and T.live[A.id])
+
+    -- copy and paste around a point
+    cmd(gus, "build selall")
+    cmd(gus, "build copy")
+    check("copy: the selection on the clipboard", T.clip[60] and #T.clip[60].rel == 3 and last(gus):find("Copied 3 props"))
+    step(); cmd(gus, "build pasteat " .. at(gus, -10, -10) .. " 0")
+    local pasted = T.group[60]
+    check("paste at a point: three new props around it", count(function(p) return p.owner == 60 end) == 6 and pasted and #pasted == 3
+        and (function()
+            local sx, sy, mz = 0, 0, math.huge
+            for _, id in ipairs(pasted) do local p = T.props[id]; sx = sx + p.x; sy = sy + p.y; mz = math.min(mz, p.z) end
+            return near(sx / 3, AREA.x - 10) and near(sy / 3, AREA.y - 10) and near(mz, AREA.z) end)())
+    cmd(gus, "build undo")
+    check("paste undo: one entry", count(function(p) return p.owner == 60 end) == 3)
+    clock = clock + 10
+    cmd(gus, "build paste")
+    check("paste with no name: at your feet", count(function(p) return p.owner == 60 end) == 6)
+    cmd(gus, "build undo")
+    clock = clock + 10
+    T.clip[60] = nil
+    cmd(gus, "build pasteat " .. at(gus, -10, -10))
+    check("paste with nothing copied", last(gus):find("Nothing copied yet"))
+end
+
+-- M3: prefabs ------------------------------------------------------------------------------------------------------
+do
+    local gus = online[60]
+    local hal = player({ guid = 61, name = "Hal", x = AREA.x + 15, y = AREA.y - 15 })
+    cmd(gm, "build grant Hal")
+    cmd(gus, "build selall")
+    cmd(gus, "build prefab save Bad!")
+    check("prefab: the name is checked", last(gus):find("Usage"))
+    cmd(gus, "build prefab save Camp")
+    local f = (function() for _, x in pairs(T.prefabs) do if x.owner == 60 then return x end end end)()
+    local data = f and T.jsonDecode(f.data)
+    check("prefab: saved from the selection as JSON", f and f.name == "camp" and data and data.v == 1 and data.name == "camp"
+        and #data.props == 3 and data.props[1].e and sqlHas("^REPLACE INTO mod_builder_prefabs %(id, owner, owner_name, name, code, data, created_at%) VALUES %(%d+, 60, 'Gus', 'camp', NULL, '{\"v\":1"))
+    check("prefab: offsets around its centre", (function()
+        local sx, sy = 0, 0
+        for _, e in ipairs(data.props) do sx = sx + e.x; sy = sy + e.y end
+        return math.abs(sx) < 0.05 and math.abs(sy) < 0.05 end)())
+    cmd(gus, "build prefab list")
+    check("prefab: list", last(gus):find("camp %(3%)"))
+    gus.addon = {}
+    serverEvents[30](30, gus, 7, "OVMOD", "wubuild\tcmd\t1/1\tprefab list", gus)
+    local pmsg
+    for _, a in ipairs(gus.addon) do if a[2]:find("^wubuild\tprefabs\t") then pmsg = a[2] end end
+    check("prefab: the window gets the list", pmsg and pmsg:find(f.id .. ",camp,%-,3$"))
+    cmd(gus, "build prefab share camp")
+    check("prefab: share gives a code", f.code and #f.code == 6 and last(gus):find(f.code, 1, true)
+        and sqlHas("^UPDATE mod_builder_prefabs SET code = '" .. f.code .. "' WHERE id = " .. f.id .. "$"))
+    step(); cmd(hal, "build prefab paste " .. f.code:lower())
+    check("prefab: someone else pastes the code", count(function(p) return p.owner == 61 end) == 3 and last(hal):find("Pasted '" .. f.code .. "': 3 props"))
+    cmd(hal, "build undo")
+    clock = clock + 10
+    cmd(hal, "build load " .. f.code)
+    check("prefab: its code works in .build load too", count(function(p) return p.owner == 61 end) == 3)
+    cmd(hal, "build undo")
+    clock = clock + 10
+    cmd(hal, "build prefab paste camp")
+    check("prefab: names are per player", last(hal):find("No prefab 'camp'"))
+    clock = clock + 10
+    cmd(gus, "build prefab pasteat camp " .. at(gus, -12, -14) .. " 90")
+    check("prefab: paste at a point, turned", count(function(p) return p.owner == 60 end) == 6 and #T.group[60] == 3)
+    cmd(gus, "build undo")
+
+    -- for other scripts (ov_workshop.lua)
+    check("OVBuild is global", type(OVBuild) == "table" and type(OVBuild.ExportPrefab) == "function" and type(OVBuild.ImportPrefab) == "function")
+    local json, info = OVBuild.ExportPrefab(f.id)
+    check("ExportPrefab(id): JSON and info", json and json:find('^{"v":1,"name":"camp","props":%[') and info.count == 3
+        and info.name == "camp" and info.ownerName == "Gus" and info.points == 3)
+    check("ExportPrefab(code) works too; unknown is nil", OVBuild.ExportPrefab(f.code) == json and OVBuild.ExportPrefab(999999) == nil)
+    clock = clock + 10
+    local ok, newIds = OVBuild.ImportPrefab(json, hal, AREA.x + 12, AREA.y - 12, AREA.z, math.pi)
+    check("ImportPrefab: pasted for the player, with an undo", ok == true and #newIds == 3 and count(function(p) return p.owner == 61 end) == 3
+        and T.undo[61][#T.undo[61]].kind == "load")
+    cmd(hal, "build undo")
+    clock = clock + 10
+    local okT = OVBuild.ImportPrefab(T.jsonDecode(json), hal)
+    check("ImportPrefab: a table works, at your feet by default", okT == true and count(function(p) return p.owner == 61 end) == 3)
+    cmd(hal, "build undo")
+    clock = clock + 10
+    local nobody = player({ guid = 63, name = "Ned", x = AREA.x, y = AREA.y })
+    check("ImportPrefab: needs the builder role", OVBuild.ImportPrefab(json, nobody) == nil)
+    check("ImportPrefab: rejects bad data", OVBuild.ImportPrefab("{\"props\":[{\"e\":2413,\"x\":1e999,\"y\":0,\"z\":0}]}", hal) == nil
+        and OVBuild.ImportPrefab("not json", hal) == nil and OVBuild.ImportPrefab('{"props":[{"e":2413,"x":0,"y":0,"z":0}]} extra', hal) == nil
+        and OVBuild.ImportPrefab('{"props":[{"e":2413,"x":90,"y":0,"z":0}]}', hal) == nil)
+    local okU, whyU = OVBuild.ImportPrefab('{"props":[{"e":424242,"x":0,"y":0,"z":0}]}', hal)
+    check("ImportPrefab: only props in this realm's catalog", okU == nil and whyU:find("on this realm"))
+    local many = {}
+    for i = 1, 61 do many[i] = '{"e":2413,"x":0,"y":0,"z":0}' end
+    check("ImportPrefab: 60 props at most", OVBuild.ImportPrefab('{"props":[' .. table.concat(many, ",") .. ']}', hal) == nil)
+    check("ImportPrefab: too far from the player", OVBuild.ImportPrefab(json, hal, AREA.x + 400, AREA.y, AREA.z) == nil)
+    env.OV_BUILD_PER_PLAYER = "2"
+    clock = clock + 10
+    check("ImportPrefab: budgets apply", OVBuild.ImportPrefab(json, hal) == nil and last(hal):find("room for 2"))
+    env.OV_BUILD_PER_PLAYER = nil
+    check("ParsePrefab: counts without placing", OVBuild.ParsePrefab(json) == 3)
+    local sid = OVBuild.SavePrefab(hal, "fromshop", json)
+    check("SavePrefab: into the player's list", sid and T.prefabs[sid].owner == 61 and T.prefabs[sid].name == "fromshop"
+        and #OVBuild.ListPrefabs(61) == 1 and OVBuild.ListPrefabs(61)[1].count == 3)
+    check("the JSON reader: depth, nesting, escapes", T.jsonDecode('[[[[[[[[[1]]]]]]]]]') == nil
+        and T.jsonDecode('{"a":"x\\"y","b":[1,2.5,-3e2],"c":true,"d":null}').a == 'x"y'
+        and T.jsonDecode('{"b":[1,2.5,-3e2]}').b[3] == -300)
+    cmd(hal, "build prefab delete fromshop")
+    check("prefab delete", T.prefabs[sid] == nil and sqlHas("^DELETE FROM mod_builder_prefabs WHERE id = " .. sid .. "$"))
+    local gus2 = online[60]
+    step(); cmd(gus2, "build selall")
+    for i = 1, 6 do cmd(gus2, "build prefab save spam" .. i) end
+    check("plot and prefab changes: five a second", last(gus2):find("Slow down")
+        and not (function() for _, x in pairs(T.prefabs) do if x.name == "spam6" then return true end end end)())
+    step(); for i = 1, 5 do cmd(gus2, "build prefab delete spam" .. i) end
+    check("(and the five are deleted again)", not (function() for _, x in pairs(T.prefabs) do if x.name:find("^spam") then return true end end end)())
+end
+
+-- M3: the op log and GM rollback ---------------------------------------------------------------------------------------
+do
+    local van = player({ guid = 62, name = "Van", x = AREA.x - 10, y = AREA.y - 25 })
+    cmd(gm, "build grant Van")
+    local ops0 = #T.oplog
+    step(); cmd(van, "build spawnat chair " .. at(van, -10, -25))
+    local v1 = T.selected[62]
+    check("op log: a spawn is one op, stored", #T.oplog == ops0 + 1 and T.oplog[#T.oplog].op == "spawnat" and T.oplog[#T.oplog].name == "Van"
+        and T.oplog[#T.oplog].rows[1].before == nil and T.oplog[#T.oplog].rows[1].after.entry == 2413
+        and sqlHas("^INSERT INTO mod_builder_oplog %(op_id, guid, name, op, prop, before_state, after_state, at%) VALUES %(%d+, 62, 'Van', 'spawnat', " .. v1 .. ", '', '2413,0,"))
+    step(); cmd(van, "build spawnat bench " .. at(van, -8, -25))
+    local v2 = T.selected[62]
+    step(); cmd(van, "build spawnat keg " .. at(van, -12, -25))
+    local v3 = T.selected[62]
+    cmd(van, "build selall")
+    step(); cmd(van, "build move z 2")
+    check("op log: a group move is one op with a row per prop", T.oplog[#T.oplog].op == "move" and #T.oplog[#T.oplog].rows == 3)
+    cmd(van, "build pick " .. T.live[v1])
+    cmd(van, "build delete")
+    check("op log: deletes too", T.oplog[#T.oplog].op == "delete" and T.oplog[#T.oplog].rows[1].after == nil)
+    cmd(van, "build rollback van 2")
+    check("rollback is GM only", last(van):find("Only GMs"))
+    cmd(gm, "build oplog van")
+    check("GM: oplog lists the last changes", said(gm, "changes by van") and last(gm):find("spawnat, 1 prop"))
+    cmd(gm, "build rollback van 2")
+    check("GM rollback: the last 2 ops undone (delete, then the move)", T.props[v1] and T.live[v1] and near(T.props[v2].z, AREA.z)
+        and near(T.props[v1].z, AREA.z) and last(gm):find("Rolled back 2 changes by van")
+        and sqlHas("^UPDATE mod_builder_oplog SET undone = 1 WHERE op_id IN %(%d+,%d+%)$"))
+    check("GM rollback: the restored prop keeps its owner", T.props[v1].owner == 62)
+    check("GM rollback: the player's undo stack is cleared", T.undo[62] == nil)
+    gm.x, gm.y = AREA.x + 300, AREA.y
+    cmd(gm, "build rollback van 10")
+    check("GM rollback: only near you", last(gm):find("No changes by van within 60 yards"))
+    gm.x, gm.y = AREA.x, AREA.y
+    cmd(gm, "build rollback van 10 120")
+    check("GM rollback: the spawns undone too", not T.props[v1] and not T.props[v2] and not T.props[v3] and last(gm):find("Rolled back 3"))
+    cmd(gm, "build rollback van 10")
+    check("GM rollback: nothing left", last(gm):find("No changes by van"))
+    check("rollback is logged as the GM's op", T.oplog[#T.oplog].op == "rollback" and T.oplog[#T.oplog].name == "Keeper")
+end
+
+-- M3: a restart reads plots, members, prefabs, tiers and sizes back ------------------------------------------------------
+do
+    local gus = online[60]
+    cmd(gus, "build pick " .. T.live[(function() for _, p in pairs(T.props) do if p.owner == 60 then return p.id end end end)()])
+    step(); cmd(gus, "build setscale 2")
+    local scaled = T.selected[60]
+    local pia = online[50]
+    cmd(pia, "build plot claim")
+    cmd(pia, "build plot add Vic visitor")
+    cmd(gm, "build trust Nia master")
+    local plotsBefore, prefabsBefore = {}, {}
+    for id, pl in pairs(T.plots) do plotsBefore[#plotsBefore + 1] = { id, pl.owner, pl.ownerName, pl.area, pl.map, pl.x, pl.y, pl.z, pl.r } end
+    local members = {}
+    for id, pl in pairs(T.plots) do for g, m in pairs(pl.members) do members[#members + 1] = { id, g, m.name, m.role } end end
+    for id, f in pairs(T.prefabs) do prefabsBefore[#prefabsBefore + 1] = { id, f.owner, f.ownerName, f.name, f.code or "", f.data } end
+    propRows = {}
+    for _, p in pairs(T.props) do propRows[#propRows + 1] = { p.id, p.owner, p.ownerName, p.area, p.entry, p.map, p.x, p.y, p.z, p.o } end
+    roleRows = {}
+    for g, r in pairs(T.roles) do roleRows[#roleRows + 1] = { g, r.name } end
+    extraRows.mod_builder_plots = plotsBefore
+    extraRows.mod_builder_plot_members = members
+    extraRows.mod_builder_prefabs = prefabsBefore
+    extraRows.mod_builder_trust = { { 54, 4 } }
+    extraRows.mod_builder_prop_scale = { { scaled, 2 } }
+    dofile(file)
+    local T3 = OV_BUILD_TEST
+    local plot3 = (function() for _, pl in pairs(T3.plots) do if pl.owner == 50 then return pl end end end)()
+    check("restart: plots and their members", plot3 and plot3.members[52] and plot3.members[52].role == "visitor")
+    check("restart: prefabs (with codes)", (function()
+        for _, f in pairs(T3.prefabs) do if f.owner == 60 and f.name == "camp" and f.code then return true end end end)())
+    check("restart: GM-set tiers", T3.trust[54] == 4 and T3.budgetOf(online[54]).tier == "master")
+    check("restart: sizes", T3.props[scaled] and T3.props[scaled].s == 2)
+    T = T3
+    propRows, roleRows = nil, nil
+    for k in pairs(extraRows) do extraRows[k] = nil end
 end
 
 -- switch off ------------------------------------------------------------------------------------------------

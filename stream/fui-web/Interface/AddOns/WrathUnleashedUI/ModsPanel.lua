@@ -1,8 +1,9 @@
 -- Esc > Mods & Workshop (3.3.5a API): the in-game front door of the WrathUnleashed mod workshop.
 --   Interface: UI size slider (modern size by default), action bars on, fill my bars.
 --   Installed:  every addon in this client with an on/off switch (takes effect after Reload UI).
---   Workshop:   the Workshop mods this realm runs (WU_MOD_CATALOG, from the generated WUModCatalog addon),
+--   Mods:       the Workshop mods this realm runs (WU_MOD_CATALOG, from the generated WUModCatalog addon),
 --               with on/off for their addons, and the links (the Workshop site, the repos), to copy.
+--   Workshop:   what players made (courses, modes, builds), to rate and play in one click (Workshop.lua).
 -- The button is named GameMenuButtonAddOns: Forever UI's game menu keeps a place for that name
 -- (after Ratings), skins it and lays it out with the other buttons.
 
@@ -42,6 +43,7 @@ local function showTab(n)
     end
     if n == 2 then panel.RefreshAddons() end
     if n == 3 and panel.RefreshWorkshop then panel.RefreshWorkshop() end
+    if n == 4 and W.RefreshWorkshopItems then W.RefreshWorkshopItems() end
 end
 
 local function buildInterface(page)
@@ -264,17 +266,18 @@ local function build()
     tinsert(UISpecialFrames, "WrathUnleashedModsFrame")   -- Esc closes it
 
     panel.pages, panel.tabs = {}, {}
-    local names = { "Interface", "Installed", "Workshop" }
+    local names = { "Interface", "Installed", "Mods", "Workshop" }
     for i, name in ipairs(names) do
         local page = CreateFrame("Frame", nil, panel)
         page:SetPoint("TOPLEFT", 12, -70); page:SetPoint("BOTTOMRIGHT", -12, 12)
         page:Hide()
         panel.pages[i] = page
-        panel.tabs[i] = button(panel, name, 120, function() showTab(i) end, "TOPLEFT", 24 + (i - 1) * 136, -42)
+        panel.tabs[i] = button(panel, name, 98, function() showTab(i) end, "TOPLEFT", 22 + (i - 1) * 104, -42)
     end
     buildInterface(panel.pages[1])
     buildInstalled(panel.pages[2])
     buildWorkshop(panel.pages[3])
+    if W.BuildWorkshopItems then W.BuildWorkshopItems(panel.pages[4]) end
     showTab(1)
     panel:Hide()
 end
@@ -304,5 +307,14 @@ if GameMenuFrame and not _G["GameMenuButtonAddOns"] then
     if ForeverUI and ForeverUI.GameMenu and ForeverUI.GameMenu.Layout then ForeverUI.GameMenu.Layout() end
 end
 
-SLASH_WUMODS1, SLASH_WUMODS2 = "/mods", "/workshop"
+-- Opens the panel on one tab (4: the Workshop).
+function W.ShowModsTab(n)
+    if not panel then build() end
+    panel:Show()
+    showTab(n)
+end
+
+SLASH_WUMODS1 = "/mods"
 SlashCmdList["WUMODS"] = function() W.ToggleMods() end
+SLASH_WUWORKSHOP1, SLASH_WUWORKSHOP2 = "/workshop", "/ws"
+SlashCmdList["WUWORKSHOP"] = function() W.ShowModsTab(4) end

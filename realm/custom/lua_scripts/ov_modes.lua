@@ -519,6 +519,7 @@ local function publishCommand(player, text)
         key, m.guid, (m.author:gsub("[^%w]", "")), (m.title:gsub("[^%w %-!&%.]", "")), hex(text), now()))
     say(player, m.title .. " sent for review. You can host it already; a GM approves it for everyone.")
     send(player, "published", key)
+    if rawget(_G, "OVWorkshop") then OVWorkshop.Published("mode", key, m.title, player) end   -- ov_workshop.lua
 end
 
 -- Drafts: your saved modes and device layouts, on your account (private; nothing is reviewed or shared).
@@ -607,6 +608,7 @@ local function gmCommand(player, word, key)
         exec(string.format("DELETE FROM mod_modes WHERE mkey = '%s'", (key:gsub("[^%w_]", ""))))
         say(player, "Removed " .. key .. ".")
     end
+    if rawget(_G, "OVWorkshop") then OVWorkshop.Reviewed("mode", key, word) end
 end
 
 local function listText(player)
@@ -641,4 +643,5 @@ end)
 RegisterPlayerEvent(4, function(event, player) leave(player) end)
 RegisterPlayerEvent(28, function(event, player) leave(player) end)
 
+OVWorkshopHooks = rawget(_G, "OVWorkshopHooks") or {}; OVWorkshopHooks.mode = modes   -- ov_workshop.lua reviews modes too
 return { sessions = sessions, modes = modes, drafts = drafts, BUMPER = BUMPER, COINDASH = COINDASH, PLATES = PLATES, isDevices = isDevices }

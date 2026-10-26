@@ -26,6 +26,8 @@ had_modes=""
 if [ -f "$WU/portal/modes.py" ]; then cp -p "$WU/portal/modes.py" "$BK/"; [ ! -f "$WU/portal/modes_data.py" ] || cp -p "$WU/portal/modes_data.py" "$BK/"; had_modes=1; fi
 had_workshop=""
 if [ -f "$WU/portal/workshop.py" ]; then cp -p "$WU/portal/workshop.py" "$BK/workshop.py"; had_workshop=1; fi
+had_creations=""
+if [ -f "$WU/portal/creations.py" ]; then cp -p "$WU/portal/creations.py" "$BK/creations.py"; had_creations=1; fi
 had_docs=""
 if [ -f "$WU/portal/docs.py" ]; then cp -p "$WU/portal/docs.py" "$BK/docs.py"; had_docs=1; fi
 had_docdir=""
@@ -46,6 +48,7 @@ put_back() {
   if [ -n "$had_modes" ]; then cp -p "$BK/modes.py" "$WU/portal/modes.py"; [ ! -f "$BK/modes_data.py" ] || cp -p "$BK/modes_data.py" "$WU/portal/modes_data.py"
   else rm -f "$WU/portal/modes.py" "$WU/portal/modes_data.py"; fi
   if [ -n "$had_workshop" ]; then cp -p "$BK/workshop.py" "$WU/portal/workshop.py"; else rm -f "$WU/portal/workshop.py"; fi
+  if [ -n "$had_creations" ]; then cp -p "$BK/creations.py" "$WU/portal/creations.py"; else rm -f "$WU/portal/creations.py"; fi
   if [ -n "$had_docs" ]; then cp -p "$BK/docs.py" "$WU/portal/docs.py"; else rm -f "$WU/portal/docs.py"; fi
   rm -rf "$WU/portal/docs"
   if [ -n "$had_docdir" ]; then cp -a "$BK/docs" "$WU/portal/docs"; fi
@@ -70,6 +73,9 @@ if [ -f demo.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]
 if [ -f armory.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' armory.py && install -m 644 armory.py "$WU/portal/armory.py"; fi
 # the mods Workshop (/wrath/mods): optional; its data comes from the "mods" step ($WU/portal/mods)
 if [ -f workshop.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' workshop.py && install -m 644 workshop.py "$WU/portal/workshop.py"; fi
+# the Workshop of player creations (/wrath/workshop): optional; it reads $WU/portal/workshop/, which
+# workshop-export.py fills (realm/serverpass.sh step 1c)
+if [ -f creations.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' creations.py && install -m 644 creations.py "$WU/portal/creations.py"; fi
 # the Leyline docs (/wrath/docs): docs.py and its pages (docs/leyline/*.md), optional, always as a pair
 if [ -f docs.py ] && [ -f docs/leyline/index.md ]; then
   python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' docs.py && {
@@ -193,6 +199,8 @@ echo "  /wrath/armory (200 = the armory is on): $c6"
 c7=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/mods || true)
 echo "  /wrath/mods Workshop (200 = on): $c7"
 c8=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/docs || true)
+c8w=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/workshop || true)
+echo "  /wrath/workshop player creations (200 = on): $c8w"
 echo "  /wrath/docs Leyline docs (200 = on): $c8"
 c9=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/host || true)
 echo "  /wrath/host + Your server (302 to sign-in = on): $c9"

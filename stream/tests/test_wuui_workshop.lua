@@ -124,7 +124,7 @@ GameMenuButtonAddOns:Fire("OnClick")
 local panel = _G.WrathUnleashedModsFrame
 check("Mods & Workshop opens", panel and panel:IsShown())
 local tab
-for _, f in ipairs(created) do if f.parent == panel and f.text == "Workshop" then tab = f end end
+for _, f in ipairs(created) do if f.parent == panel and f.text == "Mods" then tab = f end end
 tab:Fire("OnClick")
 local page = panel.pages[3]
 check("Workshop tab shown", page:IsShown())
@@ -159,6 +159,71 @@ panel.RefreshWorkshop()
 local any = false
 for _, cb in ipairs(page.rows) do if cb.row then any = true end end
 check("no mod list: an empty Workshop, no error", not any)
+
+-- ---------------------------------------------------------------- Esc > Mods & Workshop > Workshop (Workshop.lua)
+local sent = {}
+function SendAddonMessage(prefix, msg, kind, target) sent[#sent + 1] = { prefix = prefix, msg = msg, kind = kind, target = target } end
+local function lastSent() local m = sent[#sent]; return m and m.msg or "" end
+local function fromRealm(name, data)
+    for _, f in ipairs(frames) do
+        if f.events and f.events.CHAT_MSG_ADDON and f.scripts.OnEvent then
+            f.scripts.OnEvent(f, "CHAT_MSG_ADDON", "OVMOD", "wuws\t" .. name .. "\t1/1\t" .. data, "WHISPER", "Tester")
+        end
+    end
+end
+local wsTab
+for _, f in ipairs(created) do if f.parent == panel and f.text == "Workshop" then wsTab = f end end
+check("a Workshop tab next to Mods", wsTab ~= nil)
+wsTab:Fire("OnClick")
+local ws = panel.pages[4]
+check("Workshop tab shown, Mods hidden", ws:IsShown() and not page:IsShown())
+check("opening it asks the realm for the most played", lastSent() == "wuws\tlist\t1/1\tall plays 1" and sent[#sent].prefix == "OVMOD"
+    and sent[#sent].kind == "WHISPER" and sent[#sent].target == "Tester")
+fromRealm("items", "all plays 1 2\n7\tcourse\tWindmill Nine\tAlys\t2\t41\t5\t1\t0\tapproved\tNine holes, one windmill.\n"
+    .. "9\tmode\tTag|cffff0000Red\tBo\t1\t3\t0\t0\t1\tapproved\t\n12\tjunk\tx\n")
+local S = W.Workshop
+check("rows parsed, junk kinds dropped", #S.items == 2 and S.items[1].id == 7 and S.items[2].kind == "mode" and S.pages == 2)
+check("colour codes stripped from titles", S.items[2].title == "Tagcffff0000Red")
+local r1 = ws.rows[1]
+check("row shows title, author, kind and version", r1.title.text:find("^Windmill Nine") and r1.title.text:find("by Alys")
+    and r1.title.text:find("Course v2"))
+check("row shows plays, votes and the description", r1.line.text:find("41 plays") and r1.line.text:find("%+5") and r1.line.text:find("Nine holes"))
+check("my vote is marked", ws.rows[2].up.text == "[+]" and r1.up.text == "+")
+check("empty rows hidden", not ws.rows[3].title:IsShown() and not ws.rows[3].play:IsShown())
+r1.play:Fire("OnClick")
+check("Play asks the realm to start it", lastSent() == "wuws\tplay\t1/1\t7")
+r1.up:Fire("OnClick")
+check("thumbs up", lastSent() == "wuws\trate\t1/1\t7 up")
+ws.rows[2].up:Fire("OnClick")
+check("thumbs up again takes the vote back", lastSent() == "wuws\trate\t1/1\t9 none")
+fromRealm("rated", "7 6 1 1")
+check("the realm's count is shown", S.items[1].up == 6 and S.items[1].mine == 1 and r1.up.text == "[+]")
+for _, b in ipairs(ws.kindBtns) do if b.key == "mode" then b:Fire("OnClick") end end
+check("Modes asks for modes", lastSent() == "wuws\tlist\t1/1\tmode plays 1")
+for _, b in ipairs(ws.sortBtns) do if b.key == "new" then b:Fire("OnClick") end end
+check("New sorts by newest", lastSent() == "wuws\tlist\t1/1\tmode new 1")
+for _, b in ipairs(ws.kindBtns) do if b.key == "mine" then b:Fire("OnClick") end end
+check("Mine asks for my own", lastSent() == "wuws\tmine\t1/1\t")
+fromRealm("items", "mine new 1 1\n15\tbuild\tGreen Camp\tTester\t1\t0\t0\t0\t0\tpending\t")
+check("my pending build says it waits for a GM", ws.rows[1].line.text:find("waiting for a GM") and not ws.rows[1].up:IsShown())
+-- Play started a course: the panel closes and the minigolf window opens
+local toggled
+W.Golf = W.Golf or {}
+local realToggle = W.Golf.Toggle
+W.Golf.Toggle = function() toggled = true end
+fromRealm("playing", "7 course Windmill Nine")
+check("playing: the panel closes and the minigolf window opens", toggled and not panel:IsShown())
+W.Golf.Toggle = realToggle
+-- publishing a build
+local n = #sent
+check("a bad code is refused here", W.Workshop.Publish("AB", "x") == false and #sent == n)
+W.Workshop.Publish("abc234", "Green \"Camp\"")
+check("a build code goes up with its title, cleaned", lastSent() == "wuws\tpublish\t1/1\tABC234 Green Camp")
+fromRealm("msg", "Only the builder who saved it can publish it.")
+check("the realm's message shows", ws.status.text == "Only the builder who saved it can publish it.")
+SlashCmdList["WUMODS"]()
+SlashCmdList["WUWORKSHOP"]()
+check("/workshop opens the Workshop tab", panel:IsShown() and ws:IsShown())
 
 -- nothing the window shows names the game brand
 local bad = {}

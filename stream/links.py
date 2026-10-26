@@ -5,6 +5,7 @@
     GET /q/<dungeon or queue>   a Dungeon Finder queue (a dungeon id such as 258, or a queue slug)
     GET /b/<raid or wing>       a boss fight: a raid or one of its wings (stream/modes_data.py ids)
     GET /m/<mod id>             a mod (its real name and description from the Workshop catalog, stream/workshop.py)
+    GET /w/<workshop id>        something players made (a course, a mode or a build: stream/creations.py), with Play
     GET /u/<character>          a player profile (with the web armory, stream/armory.py, the card shows the
                                 real character: "Name, level 80 Blood Elf Paladin", and links its sheet)
 
@@ -14,7 +15,7 @@ Each one is a small public page: Open Graph and X card tags (wrath_portal.card_m
 wu-card.webp image), a line about what was shared, and a refresh plus a button on to the play page with
 a deep link:
 
-    /wrath?go=<kind>:<id>      kind is one of r h q b m u; id passed the same allow-list as the link
+    /wrath?go=<kind>:<id>      kind is one of r h q b m u w; id passed the same allow-list as the link
 
 Examples: /q/258 -> /wrath?go=q:258, /u/Arthas -> /wrath?go=u:Arthas, /h/krasus-landing ->
 /wrath?go=h:krasus-landing. The go value only ever holds [A-Za-z0-9._-] after the colon, so it needs no
@@ -41,6 +42,7 @@ KINDS = {
     "b": (re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$"), "Boss fight"),
     "m": (re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"), "Mod"),   # mods/wu-mod.py ID_RE, 3-32 long
     "u": (re.compile(r"^[A-Za-z]{2,12}$"), "Player"),               # a 3.3.5a character name
+    "w": (re.compile(r"^[1-9][0-9]{0,8}$"), "Workshop"),            # a Workshop item id (ov_workshop.lua)
 }
 ID_LEN = {"m": (3, 32)}
 MAX_PATH = 80
@@ -53,6 +55,7 @@ _DESC = {
     "b": "A boss fight on Wrath, the Leyline network's browser realm. Gather a raid and go.",
     "m": "A community mod for Wrath on the Leyline network.",
     "u": "A player on Wrath, the Leyline network's browser realm.",
+    "w": "Made by a player on Wrath. Press Play and it starts in your browser.",
 }
 
 
@@ -105,11 +108,12 @@ def _pretty(slug: str) -> str:
     return " ".join(w.capitalize() for w in slug.split("-") if w)
 
 
-def describe(kind: str, ident: str, realm_name: str, realms=None, who=None, mods=None) -> tuple[str, str, str]:
+def describe(kind: str, ident: str, realm_name: str, realms=None, who=None, mods=None, made=None) -> tuple[str, str, str]:
     """(card title, card description, the line on the page) for a valid link. realms is a callable
     giving the community realm list ([{"id", "name", "tagline"}...]); who(name) gives a character in the
     armory ({"name", "line"}) or None; mods(id) gives one Workshop entry ({"name", "description"}) or
-    None (stream/workshop.py Workshop.mod); any failure falls back to generic."""
+    None (stream/workshop.py Workshop.mod); made(id) gives one Workshop item ({"title", "kind", "author"},
+    stream/creations.py card_item) or None; any failure falls back to generic."""
     label = KINDS[kind][1]
     desc = _DESC[kind]
     if kind == "r":
@@ -152,6 +156,19 @@ def describe(kind: str, ident: str, realm_name: str, realms=None, who=None, mods
         except Exception:   # a broken catalog never breaks a link
             pass
         return f"{label}: {_pretty(ident)} · Leyline", desc, f"the {_pretty(ident)} mod"
+    if kind == "w":
+        try:
+            it = made(ident) if made else None
+            if it:
+                title = str(it.get("title") or "")[:48]
+                what = str(it.get("kind") or "item").lower()[:24]
+                author = str(it.get("author") or "")[:12]
+                if title:
+                    return (f"{title} · Workshop · {realm_name}", f"A {what} by {author}. " + desc,
+                            f"{title}, a {what} by {author}")
+        except Exception:   # a broken listing never breaks a link
+            pass
+        return f"Workshop item {ident} · {realm_name}", desc, f"Workshop item {ident}"
     return f"{_pretty(ident)} · {label}", desc, f"the {_pretty(ident)} hangout in Dalaran"
 
 
@@ -175,7 +192,7 @@ def _who(who, ident: str) -> tuple[str, str] | None:
 
 
 def share_page(path: str, card_meta, render, realm_name: str = "WrathUnleashed", realms=None, who=None,
-               mods=None) -> bytes:
+               mods=None, made=None) -> bytes:
     """The share page for path. card_meta(path, title) and render(body, meta=...) are the portal's own;
     who(name) gives an armory character for /u/<name>, mods(id) a Workshop entry for /m/<id>.
     Always returns a page: an unknown or malformed link gets the generic card and a link to /wrath."""
@@ -188,7 +205,7 @@ def share_page(path: str, card_meta, render, realm_name: str = "WrathUnleashed",
     if got:
         kind, ident = got
         try:
-            title, desc, line = describe(kind, ident, realm_name, realms, who, mods)
+            title, desc, line = describe(kind, ident, realm_name, realms, who, mods, made)
         except Exception:
             title, desc, line = f"{realm_name} · Leyline", _DESC[kind], "a link"
         target = deep_link(kind, ident)
@@ -211,6 +228,12 @@ def share_page(path: str, card_meta, render, realm_name: str = "WrathUnleashed",
         try:
             if mods and mods(got[1]):
                 sheet = f'<p class="center"><a href="/wrath/mods/{e(got[1])}">See it in the Workshop</a></p>'
+        except Exception:
+            sheet = ""
+    if got and got[0] == "w":
+        try:
+            if made and made(got[1]):
+                sheet = f'<p class="center"><a href="/wrath/workshop/{e(got[1])}">See it in the Workshop</a></p>'
         except Exception:
             sheet = ""
 

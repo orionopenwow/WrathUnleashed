@@ -73,6 +73,14 @@ local function dispatch(player, modId, name, data)
     end
 end
 
+-- Server scripts only: hand a message to a handler as if the player had sent it (ov_workshop.lua's Play
+-- starts a course, a mode or a build through the same checks as that script's own window).
+function OVMod.Dispatch(player, modId, name, data)
+    if not player or not (handlers[modId] and handlers[modId][name]) then return false end
+    dispatch(player, modId, name, tostring(data or ""))
+    return true
+end
+
 local function flooding(guid, now)
     local f = flood[guid]
     if not f or f.sec ~= now then

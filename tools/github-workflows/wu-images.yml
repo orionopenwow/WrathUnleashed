@@ -8,7 +8,7 @@
 # apps/docker/Dockerfile, targets db-import / authserver / worldserver, CTOOLS_BUILD=db-only, CWITH_WARNINGS=OFF,
 # CTYPE=Release.
 #
-# No game data: mod-arac's client files (patch-contents/, DBCs) are removed from the build context before the
+# No game data: mod-arac's client files (patch-contents/, DBCs, Patch-A.MPQ) are removed from the build context before the
 # build, and the job fails if any game-data file is still in it. Hosts extract dbc + maps from their own install.
 # Only the built-in token (packages: write); no other secrets.
 #
@@ -101,6 +101,7 @@ jobs:
       - name: no game data in the build context
         run: |
           rm -rf realm/custom/acore/modules/mod-arac/patch-contents
+          rm -f realm/custom/acore/modules/mod-arac/*.MPQ realm/custom/acore/modules/mod-arac/*.mpq
           bad=$(find realm/custom/acore -path '*/.git' -prune -o -type f \( -iname '*.dbc' -o -iname '*.db2' -o -iname '*.mpq' \
                 -o -iname '*.m2' -o -iname '*.wmo' -o -iname '*.adt' -o -iname '*.blp' -o -iname '*.vmtree' -o -iname '*.mmap' \) -print | head -20)
           if [ -n "$bad" ]; then echo "game data in the build context, stopping:"; echo "$bad"; exit 1; fi

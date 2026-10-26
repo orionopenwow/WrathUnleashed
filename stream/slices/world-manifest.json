@@ -927,6 +927,7 @@
   "Interface/AddOns/WrathUnleashedUI/EditMode.lua",
   "Interface/AddOns/WrathUnleashedUI/Golf.lua",
   "Interface/AddOns/WrathUnleashedUI/Modes.lua",
+  "Interface/AddOns/WrathUnleashedUI/ModeDevices.lua",
   "Interface/AddOns/WrathUnleashedUI/GameFolder.lua",
   "Interface/AddOns/WrathUnleashedUI/Leyline.lua",
   "Interface/AddOns/WrathUnleashedUI/Bindings.xml",

@@ -2,7 +2,9 @@
 -- Fake 3.3.5a API: loads every file of WrathUnleashedUI in .toc order, opens the Builder window from
 -- Esc > Mods & Workshop, and runs real round trips through ov_build.lua and ov_modapi.lua (fake mod-ale):
 -- the catalog over OVMOD, search and categories, Spawn, the nudges and turns, Undo, Delete, Save / Share / Load
--- with the code box, "isn't on this realm" without the script, and no game-brand names on screen.
+-- with the code box, "isn't on this realm" without the script, and no game-brand names on screen. M3: the budget
+-- meter and blocked spawns, the spawn menu (tabs, search, recent, favourites, prefabs), the properties panel,
+-- the group / prefab / plot rows, and edit mode's paste, box select, Shift-click, prefab and hold-Q hooks.
 local dir = arg[1] or "stream/fui-web/Interface/AddOns/WrathUnleashedUI"
 local server = arg[2] or "realm/custom/lua_scripts/ov_build.lua"
 local modapi = arg[3] or server:gsub("ov_build%.lua$", "ov_modapi.lua")
@@ -103,9 +105,11 @@ function PerformIngameSpawn(kind, entry, map, inst, x, y, z, o, save)
     local go = { guid = nextGuid, entry = entry, x = x, y = y, z = z, o = o }
     function go:GetGUID() return self.guid end
     function go:RemoveFromWorld() objects[self.guid] = nil end
+    function go:SetScale(sc) self.scale = sc end
     objects[go.guid] = go
     return go
 end
+function GetGUIDLow(g) return g end
 local function fireClient(prefix, msg, channel, sender)
     for _, f in ipairs(frames) do
         if f.events.CHAT_MSG_ADDON then f:Fire("OnEvent", "CHAT_MSG_ADDON", prefix, msg, channel, sender) end
@@ -232,6 +236,166 @@ win.code:SetText("bad|name")
 local before = #sent
 win.load:Fire("OnClick")
 check("a bad name never leaves the window", #sent == before and win.status:GetText():find("Type a build name"))
+
+
+-- M3: the budget meter ---------------------------------------------------------------------------------------------
+local function countProps() local n = 0; for _ in pairs(T.props) do n = n + 1 end; return n end
+check("the catalog carries build points", B.catalog[1].cost == T.costOf(B.catalog[1].id))
+check("budget meter: props and points", win.meter:GetText():find("Props 1/50") and win.meter:GetText():find("Points %d+/100")
+    and B.meterFrac > 0 and B.meterFrac < 0.1)
+check("the plot line says there's no plot here", win.plot:GetText():find("No plot here"))
+fireClient("OVMOD", "wubuild\tstate\t1/1\tsel=-;mine=50/50;area=Goldshire green;code=-;n=0;pos=-;pts=60/100;tier=builder;plot=-;clip=0", "WHISPER", "Tester")
+check("the meter fills at the limit", B.meterFrac == 1)
+B.pick = B.catalog[1]
+local nSent = #sent
+check("Spawn is blocked at the limit, with a plain message", B.Spawn() == false and #sent == nSent
+    and win.status:GetText():find("limit of 50 props"))
+local heavy
+for _, c in ipairs(B.catalog) do if c.cost >= 2 then heavy = c; break end end
+fireClient("OVMOD", "wubuild\tstate\t1/1\tsel=-;mine=3/50;area=Goldshire green;code=-;n=0;pos=-;pts=99/100;tier=builder;plot=-;clip=0", "WHISPER", "Tester")
+B.pick = heavy
+check("and when the points run out", B.Spawn() == false and #sent == nSent and win.status:GetText():find("Not enough build points"))
+B.Command("near")   -- the realm's real state again
+
+-- M3: the spawn menu ---------------------------------------------------------------------------------------------
+WrathUnleashedUIChar = nil
+B.ToggleMenu()
+local menu = B.Menu()
+check("the spawn menu opens (/spawnmenu too)", menu and menu:IsShown() and SLASH_WUSPAWNMENU1 == "/spawnmenu")
+local function cellsShown() local n = 0; for _, c in ipairs(menu.cells) do if c:IsShown() then n = n + 1 end end; return n end
+check("All props: a page of the realm's catalog", B.menuTab == "all" and cellsShown() == #menu.cells and menu.cells[1].item == B.catalog[1])
+local tabOf = {}
+for _, t in ipairs(menu.tabs) do tabOf[t.tab] = t end
+check("tabs: favourites, recent, prefabs, all and every category", tabOf.favourites and tabOf.recent and tabOf.prefabs and tabOf.all
+    and tabOf.seating and tabOf.decor and #menu.tabs == 4 + #B.CATS - 1)
+tabOf.lights:Fire("OnClick")
+check("a category tab", cellsShown() > 0 and (function() for _, c in ipairs(menu.cells) do if c.item and c.item.cat ~= "lights" then return false end end; return true end)())
+menu.search:SetText("brazier"); menu.search:Fire("OnTextChanged")
+check("search inside the tab", cellsShown() >= 2 and menu.cells[1].item.name:lower():find("brazier"))
+menu.search:SetText(""); menu.search:Fire("OnTextChanged")
+tabOf.recent:Fire("OnClick")
+check("Recent starts empty, and says so", cellsShown() == 0 and menu.empty:GetText():find("show up here"))
+tabOf.all:Fire("OnClick")
+serverClock = serverClock + 5
+local first = menu.cells[1].item
+local before = countProps()
+menu.cells[1]:Fire("OnClick", "LeftButton")
+check("click a prop: it spawns", countProps() == before + 1 and T.props[T.selected[7]].entry == first.id)
+check("and goes on the recent list (per character)", WrathUnleashedUIChar.builder.recent[1] == first.id)
+tabOf.recent:Fire("OnClick")
+check("Recent shows it", menu.cells[1].item == first and cellsShown() == 1)
+table.insert(WrathUnleashedUIChar.builder.recent, 999999)
+B.MenuRefresh()
+check("only props the realm sent are ever listed", cellsShown() == 1)
+menu.cells[1]:Fire("OnClick", "RightButton")
+check("right-click: a favourite", WrathUnleashedUIChar.builder.favs[first.id] == true and menu.cells[1]:GetText():find("^%* "))
+tabOf.favourites:Fire("OnClick")
+check("Favourites lists it", cellsShown() == 1 and menu.cells[1].item == first)
+menu.cells[1]:Fire("OnClick", "RightButton")
+check("right-click again: not a favourite", cellsShown() == 0 and menu.empty:GetText():find("right%-click"))
+tabOf.all:Fire("OnClick")
+menu.grid:Fire("OnMouseWheel", -1)
+check("the wheel scrolls a row", B.menuOffset == 3)
+menu:Hide()
+
+-- M3: the properties panel ----------------------------------------------------------------------------------------
+win.props:Fire("OnClick")
+local panel = B.Panel()
+local sp = T.props[T.selected[7]]
+check("Properties opens with the selection's numbers", panel and panel:IsShown()
+    and tonumber(panel.box.x:GetText()) and math.abs(tonumber(panel.box.x:GetText()) - sp.x) < 0.01
+    and panel.box.scale:GetText() == "1.00")
+panel.box.x:SetText(string.format("%.2f", sp.x + 2))
+panel.box.turn:SetText("180")
+serverClock = serverClock + 1
+panel.apply:Fire("OnClick")
+check("Apply: exact x and facing on the realm", math.abs(sp.x - (player.x + 2)) < 0.02 and math.abs(sp.o - math.pi) < 1e-3
+    and panel.box.turn:GetText() == "180")
+panel.apply:Fire("OnClick")
+check("Apply with nothing changed", panel.status:GetText():find("Nothing changed"))
+panel.box.z:SetText("high")
+panel.apply:Fire("OnClick")
+check("Apply wants numbers", panel.status:GetText():find("Type numbers"))
+panel.box.scale:SetText("1.5")
+panel.box.z:SetText(string.format("%.2f", sp.z))
+serverClock = serverClock + 1
+panel.apply:Fire("OnClick")
+check("Apply: size", sp.s == 1.5)
+panel:Hide()
+
+-- M3: group, copy / paste, prefabs and the plot from the window -------------------------------------------------------
+win.selall:Fire("OnClick")
+check("Select mine", T.group[7] and #T.group[7] == countProps() and win.sel:GetText():find("Selected: %d props"))
+win.copy:Fire("OnClick")
+check("Copy", T.clip[7] and #T.clip[7].rel == countProps())
+serverClock = serverClock + 10
+local n0 = countProps()
+win.paste:Fire("OnClick")
+check("Paste (outside edit mode: at your feet)", countProps() == n0 * 2)
+win.undo:Fire("OnClick")
+win.selall:Fire("OnClick")
+win.prefab:SetText("porch")
+win.prefabSave:Fire("OnClick")
+check("Prefab Save: the selection, and the list comes back", #B.prefabs == 1 and B.prefabs[1].name == "porch" and B.prefabs[1].count == n0)
+B.ShowMenu(true)
+local tabs2 = {}
+for _, t in ipairs(menu.tabs) do tabs2[t.tab] = t end
+tabs2.prefabs:Fire("OnClick")
+check("the spawn menu's Prefabs tab", menu.cells[1].item and menu.cells[1].item.name == "porch" and menu.cells[1]:GetText():find("porch %(" .. n0 .. "%)"))
+serverClock = serverClock + 10
+menu.cells[1]:Fire("OnClick", "LeftButton")
+check("click a prefab: pasted", countProps() == n0 * 2)
+win.undo:Fire("OnClick")
+menu:Hide()
+win.prefab:SetText("porch")
+win.prefabShare:Fire("OnClick")
+check("Prefab Share: a code in the box", T.prefabs[B.prefabs[1].id].code and win.code:GetText() == T.prefabs[B.prefabs[1].id].code)
+win.prefab:SetText("")
+nSent = #sent
+win.prefabPaste:Fire("OnClick")
+check("an empty prefab name never leaves the window", #sent == nSent and win.status:GetText():find("prefab name"))
+win.claim:Fire("OnClick")
+check("Claim: a plot, shown in the window", next(T.plots) and win.plot:GetText():find("Tester's plot %(yours%)"))
+win.plotName:SetText("Nobody")
+win.plotAdd:Fire("OnClick")
+check("Add sends the name", sent[#sent][2]:find("plot add Nobody$"))
+
+-- M3: edit mode's new clicks (the browser client calls these) ----------------------------------------------------------
+local E = W.EditMode
+win.selall:Fire("OnClick")
+win.copy:Fire("OnClick")
+E.StartPasting()
+serverClock = serverClock + 10
+n0 = countProps()
+E.Clicked(player.x + 3, player.y - 3, player.z)
+check("edit mode: Paste then a ground click pastes there", countProps() == n0 * 2 and sent[#sent][2]:find("pasteat [%-%d%.]+ [%-%d%.]+ [%-%d%.]+$"))
+win.undo:Fire("OnClick")
+E.StartBox()
+E.Clicked(player.x - 6, player.y - 6, player.z)
+check("box select: the first corner waits for the second", E.pending and E.pending.kind == "box" and not sent[#sent][2]:find("selbox"))
+E.Clicked(player.x + 6, player.y + 6, player.z)
+check("box select: two corners select the box", sent[#sent][2]:find("selbox ") and T.group[7] and #T.group[7] >= 1 and E.pending == nil)
+local ids = {}
+for id in pairs(T.props) do ids[#ids + 1] = id end
+table.sort(ids)
+E.Clicked(nil, nil, nil, T.live[ids[1]])
+check("a plain click selects just that prop", T.group[7] == nil and T.selected[7] == ids[1])
+E.Clicked(nil, nil, nil, T.live[ids[2]], true)
+check("Shift-click adds to the selection", sent[#sent][2]:find("pick %d+ add$") and T.group[7] and #T.group[7] == 2)
+IsShiftKeyDown = function() return true end
+E.Clicked(nil, nil, nil, T.live[ids[2]])
+IsShiftKeyDown = nil
+check("Shift held (IsShiftKeyDown): takes it out again", T.group[7] == nil and T.selected[7] == ids[1])
+E.StartPrefab("porch")
+serverClock = serverClock + 10
+n0 = countProps()
+E.Clicked(player.x - 3, player.y + 3, player.z)
+check("a prefab at the clicked point", sent[#sent][2]:find("prefab pasteat porch ") and countProps() > n0)
+win.undo:Fire("OnClick")
+E.SpawnMenu(true)
+check("hold Q: the spawn menu", menu:IsShown())
+E.SpawnMenu(false)
+check("let go: it closes", not menu:IsShown())
 
 -- the client ignores messages that aren't the realm's answer to us
 fireClient("OVMOD", "wubuild\tstate\t1/1\tsel=1,2,Spoof;mine=9/9;area=x;code=-", "WHISPER", "Someone")

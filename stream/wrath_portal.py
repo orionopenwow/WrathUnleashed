@@ -18,6 +18,9 @@ Two listeners, both inside Docker networks only (never published on the host):
          GET /wrath/mods       public: the mods Workshop (stream/workshop.py, optional): the catalog the
                                "mods" step publishes into /app/mods, one page per mod, the zips, and the
                                community links (stream/projects.py; signed in: POST to add, report, hide)
+         GET /wrath/workshop[/<id>]  public: what players made (courses, modes, builds; stream/creations.py), read
+                               from the file realm/custom/workshop-export.py writes to /app/workshop every
+                               5 minutes; Play is /wrath?go=w:<id> ("ovws go" over SOAP, ov_workshop.lua)
          GET /wrath/status.json  public realm status for the website's Beacons page, the launcher
                                and the GM console (CORS *, cached 30 s, at most one SOAP call per
                                30 s however many visitors ask)
@@ -105,6 +108,8 @@ Settings (environment, /srv/wrath/portal.env):
                          written by stream/server/mods-install.sh)
   WU_PORTAL_DATA         the Workshop's community links, projects.jsonl (default /data = /srv/wrath/portal-data,
                          the one writable mount); WU_MODS_ADMINS, WU_GITHUB_TOKEN etc.: stream/projects.py
+  WU_WORKSHOP_ITEMS_DIR  the approved Workshop items for /wrath/workshop (default /app/workshop =
+                         /srv/wrath/portal/workshop, written by realm/custom/workshop-export.py)
   WU_ART_DIR             the site art and theme (default /app/art = /srv/wrath/portal/art on the host,
                          installed from stream/www-files/art by fastloop.sh), served at /wrath/art/<name>
                          from a fixed list. Missing: the pages fall back to plain CSS.
@@ -195,6 +200,7 @@ modes = _load_modes()
 workshop_mod = _load_module("wu_workshop", "workshop.py")   # /wrath/mods (stream/workshop.py); set up below
 docs = _load_module("wu_docs", "docs.py")   # /wrath/docs (stream/docs.py: the Leyline docs, from docs/leyline)
 hostflow = _load_module("wu_hostflow", "hostflow.py")   # /wrath/host: "+ Your server" (stream/hostflow.py)
+creations = _load_module("wu_creations", "creations.py")   # /wrath/workshop: what players made (stream/creations.py)
 if hostflow is not None:
     hostflow.bind(lambda name: globals()[name])
 
@@ -1395,6 +1401,8 @@ def site_nav(current: str = "", signed_in: bool = False) -> str:
         items.append(("modes", "Modes", "/wrath/modes"))
     if workshop_mod is not None:
         items.append(("mods", "Mods", "/wrath/mods"))
+    if creations is not None:
+        items.append(("workshop", "Workshop", "/wrath/workshop"))
     if armory is not None:
         items.append(("armory", "Armory", "/wrath/armory"))
     if docs is not None:
@@ -1468,6 +1476,7 @@ def nav_key(path: str) -> str:
         return "leyline"
     for key, roots in (("realms", ("/wrath/realms", "/wrath/r", "/r")), ("modes", ("/wrath/modes", "/wrath/h", "/wrath/q", "/wrath/b", "/h", "/q", "/b")),
                        ("mods", ("/wrath/mods", "/wrath/m", "/m")), ("armory", ("/wrath/armory", "/wrath/u", "/u")),
+                       ("workshop", ("/wrath/workshop", "/wrath/w", "/w")),
                        ("docs", ("/wrath/docs",))):
         if any(p == r or p.startswith(r + "/") for r in roots):
             return key
@@ -1624,6 +1633,10 @@ def remember_go(user: str, query: dict) -> None:
     got = links.check_go(v) if v else None
     if got and got[0] == "r" and got[1] == hangout_id():
         got = ("h", "dalaran")   # a hop into the Dalaran Hangout (this realm through the relay) lands in Dalaran
+    if got and got[0] == "w":   # a Workshop item (stream/creations.py, "ovws go", ov_workshop.lua)
+        if creations is not None and gate_limit.hit("go:" + user.upper(), 20):
+            creations.go_intent(ac_soap, user, got[1], log)
+        return
     if not got or got[0] not in ("h", "q", "b") or not gate_limit.hit("go:" + user.upper(), 20):
         return
     modes.go_intent(ac_soap, user, links.go_value(*got), log)
@@ -2349,7 +2362,8 @@ class PageHandler(BaseHTTPRequestHandler):
             self.send(200, links.share_page(path, card_meta, lambda body, **kw: render(body, current=key, **kw),
                                             REALM_NAME, community_realms,
                                             who=armory.card_line if armory is not None else None,
-                                            mods=workshop.mod if workshop else None))
+                                            mods=workshop.mod if workshop else None,
+                                            made=creations.card_item if creations is not None else None))
             return
         if path == "/wrath/modes" and modes is not None:
             if not browse_limit.hit(self.ip(), 600):
@@ -2367,6 +2381,13 @@ class PageHandler(BaseHTTPRequestHandler):
             if ctype.startswith("text/html"):
                 body = site_chrome(body, path)
             self.send(status, body, ctype, headers=extra)
+            return
+        if creations is not None and creations.match(path):   # the Workshop of player creations (stream/creations.py)
+            if not browse_limit.hit(self.ip(), 600):
+                self.send(429, busy_page(back=path))
+                return
+            status, body = creations.page(path, query, leyline_css(), card_meta, REALM_NAME, PUBLIC_HOST)
+            self.send(status, site_chrome(body, path))
             return
         if docs is not None and docs.match(path):   # the Leyline docs (stream/docs.py)
             if not browse_limit.hit(self.ip(), 600):

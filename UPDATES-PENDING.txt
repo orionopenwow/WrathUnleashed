@@ -177,3 +177,10 @@
 1052a scripts  Modes devices: Pressure Plates sample, device drafts on your account
 1052b foreverui  Modes device editor: place triggers, buttons, timers, counters, teleporters and movers, wire them up, Play and Stop
 1052c ship  Save to GitHub (orionopenwow/WrathUnleashed): Modes devices (M5)
+1053a scripts  Workshop: publish courses, modes and builds, ratings, GM review, Play (new script: restart with the 5-minute warning)
+1053b foreverui  Workshop tab in Mods & Workshop (/workshop): browse, rate, Play, publish a build
+1053c signin  Workshop pages on the site: /wrath/workshop with Play buttons and share links
+1053d ship  Save to GitHub (orionopenwow/WrathUnleashed): Workshop (M9), image build without Patch-A.MPQ
+1054a scripts  Building: plots with co-builders, budgets and trust tiers, group select, copy and paste, prefabs, properties, GM op log and rollback
+1054b foreverui  Building: spawn menu (favourites, recents, search, prefabs), budget meter, properties panel, box select
+1054c ship  Save to GitHub (orionopenwow/WrathUnleashed): building suite (M3)

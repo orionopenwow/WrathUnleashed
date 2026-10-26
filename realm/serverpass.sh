@@ -14,6 +14,11 @@
 #      /srv/wrath/armory-export.py, which writes /srv/wrath/portal/armory/ (wu-portal's /app/armory) from
 #      cron every 5 minutes, and runs it once. Read only: fixed SELECTs in a READ ONLY session, no new
 #      database login. Bots and opted-out characters are left out. Backs up the old script and cron file.
+#   1c. The Workshop on the web (play.openvanilla.app/wrath/workshop, stream/creations.py), when
+#      workshop-export.py rides along: makes characters.mod_workshop_items (ov_workshop.lua's table, so the export
+#      works before the restart that loads the script), installs /srv/wrath/workshop-export.py, which writes
+#      /srv/wrath/portal/workshop/items.json (wu-portal's /app/workshop) from cron every 5 minutes, and runs it
+#      once. Read only, approved items only, no new database login.
 #   4. Announces a restart (SERVERPASS_WARN_MIN, default 5) and recreates the world server; if only the Lua
 #      changed, a live "reload ale" instead.
 # Never prints a password: MySQL runs in its container with the container's own root password.
@@ -82,6 +87,34 @@ SQL
     else echo "  NOTE: the first armory export failed (${out:0:200}); cron tries again in 5 minutes"; fi
   else
     echo "  NOTE: armory-export.py doesn't parse; skipped"
+  fi
+fi
+
+# The Workshop's export (see 1c above). Safe to run again: CREATE TABLE IF NOT EXISTS, install, one cron file.
+if [ -f "$T/workshop-export.py" ]; then
+  echo "== 1c. Workshop export"
+  sed -i 's/\r$//' "$T/workshop-export.py"
+  if python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' "$T/workshop-export.py"; then
+    [ -f /srv/wrath/workshop-export.py ] && cp -p /srv/wrath/workshop-export.py "$BK/workshop-export.py"
+    [ -f /etc/cron.d/wu-workshop ] && cp -p /etc/cron.d/wu-workshop "$BK/cron.wu-workshop"
+    docker exec -i ov-ac-database sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot -N -B acore_characters' <<'SQL' || die "could not make mod_workshop_items"
+CREATE TABLE IF NOT EXISTS mod_workshop_items (
+  id INT UNSIGNED NOT NULL PRIMARY KEY, kind VARCHAR(8) NOT NULL, ref VARCHAR(32) NOT NULL,
+  title VARCHAR(48) NOT NULL, author VARCHAR(12) NOT NULL, author_guid INT UNSIGNED NOT NULL,
+  version SMALLINT UNSIGNED NOT NULL DEFAULT 1, created_at INT UNSIGNED NOT NULL, updated_at INT UNSIGNED NOT NULL,
+  plays INT UNSIGNED NOT NULL DEFAULT 0, up INT UNSIGNED NOT NULL DEFAULT 0, down INT UNSIGNED NOT NULL DEFAULT 0,
+  state VARCHAR(8) NOT NULL DEFAULT 'pending', descr VARCHAR(160) NOT NULL DEFAULT '',
+  UNIQUE KEY kind_ref (kind, ref), KEY state (state), KEY author (author_guid)
+);
+SQL
+    install -m 755 "$T/workshop-export.py" /srv/wrath/workshop-export.py
+    install -d -m 755 /srv/wrath/portal/workshop
+    printf '*/5 * * * * root python3 -I /srv/wrath/workshop-export.py >/dev/null 2>&1\n' > /etc/cron.d/wu-workshop
+    chmod 644 /etc/cron.d/wu-workshop
+    if out=$(python3 -I /srv/wrath/workshop-export.py 2>&1); then echo "  $out (cron every 5 min)"
+    else echo "  NOTE: the first Workshop export failed (${out:0:200}); cron tries again in 5 minutes"; fi
+  else
+    echo "  NOTE: workshop-export.py doesn't parse; skipped"
   fi
 fi
 

@@ -2,17 +2,28 @@
 -- out of your character into a free-flying camera (the browser client does the camera: CVar leylineEditMode).
 -- While it is on, the normal UI is hidden and this addon shows the edit HUD instead:
 --   * a banner with the controls, and a line under it saying what the tool is doing (and what the realm answered);
---   * a selection card: the selected prop, your prop count and limit, the build area;
---   * a tool bar: Props, Duplicate, Undo, Delete, Snap (grid), Turn (angle step), Keys, Done.
+--   * a selection card: the selected prop (or how many), your props and build points, the plot or area;
+--   * a tool bar: Props, Duplicate, Undo, Delete, Snap (grid), Turn (angle step), Keys, Done;
+--   * a second bar: Spawn menu (Q), Select mine, Box select, Copy, Paste, Clear, Properties.
 -- Your character stays where it stood; the realm checks every change, exactly as for the .build commands.
 --
 -- Keys (the browser client reads them and calls back here):
---   click a prop       select it (the realm says if it isn't yours)
+--   click a prop       select it (the realm says if it isn't yours); Shift-click adds it to the selection
+--                      (or takes it out); move, turn, delete, duplicate and carry then work on the group
 --   Props > Spawn      then click the ground: the prop goes exactly there (on the grid when Snap is on)
+--   hold Q             the spawn menu (when nothing is carried); pick a prop, then click the ground
+--   Box select         click two corners on the ground: every prop you may select inside the box
+--   Copy / Paste       Paste, then click the ground: the copied props go there, around the point
 --   G                  carry the selection on the cursor; wheel lifts it, Q / E or Shift+wheel turn it,
 --                      a click or G drops it (".build placeat x y z turn"), Backspace puts it back
 --   V                  duplicate the selection          Delete  remove it          Ctrl+Z  undo
 --   WASD / Space / C   fly; Ctrl faster; hold the right mouse button to look; F7 back to your character
+--
+-- Hooks the browser client calls (all optional beyond Clicked and Drop):
+--   E.Clicked(x, y, z, objectId, shift)  a click in the world (shift: Shift was held; else IsShiftKeyDown())
+--   E.Drop(x, y, z, turn)                the carried selection was dropped
+--   E.SpawnMenu(down)                    Q pressed (true) or released (false) while nothing is carried
+--   E.BoxSelect(x1, y1, x2, y2, add)     a drag box's two ground corners, if the client draws one
 
 local W = WrathUnleashedUI
 local CVAR, GRID, ANGLE = "leylineEditMode", "leylineEditGrid", "leylineEditAngle"
@@ -37,7 +48,7 @@ local function builder() return W.Builder end
 local function cmd(text) local B = builder(); if B and B.Command then return B.Command(text) end end
 
 -- From the client's hotkeys (V, Delete, Ctrl+Z) and the tool bar.
-local ALLOWED = { dup = true, delete = true, undo = true, near = true }
+local ALLOWED = { dup = true, delete = true, undo = true, near = true, copy = true, selall = true, selclear = true }
 function E.Cmd(name)
     if not ALLOWED[name] then return end
     cmd(name)
@@ -49,26 +60,79 @@ function E.Note(text)
     if hud and hud.note then hud.note:SetText(E.note) end
 end
 
--- From the Builder's Spawn button while editing: the next click on the ground places this prop.
+-- What the next ground click does: place a prop, paste the copy, paste a prefab, or a box corner.
+local function pend(kind, data, note)
+    E.placing = (kind == "prop") and data or nil
+    E.pending = kind and { kind = kind, data = data } or nil
+    if note then E.Note(note) end
+end
+
+-- From the Builder's Spawn button (or the spawn menu) while editing: the next ground click places this prop.
 function E.StartPlacing(prop)
     if not prop then return end
-    E.placing = prop
-    E.Note("Click the ground where the " .. prop.name .. " goes.")
+    pend("prop", prop, "Click the ground where the " .. prop.name .. " goes.")
+end
+
+function E.StartPasting() pend("paste", nil, "Click the ground where the copy goes.") end
+function E.StartPrefab(name) if name then pend("prefab", name, "Click the ground where '" .. name .. "' goes.") end end
+function E.StartBox() pend("box", nil, "Box select: click one corner on the ground, then the other.") end
+function E.Cancel() pend(nil) end
+
+local function shiftDown(flag)
+    if flag ~= nil then return flag and true or false end
+    return (IsShiftKeyDown and IsShiftKeyDown()) and true or false
+end
+
+-- The client, if it draws a drag box: its two corners on the ground.
+function E.BoxSelect(x1, y1, x2, y2, add)
+    if not (x1 and y1 and x2 and y2) then return end
+    cmd(string.format("selbox %.2f %.2f %.2f %.2f%s", x1, y1, x2, y2, add and " add" or ""))
+    E.Note("Box selected. G carries the group, Q / E turn it, Delete removes it.")
+end
+
+-- The client: Q held (true) or let go (false) while nothing is carried.
+function E.SpawnMenu(down)
+    local B = builder()
+    if not (B and B.ShowMenu) then return end
+    if down then B.ShowMenu(true) elseif not E.menuPinned then B.ShowMenu(false) end
 end
 
 -- The client: a click in the world, with the ground point under the cursor (WoW coordinates, already on the
 -- grid when Snap is on) and the clicked object's id; either may be nil.
-function E.Clicked(x, y, z, objectId)
-    if E.placing and x then
-        local p = E.placing
-        E.placing = nil
-        cmd(string.format("spawnat %d %.2f %.2f %.2f", p.id, x, y, z))
-        E.Note(p.name .. " placed. G to carry it, V to duplicate it, or pick another in Props.")
+function E.Clicked(x, y, z, objectId, shift)
+    local p = E.pending
+    if p and x then
+        if p.kind == "prop" then
+            pend(nil)
+            cmd(string.format("spawnat %d %.2f %.2f %.2f", p.data.id, x, y, z))
+            E.Note(p.data.name .. " placed. G to carry it, V to duplicate it, or hold Q for another.")
+        elseif p.kind == "paste" then
+            pend(nil)
+            cmd(string.format("pasteat %.2f %.2f %.2f", x, y, z))
+            E.Note("Pasted. G carries the group, Ctrl+Z takes it back.")
+        elseif p.kind == "prefab" then
+            pend(nil)
+            cmd(string.format("prefab pasteat %s %.2f %.2f %.2f", p.data, x, y, z))
+            E.Note("Prefab pasted. G carries the group, Ctrl+Z takes it back.")
+        elseif p.kind == "box" then
+            if not p.data then
+                p.data = { x = x, y = y }
+                E.Note("Now click the other corner.")
+            else
+                pend(nil)
+                E.BoxSelect(p.data.x, p.data.y, x, y, shiftDown(shift))
+            end
+        end
         return
     end
     if objectId then
-        cmd("pick " .. math.floor(objectId))
-        E.Note("Selected. G to carry it, V to duplicate, Delete to remove.")
+        if shiftDown(shift) then
+            cmd("pick " .. math.floor(objectId) .. " add")
+            E.Note("Shift-click adds a prop, or takes it out. The group moves, turns and copies together.")
+        else
+            cmd("pick " .. math.floor(objectId))
+            E.Note("Selected. G to carry it, V to duplicate, Delete to remove. Shift-click adds more.")
+        end
     end
 end
 
@@ -119,16 +183,7 @@ local function moveBuilder(toWorld, show)
         if toWorld and show and W.ToggleBuilder then W.ToggleBuilder(); win = B and B.Window and B.Window() end
         if not win then return end
     end
-    local parent = toWorld and WorldFrame or UIParent
-    if win:GetParent() ~= parent then
-        win:SetParent(parent)
-        if toWorld and UIParent.GetEffectiveScale and WorldFrame.GetEffectiveScale then
-            win:SetScale(UIParent:GetEffectiveScale() / math.max(0.01, WorldFrame:GetEffectiveScale()))
-        else
-            win:SetScale(1)
-        end
-        win:SetFrameStrata("DIALOG")
-    end
+    B.Dock(win, toWorld)
     if toWorld then
         win:ClearAllPoints()
         win:SetPoint("RIGHT", WorldFrame, "RIGHT", -24, 0)
@@ -137,9 +192,10 @@ local function moveBuilder(toWorld, show)
 end
 
 local KEYS = {
-    "Click a prop: select it",
-    "Props, pick one, Spawn: then click the ground to place it",
-    "G: carry the selection. Mouse moves it, wheel lifts it,",
+    "Click a prop: select it.  Shift-click: add it to the selection (or take it out)",
+    "Hold Q (or Spawn menu): pick a prop, then click the ground. Right-click a prop: favourite",
+    "Box select: click two corners.  Select mine: all yours nearby.  Copy, then Paste and click",
+    "G: carry the selection (the whole group). Mouse moves it, wheel lifts it,",
     "     Q / E or Shift+wheel turn it, click or G drops it, Backspace puts it back",
     "V: duplicate     Delete: remove     Ctrl+Z: undo",
     "Snap: grid for placing and carrying     Turn: the angle step",
@@ -164,13 +220,13 @@ local function build()
     title:SetText("EDIT MODE")
     local help = banner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     help:SetPoint("TOP", title, "BOTTOM", 0, -4)
-    help:SetText("Click select - G carry - V duplicate - Del remove - Ctrl+Z undo - WASD fly - right mouse look - F7 back")
+    help:SetText("Click select - Shift-click add - Q props - G carry - V duplicate - Del remove - Ctrl+Z undo - F7 back")
     hud.note = banner:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     hud.note:SetPoint("TOP", banner, "BOTTOM", 0, -6)
     hud.note:SetText(E.note or "Click a prop to select it, G to carry it. Props to place new ones.")
 
     -- selection card
-    local card = panel(hud, 280, 70)
+    local card = panel(hud, 300, 88)
     card:SetScale(scale)
     card:SetPoint("TOPLEFT", hud, "TOPLEFT", 16, -16)
     local cardTitle = card:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -181,7 +237,10 @@ local function build()
     hud.sel:SetWidth(256); hud.sel:SetJustifyH("LEFT")
     hud.info = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     hud.info:SetPoint("TOPLEFT", 12, -48)
-    hud.info:SetWidth(256); hud.info:SetJustifyH("LEFT")
+    hud.info:SetWidth(276); hud.info:SetJustifyH("LEFT")
+    hud.budget = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    hud.budget:SetPoint("TOPLEFT", 12, -66)
+    hud.budget:SetWidth(276); hud.budget:SetJustifyH("LEFT")
 
     -- tool bar
     local tools = panel(hud, 840, 40)
@@ -209,10 +268,30 @@ local function build()
     add("Keys", 64, function() if hud.keys:IsShown() then hud.keys:Hide() else hud.keys:Show() end end)
     bar(tools, "Done (F7)", 96, function() E.Set(false) end, "RIGHT", -10, 0)
 
+    -- second bar: selection and the spawn menu
+    local tools2 = panel(hud, 840, 40)
+    tools2:SetScale(scale)
+    tools2:SetPoint("BOTTOM", tools, "TOP", 0, 4)
+    x = 10
+    local function add2(text, w, fn) local b = bar(tools2, text, w, fn, "LEFT", x, 0); x = x + w + 4; return b end
+    add2("Spawn menu (Q)", 120, function()
+        local B = builder()
+        if not B then return end
+        E.menuPinned = not (B.Menu() and B.Menu():IsShown())
+        B.ShowMenu(E.menuPinned)
+    end)
+    add2("Select mine", 96, function() E.Cmd("selall") end)
+    add2("Box select", 92, function() E.StartBox() end)
+    add2("Copy", 64, function() E.Cmd("copy") end)
+    add2("Paste", 64, function() E.StartPasting() end)
+    add2("Clear selection", 120, function() E.Cmd("selclear") end)
+    add2("Properties", 96, function() local B = builder(); if B then B.ToggleProps() end end)
+    add2("Save prefab", 100, function() moveBuilder(true, true) E.Note("Type a name in the Builder's Prefab box and press Save.") end)
+
     -- keys card
     hud.keys = panel(hud, 520, 22 + #KEYS * 16)
     hud.keys:SetScale(scale)
-    hud.keys:SetPoint("BOTTOM", tools, "TOP", 0, 8)
+    hud.keys:SetPoint("BOTTOM", tools2, "TOP", 0, 8)
     for i, line in ipairs(KEYS) do
         local fs = hud.keys:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         fs:SetPoint("TOPLEFT", 14, -10 - (i - 1) * 16)
@@ -228,11 +307,18 @@ local function refreshCard()
     if not hud or not hud.sel then return end
     local B = builder()
     local s = (B and B.state) or {}
-    hud.sel:SetText(s.selName and s.selName ~= "" and s.selName or "Nothing selected")
-    local parts = {}
-    if s.mine then parts[#parts + 1] = "Your props " .. s.mine end
-    parts[#parts + 1] = (s.area and s.area ~= "-") and s.area or "Not in a build area"
-    hud.info:SetText(table.concat(parts, "  -  "))
+    if s.count and s.count > 1 then
+        hud.sel:SetText(s.count .. " props selected")
+    else
+        hud.sel:SetText(s.selName and s.selName ~= "" and s.selName or "Nothing selected")
+    end
+    local p = s.plotInfo
+    if p then
+        hud.info:SetText(string.format("%s's plot: %d/%d props", p.owner, p.n, p.ncap))
+    else
+        hud.info:SetText((s.area and s.area ~= "-") and s.area or "Not in a build area")
+    end
+    hud.budget:SetText(B and B.Meter and (B.Meter()) or "")
 end
 
 local function apply(nowOn)
@@ -244,12 +330,19 @@ local function apply(nowOn)
         hud:Show()
         moveBuilder(true, true)
         local B = builder()
+        if B and B.Panel and B.Panel() then B.Dock(B.Panel(), true) end
         if B and B.RequestCatalog and (not B.catalog or #B.catalog == 0) then B.RequestCatalog() end
         refreshCard()
     else
         hud:Hide()
-        E.placing = nil
+        pend(nil)
+        E.menuPinned = nil
         moveBuilder(false)
+        local B = builder()
+        if B and B.ShowMenu then
+            if B.Menu() then B.ShowMenu(false) end
+            if B.Panel() then B.Dock(B.Panel(), false) end
+        end
         if E.hidUI then E.hidUI = nil; UIParent:Show() end
     end
 end

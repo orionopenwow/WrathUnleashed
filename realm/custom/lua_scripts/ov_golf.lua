@@ -668,6 +668,7 @@ local function publishCommand(player, text)
     say(player, string.format("%s %s: everyone on this realm can play it from /golf (%d holes).", c.title,
         replacing and "updated" or "published", #c.holes))
     send(player, "published", key)
+    if rawget(_G, "OVWorkshop") then OVWorkshop.Published("course", key, c.title, player) end   -- ov_workshop.lua
 end
 
 local function unpublishCommand(player, key)
@@ -678,6 +679,7 @@ local function unpublishCommand(player, key)
     byKey[key] = nil
     exec(string.format("DELETE FROM mod_golf_courses WHERE ckey = '%s'", key:gsub("[^%w_]", "")))
     say(player, "Taken down: " .. key)
+    if rawget(_G, "OVWorkshop") then OVWorkshop.Reviewed("course", key, "unpublish") end
 end
 
 -- The course's best rounds, one per character: id,name,strokes,verified,players;...
@@ -816,6 +818,9 @@ RegisterPlayerEvent(42, function(event, player, command)
 end)
 RegisterPlayerEvent(4, function(event, player) leave(player, false) end)
 RegisterPlayerEvent(28, function(event, player) leave(player, false) end)
+
+-- ov_workshop.lua: the published courses (backfill) and .golf unpublish (a GM's .workshop unpublish).
+OVWorkshopHooks = rawget(_G, "OVWorkshopHooks") or {}; OVWorkshopHooks.course = { run = run, COURSES = COURSES }
 
 -- For the tests.
 return { sessions = sessions, bySeat = bySeat, readCourse = readCourse, COURSES = COURSES, run = run }
