@@ -1115,6 +1115,11 @@ local function build()
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32,
         insets = { left = 11, right = 12, top = 12, bottom = 11 } })
     ui:SetBackdropColor(0.05, 0.06, 0.08, 0.95)   -- solid: the dialog texture draws see-through in the browser client
+    do   -- a colour fill the engine draws itself (no texture file; the backdrop fill needs one)
+        local bg = ui:CreateTexture(nil, "BACKGROUND")
+        bg:SetTexture(0.05, 0.06, 0.08, 0.95)
+        bg:SetPoint("TOPLEFT", 10, -10); bg:SetPoint("BOTTOMRIGHT", -10, 10)
+    end
     label(ui, "Device editor", "GameFontNormalLarge", "TOP", -40, -18)
     local close = CreateFrame("Button", nil, ui, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", -6, -6)

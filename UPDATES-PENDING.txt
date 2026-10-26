@@ -191,3 +191,5 @@
 1057a scripts  Building: the realm sends the whole selection, so a carried group moves together on screen
 1057b foreverui  Building: the selected group follows the cursor while you carry or drag it
 1057c ship  Save to GitHub (orionopenwow/WrathUnleashed): group carry
+1058a foreverui  Windows get a solid colour fill (the backdrop fill still showed the world through)
+1058b ship  Save to GitHub (orionopenwow/WrathUnleashed): solid window fill
