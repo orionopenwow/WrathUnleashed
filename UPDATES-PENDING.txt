@@ -193,3 +193,5 @@
 1057c ship  Save to GitHub (orionopenwow/WrathUnleashed): group carry
 1058a foreverui  Windows get a solid colour fill (the backdrop fill still showed the world through)
 1058b ship  Save to GitHub (orionopenwow/WrathUnleashed): solid window fill
+1059a client  Client 20261026b: shaders build a few per frame (the 9 s login and world-entry freezes), far character models load after the cover, world-only tables load after character select, the character-select sunset no longer ends in a hard edge
+1059b ship  Save to GitHub (orionopenwow/WrathUnleashed): client 20261026b, deploy script joins N build parts

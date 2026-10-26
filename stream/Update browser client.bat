@@ -10,7 +10,16 @@ echo Packing the client...
 if not exist "..\play\dist-test.tgz.part00" (echo ..\play\dist-test.tgz.part00 is missing. & pause & exit /b 1)
 if exist "%W%" rmdir /s /q "%W%"
 mkdir "%W%\kit\www-files" "%W%\kit\lua"
-copy /b "..\play\dist-test.tgz.part00"+"..\play\dist-test.tgz.part01" "%W%\dist.tgz" >nul || goto fail
+rem The build comes in N parts (part00, part01, ...). dist-test.parts.txt holds N (written with each
+rem build); without it, the two parts every build had until 20261026b. Only that many are joined, so a
+rem leftover part from an older, longer build is never glued on.
+set "NPARTS=2"
+if exist "..\play\dist-test.parts.txt" set /p NPARTS=<"..\play\dist-test.parts.txt"
+set "PARTS=..\play\dist-test.tgz.part00"
+if %NPARTS% GEQ 2 set "PARTS=%PARTS%+..\play\dist-test.tgz.part01"
+if %NPARTS% GEQ 3 set "PARTS=%PARTS%+..\play\dist-test.tgz.part02"
+if %NPARTS% GEQ 4 set "PARTS=%PARTS%+..\play\dist-test.tgz.part03"
+copy /b %PARTS% "%W%\dist.tgz" >nul || goto fail
 tar -xzf "%W%\dist.tgz" -C "%W%" || goto fail
 move "%W%\dist-test" "%W%\kit\www" >nul || goto fail
 rem The brotli copy of the client (smaller download), when the build came with one.
