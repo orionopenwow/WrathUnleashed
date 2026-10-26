@@ -748,6 +748,10 @@ local function buddyCommand(player, arg)
     local bg, b = buddyOf(guid)
     if arg == "off" or arg == "dismiss" or arg == "bye" then
         if not bg then return say(player, "You have no buddy with you.") end
+        local group, members = groupMembers(player)
+        for _, m in ipairs(group and members or {}) do
+            if m:GetGUIDLow() == bg then try(group, "RemoveMember", m:GetGUID()); break end
+        end
         if safeName(b.name) ~= "" then botCommand(player, "remove " .. safeName(b.name)) end
         companions[guid][bg] = nil
         return say(player, b.name .. " heads home.")
@@ -788,8 +792,18 @@ local function dismissCommand(player, arg)
         return say(player, "You have no bots with you.")
     end
     local gone = {}
+    -- Take the bot out of the group first: a bot that only logs out stays behind as an offline member
+    -- and fills the slot ("Your group is full"), as seen live on 2026-10-26.
+    local group, members = groupMembers(player)
+    local function ungroup(bg)
+        if not group then return end
+        for _, m in ipairs(members) do
+            if m:GetGUIDLow() == bg then try(group, "RemoveMember", m:GetGUID()); return end
+        end
+    end
     local function send(bg, c)
         gone[#gone + 1] = c.name; list[bg] = nil
+        ungroup(bg)
         local nm = safeName(c.name)
         if nm ~= "" then botCommand(player, "remove " .. nm) end
     end

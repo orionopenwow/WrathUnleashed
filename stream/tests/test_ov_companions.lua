@@ -125,6 +125,10 @@ local function group(leader, members)
     function g:ConvertToRaid() self.raid = true; self.converted = self.converted + 1 end
     function g:IsLFGGroup() return self.lfg or false end
     function g:IsBGGroup() return false end
+    function g:RemoveMember(guid)
+        for i, m in ipairs(self.members) do if m.guid == guid then table.remove(self.members, i); m.group = nil; return true end end
+        return false
+    end
     leader.group = g
     for _, m in ipairs(g.members) do m.group = g end
     return g
@@ -307,6 +311,7 @@ cmd(rd, "recruit dps")
 check("raid full at 10", last(rd):match("full %(10 players%)") or last(rd):match("most allowed in a raid"))
 cmd(rd, "dismiss all")
 check("raid: dismiss all sends 8 home", count(rd, "^playerbots bot remove ") == 8)
+check("raid: dismissed bots leave the group (no offline members filling it)", #rd.group.members == 2)
 
 -- raid caps: solo raid gets 9 (per player in a raid), not 4
 clock = clock + 31
