@@ -1,0 +1,162 @@
+# WrathUnleashed: build and publish the images the host kit pulls (hosting/INSTALL-OPERATE.md 9.4).
+#   ghcr.io/orionopenwow/wu-ac-wotlk-{db-import,authserver,worldserver}:stable   AzerothCore (mod-playerbots fork)
+#                                                                              + the modules in sources.lock
+#   ghcr.io/orionopenwow/wu-host-tools:1    the host agent, setup and self-check (hosting/kit/tools)
+#   ghcr.io/orionopenwow/wu-relay:1         the Beacons relay (hosting/relay)
+# each also as :sha-<commit>. The realm images are built exactly like realm/"Build custom realm.bat"
+# (realm/docker-compose.build.yml): fetch.sh at the pinned commits + patches, then the core's own
+# apps/docker/Dockerfile, targets db-import / authserver / worldserver, CTOOLS_BUILD=db-only, CWITH_WARNINGS=OFF,
+# CTYPE=Release.
+#
+# No game data: mod-arac's client files (patch-contents/, DBCs) are removed from the build context before the
+# build, and the job fails if any game-data file is still in it. Hosts extract dbc + maps from their own install.
+# Only the built-in token (packages: write); no other secrets.
+#
+# Source copy: tools/github-workflows/wu-images.yml. "Turn on GitHub builds.bat" copies it to .github/workflows/
+# (pushing a workflow needs the owner's `workflow` scope).
+name: wu-images
+on:
+  push:
+    branches: [main]
+    paths:
+      - "realm/custom/sources.lock"
+      - "realm/custom/patches/**"
+      - "realm/custom/fetch.sh"
+      - "hosting/kit/tools/**"
+      - "hosting/relay/**"
+      - ".github/workflows/wu-images.yml"
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "all, small (host tools + relay) or realm"
+        required: false
+        default: all
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: wu-images
+  cancel-in-progress: false
+
+env:
+  REG: ghcr.io/orionopenwow
+
+jobs:
+  small:
+    if: github.event_name != 'workflow_dispatch' || inputs.only != 'realm'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: tags
+        id: t
+        run: echo "sha=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: wu-host-tools
+        uses: docker/build-push-action@v6
+        with:
+          context: hosting/kit/tools
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/orionopenwow/wu-host-tools:1
+            ${{ env.REG }}/wu-host-tools:${{ steps.t.outputs.sha }}
+          labels: org.opencontainers.image.source=https://github.com/orionopenwow/WrathUnleashed
+      - name: wu-relay
+        uses: docker/build-push-action@v6
+        with:
+          context: hosting
+          file: hosting/relay/Dockerfile
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/orionopenwow/wu-relay:1
+            ${{ env.REG }}/wu-relay:${{ steps.t.outputs.sha }}
+          labels: org.opencontainers.image.source=https://github.com/orionopenwow/WrathUnleashed
+
+  realm:
+    if: github.event_name != 'workflow_dispatch' || inputs.only != 'small'
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - name: tags
+        id: t
+        run: echo "sha=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - name: room on the runner (the compile needs ~20 GB)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost || true
+          df -h /
+      - name: sources at the pinned commits (realm/custom/fetch.sh, the same container as Build custom realm.bat)
+        run: |
+          docker run --rm --entrypoint sh -v "$PWD/realm/custom:/w" alpine/git:latest /w/fetch.sh
+          sudo chown -R "$(id -u):$(id -g)" realm/custom/acore
+      - name: no game data in the build context
+        run: |
+          rm -rf realm/custom/acore/modules/mod-arac/patch-contents
+          bad=$(find realm/custom/acore -path '*/.git' -prune -o -type f \( -iname '*.dbc' -o -iname '*.db2' -o -iname '*.mpq' \
+                -o -iname '*.m2' -o -iname '*.wmo' -o -iname '*.adt' -o -iname '*.blp' -o -iname '*.vmtree' -o -iname '*.mmap' \) -print | head -20)
+          if [ -n "$bad" ]; then echo "game data in the build context, stopping:"; echo "$bad"; exit 1; fi
+          echo "clean"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # One builder for all three: the compile stage is built once and reused by the next two targets.
+      - name: wu-ac-wotlk-worldserver (the long one, 1-3 hours)
+        uses: docker/build-push-action@v6
+        with:
+          context: realm/custom/acore
+          file: realm/custom/acore/apps/docker/Dockerfile
+          target: worldserver
+          build-args: |
+            CTOOLS_BUILD=db-only
+            CWITH_WARNINGS=OFF
+            CTYPE=Release
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/orionopenwow/wu-ac-wotlk-worldserver:stable
+            ${{ env.REG }}/wu-ac-wotlk-worldserver:${{ steps.t.outputs.sha }}
+          labels: org.opencontainers.image.source=https://github.com/orionopenwow/WrathUnleashed
+      - name: wu-ac-wotlk-authserver
+        uses: docker/build-push-action@v6
+        with:
+          context: realm/custom/acore
+          file: realm/custom/acore/apps/docker/Dockerfile
+          target: authserver
+          build-args: |
+            CTOOLS_BUILD=db-only
+            CWITH_WARNINGS=OFF
+            CTYPE=Release
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/orionopenwow/wu-ac-wotlk-authserver:stable
+            ${{ env.REG }}/wu-ac-wotlk-authserver:${{ steps.t.outputs.sha }}
+          labels: org.opencontainers.image.source=https://github.com/orionopenwow/WrathUnleashed
+      - name: wu-ac-wotlk-db-import
+        uses: docker/build-push-action@v6
+        with:
+          context: realm/custom/acore
+          file: realm/custom/acore/apps/docker/Dockerfile
+          target: db-import
+          build-args: |
+            CTOOLS_BUILD=db-only
+            CWITH_WARNINGS=OFF
+            CTYPE=Release
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/orionopenwow/wu-ac-wotlk-db-import:stable
+            ${{ env.REG }}/wu-ac-wotlk-db-import:${{ steps.t.outputs.sha }}
+          labels: org.opencontainers.image.source=https://github.com/orionopenwow/WrathUnleashed
