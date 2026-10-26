@@ -153,3 +153,8 @@
 1041a-modes
 1041b-modes
 1041c-modes
+1041d-modes
+1041d-modes-leyline
+1042a-golf
+1042b-golf
+1042c-golf

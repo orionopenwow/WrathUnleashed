@@ -1,0 +1,57 @@
+diff --git a/crates/benilla-app/src/golf/mod.rs b/crates/benilla-app/src/golf/mod.rs
+index c6e7e238..2cbd4b0f 100644
+--- a/crates/benilla-app/src/golf/mod.rs
++++ b/crates/benilla-app/src/golf/mod.rs
+@@ -49,7 +49,7 @@ const AIM_RATE: f32 = 900.0;
+ /// One full power swing up and back down (seconds).
+ const CHARGE_CYCLE: f32 = 1.8;
+ /// Ticks of path the aim preview shows.
+-const PREVIEW_TICKS: u32 = 42;
++const PREVIEW_TICKS: u32 = 72;
+ const FLYOVER_SECS: f32 = 2.6;
+ const BALL_COLORS: [[f32; 3]; 8] = [
+     [0.97, 0.97, 0.95],
+@@ -150,6 +150,9 @@ struct Aim {
+     charging: Option<f32>,
+ }
+ 
++/// The power of this client's last putt, for the aim guide before the next swing starts.
++static LAST_POWER: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(450);
++
+ struct Roll {
+     name: String,
+     outcome: golf::Outcome,
+@@ -402,7 +405,7 @@ fn piece_geo(piece: &Piece) -> Geo {
+ fn ball_mesh() -> Mesh {
+     // A UV sphere lit from above; the material's colour tints it per player.
+     let mut g = Geo::default();
+-    let (rings, seg) = (10, 16);
++    let (rings, seg) = (16, 24);
+     for i in 0..rings {
+         let t0 = std::f32::consts::PI * i as f32 / rings as f32;
+         let t1 = std::f32::consts::PI * (i + 1) as f32 / rings as f32;
+@@ -812,6 +815,7 @@ fn aim_input(
+         aim.power = (if u <= 1.0 { u } else { 2.0 - u } * 1000.0).clamp(0.0, 1000.0);
+         if !keys.pressed(KeyCode::Space) {
+             let power = (aim.power as i32).max(15);
++            LAST_POWER.store(power.max(150), std::sync::atomic::Ordering::Relaxed);
+             let angle = aim.angle.round() as i32 % 3600;
+             aim.charging = None;
+             call_hud(script.as_deref(), &format!("OnShoot({angle}, {power})"));
+@@ -993,10 +997,13 @@ fn golf_gizmos(golf: Res<Golf>, time: Res<Time>, mut gizmos: Gizmos) {
+         .resolution(32);
+     if let Some(aim) = &golf.aim {
+         if let Some(ball) = golf.balls.get(&aim.name) {
+-            let shot = Shot { angle_t: aim.angle.round() as i32, power_m: aim.power.max(80.0) as i32 };
++            // Before the swing, the guide shows the last putt's power, faintly; while swinging, the live power.
++            let swinging = aim.charging.is_some();
++            let guide = if swinging { aim.power.max(80.0) as i32 } else { LAST_POWER.load(std::sync::atomic::Ordering::Relaxed) };
++            let shot = Shot { angle_t: aim.angle.round() as i32, power_m: guide };
+             let path = golf::simulate_for(hole, ball.pos, shot, golf.phase_now(now), PREVIEW_TICKS);
+-            let p = aim.power / 1000.0;
+-            let col = Color::srgba(0.4 + 0.6 * p, 1.0 - 0.7 * p * p, 0.3, 0.95);
++            let p = guide as f32 / 1000.0;
++            let col = if swinging { Color::srgba(0.4 + 0.6 * p, 1.0 - 0.7 * p * p, 0.3, 0.95) } else { Color::srgba(1.0, 1.0, 1.0, 0.45) };
+             let pts: Vec<Vec3> = path.frames.iter().step_by(3).map(|f| golf.world(*f) + Vec3::Y * 0.02).collect();
+             for pair in pts.chunks(2) {
+                 if let [a, b] = pair {

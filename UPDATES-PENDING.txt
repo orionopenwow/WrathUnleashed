@@ -147,3 +147,7 @@
 1041b-modes foreverui  Leyline Modes HUD (/modes): the sandboxed mode runtime, Bumper Balls, scores, keys
 1041c-modes client  Client 20261025k: Leyline Modes drawing (shapes, easing, follow/top cameras) and the script time guard
 1041d-modes ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline Modes and the mode guide
+1042a-golf scripts  Minigolf spectating (live rounds nearby, watch without playing) and Coin Dash as a built-in mode
+1042b-golf foreverui  Minigolf: Live rounds in /golf; Modes: Coin Dash, the in-game mode editor
+1042c-golf client  Client 20261025l: a smoother golf ball and an aim guide before the swing (on top of 20261025k modes)
+1042d-golf ship  Save to GitHub (orionopenwow/WrathUnleashed): golf spectating, Coin Dash, the mode editor
