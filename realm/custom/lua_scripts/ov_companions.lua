@@ -748,11 +748,14 @@ local function buddyCommand(player, arg)
     local bg, b = buddyOf(guid)
     if arg == "off" or arg == "dismiss" or arg == "bye" then
         if not bg then return say(player, "You have no buddy with you.") end
-        local group, members = groupMembers(player)
-        for _, m in ipairs(group and members or {}) do
-            if m:GetGUIDLow() == bg then try(group, "RemoveMember", m:GetGUID()); break end
+        local _, members = groupMembers(player)
+        for _, m in ipairs(members) do
+            if m:GetGUIDLow() == bg then whisper(player, m, "leave"); break end
         end
-        if safeName(b.name) ~= "" then botCommand(player, "remove " .. safeName(b.name)) end
+        local nm = safeName(b.name)
+        if nm ~= "" then
+            player:RegisterEvent(function(_, _, _, p) if p then botCommand(p, "remove " .. nm) end end, 2500, 1)
+        end
         companions[guid][bg] = nil
         return say(player, b.name .. " heads home.")
     end
@@ -792,20 +795,19 @@ local function dismissCommand(player, arg)
         return say(player, "You have no bots with you.")
     end
     local gone = {}
-    -- Take the bot out of the group first: a bot that only logs out stays behind as an offline member
-    -- and fills the slot ("Your group is full"), as seen live on 2026-10-26.
-    local group, members = groupMembers(player)
-    local function ungroup(bg)
-        if not group then return end
-        for _, m in ipairs(members) do
-            if m:GetGUIDLow() == bg then try(group, "RemoveMember", m:GetGUID()); return end
-        end
-    end
+    -- Each bot leaves the group itself first (its own "leave" command, the module's LeaveOrDisbandGroup), then
+    -- logs out 2.5 s later. A bot that only logs out stays behind as an offline member and fills the slot
+    -- ("Your group is full"). Never remove members from the group in Lua: on 2026-10-26 calling the group's
+    -- RemoveMember next to the module's own logout clean-up crashed the world server.
+    local _, members = groupMembers(player)
+    local byGuid = {}
+    for _, m in ipairs(members) do byGuid[m:GetGUIDLow()] = m end
+    local later = {}
     local function send(bg, c)
         gone[#gone + 1] = c.name; list[bg] = nil
-        ungroup(bg)
+        if byGuid[bg] then whisper(player, byGuid[bg], "leave") end
         local nm = safeName(c.name)
-        if nm ~= "" then botCommand(player, "remove " .. nm) end
+        if nm ~= "" then later[#later + 1] = nm end
     end
     if arg == "all" then
         for bg, c in pairs(list) do send(bg, c) end
@@ -823,6 +825,12 @@ local function dismissCommand(player, arg)
         for _, c in pairs(list) do names[#names + 1] = c.name end
         table.sort(names)
         return say(player, "Dismiss which? |cffffff00.dismiss <name>|r or |cffffff00.dismiss all|r: " .. table.concat(names, ", "))
+    end
+    if #later > 0 then
+        player:RegisterEvent(function(_, _, _, p)
+            if not p then return end
+            for _, nm in ipairs(later) do botCommand(p, "remove " .. nm) end
+        end, 2500, 1)
     end
     table.sort(gone)
     say(player, table.concat(gone, ", ") .. (#gone == 1 and " heads" or " head") .. " home.")

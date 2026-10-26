@@ -204,3 +204,5 @@
 1062c ship  Save to GitHub (orionopenwow/WrathUnleashed): Companions for raids and alts
 1063a realm  Companions: bots get their role's talents (tank, healer, damage), and dismissed bots leave the group (5-minute warning, then restart)
 1063b ship  Save to GitHub (orionopenwow/WrathUnleashed): Companions talent specs and dismiss fix
+1064a scripts  Companions hotfix: .dismiss no longer crashes the world server (bots leave the group themselves, then log out)
+1064b ship  Save to GitHub (orionopenwow/WrathUnleashed): Companions dismiss hotfix

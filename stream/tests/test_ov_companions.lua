@@ -62,6 +62,7 @@ function CharDBQuery(sql)
     return nil
 end
 
+local T_SRC = assert(io.open(file)):read("*a")
 dofile(file)
 local T = assert(OV_COMPANIONS_TEST)
 
@@ -104,7 +105,10 @@ local function player(over)
     function p:GetGroup() return self.group end
     function p:Teleport(...) self.teleports[#self.teleports + 1] = { ... } end
     function p:RegisterEvent(fn, delay, rep) self.queue[#self.queue + 1] = { fn = fn, delay = delay, rep = rep } end
-    function p:Whisper(text, lang, to) self.whispers[#self.whispers + 1] = { text = text, to = to } end
+    function p:Whisper(text, lang, to)
+        self.whispers[#self.whispers + 1] = { text = text, to = to }
+        if text == "leave" and to and to.group then to.group:RemoveMember(to.guid) end
+    end
     if not (over and over.built == false) then
         function p:IsPlayerbot() return self.bot == true end
         function p:IsAddclassBot() return self.addclass == true end
@@ -250,13 +254,13 @@ check("party cap: 4 bots", count(a, "addclass") == 4 and last(a):match("the most
 
 -- dismiss
 local before = #a.cmds
-cmd(a, "dismiss")
+cmd(a, "dismiss"); run(a)
 check(".dismiss alone with several: asks which", #a.cmds == before and last(a):match("Dismiss which"))
-cmd(a, "dismiss " .. tank.name:lower())
+cmd(a, "dismiss " .. tank.name:lower()); run(a)
 check(".dismiss <name> removes that one", a.cmds[#a.cmds] == "playerbots bot remove " .. tank.name and T.companions[10][tank.guid] == nil)
-cmd(a, "dismiss all")
+cmd(a, "dismiss all"); run(a)
 check(".dismiss all removes the rest", count(a, "^playerbots bot remove ") == 4 and next(T.companions[10]) == nil and last(a):match("home"))
-cmd(a, "dismiss")
+cmd(a, "dismiss"); run(a)
 check(".dismiss with none", last(a):match("no bots"))
 
 -- a recruit that never arrives
@@ -309,9 +313,11 @@ check("raid: specs, maintenance, autogear for each", (function()
 clock = clock + 31
 cmd(rd, "recruit dps")
 check("raid full at 10", last(rd):match("full %(10 players%)") or last(rd):match("most allowed in a raid"))
-cmd(rd, "dismiss all")
+cmd(rd, "dismiss all"); run(rd)
 check("raid: dismiss all sends 8 home", count(rd, "^playerbots bot remove ") == 8)
 check("raid: dismissed bots leave the group (no offline members filling it)", #rd.group.members == 2)
+check("raid: dismiss never calls the group's RemoveMember from the script (crashed the realm 2026-10-26)",
+    not T_SRC:find("RemoveMember%s*\""))
 
 -- raid caps: solo raid gets 9 (per player in a raid), not 4
 clock = clock + 31
@@ -324,7 +330,7 @@ check("solo raid: group became a raid", solo.group.raid == true)
 clock = clock + 31
 cmd(solo, "recruit healer")
 check("raid cap: 9 bots", count(solo, "addclass") == 9 and last(solo):match("most allowed in a raid"))
-cmd(solo, "dismiss all")
+cmd(solo, "dismiss all"); run(solo)
 
 -- 25 behind the switch
 clock = clock + 31
@@ -457,7 +463,7 @@ serve(me); run(me)
 cmd(me, "companions save")
 check(".companions save stores the alts, not the class bots", usual[7] and #usual[7] == 2 and usual[7][1].name == "Healie"
     and usual[7][2].name == "Tanky" and last(me):match("Saved your usual party: Healie, Tanky"))
-cmd(me, "dismiss all")
+cmd(me, "dismiss all"); run(me)
 check(".dismiss all handles alts", count(me, "^playerbots bot remove Tanky$") == 1 and count(me, "^playerbots bot remove Healie$") == 1)
 for _, ch in ipairs(chars) do if ch.guid == 501 or ch.guid == 502 then ch.online = 0 end end
 me.group.members = { me }   -- the module logs them out of the group
@@ -467,7 +473,7 @@ cmd(me, "recruit usual")
 check(".recruit usual re-adds the saved alts", count(me, "^playerbots bot add ") == adds + 2
     and last(me):match("Bringing your usual party: Healie, Tanky"))
 serve(me); run(me)
-cmd(me, "dismiss healie")
+cmd(me, "dismiss healie"); run(me)
 check(".dismiss <alt name>", me.cmds[#me.cmds] == "playerbots bot remove Healie")
 local other7 = player({ guid = 700, account = 9 })
 cmd(other7, "recruit usual")
@@ -504,7 +510,7 @@ check("in combat: catches up later", last(b):match("after the fight"))
 clock = clock + 31
 cmd(b, "buddy warrior")
 check("one buddy only", count(b, "addclass") == 1)
-cmd(b, "buddy off")
+cmd(b, "buddy off"); run(b)
 check(".buddy off dismisses", b.cmds[#b.cmds] == "playerbots bot remove " .. bb.name and T.companions[20][bb.guid] == nil)
 local bl = player({ guid = 21, level = 10 }); cmd(bl, "buddy dk")
 check(".buddy dk below 55 refused", #bl.cmds == 0 and last(bl):match("from level 55"))
@@ -517,7 +523,7 @@ local k = player({ guid = 30 })
 cmd(k, "recruit dps")
 serve(k); run(k)
 table.remove(k.group.members)   -- the player kicked it
-cmd(k, "dismiss")
+cmd(k, "dismiss"); run(k)
 check("left the group: pruned", last(k):match("no bots"))
 
 -- switches
