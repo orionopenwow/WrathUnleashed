@@ -79,7 +79,7 @@
 --   client -> server   cmd       <the text after .build>         runs it exactly as the dot command
 --                      catalog                                   asks for the catalog
 --   server -> client   catalog   id,key,category,name,points;...  the props that exist on this realm
---                      state     sel=<id>,<entry>,<name>;mine=<n>/<cap>;area=<name>;code=<code>;n=<selected>;
+--                      state     sel=<id>,<entry>,<name>;mine=<n>/<cap>;area=<name>;code=<code>;n=<selected>;ids=<id id ...>;
 --                                pos=<x>,<y>,<z>,<deg>,<size>;pts=<used>/<cap>;tier=<tier>;
 --                                plot=<id>,<owner>,<your role>,<props>/<cap>,<points>/<cap> (or -);clip=<copied>
 --                      prefabs   id,name,code,count;...           your prefabs
@@ -1263,9 +1263,14 @@ local function sendState(player)
         plot = string.format("%d,%s,%s,%d/%d,%d/%d", pl.id, cleanName(pl.ownerName), roleIn(pl, guid) or (isGM(player) and "gm") or "none",
             n, plotProps(), pts, plotPoints())
     end
-    local data = string.format("sel=%s;mine=%d/%d;area=%s;code=%s;n=%d;pos=%s;pts=%d/%d;tier=%s;plot=%s;clip=%d",
+    -- ids: every selected prop's object id, so the browser client can carry the whole group on screen
+    -- (LeylineEdit "group", client 20261026a)
+    local ids = {}
+    for i = 1, math.min(#list, 40) do ids[#ids + 1] = tostring(list[i].id) end
+    local data = string.format("sel=%s;mine=%d/%d;area=%s;code=%s;n=%d;pos=%s;pts=%d/%d;tier=%s;plot=%s;clip=%d;ids=%s",
         sel, countOwner(guid), cap.props, (areaName(key)):gsub("[;=]", ""), lastCode[guid] or "-",
-        #list, pos, pointsOwner(guid), cap.points, cap.tier, plot, clip[guid] and #clip[guid].rel or 0)
+        #list, pos, pointsOwner(guid), cap.points, cap.tier, plot, clip[guid] and #clip[guid].rel or 0,
+        #ids > 0 and table.concat(ids, " ") or "-")
     pcall(OVMod.Send, player, MOD, "state", data)
 end
 

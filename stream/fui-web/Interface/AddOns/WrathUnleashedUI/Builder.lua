@@ -200,6 +200,11 @@ local function dispatch(name, data)
     elseif name == "state" then
         B.waiting = nil
         B.state = parseState(data)
+        -- the browser client (20261026a) carries the whole selection on screen while you drag or carry it
+        if LeylineEdit then
+            local ids = B.state.ids
+            pcall(LeylineEdit, "group " .. ((ids and ids ~= "-") and ids or ""))
+        end
         if win then
             win.sel:SetText(stateText(B.state))
             if B.state.code and B.state.code ~= "-" then win.code:SetText(B.state.code) end
