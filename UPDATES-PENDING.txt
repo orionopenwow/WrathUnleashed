@@ -197,3 +197,5 @@
 1059b ship  Save to GitHub (orionopenwow/WrathUnleashed): client 20261026b, deploy script joins N build parts
 1060a client  Players on their own 3.3.5a client (realmlist play.openvanilla.app) can go anywhere: only browser sessions are kept to the streamed zones
 1060b ship  Save to GitHub (orionopenwow/WrathUnleashed): zone rule only for browser sessions
+1061a signin  Play page: step-by-step realmlist.wtf for your own 3.3.5a client; the game account name and password are labelled as the game login
+1061b ship  Save to GitHub (orionopenwow/WrathUnleashed): desktop client help on the play page
