@@ -144,6 +144,23 @@ $STREAM_HOST {
 			header_up X-Real-IP {remote_host}
 			header_up X-Forwarded-For {remote_host}
 		}
+		# Game files. wu-play sends every slice file as no-cache (it serves the slice as an editable
+		# patch folder), so the browser kept nothing and every visit re-downloaded all of it, one
+		# synchronous read at a time. World data (models, textures, terrain, sounds) never changes
+		# under its name within a slice: a week. The UI and tables (Interface\, DBFilesClient\...):
+		# 10 minutes, so a Forever UI update reaches everyone soon. /data/__* (the lists): untouched.
+		@dataworld path_regexp dataworld (?i)^/data/(world|creature|character|item|spells|sound|dungeons|environments|tileset|textures|xtextures|particles)[^a-z0-9]
+		@dataother {
+			path /data/*
+			not path /data/__*
+			not path_regexp (?i)^/data/(world|creature|character|item|spells|sound|dungeons|environments|tileset|textures|xtextures|particles)[^a-z0-9]
+		}
+		reverse_proxy @dataworld wu-play:8090 {
+			header_down Cache-Control "private, max-age=604800"
+		}
+		reverse_proxy @dataother wu-play:8090 {
+			header_down Cache-Control "private, max-age=600"
+		}
 		# WebSockets (/ws/3724, /ws/8085) pass through and stay open as long as the game does.
 		reverse_proxy wu-play:8090 {
 			flush_interval -1

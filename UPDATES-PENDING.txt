@@ -168,3 +168,5 @@
 1046b ship  Save to GitHub (orionopenwow/WrathUnleashed): client 20261025o, GitHub builds log
 1047a client  Client 20261025o + Dalaran prefetch list: the files Enter World needs (1056) download in the background on character select, so entering Dalaran no longer fetches them one at a time
 1047b ship  Save to GitHub (orionopenwow/WrathUnleashed): Dalaran prefetch list, GitHub builds bat installs gh and logs every step
+1048a client  Browsers keep game files (world data a week, UI 10 minutes): until now every visit re-downloaded everything, which is most of the Dalaran load time
+1048b ship  Save to GitHub (orionopenwow/WrathUnleashed): game-file caching on the stream site
