@@ -62,6 +62,15 @@ Play in the browser, streamed (a small "mini" slice of the game, never the full 
                                gives that realm's relay addresses instead and NO Wrath login: hop,
                                hop_name, hop_ws, hop_join, home (wrath-early.js rewrites /ws/<port> to
                                hop_ws and fills in the realm's own login from this browser's storage)
+         POST /__gate?layer=on|off|beat   the game-folder layer (ownfiles.js): a streamed player
+                               dropped their own 3.3.5a game folder on the page, so the realm lifts the
+                               zone limit for the account (the same "ovstream clear" as own files) and keeps
+                               a lease (WU_LAYER_LEASE s, 15 min) the page renews ("beat"). "off" (the page
+                               loaded without the folder) and a lapsed lease (a sweeper, every 30 s) mark the
+                               account again for what is left of its session, so the realm never strands a
+                               streamed player where they cannot load. A new stream play, own files and
+                               "End my browser pass" drop the lease. Same-origin JSON POSTs with the session
+                               cookie only. (On /__gate because Caddy already sends that path here.)
   The off switch: WU_STREAM=0 (the default until stream-up.sh sets 1). /wrath/play then says
   streaming is off and /__auth refuses the game data. Sessions are in memory: a restart of this
   service signs stream players out of the stream site (they click Play again).
@@ -227,6 +236,7 @@ FOREVERUI = "0" if os.environ.get("WU_FOREVERUI", "1").strip() == "0" else "1"
 SESSION_TTL = 12 * 3600
 CODE_TTL = 60
 DISCORD_URL = "https://discord.gg/hVeUxYwbkr"
+GAME_FOLDER_HELP = "/wrath/docs/play#use-your-own-game-folder-to-go-anywhere"
 DISCORD_HELP = ("Need help finding or setting up your own 3.3.5a game folder? Join our Discord and "
                 "people will help: " + DISCORD_URL)
 
@@ -482,6 +492,93 @@ def realm_clear(user: str) -> None:
         raise SoapError("fault", "the realm did not confirm clearing the stream mark")
 
 
+LAYER_LEASE = max(120, int(os.environ.get("WU_LAYER_LEASE", "900") or 900))
+LAYER_BUILD = 12340
+
+
+class Layers:
+    """Streamed accounts whose zone limit is lifted because the player's page reads their own game folder
+    (POST /__gate?layer=on). In memory: user -> {sid, until, slice, tier, sess_exp, retry}. A lapsed lease is
+    marked again by sweep_layers(); a failed mark is retried there."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.leases: dict[str, dict] = {}
+
+    def lift(self, user: str, sid: str, sess: dict, now: float | None = None) -> None:
+        now = time.time() if now is None else now
+        with self.lock:
+            self.leases[user.upper()] = {"sid": sid, "until": now + LAYER_LEASE, "slice": sess.get("slice") or "mini",
+                                         "tier": int(sess.get("tier") or 0), "sess_exp": float(sess.get("exp") or now),
+                                         "retry": False}
+
+    def renew(self, user: str, now: float | None = None) -> bool:
+        now = time.time() if now is None else now
+        with self.lock:
+            lease = self.leases.get(user.upper())
+            if not lease or lease["retry"]:
+                return False
+            lease["until"] = now + LAYER_LEASE
+            return True
+
+    def take(self, user: str) -> dict | None:
+        with self.lock:
+            return self.leases.pop(user.upper(), None)
+
+    def has(self, user: str) -> bool:
+        with self.lock:
+            return user.upper() in self.leases
+
+    def lapsed(self, now: float | None = None) -> list[tuple[str, dict]]:
+        now = time.time() if now is None else now
+        with self.lock:
+            out = [(u, l) for u, l in self.leases.items() if l["until"] <= now]
+            for u, _ in out:
+                del self.leases[u]
+            return out
+
+    def put_back(self, user: str, lease: dict, now: float | None = None) -> None:
+        """A mark that failed: tried again on the next sweep (the lease no longer lifts anything)."""
+        now = time.time() if now is None else now
+        with self.lock:
+            self.leases.setdefault(user.upper(), {**lease, "until": now + 30, "retry": True})
+
+
+layers = Layers()
+
+
+def layer_mark(user: str, lease: dict, now: float | None = None) -> None:
+    """The stream mark back, for what is left of the stream session (at least a minute)."""
+    now = time.time() if now is None else now
+    secs = int(max(60, min(SESSION_TTL, lease.get("sess_exp", now) - now)))
+    realm_mark(user, lease.get("slice") or "mini", int(lease.get("tier") or 0), secs)
+
+
+def sweep_layers(now: float | None = None) -> int:
+    """Mark every account whose lease lapsed (the tab closed, crashed, or lost the folder). Returns how many."""
+    n = 0
+    for user, lease in layers.lapsed(now):
+        if not stream_on():
+            continue   # streaming off: the switch released every mark already
+        try:
+            layer_mark(user, lease, now)
+            n += 1
+            log.info("layer lease lapsed: %s marked again", user)
+        except SoapError as e:
+            log.error("layer lease lapsed: mark %s failed: %s %s", user, e.kind, e.detail[:160])
+            layers.put_back(user, lease, now)
+    return n
+
+
+def _layer_sweeper() -> None:
+    while True:
+        time.sleep(30)
+        try:
+            sweep_layers()
+        except Exception:  # noqa: BLE001: the sweeper must keep running
+            log.exception("layer sweep")
+
+
 def cookie_value(header: str, name: str) -> str:
     for part in header.split(";"):
         k, _, v = part.strip().partition("=")
@@ -532,6 +629,8 @@ def env_js(sess: dict) -> bytes:
     else:
         env = {"user": sess["user"], "pass": sess["pass"], "host": PUBLIC_HOST,
                "slice": sess["slice"], "slice_tier": str(sess["tier"])}
+        if sess.get("mode") == "stream":
+            env["layer"] = "1"   # ownfiles.js may offer the game-folder layer (POST /__gate?layer=...)
     env["moderncombos"] = "1"   # character create offers the realm's 83 retail race/class pairs
     env["foreverui"] = FOREVERUI  # Forever UI on (the client reads this before its query string)
     if guest and sess.get("mode") == "demo":
@@ -822,6 +921,9 @@ def account_page(display: str, user: str, password: str, nonce: str) -> bytes:
         '<p>Jump straight in: Dalaran, arenas, dungeons and raids, streamed to your browser. '
         'Start at level 1 or boost to 80.</p>'
         f'<p>{dalaran_btn}</p>'
+        + (f'<p class="fine">Have a 3.3.5a game folder? Drop it on the game page (or choose it from the page menu) '
+           f'to go anywhere, on the same characters. It is read on your computer and never uploaded. '
+           f'<a href="{GAME_FOLDER_HELP}">How</a></p>' if streamed else '')
         # Warm the browser client while the player reads this page: the stream site's public
         # warm.html stores the client's wasm in that origin's Cache Storage and its scripts in the
         # HTTP cache (same site, so the game page reads the same copies). No game data, no sign-in.
@@ -834,7 +936,8 @@ def account_page(display: str, user: str, password: str, nonce: str) -> bytes:
         f'<div class="tags"><span class="tag">The whole world</span><span class="tag">Your own 3.3.5a files</span>{live}</div>'
         '<p>The full game, on the same realm and with the same characters. Uses your own 3.3.5a '
         'game files, read on your computer and never uploaded.</p>'
-        + ('<p><a class="btn" href="/wrath/play?mode=own">Play in the browser with my game folder</a></p>'
+        + ('<p><a class="btn" href="/wrath/play?mode=own">Play in the browser with my game folder</a> '
+           f'<a class="fine" href="{GAME_FOLDER_HELP}">Where is my game folder?</a></p>'
            if ownfiles_on() else '')
         + '<details id="desktop"><summary>Play with the desktop client or the player package</summary>'
         '<label>Account</label><div class="row">'
@@ -1033,7 +1136,8 @@ def realms_page() -> bytes:
         f'<div class="realm"><h2>{html.escape(REALM_NAME)}</h2>'
         '<div class="tags"><span class="tag">Official</span><span class="tag">Level 1 or boost to 80</span>'
         f'{_players_text(_nonneg(st.get("players")), _nonneg(st.get("bots")), bool(st.get("online")))}</div>'
-        '<p>The WrathUnleashed realm: Dalaran in your browser, or the whole world with your own game files.</p>'
+        '<p>The WrathUnleashed realm: Dalaran in your browser, or the whole world with your own game files '
+        f'(drop your 3.3.5a game folder on the game page: <a href="{GAME_FOLDER_HELP}">how</a>).</p>'
         '<p><a class="btn primary" href="/wrath">Play</a></p>'
         + share_box("/wrath/r/wrath") + '</div>')
     realms, ok = community_realms()
@@ -1918,6 +2022,7 @@ class PageHandler(BaseHTTPRequestHandler):
         # ov_slices.lua may not even be loaded), so a failed clear only matters while it is on.
         remember_go(user, query or {})
         sessions.end_user(user)
+        layers.take(user)
         try:
             realm_clear(user)
         except SoapError as e:
@@ -1958,6 +2063,7 @@ class PageHandler(BaseHTTPRequestHandler):
             self.send(503, error_page("Streaming isn't ready on the realm right now. Please try again shortly."))
             return
         remember_go(user, query)
+        layers.take(user)   # a new stream play: marked again above; a page with the folder lifts it again
         code = sessions.create(user, password, slug, info["tier"])
         log.info("stream session for %s (%s, tier %d)", user.upper(), slug, info["tier"])
         self.redirect(f"https://{STREAM_HOST}/__gate?code={urllib.parse.quote(code)}{go_param(query)}")
@@ -1973,6 +2079,7 @@ class PageHandler(BaseHTTPRequestHandler):
             self.send(*page)
             return
         sessions.end_user(user)
+        layers.take(user)
         try:
             realm_clear(user)
         except SoapError as e:
@@ -2029,6 +2136,81 @@ class PageHandler(BaseHTTPRequestHandler):
             return
         self.redirect(f"https://{PUBLIC_HOST}/wrath")
 
+    def json_reply(self, status: int, doc: dict) -> None:
+        self.send(status, (json.dumps(doc, separators=(",", ":")) + "\n").encode(), "application/json; charset=utf-8",
+                  same_origin=True)
+
+    def stream_layer(self, query: dict) -> None:
+        """POST /__gate?layer=on|off|beat on the stream site: the game-folder layer (see the module doc)."""
+        op = (query.get("layer") or [""])[0]
+        if op not in ("on", "off", "beat"):
+            self.json_reply(400, {"ok": False, "state": "unknown", "why": "layer=on|off|beat"})
+            return
+        if not gate_limit.hit("layer:" + self.ip(), 40):
+            self.json_reply(429, {"ok": False, "state": "unknown", "why": "too many requests"})
+            return
+        if self.headers.get("Origin", "") != f"https://{STREAM_HOST}":
+            self.json_reply(403, {"ok": False, "state": "unknown", "why": "same-origin only"})
+            return
+        if not self.headers.get("Content-Type", "").lower().startswith("application/json"):
+            self.json_reply(415, {"ok": False, "state": "unknown", "why": "JSON only"})
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = -1
+        if length < 0 or length > 2048:
+            self.json_reply(413, {"ok": False, "state": "unknown", "why": "too large"})
+            return
+        try:
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except ValueError:
+            body = {}
+        body = body if isinstance(body, dict) else {}
+        sid = cookie_value(self.headers.get("Cookie", ""), "wu_play")
+        sess = self.stream_session()
+        if not sess or sess.get("mode") != "stream" or sess.get("hop"):
+            self.json_reply(403, {"ok": False, "state": "n/a", "why": "not a streamed session"})
+            return
+        if not stream_on():
+            self.json_reply(503, {"ok": False, "state": "off", "why": "streaming is off"})
+            return
+        user = sess["user"]
+        if op == "off":
+            lease = layers.take(user)
+            if not lease:
+                self.json_reply(200, {"ok": True, "state": "held"})
+                return
+            try:
+                layer_mark(user, {**lease, "slice": sess["slice"], "tier": sess["tier"], "sess_exp": sess["exp"]})
+            except SoapError as e:
+                log.error("layer off: mark %s failed: %s %s", user, e.kind, e.detail[:160])
+                layers.put_back(user, lease)   # the sweeper tries again
+                self.json_reply(503, {"ok": False, "state": "failed", "why": "the realm is not answering"})
+                return
+            log.info("layer off for %s: held to the stream again", user)
+            self.json_reply(200, {"ok": True, "state": "held"})
+            return
+        if op == "beat" and layers.renew(user):
+            self.json_reply(200, {"ok": True, "state": "lifted"})
+            return
+        if op == "beat":
+            self.json_reply(409, {"ok": False, "state": "held", "why": "no lease: ask again with layer=on"})
+            return
+        build = body.get("build")
+        if build is not None and build != LAYER_BUILD:
+            self.json_reply(400, {"ok": False, "state": "held", "why": "this realm needs a 3.3.5a (12340) game folder"})
+            return
+        try:
+            realm_clear(user)
+        except SoapError as e:
+            log.error("layer on: clear %s failed: %s %s", user, e.kind, e.detail[:160])
+            self.json_reply(503, {"ok": False, "state": "held", "why": "the realm is not answering"})
+            return
+        layers.lift(user, sid, sess)
+        log.info("layer on for %s: the whole world (own game folder)", user)
+        self.json_reply(200, {"ok": True, "state": "lifted", "lease": LAYER_LEASE})
+
     def stream_env(self) -> None:
         """GET /__env.js on the stream site: the session's game login for the client."""
         if not gate_limit.hit("env:" + self.ip(), 90):
@@ -2074,8 +2256,13 @@ class PageHandler(BaseHTTPRequestHandler):
                 "ua": self.headers.get("User-Agent", ""), "form": form or {}, "who": mods_who}
 
     def do_POST(self):  # noqa: N802
-        # Only the Workshop takes posts: add a link, report one, hide one (stream/workshop.py).
-        path = urllib.parse.urlsplit(self.path).path.rstrip("/") or "/"
+        # The Workshop's posts (add a link, report one, hide one: stream/workshop.py), the host flow, and the
+        # stream site's game-folder layer (POST /__gate?layer=..., /__layer for a Caddyfile that routes it).
+        split = urllib.parse.urlsplit(self.path)
+        path = split.path.rstrip("/") or "/"
+        if path in ("/__gate", "/__layer"):
+            self.stream_layer(urllib.parse.parse_qs(split.query))
+            return
         if hostflow is not None and hostflow.match(path):   # POST /wrath/host: make a realm (stream/hostflow.py)
             hostflow.post(self, path)
             return
@@ -2344,6 +2531,7 @@ def main() -> int:
     log.info("page :%d, bridge :%d, ac soap %s, portal %s", PAGE_PORT, BRIDGE_PORT, AC_SOAP_URL, PORTAL_URL)
     if guest:
         guest.start_thread()
+    threading.Thread(target=_layer_sweeper, daemon=True, name="layer-sweeper").start()
     try:
         page.serve_forever()
     except KeyboardInterrupt:

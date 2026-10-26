@@ -42,6 +42,7 @@
   const indexKey = (name) => asciiLower(name.replace(/\//g, '\\'));
 
   class ChainError extends Error {}
+  const byteSort = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
   function globMatch(pattern, path) {
     if (pattern.length !== path.length) return false;
@@ -82,8 +83,8 @@
     return order;
   }
 
-  /// chain.rs `locale_of`: the one subfolder holding every required locale archive.
-  function localeOf(files, dirs, layout = LAYOUT) {
+  /// Every subfolder holding all the required locale archives (enUS, enGB, deDE, ...).
+  function localeCandidates(files, dirs, layout = LAYOUT) {
     const complete = (dir) =>
       layout.base
         .filter((b) => b.required && b.path.includes(LOCALE))
@@ -91,13 +92,23 @@
           const want = b.path.split(LOCALE).join(dir);
           return files.some((f) => eqi(f, want));
         });
-    const hits = dirs.filter(complete);
-    if (hits.length === 1) return hits[0];
-    if (hits.length === 0) throw new ChainError('no locale folder holds the locale archives');
-    throw new ChainError(`more than one locale folder: ${JSON.stringify(hits)}`);
+    return dirs.filter(complete);
   }
 
-  const byteSort = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  /// chain.rs `locale_of`: the one subfolder holding every required locale archive. benilla
+  /// refuses a folder with two complete locales; the browser host picks one instead (the
+  /// player's `prefer`, else enUS, else enGB, else the first by name), so a folder with a second
+  /// language pack installed still plays. `pickedFrom` on the result's caller: see validate().
+  function localeOf(files, dirs, layout = LAYOUT, prefer) {
+    const hits = localeCandidates(files, dirs, layout);
+    if (hits.length === 1) return hits[0];
+    if (hits.length === 0) throw new ChainError('no locale folder (enUS, enGB, deDE, ...) holds the locale archives (locale-xxXX.MPQ and speech-xxXX.MPQ)');
+    for (const want of [prefer, 'enUS', 'enGB']) {
+      const got = want && hits.find((h) => eqi(h, want));
+      if (got) return got;
+    }
+    return hits.slice().sort(byteSort)[0];
+  }
 
   // --- listings ---------------------------------------------------------------------------------
   //
@@ -111,7 +122,7 @@
   /// "Data/common.MPQ", "World of Warcraft/Data/enUS/locale-enUS.MPQ", or "common.MPQ" when the
   /// Data folder's own contents were dropped). The Data folder is the shallowest folder holding a
   /// `common.MPQ`; its sibling `Interface` folder, when present, is the loose addon layer.
-  function listingFromFiles(entries, label) {
+  function listingFromFiles(entries, label, opts = {}) {
     const norm = entries.map((e) => ({ path: e.path.replace(/\\/g, '/').replace(/^\/+/, ''), file: e.file }));
     let dataDir = null;
     for (const e of norm) {
@@ -156,6 +167,7 @@
     }
     return {
       label: label || dataDir || 'Data',
+      prefer: opts.locale || null,
       dataFound: prefix !== null,
       files,
       dirs,
@@ -213,10 +225,30 @@
 
   // --- build check ------------------------------------------------------------------------------
 
-  /// Look for the build number without opening any archive: 3.3.5a ships
+  const WANT_BUILD = 12340;
+  const EXE = /(^|\/)(wow|wow-64|wowclassic)\.exe$/i;
+
+  /// Find VS_FIXEDFILEINFO (0xFEEF04BD) in an exe, reading it in 4 MiB slices (never the whole
+  /// file at once). { build, version } or null.
+  async function exeVersion(file) {
+    const STEP = 4 * 1024 * 1024, OVER = 64;
+    for (let at = 0; at < file.size; at += STEP) {
+      const bytes = new Uint8Array(await file.slice(at, Math.min(file.size, at + STEP + OVER)).arrayBuffer());
+      for (let i = 0; i + 52 <= bytes.length; i += 4) {
+        if (bytes[i] === 0xbd && bytes[i + 1] === 0x04 && bytes[i + 2] === 0xef && bytes[i + 3] === 0xfe) {
+          const dv = new DataView(bytes.buffer, bytes.byteOffset + i);
+          const ms = dv.getUint32(8, true), ls = dv.getUint32(12, true);
+          return { build: ls & 0xffff, version: `${ms >>> 16}.${ms & 0xffff}.${ls >>> 16}.${ls & 0xffff}` };
+        }
+      }
+    }
+    return null;
+  }
+
+  /// The build number, read from the files (never from a folder's name): 3.3.5a ships
   /// `Data/component.wow-data.txt` and `Data/<locale>/component.wow-<locale>.txt` whose
-  /// `<component ... version="12340"/>` names the build; a dropped WoW folder also has Wow.exe,
-  /// whose VS_FIXEDFILEINFO carries 3.3.5.12340.
+  /// `<component ... version="12340"/>` names the build; a dropped game folder also has the game's
+  /// exe, whose VS_FIXEDFILEINFO carries 3.3.5.12340.
   async function detectBuild(entries) {
     const comp = entries.filter((e) => /(^|\/)component\.wow-[^/]*\.txt$/i.test(e.path));
     for (const e of comp) {
@@ -226,38 +258,64 @@
         if (m) return { build: Number(m[1]), source: e.path };
       } catch (_) {}
     }
-    const exe = entries.find((e) => /(^|\/)wow\.exe$/i.test(e.path) && e.path.split('/').length <= 2);
-    if (exe) {
+    const exes = entries.filter((e) => EXE.test(e.path) && e.path.split('/').length <= 2);
+    for (const exe of exes) {
       try {
-        const bytes = new Uint8Array(await exe.file.arrayBuffer());
-        for (let i = 0; i + 52 <= bytes.length; i += 4) {
-          if (bytes[i] === 0xbd && bytes[i + 1] === 0x04 && bytes[i + 2] === 0xef && bytes[i + 3] === 0xfe) {
-            const dv = new DataView(bytes.buffer, i);
-            const ms = dv.getUint32(8, true), ls = dv.getUint32(12, true);
-            return { build: ls & 0xffff, version: `${ms >>> 16}.${ms & 0xffff}.${ls >>> 16}.${ls & 0xffff}`, source: exe.path };
-          }
-        }
+        const v = await exeVersion(exe.file);
+        if (v) return { ...v, source: exe.path };
       } catch (_) {}
     }
     return null;
   }
 
+  /// What game a set of paths looks like, from its archive names alone (no bytes read):
+  /// '335' (common.MPQ + lichking.MPQ), '243' (common.MPQ + expansion.MPQ, no lichking.MPQ),
+  /// '112' (dbc.MPQ, model.MPQ, texture.MPQ...: the 1.x layout), 'newer' (art.MPQ/world.MPQ of
+  /// 4.x, or a CASC .build.info), or null (no game archives at all).
+  function gameLayout(paths) {
+    const base = new Set(paths.map((p) => asciiLower(p.replace(/\\/g, '/').split('/').pop())));
+    if (base.has('.build.info') || base.has('world.mpq') || base.has('art.mpq')) return 'newer';
+    if (base.has('common.mpq')) return base.has('lichking.mpq') ? '335' : base.has('expansion.mpq') ? '243' : 'common';
+    const old = ['dbc.mpq', 'model.mpq', 'texture.mpq', 'terrain.mpq', 'interface.mpq', 'wmo.mpq'];
+    if (old.filter((n) => base.has(n)).length >= 2) return '112';
+    return null;
+  }
+
+  const HELP = 'Choose the folder your 3.3.5a game is installed in (it holds the "Data" folder), or that "Data" folder itself.';
+  const WRONG = {
+    '112': 'This is a 1.12 game folder. This page needs a 3.3.5a game folder (build 12340). (The 1.12 game plays on Open Vanilla.)',
+    '243': 'This looks like a 2.4.3 game folder (it has no lichking.MPQ). This page needs a 3.3.5a game folder (build 12340).',
+    newer: 'This is a newer game version. This page needs a 3.3.5a game folder (build 12340).',
+  };
+
   /// The checks the page shows before handing the folder over. `ok` is exactly "Chain.open would
-  /// succeed on the listing" (same locale + mount-order rules); `warnings` never block.
-  async function validate(entries, label) {
-    const listing = listingFromFiles(entries, label);
-    const report = { ok: false, errors: [], warnings: [], checks: [], locale: null, order: [], build: null, listing };
+  /// succeed on the listing" (same locale + mount-order rules) and the build is 3.3.5a: a folder
+  /// whose files name another build (or that is laid out like another game version) is refused.
+  /// `warnings` never block. `opts.locale`: the player's preferred locale when several are there.
+  async function validate(entries, label, opts = {}) {
+    const listing = listingFromFiles(entries, label, opts);
+    const report = { ok: false, errors: [], warnings: [], checks: [], locale: null, order: [], build: null, listing, layout: null };
     const has = (rel) => listing.files.some((f) => eqi(f, rel));
+    report.layout = gameLayout(entries.map((e) => e.path));
     if (!listing.dataFound) {
-      report.errors.push('No common.MPQ found. Choose the "Data" folder inside your 3.3.5a game folder (or the game folder itself).');
+      if (WRONG[report.layout]) report.errors.push(WRONG[report.layout]);
+      else if (entries.length && entries.every((e) => /\.mpq$/i.test(e.path)) && entries.length < 4) {
+        report.errors.push('One archive is not enough: the game needs the whole Data folder (common.MPQ, lichking.MPQ, the patches and the language folder such as enUS). ' + HELP);
+      } else report.errors.push('No common.MPQ found. ' + HELP);
+      return report;
+    }
+    if (report.layout !== '335' && WRONG[report.layout]) {
+      report.errors.push(WRONG[report.layout]);
       return report;
     }
     for (const want of ['common.MPQ', 'expansion.MPQ', 'lichking.MPQ']) report.checks.push({ name: want, ok: has(want) });
+    const hits = localeCandidates(listing.files, listing.dirs);
     try {
-      report.locale = localeOf(listing.files, listing.dirs);
+      report.locale = localeOf(listing.files, listing.dirs, LAYOUT, listing.prefer);
       report.checks.push({ name: `${report.locale}/locale-${report.locale}.MPQ`, ok: true });
+      if (hits.length > 1) report.warnings.push(`This folder has ${hits.length} language folders (${hits.join(', ')}): using ${report.locale}.`);
     } catch (e) {
-      report.checks.push({ name: 'locale folder (enUS, enGB, deDE, …) with locale-*.MPQ', ok: false });
+      report.checks.push({ name: 'language folder (enUS, enGB, deDE, ...) with locale-*.MPQ', ok: false });
       report.errors.push(e.message);
       return report;
     }
@@ -267,14 +325,43 @@
       report.errors.push(e.message);
       return report;
     }
-    if (!has('expansion.MPQ') || !has('lichking.MPQ')) {
-      report.warnings.push('expansion.MPQ or lichking.MPQ is missing: this does not look like a complete 3.3.5a install (Wrath content will be missing).');
+    if (!has('lichking.MPQ')) {
+      report.errors.push('lichking.MPQ is missing: this is not a complete 3.3.5a game folder.');
+      return report;
     }
+    if (!has('expansion.MPQ')) report.warnings.push('expansion.MPQ is missing: some places will be empty.');
     report.build = await detectBuild(entries);
-    if (!report.build) report.warnings.push('Could not confirm the build number (no build file found in the folder). The client expects 3.3.5a (12340).');
-    else if (report.build.build !== 12340) report.warnings.push(`This folder is build ${report.build.build}; the client expects 3.3.5a (12340).`);
+    if (report.build && report.build.build !== WANT_BUILD) {
+      report.errors.push(`This folder is build ${report.build.build}${report.build.version ? ` (${report.build.version})` : ''}. This page needs 3.3.5a, build ${WANT_BUILD}.`);
+      return report;
+    }
+    if (!report.build) report.warnings.push(`Could not read the build number from the folder (no component.wow-data.txt or game exe). The game expects 3.3.5a (${WANT_BUILD}).`);
     report.ok = true;
     return report;
+  }
+
+  /// What a drop looks like, from the names at its top (and one level down): 'game' (a game
+  /// folder, its Data folder, the Data folder's contents, or loose .MPQ archives), 'addon'
+  /// (a .zip, a folder with a .toc, an Interface/AddOns tree) or 'unknown'.
+  /// `top`: [{ name, dir: bool, kids: [names] | undefined }].
+  function classifyDrop(top) {
+    const isMpq = (n) => /\.mpq$/i.test(n);
+    const isLocale = (n) => /^[a-z]{2}[A-Z]{2}$/.test(n);
+    let game = false, addon = false;
+    for (const t of top || []) {
+      const n = String(t.name || '');
+      const kids = (t.kids || []).map(String);
+      if (!t.dir) {
+        if (isMpq(n) || EXE.test(n) || /^component\.wow-.*\.txt$/i.test(n)) game = true;
+        else if (/\.(zip|toc|lua|xml)$/i.test(n)) addon = true;
+        continue;
+      }
+      if (eqi(n, 'Data') && kids.some((k) => isMpq(k) || isLocale(k))) game = true;
+      else if (isLocale(n) && kids.some(isMpq)) game = true;
+      else if (kids.some((k) => isMpq(k) || EXE.test(k) || eqi(k, 'Data') || /^component\.wow-.*\.txt$/i.test(k))) game = true;
+      else addon = true;
+    }
+    return game ? 'game' : addon ? 'addon' : 'unknown';
   }
 
   // --- the chain --------------------------------------------------------------------------------
@@ -283,7 +370,7 @@
     /// chain.rs `Chain::open` over a listing: locale, mount order, every archive opened (tables
     /// parsed once, in parallel). An archive that fails to open fails the chain, like benilla.
     static async open(listing) {
-      const locale = localeOf(listing.files, listing.dirs);
+      const locale = localeOf(listing.files, listing.dirs, LAYOUT, listing.prefer);
       const order = mountOrder(listing.files, locale);
       if (!order.length) throw new ChainError('no known 3.3.5a MPQs found');
       const archives = await Promise.all(
@@ -498,11 +585,88 @@
     }
   }
 
+  /// The streamed slice first, the player's own archives for every name the slice lacks: the
+  /// browser host's "layer" (a game folder dropped on the streamed page). `sliceIndex` is the
+  /// server's `/data/__index` (JSON bytes: the slice's names) or null when it could not be read.
+  /// handle() answers `{ pass: true }` for a name the server must answer (in the slice, a
+  /// `/data/__...` route, or anything at all while the slice's list is unknown and the folder
+  /// lacks the name), else the folder's answer; a name in neither is a 404 with no request.
+  /// `/data/__index` is the union, so the client asks for every name either source has. The loose
+  /// `Interface` folder beside a dropped game folder is not used here (addons come from the
+  /// realm and from "Your addons").
+  class LayerServer {
+    constructor(chain, sliceIndex, opts = {}) {
+      chain.loose = null;
+      this.chain = chain;
+      this.data = new DataServer(chain, opts);
+      this.slice = null;
+      this.sliceNames = [];
+      if (sliceIndex) {
+        try {
+          const names = JSON.parse(new TextDecoder('utf-8').decode(sliceIndex));
+          if (Array.isArray(names)) {
+            this.sliceNames = names.filter((n) => typeof n === 'string');
+            this.slice = new Set(this.sliceNames.map(indexKey));
+          }
+        } catch (_) { /* unknown slice: every miss goes to the server */ }
+      }
+      this.counts = { slice: this.sliceNames.length, own: 0, ownOnly: 0 };
+      this.indexPromise = null;
+    }
+
+    inSlice(name) { return !!this.slice && this.slice.has(indexKey(name)); }
+
+    /// The union name list as JSON bytes: the slice's names, then every folder name it lacks.
+    index() {
+      if (!this.indexPromise) {
+        this.indexPromise = (async () => {
+          const own = await this.chain.list();
+          const out = this.sliceNames.slice();
+          let only = 0;
+          for (const n of own) if (!this.slice || !this.slice.has(indexKey(n))) { out.push(n); only++; }
+          this.counts.own = own.length;
+          this.counts.ownOnly = only;
+          return new TextEncoder().encode(JSON.stringify(out));
+        })().catch((e) => { this.indexPromise = null; throw e; });
+      }
+      return this.indexPromise;
+    }
+
+    /// `opts.own`: answer from the folder even for a slice name (the server failed it).
+    async handle(method, pathname, opts = {}) {
+      const prefix = '/data/';
+      if (!pathname.startsWith(prefix)) return { pass: true };
+      const raw = pathname.slice(prefix.length);
+      if (raw === '__index') {
+        const head = method === 'HEAD';
+        try {
+          const bytes = await this.index();
+          return { status: 200, headers: { 'cross-origin-resource-policy': 'same-origin', 'cache-control': 'no-cache', 'content-type': 'application/json' }, body: head ? null : bytes };
+        } catch (e) {
+          return { status: 500, headers: {}, body: null, error: e };
+        }
+      }
+      if (raw.startsWith('__')) return { pass: true };
+      const name = percentDecodeLossy(raw).replace(/\//g, '\\');
+      if (!opts.own && this.inSlice(name)) return { pass: true };
+      const r = await this.data.handle(method, pathname, prefix);
+      if (r.status === 404 && !this.slice && !opts.own) return { pass: true };
+      r.source = 'own';
+      return r;
+    }
+  }
+
   const api = {
     LAYOUT,
     ChainError,
     Chain,
     DataServer,
+    LayerServer,
+    localeCandidates,
+    gameLayout,
+    classifyDrop,
+    exeVersion,
+    WANT_BUILD,
     Lru,
     globMatch,
     mountOrder,

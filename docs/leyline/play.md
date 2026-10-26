@@ -14,19 +14,51 @@ A Hero Key saved in your browser signs you in by itself the next time. If that f
 
 **Play now** takes you straight into the game in a browser tab. You need a browser with WebGPU, such as a recent Chrome or Edge.
 
-- The browser streams a small part of the world: Dalaran, arenas, dungeons and raids. Your character stays inside that part while you play this way.
+- The browser streams a small part of the world: Dalaran, the capitals, the starting areas, arenas, dungeons and raids. Your character stays inside that part while you play this way.
 - No game files are needed for this.
+- Have a 3.3.5a game folder? Drop it on the game page to go anywhere. See [Use your own game folder to go anywhere](#use-your-own-game-folder-to-go-anywhere).
 - The browser client downloads in the background while you read the realm page, so the game starts faster.
 - **End my browser pass** on the account page ends the session. Do this before you play the same account with your own files.
 
 A new character picks once: start at level 1, or take a one-time boost to 80 with a spec kit, professions and a trip to Dalaran.
 
+## Use your own game folder to go anywhere
+
+Streamed play keeps you in Dalaran, the capitals and the starting areas. With your own 3.3.5a game folder, the same browser tab plays the whole world, on the same realm and the same characters.
+
+**Which folder.** The folder you start the 3.3.5a game from. It holds a `Data` folder with `common.MPQ`, `lichking.MPQ`, the `patch` files and a language folder such as `enUS`, `enGB` or `deDE`. You can give the game folder itself or just its `Data` folder. It must be build 12340: the page reads the build from the files, and a 1.12 or 2.4.3 folder is refused. If you don't know where it is, search your computer for `lichking.MPQ`; the folder two levels up is the game folder.
+
+**How.**
+
+1. Play in the browser as usual (**Play now**).
+2. Drag the game folder onto the game page, at character select or in the world. Or open the page menu (the small **☰ menu** at the top) and press **Use my game folder**, or in the game open **Esc > Mods & Workshop > Leyline realms** and press **Use my game folder**.
+3. The page checks the folder, then loads once more ("Opening the whole world…") and puts your character back where you were.
+
+The Leyline window and the line under the Esc menu say **Whole world: your game folder** while it is on, or **Streamed: Dalaran, capitals, starting areas** without it.
+
+**Chrome and Edge** remember the folder. The next time you play, it opens by itself, or after one click on **Use my game folder** when the browser asks again. **Firefox and Safari** cannot keep a folder between visits: they ask for it each time, and once more right after you pick it in the world (the page has to load once). If you don't answer, streamed play starts by itself after 20 seconds.
+
+**Privacy.** Nothing is uploaded. The browser tab reads the archives straight from your disk, only the parts the game needs, and nothing else on your computer. **Forget my folder** in the folder window removes the page's access.
+
+**What changes on the realm.** While your folder is in use, the realm lets your account go anywhere. When you play without it again (another visit, another browser, or the tab closed), streamed play's limit comes back by itself within 15 minutes, so you are never left somewhere the browser can't load. If you are outside the streamed places then, the realm sends you to Dalaran (or your capital or starting area).
+
+**If something goes wrong.**
+
+- *"No common.MPQ found"*: you gave a different folder. Give the game folder or its `Data` folder.
+- *"This is a 1.12 game folder"* or *"This folder is build …"*: it is not a 3.3.5a (12340) folder. The 1.12 game plays on Open Vanilla.
+- *"lichking.MPQ is missing"* or *"One archive is not enough"*: the folder is incomplete. Give the whole folder, not single files.
+- *"Your browser asks once more"*: press **Use my game folder** and allow reading the folder. If you said no by mistake, press **Choose folder** and pick it again.
+- *"Back to streamed play"*: the browser stopped reading the folder (it was moved, the game was patched while you played, or the permission was taken back). Reload the page to use it again.
+- Two game tabs: only one tab plays at a time. The other tab offers **Play here**.
+- Still stuck? Ask on our [Discord](https://discord.gg/hVeUxYwbkr).
+
 ## In the browser with your own game folder
 
 This option is built but sits behind a switch on the server (`WU_OWNFILES=1`). When it is on, the account page shows **Play in the browser with my game folder**.
 
-- The page reads your own 3.3.5a `Data` folder on your computer. Nothing is uploaded.
+- The page reads your own 3.3.5a game folder (or its `Data` folder) on your computer. Nothing is uploaded.
 - The server sends no game data. You get the whole world, not only the streamed part.
+- The streamed page does the same when you drop your folder on it: see [Use your own game folder to go anywhere](#use-your-own-game-folder-to-go-anywhere).
 
 ## With your own client
 

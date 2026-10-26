@@ -127,6 +127,12 @@
   // goes to tab.html?m=busy (a small note page: no game starts) with "Play here", which tells the first
   // tab to step aside (it goes to tab.html?m=moved) and comes back here once the lock is free.
   // ?multitab=1 skips the guard (tests).
+  // window.__wuTabLock: a promise, true once this tab holds the game (or there is no guard), false
+  // for a tab that gives way. Whatever acts on the account (ownfiles.js's game-folder layer asks the
+  // realm to lift or restore the zone limit) waits for it, so a second tab never touches it.
+  var lockDone = null;
+  try { window.__wuTabLock = new Promise(function (r) { lockDone = r; }); } catch (e) { /* no promises */ }
+  var settle = function (v) { if (lockDone) { lockDone(v); lockDone = null; } };
   try {
     var here = location.pathname + location.search + location.hash;
     var noteUrl = function (m) { return './tab.html?m=' + m + '&r=' + encodeURIComponent(here); };
@@ -134,12 +140,26 @@
     if (locks && !/[?&]multitab=1\b/.test(location.search)) {
       var chan = typeof BroadcastChannel === 'function' ? new BroadcastChannel('wu-game') : null;
       locks.request('wu-game', { ifAvailable: true }, function (lock) {
-        if (!lock) { window.__wuStopped = true; location.replace(noteUrl('busy')); return null; }
-        if (chan) chan.onmessage = function (e) { if (e.data === 'take-over') location.replace(noteUrl('moved')); };
+        if (!lock) { window.__wuStopped = true; settle(false); location.replace(noteUrl('busy')); return null; }
+        settle(true);
+        if (chan) chan.onmessage = function (e) { if (e.data === 'take-over') { window.__wuStopped = true; location.replace(noteUrl('moved')); } };
         return new Promise(function () { /* held until this tab closes or navigates */ });
-      });
+      }).catch(function () { settle(true); });
+    } else settle(true);
+  } catch (e) { settle(true); console.warn('wrath-early.js tab guard', e); }
+  // The game-folder layer (ownfiles.js): a folder chosen in the world needs one page load (the client
+  // reads its name index once). The same character is seated again (the env's "char": the client's
+  // fast path), once, within 10 minutes of the choice. Never in a hop or a guest pass.
+  try {
+    var want = JSON.parse(sessionStorage.getItem('wu-layer') || 'null');
+    var env0 = window.__wenilla_env;
+    if (want && typeof want.char === 'string' && /^[A-Za-z\u00c0-\u024f]{2,12}$/.test(want.char) &&
+        Date.now() - (want.at || 0) < 600000 && env0 && typeof env0 === 'object' && !env0.char && !env0.hop &&
+        env0.demo !== '1' && env0.user) {
+      env0.char = want.char;
+      window.__wuLayerReseat = want.char;
     }
-  } catch (e) { console.warn('wrath-early.js tab guard', e); }
+  } catch (e) { /* storage blocked */ }
   // Keyboard Lock in fullscreen: Esc and browser shortcuts reach the game (hold Esc to leave fullscreen).
   try {
     document.addEventListener('fullscreenchange', function () {
@@ -199,14 +219,16 @@
       merged = { base: base, out: out };
       return out;
     };
+    // The game-folder layer's name index (ownfiles.js: the slice's names plus the folder's) wins
+    // over the server's own as the base the addons are added to.
     class AddonLayerStore extends Map {
       get(k) {
         var v = local(k);
         if (v !== undefined) return v;
-        v = super.get(k);
+        v = k === '__index' && g.__wuLayerIndex ? g.__wuLayerIndex : super.get(k);
         return k === '__index' && v ? merge(v) : v;
       }
-      has(k) { return local(k) !== undefined || super.has(k); }
+      has(k) { return local(k) !== undefined || (k === '__index' && !!g.__wuLayerIndex) || super.has(k); }
       // web.rs drops a big body after one read: the player's files stay, for the next UI reload
       delete(k) { return local(k) !== undefined ? false : super.delete(k); }
     }

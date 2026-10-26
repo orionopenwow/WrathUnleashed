@@ -248,8 +248,19 @@ check("Ragefire Chasm (inside the mark) allowed at 80", #p.tp == 0)
 -- outside: sent home with both messages
 p.map, p.zone = LATER_MAP, 0; fire(28, p); runTimers()
 check("an instance in a tier above the mark refused: sent to Dalaran", #p.tp == 1 and p.tp[1][1] == 571, LATER_MAP)
-check("whisper says bring your own client + Discord", p.msgs[#p.msgs]:match("own 3.3.5a game files") and p.msgs[#p.msgs]:match("discord.gg/hVeUxYwbkr"))
-check("centre text too", #p.center == 1 and p.center[1]:match("discord.gg/hVeUxYwbkr"))
+check("whisper says drop your game folder + the help page + Discord", p.msgs[#p.msgs]:match("Drop your own 3.3.5a game folder on the game page")
+    and p.msgs[#p.msgs]:match("Use my game folder") and p.msgs[#p.msgs]:match("nothing is uploaded")
+    and p.msgs[#p.msgs]:match("play.openvanilla.app/wrath/docs/play") and p.msgs[#p.msgs]:match("discord.gg/hVeUxYwbkr"))
+check("centre text too: drop the game folder", #p.center == 1 and p.center[1]:match("drop your 3.3.5a game folder on the page"))
+do
+    local bad = false
+    for _, t in ipairs({ p.msgs[#p.msgs], p.center[1] }) do
+        local l = t:lower()
+        if l:find("world of warcraft", 1, true) or l:find("warcraft", 1, true) or l:find("blizzard", 1, true)
+            or l:find("lich king", 1, true) or l:find("%f[%a]wow%f[%A]") then bad = true end
+    end
+    check("zone-edge text has no game-brand words", not bad)
+end
 p.map, p.zone = 571, 4395
 -- Standing in Dalaran while the core reports Crystalsong Forest (2817): the city floats above it, and the core
 -- has no WMO area for it. Live 2026-10-24: this looped "sent home" every 5 s. Inside the city box it stays.
@@ -314,7 +325,7 @@ check("level 1 login: told where it lives", h1.msgs[#h1.msgs]:match("Northshire 
 h1.x, h1.y = -9300, -100; h1.zone = 12          -- walked out of the box, still in Elwynn (no zone change)
 tick()
 check("left the Northshire box (no zone change): the position check sends it back", h1.tp[1] and h1.tp[1][1] == 0 and math.abs(h1.tp[1][2] + 8949.95) < 0.01)
-check("sent back with the own-files + Discord message", h1.msgs[#h1.msgs]:match("own 3.3.5a game files") ~= nil)
+check("sent back with the game-folder + Discord message", h1.msgs[#h1.msgs]:match("own 3.3.5a game folder") ~= nil)
 h1.x, h1.y, h1.zone = -8833, 628, 1519; fire(27, h1, 1519, 1519); runTimers()
 check("level 1 in Stormwind City: allowed", #h1.tp == 1)
 clock = clock + 10

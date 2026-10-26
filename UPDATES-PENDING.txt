@@ -137,3 +137,9 @@
 1039a-golf scripts  Minigolf: every finished round's shots are recorded; best rounds per course; replays
 1039b-golf foreverui  Minigolf HUD: Best rounds and Watch (a replay checks the recorded score), test-hole fix
 1039c-golf ship  Save to GitHub (orionopenwow/WrathUnleashed): minigolf leaderboards and replays
+1040a signin  Site: your own game folder opens the whole world for your account (lifted while the page holds the folder, back when you play streamed), guides
+1040b client  Play page: drop your 3.3.5a game folder any time (or Use my game folder): the streamed files first, your folder for everything else; one drop target for addons and folders
+1040c scripts  Zone edge: the message says how to go anywhere with your game folder
+1040d foreverui  In game: Whole world / Streamed line and Use my game folder button (/folder)
+1040e ship  Save to GitHub (orionopenwow/WrathUnleashed): the game-folder layer
+1040f leyline  Update the public orionopenwow/Leyline repo

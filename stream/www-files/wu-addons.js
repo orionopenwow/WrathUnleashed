@@ -79,12 +79,22 @@ async function readFolder(entry, prefix, out) {
   }
 }
 
-/** The dropped things as file sets: [{label, entries} | {label, error}]. */
+/** What a drop holds, taken synchronously inside the drop event (dataTransfer empties after it). */
+function snapshot(dt) {
+  const items = dt && dt.items ? [...dt.items].filter((i) => i.kind === 'file') : [];
+  return {
+    handles: items.map((i) => (typeof i.getAsFileSystemHandle === 'function' ? i.getAsFileSystemHandle().catch(() => null) : null)),
+    entries: items.map((i) => (i.webkitGetAsEntry ? i.webkitGetAsEntry() : null)),
+    files: [...((dt && dt.files) || [])],
+  };
+}
+
+/** The dropped things as file sets: [{label, entries} | {label, error}]. Takes a dataTransfer or a snapshot. */
 async function readDrop(dt) {
   const out = [];
-  const items = dt.items ? [...dt.items].filter((i) => i.kind === 'file') : [];
-  const entries = items.map((i) => (i.webkitGetAsEntry ? i.webkitGetAsEntry() : null));
-  const files = [...(dt.files || [])];
+  const snap = dt && Array.isArray(dt.entries) ? dt : snapshot(dt);
+  const entries = snap.entries;
+  const files = snap.files;
   for (let i = 0; i < Math.max(entries.length, files.length); i++) {
     const entry = entries[i];
     const file = files[i];
@@ -180,8 +190,9 @@ const hasFiles = (e) => !!(e.dataTransfer && [...(e.dataTransfer.types || [])].i
 function mountDrop() {
   if (document.getElementById('wu-drop')) return;
   css();
-  const box = el('div', { class: 'box' }, el('h2', {}, 'Drop to install addon'),
-    el('p', {}, 'An addon\'s .zip or its folder. It stays in this browser and is never uploaded.'));
+  const box = el('div', { class: 'box' }, el('h2', {}, 'Drop an addon or your game folder'),
+    el('p', {}, 'An addon\'s .zip or folder installs in this browser. Your 3.3.5a game folder opens the whole world.'),
+    el('p', {}, 'Nothing is uploaded: it all stays on this computer.'));
   const overlay = el('div', { id: 'wu-drop', 'aria-hidden': 'true' }, box);
   document.body.append(overlay);
   let depth = 0;
@@ -195,7 +206,19 @@ function mountDrop() {
     e.stopPropagation();
     depth = 0;
     show(false);
-    const sets = await readDrop(e.dataTransfer);
+    const snap = snapshot(e.dataTransfer);
+    // One drop target: a 3.3.5a game folder (or its Data folder, or its archives) goes to the game-
+    // folder layer (ownfiles.js); anything else is an addon.
+    let kind = 'addon', own = null;
+    try {
+      own = await import('./ownfiles.js');
+      kind = await own.classifySnapshot(snap);
+    } catch (err) { console.warn('wu-addons: drop check', err); }
+    if (kind === 'game' && own) {
+      own.acceptDrop(snap).catch((err) => console.warn('game folder drop', err));
+      return;
+    }
+    const sets = await readDrop(snap);
     const report = await installFiles(sets);
     await openPanel(report);
   }, true);
@@ -296,4 +319,4 @@ async function renderPanel(root, report) {
       el('button', { type: 'button', onclick: closePanel }, 'Close'))));
 }
 
-export const _test = { state, readDrop };
+export const _test = { state, readDrop, snapshot };

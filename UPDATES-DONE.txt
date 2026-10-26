@@ -142,3 +142,9 @@
 1038d-golf-leyline
 1039a-golf
 1039b-golf
+1039c-golf
+1039c-golf-leyline
+1040a
+1040b
+1040c
+1040d

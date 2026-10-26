@@ -33,9 +33,11 @@ in game: lua/ov_slices.lua                  a marked account that leaves the sli
   the slice folder returns 404, and `__index` lists only the slice. No MPQs are on the server.
 - **The realm rule** (`lua/ov_slices.lua`, mod-ale): on login, zone change and map change, a marked
   account outside its tiers is sent back to Dalaran (resurrected if dead). It gets a whisper and a
-  centre-screen message: *"This part of the world isn't streamed to the browser. To go everywhere,
-  play with your own 3.3.5a game files. Need help finding or setting up your own 3.3.5a game folder?
-  Join our Discord and people will help: https://discord.gg/hVeUxYwbkr"*. On Northrend (map 571),
+  centre-screen message: *"This part of the world isn't streamed to the browser. Drop your own 3.3.5a
+  game folder on the game page (or Esc > Mods & Workshop > Leyline realms > Use my game folder) to go
+  anywhere: it is read on your computer, nothing is uploaded. How: play.openvanilla.app/wrath/docs/play
+  - or ask on our Discord: https://discord.gg/hVeUxYwbkr"* (centre: *"Not streamed: drop your 3.3.5a
+  game folder on the page to go here"*). On Northrend (map 571),
   only zone 4395 (Dalaran, including the Underbelly and the Violet Citadel) counts as inside. Dalaran
   is always home, even at `maxTier` 0.
 - **`.play`** (marked players and GMs) opens a menu: Dalaran spots, and the streamed dungeons and raids.
@@ -264,6 +266,54 @@ switched off (`stream-switch.sh off` leaves it alone); it needs the stream site,
 turns the button off. The page must stay cross-origin isolated: wu-play sends COOP/COEP and Caddy
 passes them through.
 
+## The game-folder layer (a folder dropped on the streamed page)
+
+Streamed play stays the default. Any time a streamed player drops their 3.3.5a game folder (or its
+`Data` folder) on the page, at character select or in the world, or picks it from the page menu (**Use
+my game folder**) or in the game (Esc > Mods & Workshop > Leyline realms > **Use my game folder**, or
+`/folder`), it becomes a layer (`ownfiles.js`, `ownfiles-worker.js`, `chain.js` `LayerServer`):
+
+- **Files**: a name in the slice goes to the server as before (through wrath-early.js's retries and
+  sections.js's downloaded tiers); every other name comes from the player's own archives, read with
+  `File.slice` (no archive is copied). `/data/__index` is the union (the slice's names, then the folder's),
+  put in the client's body store before the client starts: the client decides "not in patch chain" from
+  that index, read once per page (`benilla-formats` chain.rs `Chain::index`, a `OnceLock`). So a folder
+  chosen after the client started needs one page load: the page keeps the session, shows "Opening the
+  whole world…", and seats the same character again (`env.char`, set by wrath-early.js from
+  sessionStorage). A name in neither source is a 404 with no request. A slice name the server keeps
+  failing (after the retries) is answered from the folder when it has it.
+- **Checks**: the build is read from the files (`component.wow-data.txt`, else the game's exe, in 4 MiB
+  slices): 3.3.5a = 12340. A 1.12, 2.4.3 or newer folder, or another build, is refused with a plain
+  message. Several language folders: the browser's language, else enUS. Patch order as the client's
+  (patch, patch-xxXX, then patch-?.MPQ and xxXX/patch-xxXX-?.MPQ by name; patch-10 is not a match).
+- **One drop target**: wu-addons.js's page-wide drop overlay ("Drop an addon or your game folder") looks
+  at the top of a drop: a game folder, a Data folder, loose MPQs or a game exe go to the layer; a .zip, a
+  folder with a .toc or an Interface tree is an addon.
+- **The realm**: after the folder opens, the page posts `POST /__gate?layer=on` (same-origin JSON, the
+  `wu_play` cookie; `/__gate` because Caddy already routes it to wu-portal; `/__layer` works too). wu-portal
+  sends the same `ovstream clear <ACCOUNT>` as own files and keeps a lease (`WU_LAYER_LEASE`, 900 s) that the
+  page renews every 4 minutes (`beat`). A page that loads without the folder posts `layer=off`: wu-portal
+  marks the account again for what is left of its session. A lease nobody renews (the tab closed or
+  crashed) is marked again by a sweeper thread within 30 s of lapsing; a failed mark is retried. A new
+  stream play, own files and "End my browser pass" drop the lease. A second tab (the one-tab guard) never
+  posts. wu-portal restarts forget leases (and sessions); a lifted account then stays lifted until the
+  player's next stream play.
+- **Remembered**: Chrome/Edge keep the folder handle in IndexedDB (`wu-ownfiles`): silent when the
+  browser kept the permission, else one click (with a 20 s countdown into streamed play). Firefox/Safari
+  ask each visit.
+- **Robustness**: the worker beats a counter in shared memory; a sync read whose worker stops beating
+  for 20 s gives up on it (the read passes to the server), the worker is restarted with the same folder,
+  and if that fails the page falls back to streamed play with a message and posts `layer=off`. Three
+  unreadable own reads in a row (the folder moved, the game patched, the permission revoked) count as a
+  dead worker.
+- **In the game**: the page sets the Lua global `WUUI_GAMEFOLDER` on a 1 s poll (`wrath-page.js`
+  `watchGameFolder`) and takes `WUUI_GAMEFOLDER_ASK = "pick"` (the addon's button), the way Leyline hops
+  work. WrathUnleashedUI's `GameFolder.lua` shows "Whole world: your game folder" or "Streamed: Dalaran,
+  capitals, starting areas" in the Leyline window and under the Esc menu. `window.__wuOwnFiles.status()`
+  is the same state for the console.
+- `?layer=0` turns it off for one visit; a portal without the route (no `layer: "1"` in the env) leaves the
+  page exactly as before.
+
 ## Download this section (in the browser)
 
 On the streamed site a **download sections** link (top right) opens a panel listing the slice's
@@ -333,7 +383,7 @@ Operator, once (`server/demo-pool.sh` explains each step):
 | `www-files/` | the browser additions: `ownfiles.js` (+ worker, `mpq.js`, `chain.js`), `sections.js` (+ worker), `wu-addons.js` + `wu-addons-core.js` ("Your addons": drop an addon's zip or folder on the page; kept in the browser's private storage per account and handed to the client through the layer in `wrath-early.js`), and the edited `index.html`/`boot.js` for reference; `www-patch.py` applies the same edits to the uploaded client build. `web.patch` is the same change for the source tree (`web/` + `scripts/web-build.sh`) |
 | `Size report.bat`, `Make mini slice.bat`, `Upload a mini slice.bat`, `Record a capture.bat` | your PC |
 | `wenilla-host-stream.patch` | the Rust changes (`--record`, `--export`, `--only-listed`, `--deps`, lite BLP, `--size-report`, tier lists, `/data/__tier`) |
-| `tests/` | `python3 -I tests/test_stream.py wrath_portal.py`, `python3 -I tests/test_realms.py wrath_portal.py` (the /wrath/realms list), `python3 -I tests/test_lua.py`, `bash tests/test_server_scripts.sh <linux host>`, `node --test tests/sections.browser.test.cjs`, `node --test tests/wu-addons.test.cjs`, `node --test tests/wu-addons.browser.test.cjs` |
+| `tests/` | `python3 -I tests/test_layer.py wrath_portal.py` (the game-folder layer's realm side), `node --test tests/ownfiles-layer.test.cjs`, `node --test tests/ownfiles-layer.browser.test.cjs`, `lua5.1 tests/test_wuui_gamefolder.lua`, `python3 -I tests/test_stream.py wrath_portal.py`, `python3 -I tests/test_realms.py wrath_portal.py` (the /wrath/realms list), `python3 -I tests/test_lua.py`, `bash tests/test_server_scripts.sh <linux host>`, `node --test tests/sections.browser.test.cjs`, `node --test tests/wu-addons.test.cjs`, `node --test tests/wu-addons.browser.test.cjs` |
 
 ## wenilla-host switches
 

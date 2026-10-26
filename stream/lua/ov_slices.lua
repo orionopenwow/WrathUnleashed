@@ -7,8 +7,8 @@
 --     ovstream mark <ACCOUNT> <slice> <maxTier> <seconds>      ovstream clear <ACCOUNT>
 -- (console only), which writes acore_auth.ov_stream_accounts. On login, zone, area and map change
 -- (and every few seconds, for the box-bounded starter areas), a marked player who is outside the
--- slice is sent home with a whisper and a centre-screen message saying the full world needs their
--- own game files.
+-- slice is sent home with a whisper and a centre-screen message saying they can drop their own
+-- 3.3.5a game folder on the page to go anywhere (the page then has the realm lift this rule).
 --
 -- The tiers come from slices/mini.json through tiers_lua.py (ov_slices_tiers.lua, the global
 -- OV_STREAM_TIERS), read when needed, so reordering mini.json reorders the realm too. Without that
@@ -49,10 +49,13 @@ local CHECK_EVERY_MS = 5000    -- the position check for box-bounded areas
 local GOSSIP_MAX = 30          -- 3.3.5a shows at most 32 gossip items
 
 local DISCORD = "https://discord.gg/hVeUxYwbkr"
-local BYOC = "This part of the world isn't streamed to the browser. To go everywhere, play with your own "
-    .. "3.3.5a game files. Need help finding or setting up your own 3.3.5a game folder? Join our "
-    .. "Discord and people will help: " .. DISCORD
-local BYOC_SHORT = "Not streamed: play with your own game files to go here (help: " .. DISCORD .. ")"
+local HELP = "play.openvanilla.app/wrath/docs/play"
+-- The page reads a dropped 3.3.5a game folder in the browser (stream/www-files/ownfiles.js) and the realm
+-- then lifts this rule for the account; the in-game button is Esc > Mods & Workshop > Leyline realms.
+local BYOC = "This part of the world isn't streamed to the browser. Drop your own 3.3.5a game folder on the "
+    .. "game page (or Esc > Mods & Workshop > Leyline realms > Use my game folder) to go anywhere: it is "
+    .. "read on your computer, nothing is uploaded. How: " .. HELP .. " - or ask on our Discord: " .. DISCORD
+local BYOC_SHORT = "Not streamed: drop your 3.3.5a game folder on the page to go here"
 local TAG = "|cffff9933[Browser play]|r "
 
 -- Dalaran (game_tele "Dalaran") is home at every tier: tier 1 of every slice.
@@ -488,8 +491,8 @@ local function onLogin(event, player)
     watch(player)
     if isLow(player) and not player:IsGM() then
         player:SendBroadcastMessage(TAG .. "In the browser you live in " .. placeNames(f, player) .. " until level "
-            .. lowLevel() .. "; then the Dungeon Finder opens. Type .play for the menu. To go everywhere, play with "
-            .. "your own game files (help: " .. DISCORD .. ").")
+            .. lowLevel() .. "; then the Dungeon Finder opens. Type .play for the menu. To go everywhere, drop "
+            .. "your own 3.3.5a game folder on the game page (how: " .. HELP .. ").")
     end
 end
 

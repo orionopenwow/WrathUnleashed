@@ -696,6 +696,89 @@ export function hopUi(env = window.__wenilla_env || {}, hop = window.__wuHop) {
 }
 // <<< leyline-hop -----------------------------------------------------------------------------------
 
+// >>> game-folder (the layer, 2026-10-25) ------------------------------------------------------------
+// The player's own 3.3.5a game folder as a layer over the streamed slice (ownfiles.js). The game sees it
+// through one Lua global the page sets on a 1 s poll while the bridge has a VM (a /reload wipes globals,
+// so it is set again each time), and asks for the picker the way the Leyline window asks for a hop: the
+// WrathUnleashedUI addon (GameFolder.lua) sets WUUI_GAMEFOLDER_ASK = "pick", which the poll takes and
+// clears (CHAT_MSG_ADDON does not reach the page). The account dock gets a "Game folder" button too.
+//   WUUI_GAMEFOLDER = { page = true, on = <folder in use>, build = <n>, label = "<folder name>",
+//                       ownOnly = <names only the folder has>, realm = "lifted"|"held"|"unknown"|"failed",
+//                       keeps = <the browser remembers folders>, allowed = <this page offers it> }
+export const FOLDER_TAKE = 'local a = WUUI_GAMEFOLDER_ASK; WUUI_GAMEFOLDER_ASK = nil; return a';
+
+const luaStr = (v) => '"' + String(v).replace(/[^A-Za-z0-9 _.()'-]/g, '?').slice(0, 40) + '"';
+const luaNum = (v) => (Number.isFinite(v) ? String(Math.trunc(v)) : 'nil');
+
+/** The Lua chunk that publishes the layer's state to the game and takes a pending ask. */
+export function gameFolderLua(st, allowed) {
+  const s = st || {};
+  const realm = ['lifted', 'held', 'unknown', 'failed'].includes(s.realm) ? s.realm : 'unknown';
+  return 'WUUI_GAMEFOLDER = { page = true, on = ' + (s.mounted ? 'true' : 'false')
+    + ', build = ' + luaNum(s.build) + ', label = ' + (s.label ? luaStr(s.label) : 'nil')
+    + ', ownOnly = ' + luaNum(s.counts && s.counts.ownOnly) + ', realm = ' + luaStr(realm)
+    + ', keeps = ' + (s.keepsFolders ? 'true' : 'false') + ', allowed = ' + (allowed ? 'true' : 'false') + ' }; '
+    + FOLDER_TAKE;
+}
+
+/** The poll: state in, "pick" out. `own` defaults to window.__wuOwnFiles. Returns a small handle. */
+export function watchGameFolder(wenilla, { own = () => window.__wuOwnFiles, pollMs = 1000 } = {}) {
+  const h = { polls: 0, asks: 0, error: null, timer: 0, busy: false, tick: null };
+  if (!wenilla || typeof wenilla.lua !== 'function') return h;
+  h.tick = async () => {
+    const o = own();
+    if (h.busy || !o) return null;
+    h.busy = true;
+    h.polls++;
+    try {
+      let v = null;
+      try { [v] = (await wenilla.lua(gameFolderLua(o.status(), o.allowed ? o.allowed() : false), 1500)) || []; h.error = null; }
+      catch (e) { h.error = String(e?.message || e).slice(0, 120); }
+      if (v === 'pick') { h.asks++; o.pick().catch?.(() => {}); }
+      return v;
+    } finally {
+      h.busy = false;
+    }
+  };
+  const vmUp = () => { try { return !!wenilla.ready && !!wenilla.state; } catch { return false; } };
+  if (pollMs > 0) h.timer = setInterval(() => { if (vmUp()) h.tick().catch(() => {}); }, pollMs);
+  return h;
+}
+
+/** The dock's "Game folder" button: picks the folder, or says what is in use. */
+export function folderButton(panel, own = () => window.__wuOwnFiles) {
+  if (!panel || panel.querySelector('#wu-folder')) return null;
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.id = 'wu-folder';
+  const label = () => {
+    const st = own()?.status?.();
+    b.textContent = st?.mounted ? 'Game folder: on' : 'Use my game folder';
+    b.title = st?.mounted ? `The whole world, from your game folder “${st.label}”. Nothing is uploaded.`
+      : 'Open the whole world with your own 3.3.5a game folder. Nothing is uploaded.';
+  };
+  label();
+  setInterval(label, 3000);
+  b.addEventListener('click', () => { own()?.pick?.()?.then?.(label, label); });
+  panel.append(b);
+  return b;
+}
+
+(() => {
+  try {
+    if (typeof document === 'undefined') return;
+    let tries = 0;
+    const look = () => {
+      const panel = document.getElementById('ow-dock-panel');
+      const o = window.__wuOwnFiles;
+      if (panel && o) { if (o.allowed()) folderButton(panel); return; }
+      if (++tries < 120) setTimeout(look, 250);
+    };
+    look();
+  } catch (e) { console.warn('wrath-page.js game folder button', e); }
+})();
+// <<< game-folder ----------------------------------------------------------------------------------
+
 let installed = null;
 
 /** The page layer, once. `wenilla` defaults to bridge.js's (the same module the page imports). */
@@ -724,6 +807,7 @@ export async function install(wenilla) {
   step('busy banner', busyBanner);
   step('go link', () => { status.go = goLink(); if (status.go) window.wuGo = status.go; });
   step('leyline hop', () => { status.hop = watchHops(wenilla); });
+  step('game folder', () => { if (!window.__wenilla_env?.hop) status.folder = watchGameFolder(wenilla); });
   const ui = () => step('leyline hop page', () => { hopUi(); });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ui, { once: true });
   else ui();

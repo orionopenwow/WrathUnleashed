@@ -1,5 +1,5 @@
 // Headless Chromium test (Playwright) for "Your addons": drop an addon's zip on the page, see the
-// "Drop to install addon" overlay and the result, reload, and a stub client (reading the page's
+// "Drop an addon or your game folder" overlay and the result, reload, and a stub client (reading the page's
 // body store the way benilla-formats web.rs does) finds the addon in /data/__index and reads its
 // files; a zip with game data is refused; turning it off takes it out on the next load.
 //
@@ -102,7 +102,7 @@ test('drop an addon zip: installed in this browser, the client loads it on the n
   // the overlay while dragging
   await drop(page, 'Hello.zip', GOOD, 'dragenter');
   await page.waitForSelector('#wu-drop.on');
-  assert.equal(await page.textContent('#wu-drop h2'), 'Drop to install addon');
+  assert.equal(await page.textContent('#wu-drop h2'), 'Drop an addon or your game folder');
 
   // a zip with game data in it is refused, and nothing is kept
   await drop(page, 'Sneaky.zip', BAD);

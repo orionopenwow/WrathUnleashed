@@ -30,6 +30,7 @@ Wrath is the flagship realm. It runs the 3.3.5a game on AzerothCore, and you can
 | Host kit and the `leyline host` command | Built | [Hosting](hosting.md) |
 | The relay (tunnels, join pages, listing) | Built | [Hosting](hosting.md#the-relay) |
 | Discord bridge | Built, off until the owner sets it up | [Hosting](hosting.md#discord-bridge) |
+| Drop your own 3.3.5a game folder on the streamed page to go anywhere | Built | [Play](play.md#use-your-own-game-folder-to-go-anywhere) |
 | Play in the browser with your own game folder | Built, behind a switch | [Play](play.md#in-the-browser-with-your-own-game-folder) |
 | Goldshire Inn guest pass (no sign-up) | Built, off by default | [Play](play.md#guest-pass) |
 | Realm claims with a Hero Key | Listing side built; website side planned | [Hero Key](hero-key.md) |

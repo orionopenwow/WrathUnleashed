@@ -3,6 +3,8 @@
 --            realm's link (PUBLIC_BASE/r/<id>) in the box to copy; "Join" hops there: the browser game reloads
 --            on that realm. "Back to Wrath" (always at the bottom) hops home.
 --   Friends across realms: the place for the global friends list (coming).
+--   Your game folder: "Streamed: Dalaran, capitals, starting areas" or "Whole world: your game folder", and
+--            "Use my game folder", which asks the page for the folder picker (GameFolder.lua).
 -- Opened by Esc > Mods & Workshop > Leyline realms, /leyline and /realms.
 --
 -- The client can't make HTTP calls, so the realm sends the list (realm/custom/lua_scripts/ov_leyline.lua) as
@@ -28,7 +30,7 @@ local THIS_REALM_PATH = "/wrath"
 local PREFIX = "WULY"
 local HOME_REALM = "WrathUnleashed"       -- GetRealmName() on Wrath itself
 local HOP_WAIT = 8                        -- seconds: still here after this = no page took the hop
-local WIN_W, WIN_H, ROW_H, ROWS = 560, 540, 34, 7
+local WIN_W, WIN_H, ROW_H, ROWS = 560, 600, 34, 7
 local ASK_EVERY, ANSWER_WAIT = 30, 6     -- seconds: refresh at most this often; no answer after this = unavailable
 local UNAVAILABLE = "Realm list unavailable"
 
@@ -285,6 +287,9 @@ local function build()
     win.info = label(win, "Copy link puts a realm's link here; Ctrl+C copies it. Anyone with the link can play there "
         .. "in their browser.", "GameFontHighlightSmall", "TOPLEFT", 22, listBottom - 58)
     win.info:SetWidth(WIN_W - 44)
+
+    -- Your game folder (GameFolder.lua): streamed places, or the whole world from the player's own folder.
+    if W.GameFolder then win.folder = W.GameFolder.Attach(win, listBottom - 98, WIN_W) end
 
     win.friends = buildFriends(win)
 
