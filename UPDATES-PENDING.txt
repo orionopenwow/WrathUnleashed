@@ -199,3 +199,6 @@
 1060b ship  Save to GitHub (orionopenwow/WrathUnleashed): zone rule only for browser sessions
 1061a signin  Play page: step-by-step realmlist.wtf for your own 3.3.5a client; the game account name and password are labelled as the game login
 1061b ship  Save to GitHub (orionopenwow/WrathUnleashed): desktop client help on the play page
+1062a realm  Companions for 10-player raids: up to 9 bots per player, bots always pass on loot, no guildmates as bots (5-minute warning, then restart)
+1062b scripts  Companions: .recruit party, .recruit raid, recruit between pulls inside instances, your own alts (.companions alts, .recruit alt, .companions save, .recruit usual)
+1062c ship  Save to GitHub (orionopenwow/WrathUnleashed): Companions for raids and alts

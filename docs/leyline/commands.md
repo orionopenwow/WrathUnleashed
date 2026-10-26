@@ -11,7 +11,7 @@ Some commands depend on the realm's preset. `.qol` shows what is on for the real
 | `.wu` (or `.commands`) | lists the realm's commands |
 | `.qol` | shows every quality-of-life feature and whether it is on; `.qol help` for help |
 | `.guide` | what to do at level 80 on this realm. It shows by itself when you reach 80. |
-| `.companions` | help for companions, your companions and the limits |
+| `.companions` | help for bots, the bots with you and the limits |
 | `.build help` | the Builder's commands and limits |
 
 ## Reports and getting unstuck
@@ -21,18 +21,24 @@ Some commands depend on the realm's preset. `.qol` shows what is on for the real
 | `.bug <what happened>` | files a bug report with where you are (map, zone, position, level). `.report` is the same. Reports are limited per account each hour. |
 | `.stuck` | hearths you home when you are stuck. Not in combat; once every 10 minutes. |
 
-## Companions
+## Bots
 
-Companions are bot party members. They are always labelled as bots.
+Bots are party members for dungeons and 10-player raids. They are always labelled as bots, and they always pass on loot.
 
 | Command | What it does |
 |---|---|
-| `.recruit tank`, `healer` or `dps` `[n]` | recruits n companions (default 1) into your group at your level. `.recruit dps mage` picks the class. A 5-player party by default. |
+| `.recruit party` | fills a 5-player group: 1 tank, 1 healer and damage, minus what your group already has |
+| `.recruit raid` | fills a 10-player raid: 2 tanks, 3 healers and 5 damage, minus what your group already has |
+| `.recruit tank`, `healer` or `dps` `[n]` | recruits n bots (default 1) of one role at your level. `.recruit dps mage` picks the class. |
+| `.recruit alt <name>` | brings one of your own characters as a bot, with its own gear, spec and level. `.companions alts` lists them. |
+| `.companions save` | remembers the alts with you. `.recruit usual` brings them back. |
 | `.buddy [class]` | one levelling buddy who keeps your level and follows you. `.buddy` shows it once you have one. `.buddy off` dismisses it. |
-| `.dismiss [name\|all]` | sends companions home |
+| `.dismiss [name\|all]` | sends bots home |
 | `.summon` | brings the bots in your group to you (open world) |
 
-On a realm without the bot module, these answer "Companions are coming soon".
+Up to 4 bots in a party and 9 in a raid. Not in battlegrounds or arenas, in combat or while dead. Inside a dungeon or raid you can refill a slot between pulls. `.companions` shows the rest in game.
+
+On a realm without the bot module, these answer "Bots are coming soon".
 
 ## Getting around
 

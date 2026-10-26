@@ -28,8 +28,9 @@ Where the numbers come from:
   random queues  LFGDungeons.dbc random ids, the ones ov_slices.lua's RANDOM_POOL knows.
   sizes        the raid sizes of 3.3.5a.
   bots         5-player dungeons and the random queues: the Dungeon Finder fills groups with labelled bots
-               (ov_reports.lua .guide), and .recruit (ov_companions.lua) fills a 5-player party. Raids: no,
-               .recruit stops at OV_COMPANIONS_GROUP_MAX (5 by default).
+               (ov_reports.lua .guide), and .recruit party (ov_companions.lua) fills a 5-player party.
+               Raids: False here (the Dungeon Finder doesn't fill them), though .recruit raid fills a
+               10-player raid with bots (OV_COMPANIONS_GROUP_MAX, 10 by default).
 
 Standard library only; no game files are read or kept.
 """
