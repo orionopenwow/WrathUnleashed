@@ -98,6 +98,39 @@ local function flagOf(accountId)
     return f
 end
 
+-- Only a browser session is fenced in. A streamed account that logs in with its own 3.3.5a client
+-- (realmlist play.openvanilla.app) has the whole game, so the slice rule must not apply to it
+-- (reported on Discord, 2026-10-26). Browser sessions reach the world server through the stream's
+-- relay inside the server (wu-play), so they arrive from a private address (the docker network);
+-- a desktop client arrives from its own public address. OV_STREAM_RELAY_IPS (space-separated) adds
+-- addresses that also count as the relay. No address known: treat it as a browser session (the
+-- old behaviour), so nothing opens up by mistake.
+local function isPrivateIp(ip)
+    local a, b = ip:match("^(%d+)%.(%d+)%.%d+%.%d+$")
+    a, b = tonumber(a), tonumber(b)
+    if not a then return ip == "::1" or ip:lower():find("^f[cd]") ~= nil end
+    return a == 10 or a == 127 or (a == 172 and b >= 16 and b <= 31) or (a == 192 and b == 168)
+        or (a == 100 and b >= 64 and b <= 127)
+end
+
+local function isBrowserSession(player)
+    local ok, ip = pcall(function() return player:GetPlayerIP() end)
+    if not ok or type(ip) ~= "string" or ip == "" then return true end
+    ip = ip:gsub("^::ffff:", "")
+    if isPrivateIp(ip) then return true end
+    for extra in (os.getenv("OV_STREAM_RELAY_IPS") or ""):gmatch("%S+") do
+        if extra == ip then return true end
+    end
+    return false
+end
+
+-- The mark, for this player's session: nil for a desktop client even when the account is marked.
+local function flagFor(player)
+    local f = flagOf(player:GetAccountId())
+    if f and not isBrowserSession(player) then return nil end
+    return f
+end
+
 local function factionOf(p) return p:GetTeam() == TEAM_HORDE and "horde" or "alliance" end
 local function isDK(p) return p:GetClass() == CLASS_DK end
 local function isLow(p) return p:GetLevel() < lowLevel() end
@@ -221,7 +254,7 @@ local function sendHome(player, why)
     pendingHome[guid] = true
     player:RegisterEvent(function(_, _, _, p)
         pendingHome[guid] = nil
-        local f = flagOf(p:GetAccountId())
+        local f = flagFor(p)
         if not f or p:IsGM() then return end
         if (p:GetMapId() ~= seenMap or p:GetLevel() ~= seenLevel) and inSlice(f, p, here(p)) then return end
         if p:IsDead() then p:ResurrectPlayer(100, false) end
@@ -242,7 +275,7 @@ local function sendHome(player, why)
 end
 
 local function check(player, map, zone, why)
-    local f = flagOf(player:GetAccountId())
+    local f = flagFor(player)
     if not f or player:IsGM() then return end
     local m0, z0, x, y, h = here(player)
     if not inSlice(f, player, map or m0, zone or z0, x, y, h) then
@@ -257,7 +290,7 @@ local function watch(player)
     if watching[guid] then return end
     watching[guid] = true
     player:RegisterEvent(function(eventId, _, _, p)
-        if not flagOf(p:GetAccountId()) then
+        if not flagFor(p) then
             watching[guid] = nil
             p:RemoveEventById(eventId)
             return
@@ -373,7 +406,7 @@ local function menuTiers(player, f)
 end
 
 local function showMenu(player, group)
-    local f = flagOf(player:GetAccountId())
+    local f = flagFor(player)
     local list = menuTiers(player, f)
     player:GossipClearMenu()
     if not group then
@@ -421,7 +454,7 @@ end
 
 local function onSelect(event, player, object, sender, intid, code, menuId)
     intid = tonumber(intid) or 0
-    local f = flagOf(player:GetAccountId())
+    local f = flagFor(player)
     if not f and not player:IsGM() then return player:GossipComplete() end
     if intid == 2000 then return showMenu(player) end
     if intid > 2000 and intid <= 2000 + #GROUPS then return showMenu(player, intid - 2000) end
@@ -464,7 +497,7 @@ local function onCommand(event, player, command, handler)
     end
     local cmd = (command or ""):gsub("^[%.!]", ""):lower():gsub("%s+$", "")
     if cmd == "play" then
-        if flagOf(player:GetAccountId()) or player:IsGM() then
+        if flagFor(player) or player:IsGM() then
             showMenu(player)
         else
             player:SendBroadcastMessage(TAG .. ".play is the menu for players in the browser.")
@@ -485,7 +518,7 @@ local function onLogin(event, player)
     -- A player's timed events end at logout: forget the ones of an earlier session.
     pendingHome[player:GetGUIDLow()], watching[player:GetGUIDLow()] = nil, nil
     loadAccount(player:GetAccountId())
-    local f = flagOf(player:GetAccountId())
+    local f = flagFor(player)
     if not f then return end
     check(player, nil, nil, "login")
     watch(player)
@@ -509,7 +542,7 @@ local function onMap(event, player)
 end
 
 local function onLevel(event, player, oldLevel)
-    if not flagOf(player:GetAccountId()) then return end
+    if not flagFor(player) then return end
     local lvl = player:GetLevel()
     if (tonumber(oldLevel) or 0) < lowLevel() and lvl >= lowLevel() and lvl < 80 then
         player:SendBroadcastMessage(TAG .. "Level " .. lowLevel() .. "! The Dungeon Finder (I) now queues you for the "
@@ -552,7 +585,7 @@ local function poolStreamed(pool, maps)
 end
 
 local function onCanJoinLfg(event, player, roles, dungeons, comment)
-    local f = flagOf(player:GetAccountId())
+    local f = flagFor(player)
     if not f then return true end
     if isLow(player) then
         player:SendBroadcastMessage(TAG .. "In the browser the Dungeon Finder opens at level " .. lowLevel() .. ".")
@@ -606,7 +639,7 @@ local function rearm()
         local g = p:GetGUIDLow()
         pendingHome[g], watching[g] = nil, nil
         loadAccount(p:GetAccountId())
-        if flagOf(p:GetAccountId()) then check(p, nil, nil, "tick"); watch(p) end
+        if flagFor(p) then check(p, nil, nil, "tick"); watch(p) end
     end
 end
 if CreateLuaEvent then CreateLuaEvent(rearm, 2000, 1) else rearm() end

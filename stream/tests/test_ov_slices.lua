@@ -553,6 +553,31 @@ dofile(script); runTimers()
 check("reload twice: still one watch", repeating(stuck) <= 2)
 table.remove(online)
 
+-- A marked account on its own 3.3.5a client (Discord, 2026-10-26): a public address is a desktop
+-- session, never fenced; the stream relay's private address still is.
+fire(42, nil, "ovstream mark WR000123 mini " .. MID .. " 43200", handler)
+do
+    local desk = player(42, 571, 5807, 588)
+    function desk:GetPlayerIP() return "203.0.113.7" end
+    fire(3, desk); runTimers()
+    desk.map, desk.zone = LATER_MAP, 0; fire(28, desk); runTimers()
+    check("desktop client (public address): a marked account goes anywhere", #desk.tp == 0, #desk.tp)
+    check("desktop client: no position watch", repeating(desk) == 0, repeating(desk))
+    local web = player(42, 571, 5807, 588)
+    function web:GetPlayerIP() return "172.18.0.1" end
+    fire(3, web); runTimers()
+    web.map, web.zone = LATER_MAP, 0; fire(28, web); runTimers()
+    check("browser session (relay's private address): still fenced", #web.tp == 1 and web.tp[1][1] == 571, #web.tp)
+    local mapped = player(42, 571, 5807, 588)
+    function mapped:GetPlayerIP() return "::ffff:10.0.0.5" end
+    mapped.map, mapped.zone = LATER_MAP, 0; fire(28, mapped); runTimers()
+    check("an IPv4-mapped private address counts as the relay", #mapped.tp == 1, #mapped.tp)
+    local ok100 = player(42, 571, 5807, 588)
+    function ok100:GetPlayerIP() return "100.20.1.1" end
+    ok100.map, ok100.zone = LATER_MAP, 0; fire(28, ok100); runTimers()
+    check("100.20.x is public (only 100.64/10 is shared space)", #ok100.tp == 0, #ok100.tp)
+end
+
 -- tiers in the script, as text for the JSON cross-check (tests/test_lua.py)
 local parts = {}
 for t = 0, TT.count - 1 do

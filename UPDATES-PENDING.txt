@@ -195,3 +195,5 @@
 1058b ship  Save to GitHub (orionopenwow/WrathUnleashed): solid window fill
 1059a client  Client 20261026b: shaders build a few per frame (the 9 s login and world-entry freezes), far character models load after the cover, world-only tables load after character select, the character-select sunset no longer ends in a hard edge
 1059b ship  Save to GitHub (orionopenwow/WrathUnleashed): client 20261026b, deploy script joins N build parts
+1060a client  Players on their own 3.3.5a client (realmlist play.openvanilla.app) can go anywhere: only browser sessions are kept to the streamed zones
+1060b ship  Save to GitHub (orionopenwow/WrathUnleashed): zone rule only for browser sessions
