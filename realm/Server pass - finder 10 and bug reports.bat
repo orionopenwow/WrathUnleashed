@@ -37,6 +37,8 @@ rem The OVMOD addon channel the Builder window talks over (ov_build.lua works wi
 if exist "custom\lua_scripts\ov_modapi.lua" copy /y "custom\lua_scripts\ov_modapi.lua" "%T%\" >nul
 rem Leyline minigolf (/golf): the referee for sessions, turns and published courses; needs ov_modapi.lua.
 if exist "custom\lua_scripts\ov_golf.lua" copy /y "custom\lua_scripts\ov_golf.lua" "%T%\" >nul
+rem Leyline Modes (/modes): sessions and the relay for scripted minigames; needs ov_modapi.lua.
+if exist "custom\lua_scripts\ov_modes.lua" copy /y "custom\lua_scripts\ov_modes.lua" "%T%\" >nul
 if exist "custom\leyline-fetch.py" copy /y "custom\leyline-fetch.py" "%T%\" >nul
 rem The web armory rides along too: .armory off / .armory on (ov_armory.lua), and armory-export.py, which
 rem serverpass.sh installs with its 5-minute cron (step 1b) to fill play.openvanilla.app/wrath/armory.

@@ -15,6 +15,7 @@
 --                      rest <shot> <end> <x> <y> <z> <hash>     where the roll ended (every member reports)
 --                      skip                            host: skip the player whose turn it is (idle 45 s+)
 --                      top <course> | replay <id>      the course's best rounds; one round's inputs to watch
+--                      live | watch <id>               rounds being played nearby; spectate one (no turns)
 --                      publish <course text>           (in parts) publish a course from the editor: everyone may play it
 --   server -> client   courses  key,title,holes,par,author;...
 --                      invite   <id> <host> <title>
@@ -259,12 +260,25 @@ local function members(s)
     return list
 end
 
+local byWatch = {}     -- [guidLow] = session id, for spectators
+
+local function watchers(s)
+    local list = {}
+    for _, w in ipairs(s.watchers or {}) do
+        local p = GetPlayerByGUID and GetPlayerByGUID(w.guid) or w.player
+        if p then list[#list + 1] = p end
+    end
+    return list
+end
+
 local function broadcast(s, name, data)
     for _, e in ipairs(members(s)) do send(e.player, name, data) end
+    for _, p in ipairs(watchers(s)) do send(p, name, data) end
 end
 
 local function note(s, text)
     for _, e in ipairs(members(s)) do say(e.player, text); send(e.player, "msg", text) end
+    for _, p in ipairs(watchers(s)) do send(p, "msg", text) end
 end
 
 local function phase(s) return (now() - s.t0) * TICK_HZ end
@@ -356,8 +370,9 @@ local function playerOf(seat) return (GetPlayerByGUID and GetPlayerByGUID(seat.g
 local function sendTurn(s)
     local m = current(s)
     s.phase, s.turnAt, s.pending = "aim", now(), nil
-    broadcast(s, "turn", string.format("%s %d %s %s %s %d %d", m.name, (m.strokes[s.hole] or 0) + 1,
-        fmt(m.ball.x), fmt(m.ball.y), fmt(m.ball.z), m.color, phase(s)))
+    s.lastTurn = string.format("%s %d %s %s %s %d %d", m.name, (m.strokes[s.hole] or 0) + 1,
+        fmt(m.ball.x), fmt(m.ball.y), fmt(m.ball.z), m.color, phase(s))
+    broadcast(s, "turn", s.lastTurn)
 end
 
 local function startHole(s)
@@ -448,6 +463,8 @@ endSession = function(s, why)
         end
     end
     for guid, id in pairs(bySeat) do if id == s.id then bySeat[guid] = nil end end
+    for _, p in ipairs(watchers(s)) do send(p, "end", why or "") end
+    for guid, id in pairs(byWatch) do if id == s.id then byWatch[guid] = nil end end
 end
 
 local function seatOf(s, guid)
@@ -460,8 +477,17 @@ local function lobbyText(s)
     return string.format("%d %s %s %s", s.id, s.players[1].name, (s.course.title:gsub(" ", "_")), table.concat(names, ","))
 end
 
+local function stopWatching(player)
+    local guid = player:GetGUIDLow()
+    local s = sessions[byWatch[guid] or -1]
+    byWatch[guid] = nil
+    if not s then return end
+    for i, w in ipairs(s.watchers or {}) do if w.guid == guid then table.remove(s.watchers, i) break end end
+end
+
 local function leave(player, quiet)
     local guid = player:GetGUIDLow()
+    if byWatch[guid] then return stopWatching(player) end
     local id = bySeat[guid]
     if not id then return end
     bySeat[guid] = nil
@@ -499,7 +525,7 @@ local function startCommand(player, key)
     if map and (try(map, "IsBattleground") or try(map, "IsArena")) then return say(player, "Not in a battleground or arena.") end
     local x, y, z, o = player:GetX(), player:GetY(), player:GetZ(), player:GetO()
     local s = { id = nextId, key = key, course = entry.course, text = entry.text, state = "lobby", t0 = now(),
-        players = { seat(player, 0) }, checks = {}, map = player:GetMapId(), x = x, y = y, z = z, o = o, hole = 1, turn = 1 }
+        players = { seat(player, 0) }, checks = {}, watchers = {}, map = player:GetMapId(), x = x, y = y, z = z, o = o, hole = 1, turn = 1 }
     s.par = 0
     for _, h in ipairs(s.course.holes) do s.par = s.par + h.par end
     nextId = nextId + 1
@@ -685,6 +711,40 @@ local function replayCommand(player, id)
     send(player, "replay", string.format("%d %s %d\n%s\n%s", id, q:GetString(0), q:GetUInt32(2), q:GetString(3), entry.text))
 end
 
+-- Rounds being played near you, to watch: id,host,title,hole,players;...
+local function liveCommand(player)
+    local rows = {}
+    for id, s in pairs(sessions) do
+        if s.state == "play" and s.map == player:GetMapId() then
+            local dx, dy = s.x - player:GetX(), s.y - player:GetY()
+            if dx * dx + dy * dy <= 150 * 150 then
+                rows[#rows + 1] = string.format("%d,%s,%s,%d,%d", id, s.players[1].name, (s.course.title:gsub("[,;]", "")), s.hole, #s.players)
+            end
+        end
+    end
+    send(player, "live", table.concat(rows, ";"))
+end
+
+-- Watch a round: the course, the hole and every roll, but no turns.
+local function watchCommand(player, id)
+    local s = sessions[tonumber(id or "") or -1]
+    if not s or s.state ~= "play" then return say(player, "That round has ended.") end
+    local guid = player:GetGUIDLow()
+    if bySeat[guid] then return say(player, "Leave your own game first.") end
+    if byWatch[guid] then stopWatching(player) end
+    if #s.watchers >= 16 then return say(player, "That round has enough spectators.") end
+    s.watchers[#s.watchers + 1] = { guid = guid, name = player:GetName(), player = player }
+    byWatch[guid] = s.id
+    local h = s.course.holes[s.hole]
+    send(player, "session", string.format("%d %s %s %s %s %s", s.id, fmt(s.x), fmt(s.y), fmt(s.z), string.format("%.4f", s.o), (s.course.title:gsub(" ", "_"))))
+    send(player, "course", s.text)
+    send(player, "watching", tostring(s.id))
+    send(player, "hole", string.format("%d %d %s", s.hole, h.par, h.name))
+    send(player, "score", scoreText(s))
+    if s.lastTurn then send(player, "turn", s.lastTurn) end
+    for _, e in ipairs(members(s)) do send(e.player, "msg", player:GetName() .. " is watching.") end
+end
+
 local function coursesText()
     local parts = {}
     for _, e in ipairs(COURSES) do
@@ -714,6 +774,8 @@ local function run(player, text)
     elseif word == "rest" then restCommand(player, a, b, c, d, e, f)
     elseif word == "skip" then skipCommand(player)
     elseif word == "top" then topCommand(player, a)
+    elseif word == "live" then liveCommand(player)
+    elseif word == "watch" then watchCommand(player, a)
     elseif word == "replay" then replayCommand(player, a)
     elseif word == "unpublish" then unpublishCommand(player, a)
     else
@@ -722,7 +784,7 @@ local function run(player, text)
 end
 
 -- The window's channel: each message name is the command.
-for _, name in ipairs({ "courses", "start", "join", "go", "leave", "shot", "rest", "skip", "top", "replay" }) do
+for _, name in ipairs({ "courses", "start", "join", "go", "leave", "shot", "rest", "skip", "top", "replay", "live", "watch" }) do
     OVMod.On(MOD, name, function(player, data) run(player, name .. " " .. (data or "")) end)
 end
 -- A course from the editor arrives whole (ov_modapi reassembles its parts).

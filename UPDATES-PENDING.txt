@@ -143,3 +143,7 @@
 1040d foreverui  In game: Whole world / Streamed line and Use my game folder button (/folder)
 1040e ship  Save to GitHub (orionopenwow/WrathUnleashed): the game-folder layer
 1040f leyline  Update the public orionopenwow/Leyline repo
+1041a-modes scripts  Leyline Modes on the realm (ov_modes.lua): sessions, invites, the host/player relay, publishing with GM review
+1041b-modes foreverui  Leyline Modes HUD (/modes): the sandboxed mode runtime, Bumper Balls, scores, keys
+1041c-modes client  Client 20261025k: Leyline Modes drawing (shapes, easing, follow/top cameras) and the script time guard
+1041d-modes ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline Modes and the mode guide

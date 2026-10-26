@@ -381,6 +381,30 @@ editorOn = false
 G.Editor.Stop()
 LeylineGolf = plainGolf
 
+-- Spectators: Bo watches Ann's round from nearby
+golfMod.run(ann, "leave")
+toServer(ann, "start", "meadow"); toServer(ann, "go", ""); inbox(ann)
+golfMod.run(bo, "leave")
+inbox(bo)
+toServer(bo, "live", "")
+local lv = find(inbox(bo), "live") or ""
+check("live rounds nearby are listed", lv:match("^%d+,Ann,Meadow Nine,1,1$") ~= nil)
+toServer(bo, "watch", lv:match("^(%d+)"))
+local w1 = inbox(bo)
+check("a spectator gets the course, the hole and the current turn", find(w1, "course") ~= nil and find(w1, "hole") == "1 2 First Putt"
+    and (find(w1, "turn") or ""):match("^Ann 1 ") ~= nil and find(w1, "watching") ~= nil)
+clock = clock + 2
+toServer(ann, "shot", "0 400")
+check("and every shot", (find(inbox(bo), "shot") or ""):match("^Ann ") ~= nil)
+inbox(ann)
+toServer(bo, "shot", "0 400")
+check("a spectator can't play", find(inbox(ann), "shot") == nil)
+toServer(bo, "leave", "")
+toServer(ann, "rest", golfMod.sessions[next(golfMod.sessions)].shotNo .. " rest 0 0.11 4 abcd")
+check("after leaving, a spectator hears nothing more", find(inbox(bo), "turn") == nil)
+golfMod.run(ann, "leave")
+inbox(ann)
+
 -- Leaderboards and replays: a solo round where every putt drops is recorded, listed and replayed.
 golfMod.run(ann, "leave")
 toServer(ann, "start", "meadow"); toServer(ann, "go", ""); inbox(ann)

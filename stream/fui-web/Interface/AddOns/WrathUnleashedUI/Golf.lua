@@ -503,6 +503,17 @@ dispatch = function(name, data)
             G.Refresh()
             status(#G.top.rows > 0 and "Click a round to watch it (and check it)." or "No rounds on record for this course yet.")
         end
+    elseif name == "live" then
+        G.live = {}
+        for id, host, title, hole, n in data:gmatch("(%d+),([^,;]+),([^,;]+),(%d+),(%d+)") do
+            G.live[#G.live + 1] = { id = tonumber(id), host = tidy(host), title = tidy(title), hole = tonumber(hole), players = tonumber(n) }
+        end
+        G.view = "live"
+        G.Refresh()
+        status(#G.live > 0 and "Click a round to watch it." or "No rounds being played near you.")
+    elseif name == "watching" then
+        G.watching = true
+        noteLine("Watching. /golf leave stops.")
     elseif name == "replay" then
         local head, inputs, text = data:match("^([^\n]*)\n([^\n]*)\n(.*)$")
         local id, who, claimed = (head or ""):match("^(%d+) (%S+) (%d+)")
@@ -586,7 +597,7 @@ end
 function G.StopSoon() G.stopAt = now() + 3 end
 
 function G.Stop()
-    G.stopAt, G.finished = nil, nil
+    G.stopAt, G.finished, G.watching = nil, nil, nil
     golf("end")
     G.playing, G.practice, G.turn, G.rolling, G.session, G.lobby = false, false, nil, nil, nil, nil
     G.title, G.score, G.order, G.players = "", {}, {}, {}
@@ -980,12 +991,27 @@ end
 
 function G.Refresh()
     if not win then return end
+    if G.view == "live" and G.live then
+        win.listTitle:SetText("Live rounds near you")
+        win.back:Show()
+        for i, row in ipairs(win.rows) do
+            local r = G.live[i]
+            row.course, row.round, row.live = nil, nil, r
+            if r then
+                row.text:SetText(string.format("%s's %s  |cffa0a0a0hole %d, %d playing|r", r.host, r.title, r.hole, r.players))
+                row:Show()
+            else
+                row:Hide()
+            end
+        end
+        return G.RefreshLobby()
+    end
     if G.view == "top" and G.top then
         win.listTitle:SetText("Best rounds: " .. (G.top.key or ""))
         win.back:Show()
         for i, row in ipairs(win.rows) do
             local r = G.top.rows[i]
-            row.course, row.round = nil, r
+            row.course, row.round, row.live = nil, r, nil
             if r then
                 row.text:SetText(string.format("%d.  %s   %d strokes   %s", i, r.name, r.strokes,
                     r.verified and "|cff8fe36bverified|r" or ("|cffa0a0a0" .. (r.players > 1 and "unverified" or "solo") .. "|r")))
@@ -1000,7 +1026,7 @@ function G.Refresh()
     win.back:Hide()
     for i, row in ipairs(win.rows) do
         local c = G.courses[i]
-        row.course, row.round = c, nil
+        row.course, row.round, row.live = c, nil, nil
         if c then
             row.text:SetText(string.format("%s%s  |cffa0a0a0by %s, %d holes, par %d|r", c.key == G.pick and "|cff40ff40> |r" or "", c.title,
                 c.author or "Leyline", c.holes, c.par))
@@ -1062,6 +1088,7 @@ local function build()
         row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
         row.text = label(row, "", "GameFontHighlight", "LEFT", 4, 0)
         row:SetScript("OnClick", function(self)
+            if self.live then send("watch", tostring(self.live.id)); status("Joining as a spectator..."); return end
             if self.round then return G.Watch(self.round.id) end
             if self.course then G.pick = self.course.key; G.Refresh() end
         end)
@@ -1075,12 +1102,13 @@ local function build()
         local pick = mine[G.myPick or 0]
         E.Start(pick and pick.text, pick and pick.title)
     end, "TOPLEFT", 336, -200)
-    win.mine = button(win, "My courses: new", 160, function()
+    win.liveBtn = button(win, "Live rounds", 96, function() send("live", ""); status("Looking for rounds nearby...") end, "TOPLEFT", 226, -272)
+    win.mine = button(win, "My courses: new", 112, function()
         local mine = E.MyCourses()
         G.myPick = ((G.myPick or 0) + 1) % (#mine + 1)
         local pick = mine[G.myPick]
-        win.mine:SetText(pick and ("My courses: " .. pick.title):sub(1, 26) or "My courses: new")
-    end, "TOPLEFT", 266, -272)
+        win.mine:SetText(pick and ("Mine: " .. pick.title):sub(1, 18) or "My courses: new")
+    end, "TOPLEFT", 326, -272)
     win.lobby = label(win, "", "GameFontHighlight", "TOPLEFT", 22, -234)
     win.lobby:SetWidth(WIN_W - 44)
     win.join = button(win, "Join", 90, function() if G.invite then send("join", tostring(G.invite.id)) end end, "TOPLEFT", 22, -272)
