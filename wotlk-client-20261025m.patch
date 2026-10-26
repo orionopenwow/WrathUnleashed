@@ -1,0 +1,2968 @@
+diff --git a/crates/benilla-app/src/bindings.rs b/crates/benilla-app/src/bindings.rs
+index bbd4d0f3..a111f2df 100644
+--- a/crates/benilla-app/src/bindings.rs
++++ b/crates/benilla-app/src/bindings.rs
+@@ -118,12 +118,23 @@ enum Held {
+ impl BindingsState {
+     /// Press `command` by name, as its key would (the body with `keystate = "down"`), latched
+     /// until [`Self::synth_release`]; a command already latched is not pressed again. `false` for a
+-    /// name the VM's binding table does not know. `amount` is accepted for the page's zoom notch;
+-    /// the body runs once whatever it is.
+-    pub(crate) fn synth_press(&mut self, vm: &mut UiScript, command: &str, _amount: f32) -> bool {
++    /// name the VM's binding table does not know. `amount` is the zoom pair's notch in yards; any
++    /// other body runs once whatever it is.
++    pub(crate) fn synth_press(&mut self, vm: &mut UiScript, command: &str, amount: f32) -> bool {
+         if self.synth_latched(command) {
+             return true;
+         }
++        // The zoom pair's amount is the notch's yards (bridge `fire('CAMERAZOOMOUT', 5)`): the
++        // stock bodies hard-code `CameraZoomOut(1.0)`, which dropped it.
++        if let Some(verb) = zoom_verb(command).filter(|_| amount.is_finite() && amount != 1.0) {
++            return match vm.run_binding(&format!("{verb}({amount})")) {
++                Ok(()) => true,
++                Err(e) => {
++                    debug!("bindings({command}): synthetic zoom refused: {e}");
++                    false
++                }
++            };
++        }
+         match vm.execute_binding(command, true) {
+             Ok(true) => {
+                 self.synth.push(command.to_owned());
+@@ -661,6 +672,17 @@ fn release(state: &mut BindingsState, script: &mut Option<NonSendMut<UiScript>>,
+     }
+ }
+ 
++/// The Lua verb a zoom binding command calls, for an amount the stock body does not carry.
++fn zoom_verb(command: &str) -> Option<&'static str> {
++    if command.eq_ignore_ascii_case("CAMERAZOOMIN") {
++        Some("CameraZoomIn")
++    } else if command.eq_ignore_ascii_case("CAMERAZOOMOUT") {
++        Some("CameraZoomOut")
++    } else {
++        None
++    }
++}
++
+ #[cfg(test)]
+ mod tests {
+     use bevy::input::keyboard::{Key, KeyboardInput};
+@@ -1148,6 +1170,22 @@ mod tests {
+         }
+     }
+ 
++    /// A page's zoom tap carries its amount (`wenilla.fire('CAMERAZOOMOUT', 6)`); any other amount
++    /// is the stock body's own 1.0.
++    #[test]
++    fn a_synthetic_zoom_tap_carries_its_amount() {
++        let mut app = harness();
++        app.world_mut()
++            .resource_scope(|world, mut binds: Mut<BindingsState>| {
++                let mut vm = world.non_send_resource_mut::<UiScript>();
++                assert!(binds.synth_press(&mut vm, "CAMERAZOOMOUT", 6.0));
++            });
++        app.update();
++        assert_eq!(state(&app).amount(Input::CameraZoomOut), 6.0);
++        assert_eq!(zoom_verb("cameraZoomIn"), Some("CameraZoomIn"));
++        assert_eq!(zoom_verb("MOVEFORWARD"), None);
++    }
++
+     /// The ungated one-shots fire as the keys do: `CameraZoomIn(yards)` carries its amount to the
+     /// zoom (1.0 when absent, `0x50b42d`), `SitStandOrDescendStart`'s stand toggle and
+     /// `ToggleSheath` fire.
+diff --git a/crates/benilla-app/src/cvars/table.rs b/crates/benilla-app/src/cvars/table.rs
+index f0e5b697..c181e214 100644
+--- a/crates/benilla-app/src/cvars/table.rs
++++ b/crates/benilla-app/src/cvars/table.rs
+@@ -453,6 +453,8 @@ pub(crate) const REGISTERED_WOTLK: &[Registered] = &[
+     same("UnitNameFriendlyTotemName", "0"),
+     same("UnitNameNonCombatCreatureName", "0"),
+     // The Controls and Combat panels' rows (`0x51da81`-`0x51dbd3`).
++    // Ours: 12340 always leaves the mount for a ground cast; "0" keeps the "You are mounted" refusal.
++    ours("autoDismount", "1", "leave the mount before casting on the ground"),
+     same("autoDismountFlying", "0"),
+     same("lootUnderMouse", "1"),
+     same("equipmentManager", "0").per_character(),
+diff --git a/crates/benilla-app/src/entities/skin_composite.rs b/crates/benilla-app/src/entities/skin_composite.rs
+index afd7035b..3d86a470 100644
+--- a/crates/benilla-app/src/entities/skin_composite.rs
++++ b/crates/benilla-app/src/entities/skin_composite.rs
+@@ -266,7 +266,18 @@ fn read_texture(chain: &Mutex<Chain>, path: &str) -> anyhow::Result<BlpMipChain>
+ pub(super) fn land_skin_composites(
+     mut composites: ResMut<SkinComposites>,
+     mut images: ResMut<Assets<Image>>,
++    #[cfg(target_arch = "wasm32")] mut index_gen: Local<u32>,
+ ) {
++    // A player folder mounted mid-game (the page's index generation bump): a look composited
++    // without a texture the folder now has is composited again on its next request.
++    #[cfg(target_arch = "wasm32")]
++    {
++        let gen = benilla_formats::web::index_gen();
++        if *index_gen != gen {
++            *index_gen = gen;
++            composites.done.clear();
++        }
++    }
+     composites.land(&mut images);
+ }
+ 
+diff --git a/crates/benilla-app/src/graphics_plus.rs b/crates/benilla-app/src/graphics_plus.rs
+index 71b463fe..ac6f1467 100644
+--- a/crates/benilla-app/src/graphics_plus.rs
++++ b/crates/benilla-app/src/graphics_plus.rs
+@@ -130,6 +130,86 @@ pub(crate) fn on_cvar(
+     }
+ }
+ 
++/// The browser's frame pacing. Bevy's web runner updates once per `requestAnimationFrame`, so a
++/// frame of 17-33 ms waits for the vblank after next and the rate halves to exactly 30 fps
++/// (Dalaran: p50 33.3 ms, 31 fps, on frames of ~20 ms of work). Once frames run slow the loop is
++/// let off the animation frame: the next frame starts when this one ends, and the browser shows
++/// the newest at each vblank, so ~20 ms frames show at ~50 fps instead of 30. Fast frames go
++/// back to the animation frame, which never renders a frame the display cannot show.
++#[derive(Clone, Copy, PartialEq, Eq, Debug)]
++pub(crate) enum WebPacing {
++    /// One update per animation frame (bevy's own loop).
++    AnimationFrame,
++    /// The next update as soon as this one ends.
++    FreeRun,
++}
++
++/// Mean frame time (ms) above which the loop leaves the animation frame: past one 60 Hz vblank.
++pub(crate) const FREE_RUN_ABOVE_MS: f32 = 18.0;
++/// Mean frame time (ms) below which it goes back: well inside one vblank.
++pub(crate) const FREE_RUN_BELOW_MS: f32 = 14.0;
++/// The mean's smoothing, per frame.
++#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
++const PACING_EMA: f32 = 0.05;
++
++/// The pacing for a smoothed frame time, with hysteresis.
++pub(crate) fn web_pacing(current: WebPacing, mean_ms: f32) -> WebPacing {
++    match current {
++        WebPacing::AnimationFrame if mean_ms > FREE_RUN_ABOVE_MS => WebPacing::FreeRun,
++        WebPacing::FreeRun if mean_ms < FREE_RUN_BELOW_MS => WebPacing::AnimationFrame,
++        p => p,
++    }
++}
++
++/// The free-running loop: a zero wait, so the runner polls, and an update needs no redraw.
++fn free_run_mode() -> UpdateMode {
++    UpdateMode::Reactive {
++        wait: Duration::ZERO,
++        react_to_device_events: false,
++        react_to_user_events: false,
++        react_to_window_events: false,
++    }
++}
++
++/// Switch the foreground loop between the animation frame and free-running ([`WebPacing`]).
++/// Only with no `maxFPS` cap, and only in a focused tab. Bevy's runner updates without a redraw
++/// only while every window reads invisible, which on the web changes nothing else (winit's
++/// `set_visible` is a no-op there), so free-running also clears `Window::visible`.
++#[cfg(target_arch = "wasm32")]
++fn pace_web_frames(
++    cap: Res<FrameCap>,
++    time: Res<Time<bevy::time::Real>>,
++    settings: Option<ResMut<WinitSettings>>,
++    mut windows: Query<&mut Window, With<bevy::window::PrimaryWindow>>,
++    mut state: Local<Option<(WebPacing, f32)>>,
++) {
++    let Some(mut settings) = settings else { return };
++    let Ok(mut window) = windows.single_mut() else { return };
++    let dt_ms = (time.delta_secs() * 1000.0).min(250.0);
++    let (pacing, mean) = state.get_or_insert((WebPacing::AnimationFrame, 16.7));
++    *mean += (dt_ms - *mean) * PACING_EMA;
++    let want = if cap.foreground == 0 && window.focused {
++        web_pacing(*pacing, *mean)
++    } else {
++        WebPacing::AnimationFrame
++    };
++    if want == *pacing {
++        return;
++    }
++    *pacing = want;
++    match want {
++        WebPacing::FreeRun => {
++            settings.focused_mode = free_run_mode();
++            window.visible = false;
++        }
++        WebPacing::AnimationFrame => {
++            settings.focused_mode = update_mode(cap.foreground, false);
++            window.visible = true;
++        }
++    }
++    info!("video: browser frame pacing {want:?} (mean frame {mean:.1} ms)");
++}
++
+ pub(crate) struct GraphicsPlusPlugin;
+ 
+ impl Plugin for GraphicsPlusPlugin {
+@@ -144,6 +224,8 @@ impl Plugin for GraphicsPlusPlugin {
+             // frame for the loop, so neither races a game system.
+             .add_systems(PreUpdate, benilla_world::graphics_plus::gate_darker_nights)
+             .add_systems(Last, apply_frame_cap);
++        #[cfg(target_arch = "wasm32")]
++        app.add_systems(Last, pace_web_frames.after(apply_frame_cap));
+     }
+ }
+ 
+@@ -151,6 +233,23 @@ impl Plugin for GraphicsPlusPlugin {
+ mod tests {
+     use super::*;
+ 
++    /// The halving case leaves the animation frame (33.3 ms reads), and the loop comes back only
++    /// once frames are well inside a vblank; between the two thresholds it stays put.
++    #[test]
++    fn slow_browser_frames_leave_the_animation_frame_with_hysteresis() {
++        use WebPacing::*;
++        assert_eq!(web_pacing(AnimationFrame, 16.7), AnimationFrame);
++        assert_eq!(web_pacing(AnimationFrame, 33.3), FreeRun, "the 30 fps halving");
++        assert_eq!(web_pacing(FreeRun, 20.0), FreeRun, "~50 fps of 20 ms frames keeps running");
++        assert_eq!(web_pacing(FreeRun, 16.0), FreeRun, "inside the band: no flapping");
++        assert_eq!(web_pacing(FreeRun, 10.0), AnimationFrame);
++        assert_eq!(web_pacing(AnimationFrame, 17.0), AnimationFrame);
++        match free_run_mode() {
++            UpdateMode::Reactive { wait, .. } => assert_eq!(wait, Duration::ZERO),
++            UpdateMode::Continuous => panic!("free run is a zero-wait reactive loop"),
++        }
++    }
++
+     #[test]
+     fn the_default_caps_are_the_loop_bevy_already_ran() {
+         let shipped = winit_settings(FrameCap::default());
+diff --git a/crates/benilla-app/src/loading_screen.rs b/crates/benilla-app/src/loading_screen.rs
+index 6ca54738..c7b50be8 100644
+--- a/crates/benilla-app/src/loading_screen.rs
++++ b/crates/benilla-app/src/loading_screen.rs
+@@ -289,6 +289,54 @@ struct LoadingBackdrop;
+ struct LoadingBarFill;
+ #[derive(Component)]
+ struct LoadingBarBorder;
++
++/// How a 4:3 layer of the cover fits the window: the art covers it, the bar's area fits inside.
++#[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
++enum LoadingFit {
++    Cover,
++    Contain,
++}
++
++/// A 4:3 layer's size and top-left in a `w`×`h` window (logical px): `Cover` is at least the
++/// window both ways, `Contain` at most; both centred.
++fn fit_rect(fit: LoadingFit, w: f32, h: f32) -> (f32, f32, f32, f32) {
++    let (w, h) = (w.max(1.0), h.max(1.0));
++    let by_height = (h * BACKDROP_ASPECT, h);
++    let by_width = (w, w / BACKDROP_ASPECT);
++    let wider = w / h > BACKDROP_ASPECT;
++    let (lw, lh) = match (fit, wider) {
++        (LoadingFit::Cover, true) | (LoadingFit::Contain, false) => by_width,
++        (LoadingFit::Cover, false) | (LoadingFit::Contain, true) => by_height,
++    };
++    (lw, lh, (w - lw) * 0.5, (h - lh) * 0.5)
++}
++
++/// Size the cover's two 4:3 layers to the window, on a change only.
++fn fit_loading_layers(
++    window: Query<&Window, With<bevy::window::PrimaryWindow>>,
++    mut layers: Query<(&LoadingFit, &mut Node)>,
++    mut last: Local<Option<(f32, f32)>>,
++) {
++    let Ok(win) = window.single() else {
++        return;
++    };
++    let size = (win.width(), win.height());
++    if *last == Some(size) && !layers.is_empty() {
++        // Re-fit only on a resize (and the first frame the layers exist).
++        return;
++    }
++    if layers.is_empty() {
++        return;
++    }
++    *last = Some(size);
++    for (fit, mut node) in &mut layers {
++        let (w, h, left, top) = fit_rect(*fit, size.0, size.1);
++        node.width = Val::Px(w);
++        node.height = Val::Px(h);
++        node.left = Val::Px(left);
++        node.top = Val::Px(top);
++    }
++}
+ /// The tip-of-the-day `Text` root; its coloured runs are children, rebuilt when the tip changes.
+ #[derive(Component)]
+ pub(crate) struct LoadingTip;
+@@ -304,7 +352,12 @@ impl Plugin for LoadingScreenPlugin {
+             .add_systems(Startup, setup_loading_screen.after(AssetSet::Open))
+             // In `WorldStage::Present`, after Input and Stream: a teleport snaps in Input and the
+             // streamer refocuses in Stream, so the cover lands on the same frame, never a flash.
+-            .add_systems(Update, drive_loading_screen.in_set(WorldStage::Present));
++            .add_systems(Update, drive_loading_screen.in_set(WorldStage::Present))
++            // Before the layout reads the sizes; outside `Update`, so it orders against no game system.
++            .add_systems(
++                PostUpdate,
++                fit_loading_layers.before(bevy::ui::UiSystems::Layout),
++            );
+         // The cover's input rule, registered here so the two cannot be registered apart.
+         input::build(app);
+     }
+@@ -361,30 +414,38 @@ fn setup_loading_screen(
+     let fill = tex("Interface\\Glues\\LoadingBar\\Loading-BarFill.blp").unwrap_or_default();
+ 
+     commands.entity(root).with_children(|root| {
+-        // One 4:3 area fit to the viewport height and centred; the bar's fractions are relative
+-        // to it. Paint order is spawn order: backdrop, tip, fill, border.
+-        root.spawn(Node {
+-            width: Val::Vh(100.0 * BACKDROP_ASPECT),
+-            height: Val::Vh(100.0),
+-            position_type: PositionType::Relative,
+-            ..default()
+-        })
++        // The art covers the window (owner, 2026-10-25: no bars at any window shape): a 4:3 node
++        // at least the window's width and height, centred, cropped by the window
++        // ([`fit_loading_layers`] sizes it). Tinted black until the art resolves. Spawned first,
++        // so it paints under the bar's area.
++        root.spawn((
++            LoadingBackdrop,
++            LoadingFit::Cover,
++            ImageNode {
++                color: Color::BLACK,
++                image_mode: NodeImageMode::Stretch,
++                ..default()
++            },
++            Node {
++                position_type: PositionType::Absolute,
++                width: Val::Vh(100.0 * BACKDROP_ASPECT),
++                height: Val::Vh(100.0),
++                ..default()
++            },
++        ));
++        // The bar's 4:3 area fits inside the window and is centred, so the bar and the tip stay
++        // whole on a tall window; their fractions are relative to it. Paint order is spawn order:
++        // tip, fill, border.
++        root.spawn((
++            LoadingFit::Contain,
++            Node {
++                width: Val::Vh(100.0 * BACKDROP_ASPECT),
++                height: Val::Vh(100.0),
++                position_type: PositionType::Absolute,
++                ..default()
++            },
++        ))
+         .with_children(|area| {
+-            // Tinted black until the art resolves.
+-            area.spawn((
+-                LoadingBackdrop,
+-                ImageNode {
+-                    color: Color::BLACK,
+-                    image_mode: NodeImageMode::Stretch,
+-                    ..default()
+-                },
+-                Node {
+-                    position_type: PositionType::Absolute,
+-                    width: Val::Percent(100.0),
+-                    height: Val::Percent(100.0),
+-                    ..default()
+-                },
+-            ));
+             // The tip, between the backdrop and the bar as in the reference (`0x406e12`,
+             // `0x406e18`), placed in percent of this area, the space of `crate::game_tip`.
+             area.spawn((LoadingTip, crate::game_tip::tip_bundle()));
+@@ -634,7 +695,12 @@ fn drive_loading_screen(
+             // The terrain under the player is a must: buildings over an empty plane read as a
+             // broken world, so only the blind backstop lifts without it.
+             let ground = progress.focus_resident;
++            // Never over a hole: a building of the neighbourhood still loading (or re-requested
++            // after a failed load), or a collider still building, may be the floor under the body
++            // (Dalaran opened after 40.5 s with 8 placements pending and the player fell).
++            let body_ground_pending = !crate::player::hold_ends_on_timeout(&progress);
+             if rest_ready
++                && !body_ground_pending
+                 && ((ground && stalled >= STALL_LIFT_SECS && resident >= STALL_LIFT_RESIDENT)
+                     || (ground
+                         && stalled >= STALL_LIFT_LOOSE_SECS
+@@ -650,7 +716,7 @@ fn drive_loading_screen(
+                 // as dead keys (WASD moved nothing at a 64 s Northshire entry).
+                 // …but never into empty air: with colliders still building the body stays held
+                 // (the settle release ends it once they are in).
+-                if crate::player::hold_ends_on_timeout(progress.colliders_pending) {
++                if crate::player::hold_ends_on_timeout(&progress) {
+                     // Queued: a read here keeps this system out of the body's writers' order.
+                     if player.as_ref().is_some_and(|p| p.settling) {
+                         let resident = progress.focus_resident;
+@@ -682,13 +748,14 @@ fn drive_loading_screen(
+             {
+                 screen.last_wait_log = now;
+                 info!(
+-                    "loading screen: waiting {:.1}s — {}/{} resident, {} placements pending, \
+-                     {} colliders pending, {} merges pending, awaiting_snap={}, settling={}, \
+-                     warm={}, ui_pending={}",
++                    "loading screen: waiting {:.1}s — {}/{} resident, {} placements pending \
++                     ({} buildings), {} colliders pending, {} merges pending, awaiting_snap={}, \
++                     settling={}, warm={}, ui_pending={}",
+                     now - screen.active_since,
+                     progress.ready,
+                     progress.total,
+                     progress.placements_pending,
++                    progress.wmo_pending,
+                     progress.colliders_pending,
+                     progress.merge_pending,
+                     screen.awaiting_snap,
+@@ -803,6 +870,22 @@ fn drive_loading_screen(
+ mod tests {
+     use super::*;
+ 
++    /// The art covers every window shape (tall phone, 800×868, 16:9, 21:9) with no bar, and the
++    /// bar's area fits inside it, both centred.
++    #[test]
++    fn the_art_covers_and_the_bar_area_fits_every_window() {
++        for (w, h) in [(504.0, 958.0), (800.0, 868.0), (1920.0, 1080.0), (2560.0, 1080.0), (1024.0, 768.0)] {
++            let (cw, ch, cl, ct) = fit_rect(LoadingFit::Cover, w, h);
++            assert!(cw >= w - 0.01 && ch >= h - 0.01, "{w}x{h}: cover {cw}x{ch}");
++            assert!((cw / ch - BACKDROP_ASPECT).abs() < 1e-4);
++            assert!((cl * 2.0 + cw - w).abs() < 0.01 && (ct * 2.0 + ch - h).abs() < 0.01, "centred");
++            let (aw, ah, al, at) = fit_rect(LoadingFit::Contain, w, h);
++            assert!(aw <= w + 0.01 && ah <= h + 0.01, "{w}x{h}: area {aw}x{ah}");
++            assert!(al >= -0.01 && at >= -0.01);
++            assert!((aw - w).abs() < 0.01 || (ah - h).abs() < 0.01, "touches two edges");
++        }
++    }
++
+     #[test]
+     fn the_cover_counts_frames_to_the_glass_and_resets_the_moment_it_drops() {
+         let mut cover = EntryCover::default();
+diff --git a/crates/benilla-app/src/net.rs b/crates/benilla-app/src/net.rs
+index 4681f853..9aed65a7 100644
+--- a/crates/benilla-app/src/net.rs
++++ b/crates/benilla-app/src/net.rs
+@@ -1275,6 +1275,9 @@ pub(crate) enum ClientCommand {
+     CancelAura {
+         spell_id: u32,
+     },
++    /// `CMSG_CANCEL_MOUNT_AURA` (0x375), an empty body: `Dismount()`, a mount re-press, and the
++    /// auto-dismount ahead of a ground cast. The mount leaves as a `UNIT_FIELD_MOUNTDISPLAYID` delta.
++    CancelMountAura,
+     /// `CMSG_DISMISS_CRITTER`, the companion out by guid; it leaves as a `UNIT_FIELD_CRITTER` delta.
+     DismissCritter {
+         guid: u64,
+diff --git a/crates/benilla-app/src/net/io.rs b/crates/benilla-app/src/net/io.rs
+index e457cd4b..5553cd74 100644
+--- a/crates/benilla-app/src/net/io.rs
++++ b/crates/benilla-app/src/net/io.rs
+@@ -1602,6 +1602,7 @@ pub(super) fn dispatch(w: &mut WorldWriter, cmd: ClientCommand) -> Result<()> {
+             w.cast_spell_at_source(spell_id, src)
+         }
+         ClientCommand::CancelAura { spell_id } => w.cancel_aura(spell_id),
++        ClientCommand::CancelMountAura => w.cancel_mount_aura(),
+         ClientCommand::DismissCritter { guid } => w.dismiss_critter(guid),
+         ClientCommand::SetActionButton { button, packed } => {
+             w.set_action_button(button, packed)
+diff --git a/crates/benilla-app/src/pipe_warm/mod.rs b/crates/benilla-app/src/pipe_warm/mod.rs
+index 159c0166..8966d687 100644
+--- a/crates/benilla-app/src/pipe_warm/mod.rs
++++ b/crates/benilla-app/src/pipe_warm/mod.rs
+@@ -279,6 +279,16 @@ pub(crate) struct WarmPass {
+     last_reveal: f32,
+     reveal_frames: u32,
+     showing: Vec<Entity>,
++    /// The settled-pipeline count last seen and when it last grew: the timeout is a stall clock.
++    settled_seen: usize,
++    progress_at: f32,
++}
++
++/// Whether a warm pass gives up: only after [`WARM_TIMEOUT_SECS`] with no pipeline settling, and
++/// never past [`WARM_HARD_CAP_SECS`]. A browser compiling a cold shader cache took longer than
++/// the old absolute 10 s, and the 7 pipelines still pending then compiled live in Dalaran.
++pub(crate) fn warm_gives_up(now: f32, spawned: f32, progress_at: f32) -> bool {
++    now - progress_at >= WARM_TIMEOUT_SECS || now - spawned >= WARM_HARD_CAP_SECS
+ }
+ 
+ impl WarmPass {
+@@ -330,6 +340,8 @@ type WarmRigVis<'w, 's> = Query<
+ /// Never hold a cover unbounded: on timeout the pass warns and releases, and what remains
+ /// compiles live.
+ const WARM_TIMEOUT_SECS: f32 = 10.0;
++/// The pass's whole budget, progress or not.
++const WARM_HARD_CAP_SECS: f32 = 45.0;
+ fn run_warm_pass(
+     mut commands: Commands,
+     mut warm: ResMut<WarmPass>,
+@@ -379,6 +391,8 @@ fn run_warm_pass(
+             return;
+         }
+         warm.spawned_at = Some(now);
++        warm.progress_at = now;
++        warm.settled_seen = watch.0.settled.load(Ordering::Relaxed);
+         warm.last_reveal = now;
+         warm.revealed = 0;
+         warm.reveal_frames = 0;
+@@ -450,11 +464,18 @@ fn run_warm_pass(
+     }
+     let all_revealed = revealed_now == 0;
+     let last_reveal = warm.last_reveal;
++    let settled_now = watch.0.settled.load(Ordering::Relaxed);
+     let pending = watch
+         .0
+         .created
+         .load(Ordering::Relaxed)
+-        .saturating_sub(watch.0.settled.load(Ordering::Relaxed));
++        .saturating_sub(settled_now);
++    // Progress: a pipeline settled, or a slice went out.
++    if settled_now > warm.settled_seen || revealed_now > 0 {
++        warm.settled_seen = warm.settled_seen.max(settled_now);
++        warm.progress_at = now;
++    }
++    let progress_at = warm.progress_at;
+     if all_revealed && pending == 0 && now - last_reveal >= WARM_SETTLE_SECS {
+         warm.done = true;
+         warm.warmed_once = true;
+@@ -466,11 +487,16 @@ fn run_warm_pass(
+             now - spawned,
+             warm.reveal_frames,
+         );
+-    } else if now - spawned >= WARM_TIMEOUT_SECS {
++    } else if warm_gives_up(now, spawned, progress_at) {
+         warm.done = true;
+         warm.effect_tex = None;
+         despawn_rigs(&mut commands, &rigs);
+-        warn!("pipeline warm: TIMED OUT with {pending} pipelines pending — cover released");
++        warn!(
++            "pipeline warm: TIMED OUT after {:.1}s ({:.1}s with none settling) with {pending} \
++             pipelines pending — cover released",
++            now - spawned,
++            now - progress_at
++        );
+     }
+ }
+ 
+@@ -715,10 +741,17 @@ fn warm_effect_lane(
+ 
+ #[cfg(test)]
+ mod census_tests {
+-    use super::{view_class, ViewClass};
++    use super::{view_class, warm_gives_up, ViewClass};
+     use bevy::camera::{OrthographicProjection, PerspectiveProjection, Projection};
+     use bevy::render::view::Msaa;
+ 
++    #[test]
++    fn the_warm_timeout_is_a_stall_clock_with_a_cap() {
++        assert!(!warm_gives_up(12.0, 0.0, 9.0), "still settling at 12 s: keep the cover");
++        assert!(warm_gives_up(19.5, 0.0, 9.0), "ten seconds with nothing settling");
++        assert!(warm_gives_up(45.0, 0.0, 44.9), "the hard cap");
++    }
++
+     fn perspective() -> Projection {
+         Projection::Perspective(PerspectiveProjection::default())
+     }
+diff --git a/crates/benilla-app/src/player/world_focus.rs b/crates/benilla-app/src/player/world_focus.rs
+index d21bd4ae..8840de9c 100644
+--- a/crates/benilla-app/src/player/world_focus.rs
++++ b/crates/benilla-app/src/player/world_focus.rs
+@@ -97,10 +97,11 @@ pub(super) fn publish_view_focus(
+     };
+ }
+ 
+-/// Whether a stalled hold may give up: never while a collider is still building, since the one
+-/// under the body may be among them.
+-pub(crate) fn hold_ends_on_timeout(colliders_pending: usize) -> bool {
+-    colliders_pending == 0
++/// Whether a stalled hold may give up: never while a collider is still building, or a building
++/// of the focus neighbourhood is still loading or being re-requested after a failed load, since
++/// the floor under the body may be among them.
++pub(crate) fn hold_ends_on_timeout(p: &WorldLoadProgress) -> bool {
++    p.colliders_pending == 0 && p.wmo_pending == 0
+ }
+ 
+ /// The hold's best progress so far ([`release_post_snap_hold`]).
+@@ -168,7 +169,7 @@ pub(super) fn release_post_snap_hold(
+     } else if player.world_stale || progressed {
+         player.settle_deadline = now + SETTLE_TIMEOUT;
+     } else if now >= player.settle_deadline {
+-        if hold_ends_on_timeout(p.colliders_pending) {
++        if hold_ends_on_timeout(&p) {
+             player.end_settle(false, now);
+             crate::webprogress::signal("ground-wait:0");
+         } else {
+@@ -177,9 +178,9 @@ pub(super) fn release_post_snap_hold(
+             // says why.
+             player.settle_deadline = now + SETTLE_TIMEOUT;
+             info!(
+-                "settle: the stall budget ran out with {} collider(s) still building — the body \
+-                 stays held until they are in",
+-                p.colliders_pending
++                "settle: the stall budget ran out with {} collider(s) still building and {} \
++                 building(s) still loading — the body stays held until they are in",
++                p.colliders_pending, p.wmo_pending
+             );
+             crate::webprogress::signal("ground-wait:1");
+         }
+@@ -330,6 +331,27 @@ mod tests {
+         assert!(!settling(&mut app), "released once they are in");
+     }
+ 
++    /// A building of the neighbourhood still loading (a Dalaran root re-requested after a 502)
++    /// holds the body however long it takes; the hold ends once it is up.
++    #[test]
++    fn a_stalled_hold_never_releases_while_a_building_loads() {
++        let mut app = app();
++        app.world_mut().resource_mut::<Player>().world_stale = false;
++        for _ in 0..(4.0 * SETTLE_TIMEOUT) as usize {
++            step(&mut app, 1.0, |p| {
++                p.total = 4430;
++                p.ready = 4422;
++                p.placements_pending = 8;
++                p.wmo_pending = 1;
++            });
++        }
++        assert!(settling(&mut app), "held while the city's root is re-requested");
++        for _ in 0..(2.0 * SETTLE_TIMEOUT) as usize {
++            step(&mut app, 1.0, |p| p.wmo_pending = 0);
++        }
++        assert!(!settling(&mut app), "the stall budget applies again once it is up");
++    }
++
+     /// Pending counts that bounce between the same values are no progress: the hold times out,
+     /// where it used to stay frozen for good (a 64 s Northshire entry, then dead WASD).
+     #[test]
+diff --git a/crates/benilla-app/src/portrait/framing.rs b/crates/benilla-app/src/portrait/framing.rs
+index 1829c5ba..1994e181 100644
+--- a/crates/benilla-app/src/portrait/framing.rs
++++ b/crates/benilla-app/src/portrait/framing.rs
+@@ -61,10 +61,12 @@ pub(super) fn glue_scene_framing(fov: f32, window_aspect: f32, art: Option<ArtEx
+         let half_w = (t0 * window_aspect).min(GLUE_BOX_ASPECT * floor);
+         2.0 * (half_w / window_aspect).max(floor).atan()
+     } else {
+-        // Hold the authored half-width and open upward to the art's edge; past it the sides crop,
+-        // so no floor and no bars.
+-        let ceiling = art.map_or(f32::INFINITY, |a| a.half_h.max(t0));
+-        2.0 * (h0 / window_aspect).min(ceiling).atan()
++        // Cover: the authored vertical holds and the sides crop, centred. Opening upward (holding
++        // the authored half-width) ran past the scene's art on a tall window: a black wedge in the
++        // top corners at 800×868, most of the frame at a phone's 504×958. The authored 4:3 box is
++        // the one extent every scene's art is known to fill.
++        let _ = (h0, art);
++        authored
+     }
+ }
+ 
+@@ -621,25 +623,19 @@ mod tests {
+     }
+ 
+     #[test]
+-    fn a_narrow_glue_window_holds_its_authored_width_instead() {
+-        let half_width = |vert: f32, a: f32| (vert * 0.5).tan() * a;
+-        let authored = half_width(
+-            diag_to_vert(1.0, GLUE_AUTHORED_ASPECT),
+-            GLUE_AUTHORED_ASPECT,
+-        );
+-        for narrow in [5.0 / 4.0, 1.0, 3.0 / 4.0] {
+-            let got = half_width(glue_scene_framing(1.0, narrow, None), narrow);
+-            assert!(
+-                (got - authored).abs() < 5e-4,
+-                "a{narrow}: authored half-width {authored} vs {got}"
+-            );
++    fn a_narrow_glue_window_covers_by_cropping_the_sides() {
++        let close = |a: f32, b: f32| (a - b).abs() < 5e-6;
++        let authored = diag_to_vert(1.0, GLUE_AUTHORED_ASPECT);
++        // 800×868, a phone's 504×958, a square, 5:4: the authored vertical, the sides cropped, so
++        // nothing past the authored box (the art's known extent) shows.
++        for narrow in [5.0 / 4.0, 1.0, 800.0 / 868.0, 3.0 / 4.0, 504.0 / 958.0] {
++            let got = glue_scene_framing(1.0, narrow, None);
++            assert!(close(got, authored), "a{narrow}: {got} vs the authored {authored}");
++            let half_w = (got * 0.5).tan() * narrow;
++            assert!(half_w <= (authored * 0.5).tan() * GLUE_AUTHORED_ASPECT + 1e-6);
+         }
+-        // A tall window sees more, never less.
+-        assert!(
+-            glue_scene_framing(1.0, 1.0, None)
+-                > glue_scene_framing(1.0, GLUE_AUTHORED_ASPECT, None)
+-        );
+-        // A degenerate mid-resize window must not produce a NaN fov.
++        // Continuous at 4:3, and a degenerate mid-resize window must not produce a NaN fov.
++        assert!(close(glue_scene_framing(1.0, GLUE_AUTHORED_ASPECT, None), authored));
+         assert!(glue_scene_framing(1.0, 0.0, None).is_finite());
+     }
+ 
+@@ -800,20 +796,14 @@ mod tests {
+         );
+         // 16:10 still fills the window: it is narrower than the frame.
+         assert!(glue_box_aspect(1.6).is_none());
+-        // A narrow window with bounded art height holds that height, cropping the sides.
+-        let short = Some(ArtExtent {
++        // A narrow window holds the authored height whatever the art, cropping the sides.
++        let tall = Some(ArtExtent {
+             half_w: 10.0,
+             half_h: t0 * 1.1,
+         });
+-        let v = glue_scene_framing(1.0, 0.75, short);
+-        assert!(
+-            close((v * 0.5).tan(), t0 * 1.1),
+-            "height held at the art's edge"
+-        );
+-        assert!(
+-            glue_scene_framing(1.0, 0.75, None) > v,
+-            "…below the unbounded law's"
+-        );
++        let v = glue_scene_framing(1.0, 0.75, tall);
++        assert!(close((v * 0.5).tan(), t0), "height held at the authored box");
++        assert!(close(glue_scene_framing(1.0, 0.75, None), v));
+     }
+ 
+     /// The 1.12 client's GL stream uploads the same bake matrix for HumanMale's `cameraLookup[0]`
+diff --git a/crates/benilla-app/src/portrait/glue_backdrop.rs b/crates/benilla-app/src/portrait/glue_backdrop.rs
+index ff828dbf..c52d94c5 100644
+--- a/crates/benilla-app/src/portrait/glue_backdrop.rs
++++ b/crates/benilla-app/src/portrait/glue_backdrop.rs
+@@ -106,6 +106,8 @@ pub(crate) struct GlueBackdrop {
+     wall: Handle<StandardMaterial>,
+     floor: Handle<StandardMaterial>,
+     shadow: Handle<StandardMaterial>,
++    /// The void fill's wall behind the animated scene: the wall's vignette in the edge colour.
++    void: Handle<StandardMaterial>,
+     /// The colour shown now and the one easing in, linear.
+     pub(crate) shown: LinearRgba,
+     target: LinearRgba,
+@@ -202,6 +204,7 @@ impl GlueBackdrop {
+         let wall_tex = images.add(mask_image(128, |u, v| (wall_lum(u, v), 1.0)));
+         let floor_tex = images.add(mask_image(128, |u, v| (floor_lum(u, v), 1.0)));
+         let shadow_tex = images.add(mask_image(64, |u, v| (0.0, shadow_alpha(u, v))));
++        let void = mat(materials, wall_tex.clone(), false);
+         let wall = mat(materials, wall_tex, false);
+         let floor = mat(materials, floor_tex, false);
+         let shadow = materials.add(StandardMaterial {
+@@ -218,6 +221,7 @@ impl GlueBackdrop {
+             wall,
+             floor,
+             shadow,
++            void,
+             shown: neutral,
+             target: neutral,
+             from: neutral,
+@@ -252,6 +256,23 @@ impl GlueBackdrop {
+         }
+     }
+ 
++    /// Spawn the void fill's one wall under the animated scene's `root` on `layer`.
++    pub(crate) fn spawn_void_fill(&self, commands: &mut Commands, root: Entity, layer: &RenderLayers) {
++        let child = commands
++            .spawn((
++                Mesh3d(self.quad.clone()),
++                MeshMaterial3d(self.void.clone()),
++                Transform::IDENTITY,
++                Visibility::Visible,
++                layer.clone(),
++                BackdropPart::Wall,
++                bevy::light::NotShadowCaster,
++                bevy::light::NotShadowReceiver,
++            ))
++            .id();
++        commands.entity(root).add_child(child);
++    }
++
+     /// New parts stand at the origin until the next fit.
+     pub(crate) fn mark_spawned(&mut self) {
+         self.refit = true;
+@@ -290,7 +311,7 @@ impl BackdropView {
+         [
+             self.eye.x, self.eye.y, self.eye.z, self.fwd.x, self.fwd.y, self.fwd.z, self.up.x,
+             self.up.y, self.up.z, self.vert_fov, self.target_dist, self.stage.x, self.stage.y,
+-            self.stage.z,
++            self.stage.z + self.void_fill.unwrap_or(0.0),
+         ]
+     }
+ }
+@@ -312,6 +333,9 @@ pub(crate) struct BackdropView {
+     pub(crate) vert_fov: f32,
+     pub(crate) target_dist: f32,
+     pub(crate) stage: Vec3,
++    /// `Some(far)` behind the animated scene: only the wall stands, just inside the scene
++    /// camera's authored far plane, behind every part of the scene.
++    pub(crate) void_fill: Option<f32>,
+ }
+ 
+ /// Each part's transform for `view`: the wall square to the camera and filling the view (with
+@@ -319,6 +343,8 @@ pub(crate) struct BackdropView {
+ /// shadow just above the floor at the stage spot.
+ pub(crate) fn part_transform(part: BackdropPart, view: &BackdropView) -> Transform {
+     let depth = view.target_dist * (1.0 + WALL_DEPTH);
++    // The void fill stands behind the whole scene, not just past the stage.
++    let depth = view.void_fill.map_or(depth, |far| (far * 0.95).max(depth));
+     match part {
+         BackdropPart::Wall => {
+             let half_h = depth * (view.vert_fov * 0.5).tan() * 1.25;
+@@ -359,7 +385,8 @@ pub(super) fn drive_glue_backdrop(
+     // exists only after that spawn, so creating them on the view stood both waiting for ever (the
+     // black character screen of 2026-10-25).
+     let Some(mut backdrop) = backdrop else {
+-        if preview.scene.is_some() && MINIMAL_GLUE_BACKDROP {
++        // The void fill needs the assets too, so they are made for every glue scene.
++        if preview.scene.is_some() {
+             commands.insert_resource(GlueBackdrop::new(
+                 &mut setup.0,
+                 &mut setup.1,
+@@ -371,6 +398,17 @@ pub(super) fn drive_glue_backdrop(
+     let Some(view) = scene.backdrop_view() else {
+         return;
+     };
++    // The void fill: one wall behind the animated scene, spawned once the scene is up (a scene
++    // rebuild despawns it with the root, and this puts it back).
++    if view.void_fill.is_some() && scene.is_spawned() && parts.is_empty() {
++        backdrop.spawn_void_fill(
++            &mut commands,
++            scene.root(),
++            &RenderLayers::layer(super::GLUE_LAYER),
++        );
++        backdrop.mark_spawned();
++        return;
++    }
+     let key = view.key();
+     if backdrop.refit || backdrop.last_view != Some(key) {
+         for (e, part) in parts.iter() {
+@@ -383,6 +421,14 @@ pub(super) fn drive_glue_backdrop(
+     let faction = faction_of(preview.look.as_ref(), dk);
+     let fresh = backdrop.faction.is_none();
+     if backdrop.ease_to(faction, real.elapsed_secs()) || fresh {
++        if view.void_fill.is_some() {
++            // Behind the scene: the dim edge colour, the clears left as they are.
++            let edge = backdrop.edge();
++            if let Some(m) = materials.get_mut(&backdrop.void) {
++                m.base_color = edge;
++            }
++            return;
++        }
+         let shown = Color::LinearRgba(backdrop.shown);
+         for h in [&backdrop.wall, &backdrop.floor] {
+             if let Some(m) = materials.get_mut(h) {
+@@ -455,6 +501,7 @@ mod tests {
+             wall: Handle::default(),
+             floor: Handle::default(),
+             shadow: Handle::default(),
++            void: Handle::default(),
+             shown: LinearRgba::BLACK,
+             target: LinearRgba::BLACK,
+             from: LinearRgba::BLACK,
+@@ -501,6 +548,7 @@ mod tests {
+             vert_fov: 0.8,
+             target_dist: 5.0,
+             stage: Vec3::ZERO,
++            void_fill: None,
+         };
+         let t = part_transform(BackdropPart::Wall, &view);
+         let depth = (t.translation - view.eye).length();
+@@ -510,5 +558,20 @@ mod tests {
+             assert!(t.scale.y * 0.5 > frustum_half_h, "{w}x{h}: height");
+             assert!(t.scale.x * 0.5 > frustum_half_h * aspect, "{w}x{h}: width");
+         }
++        // The void fill stands just inside the authored far plane and still covers every shape.
++        let far = 60.0;
++        let fill = BackdropView {
++            void_fill: Some(far),
++            ..view
++        };
++        let t = part_transform(BackdropPart::Wall, &fill);
++        let depth = (t.translation - fill.eye).length();
++        assert!((depth - far * 0.95).abs() < 1e-3, "behind the scene: {depth}");
++        let frustum_half_h = depth * (fill.vert_fov * 0.5).tan();
++        for (w, h) in [(16.0, 9.0), (504.0, 958.0), (800.0, 868.0), (21.0, 9.0)] {
++            let aspect: f32 = w / h;
++            assert!(t.scale.y * 0.5 > frustum_half_h, "{w}x{h}: height");
++            assert!(t.scale.x * 0.5 > frustum_half_h * aspect, "{w}x{h}: width");
++        }
+     }
+ }
+diff --git a/crates/benilla-app/src/portrait/glue_booth.rs b/crates/benilla-app/src/portrait/glue_booth.rs
+index b38d1179..3c02e1ae 100644
+--- a/crates/benilla-app/src/portrait/glue_booth.rs
++++ b/crates/benilla-app/src/portrait/glue_booth.rs
+@@ -373,6 +373,16 @@ impl CreateScene {
+         self.backdrop
+     }
+ 
++    /// The scene's root, which the void fill's wall is parented under (it despawns with it).
++    pub(crate) fn root(&self) -> Entity {
++        self.root
++    }
++
++    /// Whether the scene model is up (the void fill waits for it).
++    pub(crate) fn is_spawned(&self) -> bool {
++        self.spawned
++    }
++
+     /// Whether the standing (or requested) scene is `token`'s.
+     pub(crate) fn token_is(&self, token: &str) -> bool {
+         self.token == Some(token)
+@@ -801,8 +811,10 @@ pub(super) fn sync_glue_scene(
+             w.physical_height().max(1),
+         );
+         // A stock pane is its own frame ([`pillarbox_glue_scene`]).
+-        let box_aspect =
+-            glue_box_aspect(w.width() / w.height().max(1.0)).filter(|_| preview.pane.is_none());
++        // No pillarbox (owner, 2026-10-25: no black at any window shape, 16:9 included): the
++        // scene fills the window and the void fill (`glue_backdrop`) stands behind it.
++        let box_aspect = glue_box_aspect(w.width() / w.height().max(1.0))
++            .filter(|_| preview.pane.is_none() && !FILL_GLUE_WINDOW);
+         if scene.viewport_aspect != box_aspect {
+             scene.viewport_aspect = box_aspect;
+         }
+@@ -1174,20 +1186,25 @@ pub(super) fn sync_glue_scene(
+                 ..default()
+             }),
+         );
+-        scene.backdrop = super::glue_backdrop::minimal_for(token).then(|| {
+-            super::glue_backdrop::BackdropView {
+-                eye: cam.eye,
+-                fwd,
+-                up,
+-                vert_fov,
+-                target_dist: (cam.target - cam.eye).length().max(0.1),
+-                stage: scene.char_spot,
+-            }
++        // The minimal room, or behind the animated scene the void fill: one far wall, so a window
++        // shape that sees past the scene's art shows a dim faction vignette, never black.
++        let minimal = super::glue_backdrop::minimal_for(token);
++        scene.backdrop = Some(super::glue_backdrop::BackdropView {
++            eye: cam.eye,
++            fwd,
++            up,
++            vert_fov,
++            target_dist: (cam.target - cam.eye).length().max(0.1),
++            stage: scene.char_spot,
++            void_fill: (!minimal).then_some(cam.far),
+         });
+         aim(&mut cams, GLUE_SLOT, &rig);
+     }
+ }
+ 
++/// The pane-less glue scene fills the window at every aspect: no pillarbox bars.
++pub(crate) const FILL_GLUE_WINDOW: bool = true;
++
+ /// How much wider the character-select view opens than the scene camera's own (tan units). At
+ /// 1.2 the owner measured the model at ~80% of a 985 px window; the fill goes as 1/this, so 1.75
+ /// lands it at ~55%, retail's framing.
+@@ -1821,7 +1838,7 @@ mod tests {
+     }
+ 
+     /// The booth camera's viewport is the stock pane's rect, no pillarbox inside it; the pane-less
+-    /// screens keep their pillarbox past [`super::super::framing::GLUE_BOX_ASPECT`].
++    /// screens fill the window ([`FILL_GLUE_WINDOW`]) at every aspect.
+     #[test]
+     fn the_viewport_is_the_stock_pane_and_the_native_box_otherwise() {
+         for stock in [true, false] {
+@@ -1831,7 +1848,7 @@ mod tests {
+                 let root = app.world_mut().spawn_empty().id();
+                 let pet = app.world_mut().spawn_empty().id();
+                 let mut scene = CreateScene::empty(root, pet);
+-                scene.viewport_aspect = glue_box_aspect(a).filter(|_| !stock);
++                scene.viewport_aspect = glue_box_aspect(a).filter(|_| !stock && !FILL_GLUE_WINDOW);
+                 let preview = GluePreview {
+                     pane: stock.then(|| glue_parent(a)),
+                     ..GluePreview::default()
+@@ -1862,8 +1879,8 @@ mod tests {
+                     let view = super::super::framing::stock_pane_view(w, h, glue_parent(a));
+                     view.map(|v| (v.position, v.size))
+                 } else {
+-                    glue_box_physical(w, h, glue_box_aspect(a))
+-                        .map(|(x, bw)| (UVec2::new(x, 0), UVec2::new(bw, h)))
++                    // The pane-less scene fills the window: no viewport, no bars.
++                    None
+                 };
+                 assert_eq!(vp, want, "stock {stock} {w}x{h}");
+                 if stock && a <= 16.0 / 9.0 {
+diff --git a/crates/benilla-app/src/script_calls.rs b/crates/benilla-app/src/script_calls.rs
+index 26f77cdc..764986ea 100644
+--- a/crates/benilla-app/src/script_calls.rs
++++ b/crates/benilla-app/src/script_calls.rs
+@@ -49,6 +49,7 @@ pub(crate) fn apply_script_calls(
+             ScriptCall::SpellTargetUnit(token) => appliers.p1().spell_target_unit(&token),
+             ScriptCall::SpellStopTargeting => appliers.p1().stop_targeting(),
+             ScriptCall::SpellStopCasting => appliers.p2().stop_casting(),
++            ScriptCall::Dismount => appliers.p2().dismount(),
+             ScriptCall::CastSpell {
+                 spell_id,
+                 at,
+diff --git a/crates/benilla-app/src/spell/cast_send.rs b/crates/benilla-app/src/spell/cast_send.rs
+index ef375e2a..37ebb49a 100644
+--- a/crates/benilla-app/src/spell/cast_send.rs
++++ b/crates/benilla-app/src/spell/cast_send.rs
+@@ -609,15 +609,34 @@ fn send_spell_cast(
+     // The mounted block (`0x609c6c`): a live `UNIT_FIELD_MOUNTDISPLAYID` refuses 0x39 "You are
+     // mounted" unless `Attributes & 0x01000000`. Local, because vmangos silently dismounts
+     // instead. The range gate runs first, so mounted and out of range reads "Out of range.".
+-    if validator::cast_mounted_refusal(
+-        ctx.rel
+-            .self_store
+-            .is_some_and(|s| s.0.unit_mount_display_id() > 0),
+-        def,
+-    ) {
+-        debug!("ui_action: cast {spell_id} refused locally — mounted (0x39)");
+-        cast_errors.push_local(spell_id, 0x39);
+-        return;
++    // Set by the auto-dismount below; the cancel goes out only once every later gate passed, so a
++    // refused cast never costs the mount.
++    let mut dismount_first = false;
++    let mounted = ctx
++        .rel
++        .self_store
++        .is_some_and(|s| s.0.unit_mount_display_id() > 0);
++    if validator::cast_mounted_refusal(mounted, def) {
++        // 3.3.5a: a mount pressed while mounted dismounts (`CMSG_CANCEL_MOUNT_AURA`), whichever
++        // mount it is, and casts nothing.
++        if def.is_some_and(|d| d.effect_apply_aura.contains(&benilla_formats::SPELL_AURA_MOUNTED)) {
++            debug!("ui_action: cast {spell_id} is a mount pressed while mounted — dismount");
++            let _ = commands.0.send(ClientCommand::CancelMountAura);
++            return;
++        }
++        // `autoDismount` (default on) / `autoDismountFlying` (default off): any other cast leaves
++        // the mount first, the cancel ahead of the cast on the same ordered stream, so the server
++        // has dismounted by the time it checks the cast. Flying without `autoDismountFlying` keeps
++        // the refusal (a dismount there is a fall).
++        let flying = ctx.self_move_flags & benilla_protocol::messages::CLASSIC_FLYING != 0;
++        if validator::auto_dismounts(ctx.auto_dismount, flying) {
++            debug!("ui_action: cast {spell_id} while mounted — auto-dismount first");
++            dismount_first = true;
++        } else {
++            debug!("ui_action: cast {spell_id} refused locally — mounted (0x39)");
++            cast_errors.push_local(spell_id, 0x39);
++            return;
++        }
+     }
+     // The water leg (`0x609d39–0x609d7b`): 0x50 "Cannot use while swimming" for mounts, Travel
+     // Form and food, 0x58 "Can only use while swimming" for Aquatic Form. Local, because vmangos's
+@@ -669,6 +688,9 @@ fn send_spell_cast(
+     // The deferred cursor entry (`6e50c8`): every rung passed, the cursor waits for its click.
+     if let Some(word) = pending_word {
+         debug!("ui_action: cast {spell_id} awaits its click — targeting cursor up ({word:#06x})");
++        if dismount_first {
++            let _ = commands.0.send(ClientCommand::CancelMountAura);
++        }
+         ground.enter(spell_id, commit, word);
+         return;
+     }
+@@ -714,6 +736,9 @@ fn send_spell_cast(
+         crate::ui_cast::queue_sent(ecs, spell_id, target);
+     }
+     // `SendCast 0x6e54f0`: one targets block, two opcodes.
++    if dismount_first {
++        let _ = commands.0.send(ClientCommand::CancelMountAura);
++    }
+     let _ = commands.0.send(match commit {
+         CastCommit::Spell => match (explicit_object, item_target) {
+             // A lock opener bound by its click; `BindTarget`'s GameObject arm fills the block.
+@@ -832,6 +857,7 @@ mod tests {
+             main_hand_item: None,
+             self_auras: None,
+             self_move_flags: 0,
++            auto_dismount: Default::default(),
+         }
+     }
+ 
+@@ -874,6 +900,119 @@ mod tests {
+             .expect("the ladder runs as a one-shot system");
+     }
+ 
++    /// 3.3.5a mounted presses: a mount re-press dismounts and casts nothing; any other ground cast
++    /// sends `CMSG_CANCEL_MOUNT_AURA` and then the cast; flying keeps the 0x39 refusal unless
++    /// `autoDismountFlying`; `autoDismount` 0 keeps it on the ground; the `Attributes` bit-24
++    /// exemption casts without dismounting.
++    #[test]
++    fn mounted_presses_dismount_auto_dismount_or_refuse() {
++        use crate::net::ObjectStore;
++        use benilla_formats::SpellDisplay;
++        use benilla_protocol::ObjectFields;
++        const MOUNT: u32 = 23229;
++        const PLAIN: u32 = 100;
++        const EXEMPT: u32 = 200;
++        let (mut world, rx) = world();
++        let mut spells = crate::ui_action::Spells::empty_for_tests();
++        spells.catalog = benilla_formats::SpellCatalog::from_displays(
++            [
++                (
++                    MOUNT,
++                    SpellDisplay {
++                        effect_apply_aura: [benilla_formats::SPELL_AURA_MOUNTED, 0, 0],
++                        ..Default::default()
++                    },
++                ),
++                (PLAIN, SpellDisplay::default()),
++                (
++                    EXEMPT,
++                    SpellDisplay {
++                        attributes: 0x0100_0000,
++                        ..Default::default()
++                    },
++                ),
++            ]
++            .into_iter()
++            .collect(),
++        );
++        world.insert_resource(spells);
++        let mounted: &'static ObjectStore = Box::leak(Box::new(ObjectStore(
++            ObjectFields::from_pairs(&[
++                (133, 14776), // UNIT_FIELD_MOUNTDISPLAYID
++                (22, 100),
++                (28, 100),
++            ]),
++        )));
++        let press = |world: &mut World,
++                     spell_id: u32,
++                     flags: u32,
++                     auto: super::super::validator::AutoDismount| {
++            // Each press stands alone: no cast in flight, no cooldown from the last one.
++            world.insert_resource(crate::spell::PendingCast::default());
++            world.insert_resource(crate::spell::QueuedMeleeSpell::default());
++            world.insert_resource(crate::spell::Cooldowns::default());
++            world
++                .run_system_once(move |mut ladder: CastLadder| {
++                    let base = ctx();
++                    let c = cast_target::CastContext {
++                        rel: cast_target::TargetRelations {
++                            self_store: Some(mounted),
++                            ..base.rel
++                        },
++                        self_move_flags: flags,
++                        auto_dismount: auto,
++                        ..base
++                    };
++                    ladder.send(spell_id, &c, CastCommit::Spell);
++                })
++                .expect("one-shot");
++        };
++        let sent = |rx: &Receiver<ClientCommand>| -> Vec<String> {
++            rx.try_iter()
++                .map(|c| match c {
++                    ClientCommand::CancelMountAura => "dismount".to_string(),
++                    ClientCommand::CastSpell { spell_id, .. } => format!("cast {spell_id}"),
++                    other => format!("{other:?}").split_whitespace().next().unwrap().to_string(),
++                })
++                .collect()
++        };
++        let defaults = super::super::validator::AutoDismount::default();
++        let fly = benilla_protocol::messages::CLASSIC_FLYING;
++
++        press(&mut world, MOUNT, 0, defaults);
++        assert_eq!(sent(&rx), vec!["dismount"], "a mount re-press only dismounts");
++        assert!(world.resource::<CastErrors>().0.is_empty(), "no \"You are mounted\"");
++
++        press(&mut world, PLAIN, 0, defaults);
++        assert_eq!(sent(&rx), vec!["dismount".to_string(), format!("cast {PLAIN}")]);
++        assert!(world.resource::<CastErrors>().0.is_empty());
++
++        press(&mut world, PLAIN, fly, defaults);
++        assert!(sent(&rx).is_empty(), "flying: no dismount, no cast");
++        assert_eq!(
++            std::mem::take(&mut world.resource_mut::<CastErrors>().0),
++            vec![CastFail::local(PLAIN, 0x39)]
++        );
++
++        press(&mut world, MOUNT, fly, defaults);
++        assert_eq!(sent(&rx), vec!["dismount"], "the mount button still dismounts in the air");
++
++        let both = super::super::validator::AutoDismount { ground: true, flying: true };
++        press(&mut world, PLAIN, fly, both);
++        assert_eq!(sent(&rx), vec!["dismount".to_string(), format!("cast {PLAIN}")]);
++
++        let off = super::super::validator::AutoDismount { ground: false, flying: false };
++        press(&mut world, PLAIN, 0, off);
++        assert!(sent(&rx).is_empty());
++        assert_eq!(
++            std::mem::take(&mut world.resource_mut::<CastErrors>().0),
++            vec![CastFail::local(PLAIN, 0x39)]
++        );
++
++        press(&mut world, EXEMPT, 0, defaults);
++        assert_eq!(sent(&rx), vec![format!("cast {EXEMPT}")], "bit 24 casts mounted");
++    }
++
+     /// TryCast's dead rung (`0x6e4c49`): a corpse and a ghost (health 1, the `PLAYER_FLAGS` bit)
+     /// are refused with 0x13 and no packet, after the profession intercept; `Attributes &
+     /// 0x800000` waives it, and the Attack button's own entry takes the same rung.
+diff --git a/crates/benilla-app/src/spell/cast_target.rs b/crates/benilla-app/src/spell/cast_target.rs
+index dead41eb..3d948478 100644
+--- a/crates/benilla-app/src/spell/cast_target.rs
++++ b/crates/benilla-app/src/spell/cast_target.rs
+@@ -184,6 +184,8 @@ pub(crate) struct CastContext<'a> {
+     pub(crate) self_move_flags: u32,
+     /// The caster's aura table: the toggle-cancel scans and the crowd-control exemption read it.
+     pub(crate) self_auras: Option<&'a UnitAuras>,
++    /// `autoDismount` / `autoDismountFlying`, read by the mounted block.
++    pub(crate) auto_dismount: super::validator::AutoDismount,
+ }
+ 
+ /// Positions and the two units for the pre-send range refusal: the client's cast runs
+@@ -239,6 +241,8 @@ pub(crate) struct CastTargeting<'w, 's> {
+     index: Option<Res<'w, GuidIndex>>,
+     self_guid: Res<'w, SelfGuid>,
+     auto_self_cast: Res<'w, AutoSelfCast>,
++    /// `Option`: a harness without the spell plugin keeps the CVar defaults.
++    auto_dismount: Option<Res<'w, super::validator::AutoDismount>>,
+     factions: Option<Res<'w, Factions>>,
+     reputations: Res<'w, Reputations>,
+     /// The party slots and raid roster as the frame began; a harness without them has no group.
+@@ -301,6 +305,7 @@ impl CastTargeting<'_, '_> {
+                 .filter(|&g| g != 0),
+             self_move_flags: self.player.as_deref().map_or(0, |p| p.move_flags()),
+             self_auras: self.self_auras.iter().next(),
++            auto_dismount: self.auto_dismount.as_deref().copied().unwrap_or_default(),
+         }
+     }
+ 
+diff --git a/crates/benilla-app/src/spell/inflight.rs b/crates/benilla-app/src/spell/inflight.rs
+index 3d577e2e..9cded078 100644
+--- a/crates/benilla-app/src/spell/inflight.rs
++++ b/crates/benilla-app/src/spell/inflight.rs
+@@ -286,6 +286,12 @@ impl SelfCancel<'_, '_> {
+         self.cancel(true, false);
+     }
+ 
++    /// `Dismount()` (3.3.5a): `CMSG_CANCEL_MOUNT_AURA`; the mount leaves by the descriptor delta.
++    pub(crate) fn dismount(&mut self) {
++        debug!("script: Dismount() — CMSG_CANCEL_MOUNT_AURA");
++        let _ = self.net.0.send(crate::net::ClientCommand::CancelMountAura);
++    }
++
+     fn cancel(&mut self, esc: bool, moved: bool) {
+         let Self {
+             pending,
+diff --git a/crates/benilla-app/src/spell/mod.rs b/crates/benilla-app/src/spell/mod.rs
+index 1fa6b8f4..66017539 100644
+--- a/crates/benilla-app/src/spell/mod.rs
++++ b/crates/benilla-app/src/spell/mod.rs
+@@ -102,6 +102,8 @@ impl Plugin for SpellPlugin {
+             .init_resource::<Cooldowns>()
+             .init_resource::<SpellModifiers>()
+             .init_resource::<AutoSelfCast>()
++            .init_resource::<validator::AutoDismount>()
++            .add_observer(validator::on_auto_dismount_cvar)
+             .init_resource::<SpellTargeting>()
+             .init_resource::<HeldForPick>()
+             .init_resource::<targeting::EnchantConfirmItem>()
+diff --git a/crates/benilla-app/src/spell/validator.rs b/crates/benilla-app/src/spell/validator.rs
+index fed05c6c..82814596 100644
+--- a/crates/benilla-app/src/spell/validator.rs
++++ b/crates/benilla-app/src/spell/validator.rs
+@@ -147,6 +147,46 @@ pub(crate) fn cast_mounted_refusal(mounted: bool, spell: Option<&SpellDisplay>)
+     mounted && spell.is_none_or(|d| d.attributes & 0x0100_0000 == 0)
+ }
+ 
++/// Whether a refused mounted cast leaves the mount instead (3.3.5a `autoDismount` /
++/// `autoDismountFlying`): on the ground with `autoDismount`, in the air only with
++/// `autoDismountFlying`.
++pub(crate) fn auto_dismounts(setting: AutoDismount, flying: bool) -> bool {
++    if flying {
++        setting.flying
++    } else {
++        setting.ground
++    }
++}
++
++/// The two auto-dismount CVars, `autoDismount` (default `"1"`) and `autoDismountFlying`
++/// (default `"0"`).
++#[derive(bevy::prelude::Resource, Clone, Copy, Debug, PartialEq, Eq)]
++pub(crate) struct AutoDismount {
++    pub(crate) ground: bool,
++    pub(crate) flying: bool,
++}
++
++impl Default for AutoDismount {
++    fn default() -> Self {
++        Self {
++            ground: true,
++            flying: false,
++        }
++    }
++}
++
++/// The auto-dismount CVars' change callback.
++pub(crate) fn on_auto_dismount_cvar(
++    ev: bevy::prelude::On<crate::cvars::CvarChanged>,
++    mut auto: bevy::prelude::ResMut<AutoDismount>,
++) {
++    if ev.is("autoDismount") {
++        auto.ground = ev.flag();
++    } else if ev.is("autoDismountFlying") {
++        auto.flying = ev.flag();
++    }
++}
++
+ /// The interrupt-flag water pair: `0x80` cancels an aura on entering water, `0x100` on leaving it
+ /// (vmangos `AURA_INTERRUPT_UNDER_WATER_CANCELS` / `AURA_INTERRUPT_ABOVE_WATER_CANCELS`). The
+ /// validator refuses a cast whose aura could not survive the caster's current side.
+@@ -360,6 +400,17 @@ mod tests {
+     }
+ 
+     /// The mounted refusal (`0x609c6c`) and its bit-24 exemption (`0x609c6f`).
++    #[test]
++    fn auto_dismount_follows_the_two_cvars() {
++        let on = AutoDismount::default();
++        assert!(auto_dismounts(on, false), "autoDismount defaults on: a ground cast dismounts");
++        assert!(!auto_dismounts(on, true), "autoDismountFlying defaults off: flying refuses");
++        let both = AutoDismount { ground: true, flying: true };
++        assert!(auto_dismounts(both, true));
++        let off = AutoDismount { ground: false, flying: false };
++        assert!(!auto_dismounts(off, false));
++    }
++
+     #[test]
+     fn cast_mounted_refusal_honors_the_bit24_exemption() {
+         let plain = SpellDisplay::default();
+diff --git a/crates/benilla-app/src/ui_chat/channels.rs b/crates/benilla-app/src/ui_chat/channels.rs
+index ecf66351..86b605f2 100644
+--- a/crates/benilla-app/src/ui_chat/channels.rs
++++ b/crates/benilla-app/src/ui_chat/channels.rs
+@@ -46,6 +46,28 @@ pub(crate) struct ZoneChannelWalk {
+     /// A character session is live: without it the logout frame, still `InWorld` with `at` just
+     /// cleared, would join the zone being left.
+     live: bool,
++    /// A new zone and when it was first seen: the walk waits [`ZONE_STEADY_SECS`] for it, so a
++    /// boundary the area flickers across (a city WMO's edge over another zone's terrain) does not
++    /// leave and re-join every channel each flicker.
++    candidate: Option<(u32, f32)>,
++}
++
++/// How long a new zone must hold before the walk acts on it.
++const ZONE_STEADY_SECS: f32 = 1.0;
++
++/// The debounce: whether `zone`, seen at `now`, has held long enough for the walk.
++fn zone_is_steady(candidate: &mut Option<(u32, f32)>, zone: u32, now: f32, first: bool) -> bool {
++    if first {
++        *candidate = None;
++        return true; // the entry walk is not a flicker
++    }
++    match *candidate {
++        Some((z, since)) if z == zone => now - since >= ZONE_STEADY_SECS,
++        _ => {
++            *candidate = Some((zone, now));
++            false
++        }
++    }
+ }
+ 
+ impl ZoneChannelWalk {
+@@ -54,6 +76,7 @@ impl ZoneChannelWalk {
+         self.at = None;
+         self.zone_id = None;
+         self.live = false;
++        self.candidate = None;
+     }
+ }
+ 
+@@ -310,6 +333,7 @@ fn apply_walk(steps: &[WalkStep], channels: &mut ChannelState, commands: &NetCom
+         match step {
+             WalkStep::Leave(name) => {
+                 debug!("chat: leaving zone channel {name:?}");
++                channels.note_walk_leave(name);
+                 let _ = commands.0.send(channels.leave_command(name.clone()));
+             }
+             WalkStep::Join(name) => {
+@@ -373,6 +397,7 @@ pub(super) fn auto_join_zone_channels(
+     body: (
+         Option<Res<crate::player::Player>>,
+         Option<Res<crate::cinematic::Cinematic>>,
++        Res<Time>,
+     ),
+     mut walk: ResMut<ZoneChannelWalk>,
+     mut entered: MessageReader<crate::net::EnteredWorldMessage>,
+@@ -432,8 +457,14 @@ pub(super) fn auto_join_zone_channels(
+         return; // the mask is not seated: the reference's ready-flag bail
+     }
+     if walk.at == Some(zone_id) {
++        walk.candidate = None;
+         return; // same zone as last frame
+     }
++    let first = walk.at.is_none();
++    if !zone_is_steady(&mut walk.candidate, zone_id, body.2.elapsed_secs(), first) {
++        return;
++    }
++    walk.candidate = None;
+ 
+     let steps = plan_walk(&channels, &zone_name, in_city, city_word(&areas.0));
+     if apply_walk(&steps, &mut channels, &commands) {
+@@ -592,6 +623,39 @@ mod tests {
+         assert!(zone_is_settled(Some(&p)), "settled: the zone is now final");
+     }
+ 
++    /// A zone must hold a second before the walk leaves and re-joins for it; the entry walk does
++    /// not wait, and a flicker back resets the clock.
++    #[test]
++    fn a_flickering_zone_does_not_walk_until_it_holds() {
++        let mut c = None;
++        assert!(zone_is_steady(&mut c, 4395, 0.0, true), "the entry walk is immediate");
++        assert!(!zone_is_steady(&mut c, 2817, 1.0, false));
++        assert!(!zone_is_steady(&mut c, 2817, 1.5, false));
++        assert!(!zone_is_steady(&mut c, 4395, 1.6, false), "flicker: a new candidate");
++        assert!(!zone_is_steady(&mut c, 2817, 1.7, false));
++        assert!(zone_is_steady(&mut c, 2817, 2.8, false), "held a second");
++    }
++
++    /// The walk's LEAVE of a channel the server already moved us out of is answered
++    /// `NOT_MEMBER`, which is not shown; a player's own leave's answer still is.
++    #[test]
++    fn the_walks_own_leave_answer_is_not_shown() {
++        use benilla_protocol::messages::channel_notice as n;
++        let mut channels = state(SEED);
++        channels.note_walk_leave("Trade - City");
++        assert!(channels.swallow_walk_answer(n::NOT_MEMBER, "Trade - City"));
++        assert!(
++            !channels.swallow_walk_answer(n::NOT_MEMBER, "Trade - City"),
++            "one answer per leave"
++        );
++        channels.note_walk_leave("General - Crystalsong Forest");
++        assert!(
++            !channels.swallow_walk_answer(n::YOU_LEFT, "General - Crystalsong Forest"),
++            "a YOU_LEFT settles the leave and is shown"
++        );
++        assert!(!channels.swallow_walk_answer(n::NOT_MEMBER, "General - Crystalsong Forest"));
++    }
++
+     #[test]
+     fn leaving_the_world_ends_the_channel_session() {
+         let mut channels = state(SEED);
+@@ -603,6 +667,7 @@ mod tests {
+             at: Some(440),
+             zone_id: Some(440),
+             live: true,
++            candidate: None,
+         };
+         let mut cascade = GuildRecruitmentCascade::default();
+         cascade.observe_guild_id(7);
+diff --git a/crates/benilla-app/src/ui_chat/edit.rs b/crates/benilla-app/src/ui_chat/edit.rs
+index 4d42bf5d..3f561ce1 100644
+--- a/crates/benilla-app/src/ui_chat/edit.rs
++++ b/crates/benilla-app/src/ui_chat/edit.rs
+@@ -106,6 +106,39 @@ pub(crate) struct ChannelState {
+     /// confirmed custom join, shrunk by an explicit leave. A channel whose re-join is refused, or
+     /// that kicks the player, stays listed until a `/leave`, where the reference's file drops it.
+     pub custom: Vec<String>,
++    /// The zone walk's own LEAVEs still awaiting their answer, by channel name. AzerothCore moves
++    /// the local channels itself on a zone change (`Player::UpdateLocalChannels`), so the walk's
++    /// LEAVE often finds the channel already left and is answered `NOT_MEMBER`: a "Not on channel"
++    /// line per channel on every zone change. That answer is ours, not the player's, and is
++    /// dropped ([`Self::swallow_walk_answer`]).
++    pub walk_leaves: Vec<String>,
++}
++
++impl ChannelState {
++    /// Note the walk's LEAVE of `name`; kept to the last few dozen.
++    pub(crate) fn note_walk_leave(&mut self, name: &str) {
++        self.walk_leaves.push(name.to_string());
++        let over = self.walk_leaves.len().saturating_sub(32);
++        self.walk_leaves.drain(..over);
++    }
++
++    /// Whether a `NOT_MEMBER` (or the leave's own `YOU_LEFT`) for `name` answers a walk LEAVE;
++    /// the `NOT_MEMBER` is then not shown. Either answer settles the leave.
++    pub(crate) fn swallow_walk_answer(&mut self, notice: u8, name: &str) -> bool {
++        use benilla_protocol::messages::channel_notice as n;
++        if notice != n::NOT_MEMBER && notice != n::YOU_LEFT {
++            return false;
++        }
++        let Some(i) = self
++            .walk_leaves
++            .iter()
++            .position(|w| w.eq_ignore_ascii_case(name))
++        else {
++            return false;
++        };
++        self.walk_leaves.remove(i);
++        notice == n::NOT_MEMBER
++    }
+ }
+ 
+ /// One slot, the reference's `[0xb4fe04] + n*0xa0` record, in the fields this client uses.
+diff --git a/crates/benilla-app/src/ui_chat/feed.rs b/crates/benilla-app/src/ui_chat/feed.rs
+index 679837b0..bdf249e0 100644
+--- a/crates/benilla-app/src/ui_chat/feed.rs
++++ b/crates/benilla-app/src/ui_chat/feed.rs
+@@ -534,6 +534,13 @@ pub(super) fn deliver(
+     // Read first: the reference picks the token from `slot+0x9c` (`0x49c0c2`) before writing it
+     // (`0x49bb20`), and the renamed and suspended tokens keep the window's registration.
+     event.slot_state = channels.slot_state(&event.channel);
++    // The answer to the zone walk's own LEAVE of a channel the server already moved us out of.
++    if let Some(byte) = notice {
++        if channels.swallow_walk_answer(byte, &event.channel) {
++            debug!("chat: {:?} was already left — the walk's leave answer is dropped", event.channel);
++            return;
++        }
++    }
+     if let Some(byte) = notice {
+         // The server's half of every join and leave, for a log to tell a request from its answer.
+         debug!(
+diff --git a/crates/benilla-app/src/webbridge/act.rs b/crates/benilla-app/src/webbridge/act.rs
+index 7684ddd9..5fe9bf7b 100644
+--- a/crates/benilla-app/src/webbridge/act.rs
++++ b/crates/benilla-app/src/webbridge/act.rs
+@@ -1,12 +1,16 @@
+-//! The bridge's world verbs (`target`, `interact`, `moveto`, `stop`, `path`). Not in the 3.3.5a
+-//! client yet: each is answered `{id, op, ok: false, reason}` so a page's promise resolves. The
+-//! touch layer needs none of them (it targets and interacts through binding commands and Lua).
++//! The bridge's world verbs (`target`, `interact`, `moveto`, `stop`, `path`). `moveto` and `stop`
++//! are a straight-line walk: the body turns to face the goal and holds MOVEFORWARD each frame
++//! until it is within [`ARRIVE_YD`], stops making headway ([`STUCK_SECS`]), or any movement
++//! command from the page cancels it. The rest are not in the 3.3.5a client yet and are answered
++//! `{id, op, ok: false, reason}` so a page's promise resolves. The touch layer needs none of them
++//! (it targets and interacts through binding commands and Lua).
+ 
+ use bevy::prelude::*;
+ 
+ use benilla_ui::script::plain::PlainValue;
+ 
+ use super::{BridgeInput, BridgeOutbox};
++use crate::player::Player;
+ 
+ #[derive(Debug, Clone, PartialEq)]
+ #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))] // only the page's queue builds them
+@@ -38,29 +42,208 @@ pub(crate) fn parse_guid(s: &str) -> Option<u64> {
+     u64::from_str_radix(t, 16).ok()
+ }
+ 
++/// The command the walk holds.
++pub(super) const WALK_COMMAND: &str = "MOVEFORWARD";
++/// A walk ends this close to its goal (yd, on the ground plane).
++pub(crate) const ARRIVE_YD: f32 = 1.0;
++/// A walk that gets no [`HEADWAY_YD`] closer for this long is blocked and ends.
++pub(crate) const STUCK_SECS: f64 = 3.0;
++/// The headway that resets the stuck clock.
++const HEADWAY_YD: f32 = 0.5;
++
++/// The walk in flight.
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub(crate) struct Walk {
++    /// The goal, WoW coordinates.
++    pub(crate) to: [f32; 3],
++    /// The nearest it has been, and when.
++    best: f32,
++    best_at: f64,
++}
++
++/// The bridge's walk, read by the snapshot (`self.autoMove`).
++#[derive(Resource, Default)]
++pub(crate) struct BridgeWalk {
++    pub(crate) walk: Option<Walk>,
++    /// Why the last walk ended, for the snapshot (`self.autoMoveEnd`).
++    pub(crate) ended: Option<&'static str>,
++}
++
++/// One steering step: the turn (radians, positive left) that faces `to` from `from` with facing
++/// `facing` (WoW orientation, counter-clockwise from +X north), and the ground distance left.
++pub(crate) fn steer(from: [f32; 3], facing: f32, to: [f32; 3]) -> (f32, f32) {
++    let (dx, dy) = (to[0] - from[0], to[1] - from[1]);
++    let dist = dx.hypot(dy);
++    let mut turn = dy.atan2(dx) - facing;
++    while turn > std::f32::consts::PI {
++        turn -= std::f32::consts::TAU;
++    }
++    while turn <= -std::f32::consts::PI {
++        turn += std::f32::consts::TAU;
++    }
++    (turn, dist)
++}
++
++/// What a walk does this frame.
++#[derive(Debug, PartialEq)]
++pub(crate) enum WalkStep {
++    /// Turn by this much and keep walking.
++    Go(f32),
++    /// Done: arrived or blocked.
++    End(&'static str),
++}
++
++impl Walk {
++    pub(crate) fn new(to: [f32; 3], now: f64) -> Self {
++        Self {
++            to,
++            best: f32::MAX,
++            best_at: now,
++        }
++    }
++
++    /// The step from `from`, facing `facing`, at `now`.
++    pub(crate) fn step(&mut self, from: [f32; 3], facing: f32, now: f64) -> WalkStep {
++        let (turn, dist) = steer(from, facing, self.to);
++        if dist <= ARRIVE_YD {
++            return WalkStep::End("arrived");
++        }
++        if dist < self.best - HEADWAY_YD || self.best == f32::MAX {
++            self.best = dist;
++            self.best_at = now;
++        } else if now - self.best_at > STUCK_SECS {
++            return WalkStep::End("blocked");
++        }
++        WalkStep::Go(turn)
++    }
++}
++
++fn answer(out: &mut BridgeOutbox, id: u32, op: &ActOp, ok: bool, reason: Option<&str>) {
++    let mut m = vec![
++        ("id".into(), PlainValue::Num(f64::from(id))),
++        ("op".into(), PlainValue::Str(op.name().into())),
++        ("ok".into(), PlainValue::Bool(ok)),
++    ];
++    if let Some(r) = reason {
++        m.push(("reason".into(), PlainValue::Str(r.into())));
++    }
++    out.push("act", PlainValue::Map(m));
++}
++
+ fn refuse(input: &mut BridgeInput, out: &mut BridgeOutbox, reason: &str) {
+     for (id, op) in input.act.drain(..) {
+-        out.push(
+-            "act",
+-            PlainValue::Map(vec![
+-                ("id".into(), PlainValue::Num(f64::from(id))),
+-                ("op".into(), PlainValue::Str(op.name().into())),
+-                ("ok".into(), PlainValue::Bool(false)),
+-                ("reason".into(), PlainValue::Str(reason.into())),
+-            ]),
+-        );
++        answer(out, id, &op, false, Some(reason));
+     }
+ }
+ 
+-pub(crate) fn run_object_ops(mut input: ResMut<BridgeInput>, mut out: ResMut<BridgeOutbox>) {
++/// Answer this frame's verbs: a walk starts or stops, the rest are refused.
++pub(crate) fn run_object_ops(
++    mut input: ResMut<BridgeInput>,
++    mut out: ResMut<BridgeOutbox>,
++    mut walk: ResMut<BridgeWalk>,
++    player: Option<Res<Player>>,
++    time: Res<Time<Real>>,
++) {
+     let _ = input.auto_loot_restore.take();
+-    refuse(&mut input, &mut out, "not supported by this client yet");
++    let now = time.elapsed_secs_f64();
++    for (id, op) in std::mem::take(&mut input.act) {
++        match op {
++            ActOp::MoveTo(to) => {
++                if player.as_deref().is_some_and(|p| p.active) {
++                    walk.walk = Some(Walk::new(to, now));
++                    walk.ended = None;
++                    answer(&mut out, id, &op, true, None);
++                } else {
++                    answer(&mut out, id, &op, false, Some("no character to walk"));
++                }
++            }
++            ActOp::Stop => {
++                if walk.walk.take().is_some() {
++                    walk.ended = Some("stopped");
++                    input.end_walk();
++                }
++                answer(&mut out, id, &op, true, None);
++            }
++            _ => answer(&mut out, id, &op, false, Some("not supported by this client yet")),
++        }
++    }
+ }
+ 
+-pub(crate) fn run_move_ops() {}
++/// Steer the walk: face the goal and hold [`WALK_COMMAND`], or let go once it ends.
++pub(crate) fn run_move_ops(
++    mut input: ResMut<BridgeInput>,
++    mut walk: ResMut<BridgeWalk>,
++    player: Option<ResMut<Player>>,
++    time: Res<Time<Real>>,
++) {
++    if input.take_walk_cancel() {
++        if walk.walk.take().is_some() {
++            walk.ended = Some("cancelled");
++            input.end_walk();
++        }
++        return;
++    }
++    let Some(w) = walk.walk.as_mut() else {
++        return;
++    };
++    let Some(mut player) = player.filter(|p| p.active) else {
++        walk.walk = None;
++        walk.ended = Some("no character");
++        input.end_walk();
++        return;
++    };
++    let from = benilla_assets::coords::bevy_to_wow(player.pos);
++    match w.step(from, player.facing(), time.elapsed_secs_f64()) {
++        WalkStep::Go(turn) => {
++            player.turn_aim(turn);
++            input.hold_walk();
++        }
++        WalkStep::End(why) => {
++            walk.walk = None;
++            walk.ended = Some(why);
++            input.end_walk();
++        }
++    }
++}
+ 
+ pub(crate) fn run_path_ops() {}
+ 
+-pub(crate) fn refuse_world_ops(mut input: ResMut<BridgeInput>, mut out: ResMut<BridgeOutbox>) {
++pub(crate) fn refuse_world_ops(
++    mut input: ResMut<BridgeInput>,
++    mut out: ResMut<BridgeOutbox>,
++    mut walk: ResMut<BridgeWalk>,
++) {
++    if walk.walk.take().is_some() {
++        walk.ended = Some("left the world");
++        input.end_walk();
++    }
+     refuse(&mut input, &mut out, "not in the world");
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn the_walk_turns_to_face_the_goal_and_ends_on_arrival() {
++        // Facing north (+X), a goal due west (+Y) is a quarter turn left.
++        let (turn, dist) = steer([0.0, 0.0, 0.0], 0.0, [0.0, 10.0, 0.0]);
++        assert!((turn - std::f32::consts::FRAC_PI_2).abs() < 1e-5);
++        assert!((dist - 10.0).abs() < 1e-5);
++        // Facing west, a goal due east is a half turn, wrapped into (-π, π].
++        let (turn, _) = steer([0.0, 0.0, 0.0], std::f32::consts::FRAC_PI_2, [0.0, -5.0, 0.0]);
++        assert!((turn.abs() - std::f32::consts::PI).abs() < 1e-5);
++        let mut w = Walk::new([5801.9, 634.2, 647.6], 0.0);
++        assert!(matches!(w.step([5790.0, 634.2, 647.6], 0.0, 0.0), WalkStep::Go(t) if t.abs() < 1e-4));
++        assert_eq!(w.step([5801.5, 634.0, 647.6], 0.0, 1.0), WalkStep::End("arrived"));
++    }
++
++    #[test]
++    fn a_walk_that_makes_no_headway_ends_blocked() {
++        let mut w = Walk::new([100.0, 0.0, 0.0], 0.0);
++        assert!(matches!(w.step([0.0, 0.0, 0.0], 0.0, 0.0), WalkStep::Go(_)));
++        assert!(matches!(w.step([10.0, 0.0, 0.0], 0.0, 2.0), WalkStep::Go(_)), "headway");
++        assert!(matches!(w.step([10.2, 0.0, 0.0], 0.0, 4.5), WalkStep::Go(_)));
++        assert_eq!(w.step([10.2, 0.0, 0.0], 0.0, 5.1), WalkStep::End("blocked"));
++    }
++}
+diff --git a/crates/benilla-app/src/webbridge/mod.rs b/crates/benilla-app/src/webbridge/mod.rs
+index f09088e3..477f892d 100644
+--- a/crates/benilla-app/src/webbridge/mod.rs
++++ b/crates/benilla-app/src/webbridge/mod.rs
+@@ -176,12 +176,38 @@ pub(crate) struct BridgeInput {
+     auto_loot_restore: Option<(bool, u8)>,
+     /// Drop every synthetic latch this frame (a `release`, or the hook object vanishing).
+     drop_holds: bool,
++    /// The `moveto` walk holds [`act::WALK_COMMAND`] here.
++    walk_holding: bool,
++    /// A page movement command arrived during a walk: it ends the walk.
++    walk_cancel: bool,
+ }
+ 
+ impl BridgeInput {
++    /// The walk holds its command, re-asserted each frame like any page hold.
++    pub(crate) fn hold_walk(&mut self) {
++        self.walk_holding = true;
++        self.held.insert(act::WALK_COMMAND.to_string());
++    }
++
++    /// The walk ended: its command is let go.
++    pub(crate) fn end_walk(&mut self) {
++        if std::mem::take(&mut self.walk_holding) && self.held.remove(act::WALK_COMMAND) {
++            self.released.push(act::WALK_COMMAND.to_string());
++        }
++    }
++
++    /// Whether a page movement command cancelled the walk since the last ask.
++    pub(crate) fn take_walk_cancel(&mut self) -> bool {
++        std::mem::take(&mut self.walk_cancel)
++    }
++
+     /// Take one parsed command in. Names are checked against the VM's table when they run
+     /// ([`apply_synth_input`]); an unknown one is reported once (an `error` event) and dropped.
+     pub(crate) fn apply(&mut self, cmd: BridgeCommand) {
++        if matches!(cmd, BridgeCommand::Hold { .. } | BridgeCommand::Release) && self.walk_holding {
++            // "Cancelled by any movement command" (bridge.js `moveTo`).
++            self.walk_cancel = true;
++        }
+         match cmd {
+             BridgeCommand::Hold { cmd, down } => {
+                 if down {
+@@ -288,6 +314,7 @@ impl Plugin for WebBridgePlugin {
+         }
+         app.init_resource::<BridgeConfig>()
+             .init_resource::<BridgeInput>()
++            .init_resource::<act::BridgeWalk>()
+             .init_resource::<BridgeOutbox>()
+             .init_resource::<BridgeMemo>()
+             .init_non_send_resource::<sink::WakeHook>()
+diff --git a/crates/benilla-app/src/webbridge/snapshot.rs b/crates/benilla-app/src/webbridge/snapshot.rs
+index 98ab6781..a3b7f3c3 100644
+--- a/crates/benilla-app/src/webbridge/snapshot.rs
++++ b/crates/benilla-app/src/webbridge/snapshot.rs
+@@ -18,6 +18,8 @@ pub(crate) struct BridgeReadout<'w, 's> {
+     player: Option<Res<'w, crate::player::Player>>,
+     map: Option<Res<'w, benilla_world::world_map::CurrentMap>>,
+     time: Res<'w, Time<Real>>,
++    /// The `moveto` walk, for `autoMove`.
++    walk: Option<Res<'w, super::act::BridgeWalk>>,
+     /// The last snapshot's position and time, for `moving`/`speed`.
+     last: Local<'s, Option<(Vec3, f64)>>,
+ }
+@@ -76,6 +78,17 @@ impl BridgeReadout<'_, '_> {
+                 ("facing".into(), num(p.facing())),
+                 ("moving".into(), PlainValue::Bool(speed > 0.05)),
+                 ("speed".into(), num(speed)),
++                (
++                    "autoMove".into(),
++                    PlainValue::Bool(self.walk.as_deref().is_some_and(|w| w.walk.is_some())),
++                ),
++                (
++                    "autoMoveEnd".into(),
++                    self.walk
++                        .as_deref()
++                        .and_then(|w| w.ended)
++                        .map_or(PlainValue::Null, |e| PlainValue::Str(e.into())),
++                ),
+             ])
+         });
+         PlainValue::Map(vec![
+diff --git a/crates/benilla-assets/src/web_read.rs b/crates/benilla-assets/src/web_read.rs
+index 6e6bf497..38487896 100644
+--- a/crates/benilla-assets/src/web_read.rs
++++ b/crates/benilla-assets/src/web_read.rs
+@@ -29,7 +29,8 @@ pub(crate) fn may_exist(internal: &str) -> bool {
+ pub(crate) enum Pending {
+     Absent,
+     Ready(Vec<u8>),
+-    Fetch(js_sys::Promise),
++    /// The request in flight and its URL, for a retry.
++    Fetch(js_sys::Promise, String),
+ }
+ 
+ /// Start reading `internal` now.
+@@ -46,30 +47,114 @@ pub(crate) fn start(internal: &str) -> Pending {
+         return Pending::Ready(bytes);
+     }
+     match web_sys::window() {
+-        Some(w) => Pending::Fetch(w.fetch_with_str(&url)),
++        Some(w) => Pending::Fetch(w.fetch_with_str(&url), url),
+         None => Pending::Absent,
+     }
+ }
+ 
++/// What one read came back with.
++pub(crate) enum Body {
++    Bytes(Vec<u8>),
++    /// Not in the archive chain: the name index says so, or the host answered 404.
++    Absent,
++    /// The request failed (network, 5xx) on every try: the file exists but did not arrive.
++    Unreachable,
++}
++
++/// Re-tries for a failed request, after the page's own `/data` retries (`window.__wuRetries`):
++/// a dropped WMO group used to be skipped for good, a hole in a city floor.
++const RETRY_DELAYS_MS: [i32; 3] = [400, 1200, 3000];
++
++/// Give the browser its event loop back (a `setTimeout(0)` macrotask, not a microtask), so a
++/// frame can render between slices of a long loader.
++pub(crate) async fn yield_to_browser() {
++    sleep_ms(0).await;
++}
++
++/// Time-slicing for a loader's long synchronous loop: [`Self::tick`] yields to the browser once
++/// [`SLICE_MS`] of work has run since the last yield.
++pub(crate) struct Slicer(bevy::platform::time::Instant);
++
++/// The work a loader does between yields: a fraction of a 60 Hz frame.
++const SLICE_MS: u128 = 8;
++
++impl Slicer {
++    pub(crate) fn new() -> Self {
++        Self(bevy::platform::time::Instant::now())
++    }
++
++    pub(crate) async fn tick(&mut self) {
++        if self.0.elapsed().as_millis() >= SLICE_MS {
++            yield_to_browser().await;
++            self.0 = bevy::platform::time::Instant::now();
++        }
++    }
++}
++
++async fn sleep_ms(ms: i32) {
++    let p = js_sys::Promise::new(&mut |resolve, _| {
++        match web_sys::window() {
++            Some(w) => {
++                let _ = w.set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms);
++            }
++            None => {
++                let _ = resolve.call0(&wasm_bindgen::JsValue::NULL);
++            }
++        }
++    });
++    let _ = wasm_bindgen_futures::JsFuture::from(p).await;
++}
++
++/// One `fetch` of `url`: the body, a definite absence (404), or a failure worth another try.
++async fn fetch_once(p: js_sys::Promise) -> Body {
++    let Ok(resp) = wasm_bindgen_futures::JsFuture::from(p).await else {
++        return Body::Unreachable;
++    };
++    let Ok(resp) = resp.dyn_into::<web_sys::Response>() else {
++        return Body::Unreachable;
++    };
++    if resp.status() == 404 {
++        return Body::Absent;
++    }
++    if !resp.ok() {
++        return Body::Unreachable;
++    }
++    let Ok(buf) = resp.array_buffer() else {
++        return Body::Unreachable;
++    };
++    match wasm_bindgen_futures::JsFuture::from(buf).await {
++        Ok(buf) => Body::Bytes(js_sys::Uint8Array::new(&buf).to_vec()),
++        Err(_) => Body::Unreachable,
++    }
++}
++
+ impl Pending {
+-    /// The body, `None` for a missing file or a failed request.
++    /// The body, `None` for a missing file or a request that failed every retry.
+     pub(crate) async fn bytes(self) -> Option<Vec<u8>> {
++        match self.body().await {
++            Body::Bytes(b) => Some(b),
++            Body::Absent | Body::Unreachable => None,
++        }
++    }
++
++    /// The body, telling a missing file from one that failed to arrive. A failed request is
++    /// re-sent after [`RETRY_DELAYS_MS`].
++    pub(crate) async fn body(self) -> Body {
+         match self {
+-            Pending::Absent => None,
+-            Pending::Ready(b) => Some(b),
+-            Pending::Fetch(p) => {
+-                let resp: web_sys::Response = wasm_bindgen_futures::JsFuture::from(p)
+-                    .await
+-                    .ok()?
+-                    .dyn_into()
+-                    .ok()?;
+-                if !resp.ok() {
+-                    return None;
++            Pending::Absent => Body::Absent,
++            Pending::Ready(b) => Body::Bytes(b),
++            Pending::Fetch(p, url) => {
++                let mut got = fetch_once(p).await;
++                for delay in RETRY_DELAYS_MS {
++                    if !matches!(got, Body::Unreachable) {
++                        break;
++                    }
++                    bevy::log::warn!("data: {url} failed; trying again in {delay} ms");
++                    sleep_ms(delay).await;
++                    let Some(w) = web_sys::window() else { break };
++                    got = fetch_once(w.fetch_with_str(&url)).await;
+                 }
+-                let buf = wasm_bindgen_futures::JsFuture::from(resp.array_buffer().ok()?)
+-                    .await
+-                    .ok()?;
+-                Some(js_sys::Uint8Array::new(&buf).to_vec())
++                got
+             }
+         }
+     }
+@@ -84,3 +169,14 @@ pub(crate) async fn read_all(names: &[String]) -> Vec<Option<Vec<u8>>> {
+     }
+     out
+ }
++
++/// [`read_all`], keeping each name's [`Body`] so a caller can fail on a file that exists but
++/// did not arrive.
++pub(crate) async fn read_all_bodies(names: &[String]) -> Vec<Body> {
++    let pending: Vec<Pending> = names.iter().map(|n| start(n)).collect();
++    let mut out = Vec::with_capacity(pending.len());
++    for p in pending {
++        out.push(p.body().await);
++    }
++    out
++}
+diff --git a/crates/benilla-assets/src/wmo.rs b/crates/benilla-assets/src/wmo.rs
+index 80318e02..d8c2cf9d 100644
+--- a/crates/benilla-assets/src/wmo.rs
++++ b/crates/benilla-assets/src/wmo.rs
+@@ -421,14 +421,36 @@ impl AssetLoader for WmoModelLoader {
+             (0..root.group_count()).map(|_| None).collect();
+         // The browser requests every group at once (`web_read`), not one round trip per group (a
+         // 300-group city was a minute at 190 ms); the loop below takes them in index order.
++        // A group that exists but did not arrive (after the page's and the reader's retries)
++        // fails the whole root, which the streamer then re-requests: skipping it left a city with
++        // a hole in its floor and no collider there, and the reveal waited on nothing.
+         #[cfg(target_arch = "wasm32")]
+         let mut pre_groups: Vec<Option<Vec<u8>>> = {
+             let names: Vec<String> = (0..root.group_count())
+                 .map(|gi| format!("{stem}_{gi:03}.wmo"))
+                 .collect();
+-            crate::web_read::read_all(&names).await
++            let mut out = Vec::with_capacity(names.len());
++            for (name, body) in names.iter().zip(crate::web_read::read_all_bodies(&names).await) {
++                match body {
++                    crate::web_read::Body::Bytes(b) => out.push(Some(b)),
++                    crate::web_read::Body::Absent => out.push(None),
++                    crate::web_read::Body::Unreachable => {
++                        return Err(std::io::Error::other(format!(
++                            "WMO group {name} did not arrive"
++                        )));
++                    }
++                }
++            }
++            out
+         };
++        // The browser runs this loader on the main thread: a city's few hundred groups parsed in
++        // one go froze the page for seconds (Dalaran's arrival). Sliced, a frame renders every
++        // ~8 ms of parsing.
++        #[cfg(target_arch = "wasm32")]
++        let mut slicer = crate::web_read::Slicer::new();
+         for gi in 0..root.group_count() {
++            #[cfg(target_arch = "wasm32")]
++            slicer.tick().await;
+             #[cfg(target_arch = "wasm32")]
+             let got = pre_groups.get_mut(gi as usize).and_then(Option::take);
+             #[cfg(not(target_arch = "wasm32"))]
+diff --git a/crates/benilla-formats/src/chain.rs b/crates/benilla-formats/src/chain.rs
+index 67ef8a32..7b47d188 100644
+--- a/crates/benilla-formats/src/chain.rs
++++ b/crates/benilla-formats/src/chain.rs
+@@ -373,20 +373,31 @@ impl Chain {
+     /// The chain's name index, fetched and parsed on first use (see the struct doc). `None` when
+     /// the host has no working `/data/__index`, in which case every caller falls back to the
+     /// per-name request it made before the index existed.
+-    fn index(&self) -> Option<&std::collections::HashSet<String>> {
++    fn index(&self) -> Option<std::sync::Arc<std::collections::HashSet<String>>> {
+         // One per page, not per `Chain`: every chain of a page reads the same host, and the
+         // client opens several (the world's, the async asset reader's, tools'), each of which
+-        // parsed the multi-megabyte list again.
+-        static SHARED: std::sync::OnceLock<Option<std::collections::HashSet<String>>> =
+-            std::sync::OnceLock::new();
++        // parsed the multi-megabyte list again. Keyed by the page's index generation
++        // (`globalThis.__wenilla_index_gen`): a player folder mounted mid-game bumps it, and the
++        // next ask re-reads `/data/__index`, which the page's store answers with the union.
++        type Shared = Option<(u32, Option<std::sync::Arc<std::collections::HashSet<String>>>)>;
++        static SHARED: std::sync::Mutex<Shared> = std::sync::Mutex::new(None);
+         let _ = &self.index;
+-        SHARED
+-            .get_or_init(|| {
+-                let bytes = crate::web::fetch_sync(&format!("{}/__index", self.base)).ok()?;
+-                let names: Vec<String> = serde_json::from_slice(&bytes).ok()?;
+-                Some(names.iter().map(|n| Self::index_key(n)).collect())
+-            })
+-            .as_ref()
++        let gen = crate::web::index_gen();
++        let mut shared = SHARED.lock().unwrap_or_else(|e| e.into_inner());
++        if let Some((g, set)) = shared.as_ref() {
++            if *g == gen {
++                return set.clone();
++            }
++        }
++        let set = (|| {
++            let bytes = crate::web::fetch_sync(&format!("{}/__index", self.base)).ok()?;
++            let names: Vec<String> = serde_json::from_slice(&bytes).ok()?;
++            Some(std::sync::Arc::new(
++                names.iter().map(|n| Self::index_key(n)).collect(),
++            ))
++        })();
++        *shared = Some((gen, set.clone()));
++        set
+     }
+ 
+     /// Whether the web host has `name` — from the name index when it loaded, else a `HEAD`
+diff --git a/crates/benilla-formats/src/web.rs b/crates/benilla-formats/src/web.rs
+index 333d8656..d348289f 100644
+--- a/crates/benilla-formats/src/web.rs
++++ b/crates/benilla-formats/src/web.rs
+@@ -106,6 +106,10 @@ export function take_prefetched(url) {
+     }
+     return new Uint8Array(body);
+ }
++// The page's name-index generation: bumped when a player folder is mounted over the slice.
++export function index_gen() {
++    return (globalThis.__wenilla_index_gen | 0) >>> 0;
++}
+ export function sync_get(url) {
+     const t0 = performance.now();
+     const x = new XMLHttpRequest();
+@@ -161,6 +165,8 @@ export function slow(msg) {
+ "#)]
+     extern "C" {
+         fn take_prefetched(url: &str) -> Option<js_sys::Uint8Array>;
++        /// `globalThis.__wenilla_index_gen`, 0 until the page bumps it.
++        pub fn index_gen() -> u32;
+         #[wasm_bindgen(catch)]
+         fn sync_get(url: &str) -> Result<JsValue, JsValue>;
+         fn now_ms() -> f64;
+@@ -366,6 +372,6 @@ pub fn host_lacks(name: &str) -> bool {
+ 
+ #[cfg(target_arch = "wasm32")]
+ pub use wasm::{
+-    data_base, exists_sync, fetch_sync, prefetch_into_store, read_stats, ready_or_prefetch, stored,
+-    trace, ReadStats,
++    data_base, exists_sync, fetch_sync, index_gen, prefetch_into_store, read_stats,
++    ready_or_prefetch, stored, trace, ReadStats,
+ };
+diff --git a/crates/benilla-formats/src/wmo_area.rs b/crates/benilla-formats/src/wmo_area.rs
+index d24b5f4f..6615f833 100644
+--- a/crates/benilla-formats/src/wmo_area.rs
++++ b/crates/benilla-formats/src/wmo_area.rs
+@@ -42,6 +42,18 @@ pub struct WmoAreaCatalog {
+ }
+ 
+ impl WmoAreaCatalog {
++    /// A catalog from rows, for a dependent crate's tests: group rows by `(WMOID, NameSetID,
++    /// WMOGroupID)`, whole-WMO rows by `(WMOID, NameSetID)`.
++    pub fn from_parts(
++        groups: impl IntoIterator<Item = ((u32, u32, u32), WmoArea)>,
++        defaults: impl IntoIterator<Item = ((u32, u32), WmoArea)>,
++    ) -> Self {
++        Self {
++            groups: groups.into_iter().collect(),
++            defaults: defaults.into_iter().collect(),
++        }
++    }
++
+     /// The hit group's own row by exact key, the zone-text chain's second query (`0x69d8f0`, one
+     /// bsearch at `0x7ccd30` with no name-set retry, default fallback or overlay): its name, if
+     /// any, refills the subzone slot.
+diff --git a/crates/benilla-protocol/src/messages/opcode.rs b/crates/benilla-protocol/src/messages/opcode.rs
+index 7772f342..d2a7b740 100644
+--- a/crates/benilla-protocol/src/messages/opcode.rs
++++ b/crates/benilla-protocol/src/messages/opcode.rs
+@@ -417,6 +417,9 @@ pub const CMSG_CAST_SPELL: u16 = 0x012E; // 302
+ /// before the local cancel (`0x6095b8`).
+ pub const CMSG_CANCEL_CAST: u16 = 0x012F; // 303
+ pub const CMSG_CANCEL_AURA: u16 = 0x0136; // 310
++/// Leave the mount (3.3.5a `Dismount()`, the auto-dismount before a ground cast): an empty body.
++/// AzerothCore `HandleCancelMountAuraOpcode` ignores it while not mounted or on a taxi.
++pub const CMSG_CANCEL_MOUNT_AURA: u16 = 0x0375; // 885
+ /// Send the summoned companion home (`Spell_C_CancelAura` `0x80303d`): the critter's guid.
+ pub const CMSG_DISMISS_CRITTER: u16 = 0x048D; // 1165
+ /// Cancel our channel: a `u32` spell id the server ignores (`Spell.h:69`) and 1.12 still sends.
+diff --git a/crates/benilla-protocol/src/world/writer/spells.rs b/crates/benilla-protocol/src/world/writer/spells.rs
+index ad0eef98..83a6fec1 100644
+--- a/crates/benilla-protocol/src/world/writer/spells.rs
++++ b/crates/benilla-protocol/src/world/writer/spells.rs
+@@ -24,6 +24,12 @@ impl WorldWriter {
+         self.send(opcode::CMSG_CANCEL_AURA, &messages::cancel_aura(spell_id))
+     }
+ 
++    /// `CMSG_CANCEL_MOUNT_AURA` (0x375): dismount, an empty body. No reply: the mount display id
++    /// clears by a `UNIT_FIELD_MOUNTDISPLAYID` delta.
++    pub fn cancel_mount_aura(&mut self) -> Result<()> {
++        self.send(opcode::CMSG_CANCEL_MOUNT_AURA, &[])
++    }
++
+     /// `CMSG_DISMISS_CRITTER`: send the companion out home. No reply: `UNIT_FIELD_CRITTER` clears.
+     pub fn dismiss_critter(&mut self, critter_guid: u64) -> Result<()> {
+         self.send(
+diff --git a/crates/benilla-ui/src/script/calls.rs b/crates/benilla-ui/src/script/calls.rs
+index 4f76c4f5..253c0868 100644
+--- a/crates/benilla-ui/src/script/calls.rs
++++ b/crates/benilla-ui/src/script/calls.rs
+@@ -33,6 +33,8 @@ pub enum ScriptCall {
+     SpellStopTargeting,
+     /// `SpellStopCasting()` (`0x6e6e80`), made with something to stop.
+     SpellStopCasting,
++    /// `Dismount()` (3.3.5a): `CMSG_CANCEL_MOUNT_AURA`, which the server ignores while not mounted.
++    Dismount,
+     /// `CastSpell(index, "spell" [, onSelf])` (`0x541250`), `CastSpellByName(name [, unit])`
+     /// (`0x540310`) and `CastSpellByID(id [, unit])` (`0x53e060`), aimed at `at`. `via_book`: the
+     /// book's dispatcher `0x53bc40`, whose cancel forks a re-press runs into; a `!name` and
+diff --git a/crates/benilla-ui/src/script/input_verbs.rs b/crates/benilla-ui/src/script/input_verbs.rs
+index 6ec83185..c807906d 100644
+--- a/crates/benilla-ui/src/script/input_verbs.rs
++++ b/crates/benilla-ui/src/script/input_verbs.rs
+@@ -397,6 +397,15 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
+             Ok(())
+         })?,
+     )?;
++    // `Dismount()` (3.3.5a): leaves the mount through the server, ungated; the server ignores it
++    // when there is no mount or the ride is a taxi.
++    g.set(
++        "Dismount",
++        lua.create_function(|lua, _: MultiValue| {
++            push_call(lua, ScriptCall::Dismount);
++            Ok(())
++        })?,
++    )?;
+     // `ToggleSheath()` resolves the active player and acts on it, ungated.
+     g.set(
+         "ToggleSheath",
+diff --git a/crates/benilla-ui/src/script/wrath_compat.lua b/crates/benilla-ui/src/script/wrath_compat.lua
+index 61c7f6e2..2620ea6e 100644
+--- a/crates/benilla-ui/src/script/wrath_compat.lua
++++ b/crates/benilla-ui/src/script/wrath_compat.lua
+@@ -125,7 +125,7 @@ for _, n in ipairs({
+     "EquipmentManagerIgnoreSlotForSave", "ExpandCurrencyList", "SetCurrencyUnused",
+     "SetCurrencyBackpack", "SetCurrentTitle", "PlaceGlyphInSocket", "RemoveGlyphFromSocket",
+     "SetTracking", "RefreshLFGList", "SearchLFGJoin", "SearchLFGLeave", "SearchLFGSort",
+-    "UnitSwitchToVehicleSeat", "VehicleExit", "Dismount", "AddMute", "ClearPartyAssignment",
++    "UnitSwitchToVehicleSeat", "VehicleExit", "AddMute", "ClearPartyAssignment",
+     "SetPartyAssignment", "GuildInvite", "WithdrawGuildBankMoney", "ReportPlayerIsPVPAFK",
+     "RespondInstanceLock", "ContainerRefundItemPurchase", "CancelItemTempEnchantment",
+ }) do def(n, noop) end
+@@ -243,12 +243,18 @@ def("GetItemCooldown", function(item)
+ end)
+ def("IsUsableItem", function(item) return GetItemCount(item) > 0 and 1 or nil, nil end)
+ def("IsItemInRange", none)
++-- By id, link or name. A name the item cache has not seen (`GetItemInfo` answers only cached
++-- items) is matched against the bag links' own `[Name]`, any case, so `UseItemByName("Hearthstone")`
++-- works on a fresh session.
+ def("UseItemByName", function(item)
+     local want = itemId(item)
+-    if not want then return end
++    local name = type(item) == "string" and not want and item:lower() or nil
++    if not want and not name then return end
+     for bag = 0, 4 do
+         for slot = 1, GetContainerNumSlots(bag) do
+-            if idFromLink(GetContainerItemLink(bag, slot)) == want then
++            local link = GetContainerItemLink(bag, slot)
++            if (want and idFromLink(link) == want)
++                or (name and type(link) == "string" and (link:match("%[(.-)%]") or ""):lower() == name) then
+                 return UseContainerItem(bag, slot)
+             end
+         end
+diff --git a/crates/benilla-world/src/terrain_stream.rs b/crates/benilla-world/src/terrain_stream.rs
+index b6b9ccbc..1b1b0f49 100644
+--- a/crates/benilla-world/src/terrain_stream.rs
++++ b/crates/benilla-world/src/terrain_stream.rs
+@@ -206,6 +206,11 @@ pub struct WorldLoadProgress {
+     pub merge_pending: usize,
+     /// Focus-neighbourhood placements not yet spawned.
+     pub placements_pending: usize,
++    /// The WMO roots among [`Self::placements_pending`]: a building in the focus tile or its 8
++    /// neighbours not yet up, failed loads being re-requested included. Its floor may be the one
++    /// under the body, so neither the loading cover's stall rule nor the settle hold's gives up on
++    /// it.
++    pub wmo_pending: usize,
+     /// Retained-pass regions spawned but not yet drawable (`StaticGx::undrawn_regions`).
+     pub gx_pending: usize,
+     /// The focus tile these facts are about. The settle release refuses on a mismatch with the
+@@ -403,6 +408,7 @@ impl Plugin for TerrainPlugin {
+             .init_resource::<TerrainStreamer>()
+             .init_resource::<StreamActivity>()
+             .init_resource::<Placements>()
++            .init_resource::<spawn::LoadRetries>()
+             .init_resource::<HullWelds>()
+             .init_resource::<StaticMerge>()
+             .init_resource::<crate::model_forms::ModelForms>()
+@@ -879,6 +885,7 @@ fn stream_terrain(
+             // The focus neighbourhood's placements count too, each up once its model and its WMO
+             // props have spawned; a tile not yet up holds `scene_ready` down itself.
+             let mut near_pending = 0usize;
++            let mut near_wmo_pending = 0usize;
+             let mut near_tile_missing = false;
+             for dx in -1..=1i32 {
+                 for dy in -1..=1i32 {
+@@ -902,6 +909,9 @@ fn stream_terrain(
+                                         p.total += 1;
+                                         p.ready += usize::from(pl.spawned);
+                                         near_pending += usize::from(!pl.spawned);
++                                        near_wmo_pending += usize::from(
++                                            !pl.spawned && matches!(pl.model, ModelHandle::Wmo(_)),
++                                        );
+                                     }
+                                     for d in pl.doodads.iter().filter(|d| near_gate(d.transform)) {
+                                         p.total += 1;
+@@ -916,6 +926,7 @@ fn stream_terrain(
+                 }
+             }
+             p.placements_pending = near_pending;
++            p.wmo_pending = near_wmo_pending;
+             // `focus_resident` already folds in the WDT gate and the global WMO's spawn.
+             p.scene_ready = p.focus_resident && !near_tile_missing && near_pending == 0;
+             // A WMO-only map counts its one placement, props included, which keeps `total > 0`.
+@@ -929,6 +940,8 @@ fn stream_terrain(
+                 p.scene_ready &= full;
+             }
+             p.complete = p.scene_ready && p.is_ready();
++        } else {
++            p.wmo_pending = 0;
+         }
+         // Spawned geometry that cannot draw yet is a hole in the reveal; published every frame.
+         p.gx_pending = staticgx
+diff --git a/crates/benilla-world/src/terrain_stream/collider.rs b/crates/benilla-world/src/terrain_stream/collider.rs
+index 8a45000c..5bb2d912 100644
+--- a/crates/benilla-world/src/terrain_stream/collider.rs
++++ b/crates/benilla-world/src/terrain_stream/collider.rs
+@@ -291,6 +291,60 @@ pub(super) fn impassable_wall_data(
+     (!tris.is_empty()).then_some((verts, tris))
+ }
+ 
++/// Triangle cap per collider build for one placement's hull. The browser builds a trimesh on the
++/// main thread at ~1 µs per triangle and a build is indivisible, so Dalaran's city WMO (313k
++/// camera and 727k walk triangles) froze a frame for 297 ms and 628 ms. Split into pieces of this
++/// size, each build is ~20-25 ms and the per-frame budget spreads them over frames.
++pub const SPLIT_MAX_TRIS: usize = 24_576;
++
++/// `(verts, tris)` cut into pieces of at most `max_tris` triangles, each with only the vertices
++/// its triangles use (indices rebased). The triangles keep their order, and a WMO's merged hull
++/// lists them group by group, so each piece stays one neighbourhood of the building. A hull at or
++/// under the cap comes back whole, untouched.
++pub fn split_collider_data(
++    verts: Vec<Vec3>,
++    tris: Vec<[u32; 3]>,
++    max_tris: usize,
++) -> Vec<(Vec<Vec3>, Vec<[u32; 3]>)> {
++    let max_tris = max_tris.max(1);
++    if tris.len() <= max_tris {
++        return vec![(verts, tris)];
++    }
++    // `stamp[v] == piece + 1` while `v` is in the current piece, so the remap never needs clearing.
++    let mut stamp = vec![0u32; verts.len()];
++    let mut remap = vec![0u32; verts.len()];
++    let mut out = Vec::with_capacity(tris.len().div_ceil(max_tris));
++    for (piece, chunk) in tris.chunks(max_tris).enumerate() {
++        let tag = piece as u32 + 1;
++        let mut pv: Vec<Vec3> = Vec::new();
++        let mut pt: Vec<[u32; 3]> = Vec::with_capacity(chunk.len());
++        for t in chunk {
++            let mut nt = [0u32; 3];
++            for (k, &v) in t.iter().enumerate() {
++                let vi = v as usize;
++                let Some(&p) = verts.get(vi) else {
++                    nt = [u32::MAX; 3];
++                    break;
++                };
++                if stamp[vi] != tag {
++                    stamp[vi] = tag;
++                    remap[vi] = pv.len() as u32;
++                    pv.push(p);
++                }
++                nt[k] = remap[vi];
++            }
++            // An out-of-range index (a malformed hull) drops its triangle, as parry would panic.
++            if nt[0] != u32::MAX {
++                pt.push(nt);
++            }
++        }
++        if !pt.is_empty() {
++            out.push((pv, pt));
++        }
++    }
++    out
++}
++
+ /// Builds a static trimesh [`Collider`] on the async compute pool, for [`finish_colliders`].
+ pub fn build_collider_task(verts: Vec<Vec3>, tris: Vec<[u32; 3]>) -> Task<Collider> {
+     #[cfg(target_arch = "wasm32")]
+@@ -575,6 +629,40 @@ mod tests {
+         app
+     }
+ 
++    #[test]
++    fn a_big_hull_splits_into_capped_pieces_with_the_same_triangles() {
++        let (verts, tris) = grid(40); // 40 chunks of 512 triangles
++        let total = tris.len();
++        let world_tris = |v: &[Vec3], t: &[[u32; 3]]| -> Vec<[[i64; 3]; 3]> {
++            t.iter()
++                .map(|t| t.map(|i| (v[i as usize] * 1000.0).round().as_i64vec3().to_array()))
++                .collect()
++        };
++        let before = world_tris(&verts, &tris);
++        let pieces = split_collider_data(verts.clone(), tris.clone(), 1000);
++        assert_eq!(pieces.len(), total.div_ceil(1000));
++        let mut after = Vec::new();
++        for (v, t) in &pieces {
++            assert!(t.len() <= 1000);
++            assert!(t.iter().flatten().all(|&i| (i as usize) < v.len()), "rebased indices");
++            assert!(v.len() <= t.len() * 3, "only the vertices the piece uses");
++            after.extend(world_tris(v, t));
++        }
++        assert_eq!(before, after, "same triangles, same order");
++        let whole = split_collider_data(verts, tris, total);
++        assert_eq!(whole.len(), 1, "at the cap the hull stays whole");
++        assert_eq!(whole[0].1.len(), total);
++    }
++
++    #[test]
++    fn a_split_drops_out_of_range_triangles_instead_of_panicking() {
++        let verts = vec![Vec3::ZERO, Vec3::X, Vec3::Y];
++        let tris = vec![[0, 1, 2], [0, 1, 9], [2, 1, 0]];
++        let pieces = split_collider_data(verts, tris, 1);
++        assert_eq!(pieces.len(), 2);
++        assert!(pieces.iter().all(|(_, t)| t.len() == 1));
++    }
++
+     /// Polled until done, not slept for: the timing is the pool's and is not asserted.
+     #[test]
+     fn a_finished_task_hands_its_shape_over_and_attaches() {
+diff --git a/crates/benilla-world/src/terrain_stream/queries.rs b/crates/benilla-world/src/terrain_stream/queries.rs
+index 68f79d28..c02ef3f8 100644
+--- a/crates/benilla-world/src/terrain_stream/queries.rs
++++ b/crates/benilla-world/src/terrain_stream/queries.rs
+@@ -118,6 +118,8 @@ pub(super) fn update_current_area(
+     adt_tiles: Res<Assets<AdtTile>>,
+     interior: Res<crate::wmo_portal::CurrentAreaInterior>,
+     wmo_areas: Option<Res<crate::wmo_portal::WmoAreas>>,
++    // `Option`: a harness without the portal plugin reads terrain areas only.
++    standing_in: Option<Res<crate::wmo_portal::CurrentWmoInterior>>,
+ ) {
+     let Some(wow) = focus.body_pos() else {
+         // No avatar: the area dies with the character session, or the next login reads this
+@@ -140,7 +142,21 @@ pub(super) fn update_current_area(
+             .map(|a| a.area_table_id)
+             .filter(|&id| id != 0)
+     });
+-    let found = interior_area.or_else(|| {
++    // Then any group under the feet, EXTERIOR included, by its exact `WMOAreaTable` row
++    // (`GetAreaID`'s map-object leg, AzerothCore's `GetWMOAreaTableEntryByTripple`): Dalaran's
++    // streets are exterior groups over Crystalsong Forest, and Runeweaver Square read as "Forlorn
++    // Woods". Exact rows only, never the whole-WMO default, so a city street without its own row
++    // keeps the terrain's subzone.
++    let standing_area = || {
++        let k = standing_in.as_ref()?.0?;
++        let cat = wmo_areas.as_ref()?;
++        (k.group_area_id != 0)
++            .then(|| cat.0.group_row(k.wmo_id, k.name_set, k.group_area_id))
++            .flatten()
++            .map(|a| a.area_table_id)
++            .filter(|&id| id != 0)
++    };
++    let found = interior_area.or_else(standing_area).or_else(|| {
+         let (tx, ty) = world_to_tile(wow[0], wow[1]);
+         streamer
+             .tiles
+@@ -208,6 +224,59 @@ mod tests {
+         assert_eq!(w.resource::<CurrentArea>().0, None);
+     }
+ 
++    fn row(area_table_id: u32) -> benilla_formats::WmoArea {
++        benilla_formats::WmoArea {
++            id: 1,
++            sound_provider: [0, 0],
++            ambience: 0,
++            zone_music: 0,
++            intro_sound: 0,
++            area_table_id,
++            name: String::new(),
++        }
++    }
++
++    /// Runeweaver Square: an exterior street group of the Dalaran WMO, over Crystalsong Forest
++    /// terrain. Its exact `WMOAreaTable` row names the area; a whole-WMO row alone never does.
++    #[test]
++    fn an_exterior_wmo_group_with_its_own_row_names_the_area() {
++        use crate::wmo_portal::{CurrentWmoInterior, WmoAreas, WmoInteriorKeys};
++        let mut w = bare_world();
++        w.insert_resource(crate::terrain_stream::ViewFocus::body(
++            [5801.9, 634.2, 647.6],
++            true,
++        ));
++        let keys = WmoInteriorKeys {
++            wmo_id: 4096,
++            name_set: 0,
++            group_area_id: 2000,
++        };
++        w.insert_resource(CurrentWmoInterior(Some(keys)));
++        w.insert_resource(WmoAreas(benilla_formats::WmoAreaCatalog::from_parts(
++            [((4096, 0, 2000), row(4613))],
++            [((4096, 0), row(4395))],
++        )));
++        w.run_system_once(update_current_area).unwrap();
++        assert_eq!(w.resource::<CurrentArea>().0, Some(4613));
++
++        // A group with no row of its own: the whole-WMO row is not an area answer.
++        let mut w2 = bare_world();
++        w2.insert_resource(crate::terrain_stream::ViewFocus::body(
++            [5801.9, 634.2, 647.6],
++            true,
++        ));
++        w2.insert_resource(CurrentWmoInterior(Some(WmoInteriorKeys {
++            group_area_id: 2001,
++            ..keys
++        })));
++        w2.insert_resource(WmoAreas(benilla_formats::WmoAreaCatalog::from_parts(
++            [((4096, 0, 2000), row(4613))],
++            [((4096, 0), row(4395))],
++        )));
++        w2.run_system_once(update_current_area).unwrap();
++        assert_eq!(w2.resource::<CurrentArea>().0, None, "no terrain, no exact row");
++    }
++
+     /// A recoverable disconnect keeps the avatar as the local puppet, and with it the area.
+     #[test]
+     fn a_body_that_survives_a_drop_keeps_its_area() {
+diff --git a/crates/benilla-world/src/terrain_stream/spawn/mod.rs b/crates/benilla-world/src/terrain_stream/spawn/mod.rs
+index 9dacb9e8..09157d45 100644
+--- a/crates/benilla-world/src/terrain_stream/spawn/mod.rs
++++ b/crates/benilla-world/src/terrain_stream/spawn/mod.rs
+@@ -10,7 +10,9 @@ use fx::{
+     emitter_fade, spawn_emitters_for, spawn_lights_for, spawn_ribbons_for, spawn_wmo_lights_for,
+ };
+ 
++use std::collections::HashMap;
+ use std::sync::Arc;
++use std::time::Duration;
+ use bevy::platform::time::Instant;
+ 
+ use benilla_assets::coords::{wmo_doodad_local, wow_to_bevy};
+@@ -34,6 +36,7 @@ use benilla_assets::materials::WowModelMaterial;
+ 
+ use super::collider::{
+     build_collider_task, doodad_bodies_disabled, doodad_hulls_bare, placement_collider_data,
++    split_collider_data, SPLIT_MAX_TRIS,
+     PendingCollider,
+ };
+ use super::merge::{MergeSite, StaticMerge};
+@@ -57,43 +60,212 @@ type SpawnTables<'w> = (
+     ResMut<'w, StaticMerge>,
+     // `None` only under `WOW_STATIC_GX=0`, when the retained pass is not armed.
+     Option<ResMut<'w, crate::static_gx::StaticGx>>,
++    // `None` in a harness without the streamer plugin: a failed load retires at once.
++    Option<ResMut<'w, LoadRetries>>,
+ );
+ 
++/// Re-requests of placement models whose load failed for a reason other than absence (a dropped
++/// connection, a 5xx, a WMO group that never arrived). A WMO root is re-requested for as long as
++/// it fails, since its floor may be the one under the body; an M2 gets [`M2_RETRIES`] tries.
++#[derive(Resource, Default)]
++pub struct LoadRetries {
++    by_asset: HashMap<bevy::asset::UntypedAssetId, Retry>,
++    /// Placements (and WMO props, by index) retired because their file was absent, with its path:
++    /// a player folder mounted over the slice mid-game (the page's index generation bump) may
++    /// now have it, so they are put back and requested again ([`revive_absent_placements`]).
++    absent: Vec<(u32, Option<usize>, bevy::asset::AssetPath<'static>)>,
++    /// The page's index generation last seen.
++    index_gen: u32,
++}
++
++#[cfg_attr(not(any(target_arch = "wasm32", test)), allow(dead_code))]
++/// On a new page index generation (a player folder mounted mid-game), put back every placement
++/// retired as absent and request its model again; one still absent retires again at once.
++fn revive_absent_placements(
++    placements: &mut Placements,
++    asset_server: &AssetServer,
++    retries: &mut LoadRetries,
++    index_gen: u32,
++) {
++    if retries.index_gen == index_gen {
++        return;
++    }
++    retries.index_gen = index_gen;
++    let absent = std::mem::take(&mut retries.absent);
++    if absent.is_empty() {
++        return;
++    }
++    info!("placements: index generation {index_gen} — {} absent model(s) requested again", absent.len());
++    for (uid, doodad, path) in absent {
++        let Some(p) = placements.by_id.get_mut(&uid) else {
++            continue; // streamed out since
++        };
++        let slot = match doodad {
++            None => &mut p.spawned,
++            Some(i) => match p.doodads.get_mut(i) {
++                Some(d) => &mut d.spawned,
++                None => continue,
++            },
++        };
++        // Only a placement that spawned nothing: a doodad index can move with a re-resolve.
++        if *slot && (doodad.is_some() || p.entities.is_empty()) {
++            *slot = false;
++            placements.pending_spawns += 1;
++            asset_server.reload(path);
++        }
++    }
++}
++
++#[derive(Clone, Copy)]
++struct Retry {
++    tries: u32,
++    next_at: Instant,
++}
++
++/// Tries for an M2 placement or WMO prop before it retires as empty.
++const M2_RETRIES: u32 = 3;
++
++/// The wait before re-request `tries` (1-based): 1, 2, 4, 8, then every 10 s.
++fn retry_delay(tries: u32) -> Duration {
++    Duration::from_secs(match tries {
++        0 | 1 => 1,
++        2 => 2,
++        3 => 4,
++        4 => 8,
++        _ => 10,
++    })
++}
++
++/// What to do with a failed load: retire it (absent, or out of tries) or wait for its re-request.
++#[derive(Debug, PartialEq, Eq)]
++enum FailedLoad {
++    Retire,
++    Retrying,
++}
++
++impl LoadRetries {
++    /// A failed load's next step; a re-request is due, it is sent through `reload`.
++    fn on_failed(
++        &mut self,
++        id: bevy::asset::UntypedAssetId,
++        absent: bool,
++        wmo: bool,
++        now: Instant,
++        reload: impl FnOnce(),
++    ) -> FailedLoad {
++        if absent {
++            self.by_asset.remove(&id);
++            return FailedLoad::Retire;
++        }
++        let r = self.by_asset.entry(id).or_insert(Retry {
++            tries: 0,
++            next_at: now,
++        });
++        if now < r.next_at {
++            return FailedLoad::Retrying;
++        }
++        if !wmo && r.tries >= M2_RETRIES {
++            self.by_asset.remove(&id);
++            return FailedLoad::Retire;
++        }
++        r.tries += 1;
++        r.next_at = now + retry_delay(r.tries);
++        reload();
++        FailedLoad::Retrying
++    }
++}
++
+ /// Retires a placement, or a WMO prop, whose model load failed: it spawns nothing and stops
+ /// counting as pending, as a missing WDT falls back rather than stalling the world; warned once.
+-fn retire_failed_placements(placements: &mut Placements, asset_server: &AssetServer) {
++/// With [`LoadRetries`] only an absent file retires at once: any other failure is re-requested
++/// and keeps counting as pending, so the reveal and the settle hold wait for it (a Dalaran root
++/// dropped by a 502 used to retire, and the city opened with no floor).
++fn retire_failed_placements(
++    placements: &mut Placements,
++    asset_server: &AssetServer,
++    mut retries: Option<&mut LoadRetries>,
++) {
+     let Placements {
+         by_id,
+         pending_spawns,
+         ..
+     } = placements;
+-    let failed = |id: bevy::asset::UntypedAssetId| {
+-        asset_server.load_state(id).is_failed().then(|| {
+-            asset_server
+-                .get_path(id)
+-                .map_or_else(|| id.to_string(), |p| p.to_string())
+-        })
++    let now = Instant::now();
++    // `Some((path, absent))` for a failed load.
++    let failed = |id: bevy::asset::UntypedAssetId| match asset_server.load_state(id) {
++        bevy::asset::LoadState::Failed(err) => {
++            let absent = matches!(
++                &*err,
++                bevy::asset::AssetLoadError::AssetReaderError(
++                    bevy::asset::io::AssetReaderError::NotFound(_)
++                )
++            );
++            let path = asset_server.get_path(id);
++            Some((path.map(|p| p.into_owned()), absent, id))
++        }
++        _ => None,
+     };
+-    for p in by_id.values_mut() {
++    let mut step = |path: Option<bevy::asset::AssetPath<'static>>,
++                    absent: bool,
++                    id: bevy::asset::UntypedAssetId,
++                    wmo: bool|
++     -> FailedLoad {
++        match retries.as_deref_mut() {
++            Some(r) => r.on_failed(id, absent, wmo, now, || {
++                if let Some(path) = path.clone() {
++                    warn!("model {path} failed to load; requesting it again");
++                    asset_server.reload(path);
++                }
++            }),
++            None => FailedLoad::Retire,
++        }
++    };
++    let label = |path: &Option<bevy::asset::AssetPath<'static>>, id: bevy::asset::UntypedAssetId| {
++        path.as_ref().map_or_else(|| id.to_string(), |p| p.to_string())
++    };
++    let mut absent_now: Vec<(u32, Option<usize>, bevy::asset::AssetPath<'static>)> = Vec::new();
++    for (&uid, p) in by_id.iter_mut() {
+         if !p.spawned {
+-            let id = match &p.model {
+-                ModelHandle::M2(h) => h.id().untyped(),
+-                ModelHandle::Wmo(h) => h.id().untyped(),
++            let (id, wmo) = match &p.model {
++                ModelHandle::M2(h) => (h.id().untyped(), false),
++                ModelHandle::Wmo(h) => (h.id().untyped(), true),
+             };
+-            if let Some(path) = failed(id) {
+-                warn!("placement model {path} failed to load: nothing spawned");
+-                p.spawned = true;
+-                *pending_spawns -= 1;
++            if let Some((path, absent, id)) = failed(id) {
++                if step(path.clone(), absent, id, wmo) == FailedLoad::Retire {
++                    if let (true, Some(path)) = (absent, path.clone()) {
++                        absent_now.push((uid, None, path));
++                    }
++                    warn!(
++                        "placement model {} failed to load: nothing spawned",
++                        label(&path, id)
++                    );
++                    p.spawned = true;
++                    *pending_spawns -= 1;
++                }
+             }
+         }
+-        for d in p.doodads.iter_mut().filter(|d| !d.spawned) {
+-            if let Some(path) = failed(d.handle.id().untyped()) {
+-                warn!("WMO prop model {path} failed to load: nothing spawned");
+-                d.spawned = true;
+-                *pending_spawns -= 1;
++        for (di, d) in p.doodads.iter_mut().enumerate().filter(|(_, d)| !d.spawned) {
++            if let Some((path, absent, id)) = failed(d.handle.id().untyped()) {
++                if step(path.clone(), absent, id, false) == FailedLoad::Retire {
++                    if let (true, Some(path)) = (absent, path.clone()) {
++                        absent_now.push((uid, Some(di), path));
++                    }
++                    warn!(
++                        "WMO prop model {} failed to load: nothing spawned",
++                        label(&path, id)
++                    );
++                    d.spawned = true;
++                    *pending_spawns -= 1;
++                }
+             }
+         }
+     }
++    drop(step);
++    if let Some(r) = retries {
++        r.absent.extend(absent_now);
++        let over = r.absent.len().saturating_sub(4096);
++        r.absent.drain(..over);
++    }
+ }
+ 
+ /// Whether the ADT under `bevy_pos` failed to load, so [`doodad_ground_shade`] would wait forever.
+@@ -130,16 +302,25 @@ pub(super) fn spawn_loaded_placements(
+     mut anim_table: ResMut<crate::mat_anim_table::MatAnimTable>,
+     tables: SpawnTables,
+ ) {
+-    let (mut probes, mut activity, focus, mut forms, mut welds, mut merge, mut staticgx) = tables;
++    let (mut probes, mut activity, focus, mut forms, mut welds, mut merge, mut staticgx, mut retries) =
++        tables;
+     let Some(shared_light) = shared_light else {
+         return;
+     };
++    // A player folder mounted mid-game: what was absent may be there now.
++    #[cfg(target_arch = "wasm32")]
++    let mut placements = placements;
++    #[cfg(target_arch = "wasm32")]
++    if let Some(r) = retries.as_deref_mut() {
++        let gen = benilla_formats::web::index_gen();
++        revive_absent_placements(placements.as_mut(), &asset_server, r, gen);
++    }
+     // Steady state: the pending count, kept by register, handoff and release, skips the walk.
+     if placements.pending_spawns == 0 {
+         return;
+     }
+     let placements = placements.into_inner();
+-    retire_failed_placements(placements, &asset_server);
++    retire_failed_placements(placements, &asset_server, retries.as_deref_mut());
+     let t0 = Instant::now();
+     // The count cap bounds the render-side wave a time budget misses; off until the focus is
+     // paced, as the loading cover absorbs the burst and a cap would only lengthen the reveal.
+@@ -514,8 +695,11 @@ pub(super) fn spawn_loaded_placements(
+                     }
+                     // Two colliders, each on its layer: the reference gathers different faces for
+                     // the body (drops DETAIL) and the camera (drops NOCAMCOLLIDE, keeps DETAIL).
+-                    if let Some((verts, tris)) =
+-                        placement_collider_data(m.collision.as_ref(), &p.transform)
++                    // A city-sized hull builds in pieces (`SPLIT_MAX_TRIS`): one indivisible
++                    // build of Dalaran's froze the browser for 300-630 ms.
++                    for (verts, tris) in placement_collider_data(m.collision.as_ref(), &p.transform)
++                        .map(|(v, t)| split_collider_data(v, t, SPLIT_MAX_TRIS))
++                        .unwrap_or_default()
+                     {
+                         ents.push(
+                             commands
+@@ -534,8 +718,10 @@ pub(super) fn spawn_loaded_placements(
+                                 .id(),
+                         );
+                     }
+-                    if let Some((verts, tris)) =
++                    for (verts, tris) in
+                         placement_collider_data(m.collision_camera.as_ref(), &p.transform)
++                            .map(|(v, t)| split_collider_data(v, t, SPLIT_MAX_TRIS))
++                            .unwrap_or_default()
+                     {
+                         ents.push(
+                             commands
+@@ -963,7 +1149,7 @@ mod retire_tests {
+         app.add_systems(
+             Update,
+             |mut pl: ResMut<Placements>, server: Res<AssetServer>| {
+-                retire_failed_placements(&mut pl, &server)
++                retire_failed_placements(&mut pl, &server, None)
+             },
+         );
+         app
+@@ -1008,6 +1194,41 @@ mod retire_tests {
+         panic!("the loads never failed");
+     }
+ 
++    #[test]
++    fn a_failed_load_is_requested_again_unless_absent() {
++        let id = bevy::asset::AssetId::<Mesh>::invalid().untyped();
++        let t0 = Instant::now();
++        let mut book = LoadRetries::default();
++        let mut sent = 0;
++        // Absent: retired at once, never re-requested.
++        assert_eq!(book.on_failed(id, true, true, t0, || sent += 1), FailedLoad::Retire);
++        assert_eq!(sent, 0);
++        // A WMO: re-requested at once, then only after its delay, for as long as it fails.
++        assert_eq!(book.on_failed(id, false, true, t0, || sent += 1), FailedLoad::Retrying);
++        assert_eq!(sent, 1);
++        assert_eq!(book.on_failed(id, false, true, t0, || sent += 1), FailedLoad::Retrying);
++        assert_eq!(sent, 1, "inside the delay: no second request");
++        let mut t = t0;
++        for _ in 0..20 {
++            t += Duration::from_secs(11);
++            assert_eq!(book.on_failed(id, false, true, t, || sent += 1), FailedLoad::Retrying);
++        }
++        assert_eq!(sent, 21, "a WMO never gives up");
++        // An M2: three re-requests, then retired.
++        let mut m2 = LoadRetries::default();
++        let mut sent = 0;
++        let mut t = t0;
++        let mut steps = Vec::new();
++        for _ in 0..4 {
++            steps.push(m2.on_failed(id, false, false, t, || sent += 1));
++            t += Duration::from_secs(11);
++        }
++        assert_eq!(sent, M2_RETRIES);
++        assert_eq!(steps[3], FailedLoad::Retire);
++        assert_eq!(retry_delay(1), Duration::from_secs(1));
++        assert_eq!(retry_delay(9), Duration::from_secs(10));
++    }
++
+     #[test]
+     fn a_failed_model_load_retires_the_placement() {
+         let mut app = app();
+@@ -1032,6 +1253,40 @@ mod retire_tests {
+         assert_eq!(pl.pending_spawns, 1);
+     }
+ 
++    /// An absent model retires at once and is remembered; a page index generation bump (a player
++    /// folder mounted mid-game) puts it back and requests it again.
++    #[test]
++    fn an_absent_model_comes_back_on_a_new_index_generation() {
++        let mut app = app();
++        let server = app.world().resource::<AssetServer>().clone();
++        let m2: Handle<M2Model> = server.load("mpq://missing/tree.m2");
++        let wmo: Handle<WmoModel> = server.load("mpq://missing/hall.wmo");
++        let ids = [m2.id().untyped(), wmo.id().untyped()];
++        {
++            let mut pl = app.world_mut().resource_mut::<Placements>();
++            pl.by_id.insert(1, placement(ModelHandle::M2(m2), vec![]));
++            pl.by_id.insert(2, placement(ModelHandle::Wmo(wmo), vec![]));
++            pl.pending_spawns = 2;
++        }
++        settle(&mut app, &ids);
++        let mut pl = app.world_mut().resource_mut::<Placements>();
++        assert!(pl.by_id[&1].spawned && pl.by_id[&2].spawned, "retired");
++        assert_eq!(pl.pending_spawns, 0);
++        // What `retire_failed_placements` records for a `NotFound` (this harness's failure is not
++        // one, so the book is filled as it would be).
++        let mut book = LoadRetries::default();
++        book.absent = vec![
++            (1, None, "mpq://missing/tree.m2".into()),
++            (2, None, "mpq://missing/hall.wmo".into()),
++        ];
++        revive_absent_placements(&mut pl, &server, &mut book, 0);
++        assert!(pl.by_id[&1].spawned, "the same generation changes nothing");
++        revive_absent_placements(&mut pl, &server, &mut book, 1);
++        assert!(!pl.by_id[&1].spawned && !pl.by_id[&2].spawned, "requested again");
++        assert_eq!(pl.pending_spawns, 2);
++        assert!(book.absent.is_empty());
++    }
++
+     #[test]
+     fn a_failed_prop_load_retires_the_prop() {
+         let mut app = app();
+diff --git a/web/boot.js b/web/boot.js
+index d18b83eb..0e0db37d 100644
+--- a/web/boot.js
++++ b/web/boot.js
+@@ -750,19 +750,25 @@ function logMemory(when) {
+   }
+ }
+ 
+-/// In the world, the glue screens' files leave the body store: nothing reads them until a logout,
+-/// which fetches them again (the HTTP cache usually has them).
++/// In the world, the glue screens' model and sound files leave the body store: nothing reads them
++/// until a logout, and the client reads those asynchronously (`fetch`, the HTTP cache usually has
++/// them). The interface files (Lua, XML, TOC, BLP art) stay: the logout reads them synchronously,
++/// and each one fetched again froze the frame for ~180 ms.
++export function glueBodyDroppable(key) {
++  const glue = /^interface\\(gluexml|glues)\\/.test(key) || /^interface\\addons\\[^\\]+\\glue/.test(key);
++  return glue && /\.(m2|mdx|skin|anim|wav|mp3|ogg)$/.test(key);
++}
+ function dropGlueBodies() {
+   const m = globalThis.__wenilla_prefetch;
+   if (!m) return;
+   let n = 0;
+   for (const k of [...m.keys()]) {
+-    if (/^interface\\(gluexml|glues)\\/.test(k) || /^interface\\addons\\[^\\]+\\glue/.test(k)) {
++    if (glueBodyDroppable(k)) {
+       m.delete(k);
+       n++;
+     }
+   }
+-  if (n) console.log(`boot: ${n} glue-screen files released from the body store`);
++  if (n) console.log(`boot: ${n} glue-screen model/sound files released from the body store`);
+ }
+ 
+ /// Keys reach the client only through the canvas's own listeners (winit), so the canvas takes
+diff --git a/web/bridge.js b/web/bridge.js
+index 24f5ce65..c7724fe4 100644
+--- a/web/bridge.js
++++ b/web/bridge.js
+@@ -154,6 +154,26 @@ export const wenilla = {
+   chat(text) {
+     push({ op: 'chat', text });
+   },
++  /**
++   * Use a bag item by name, id or link, as a right-click on it does (`UseItemByName`: a name the
++   * item cache has not seen yet is matched against the bags' links). Resolves to the Lua result.
++   */
++  useItem(item) {
++    return this.lua(`UseItemByName(${JSON.stringify(item)})`);
++  },
++  /**
++   * Put the camera `yards` behind the character. `CameraZoomOut` stops at the zoom limit,
++   * `cameraDistanceMax` × `cameraDistanceMaxFactor` (15 yd by default, where the camera already
++   * starts, so a plain zoom-out does nothing); this raises the factor to reach `yards` (up to the
++   * 50 yd ceiling) and zooms there. The factor is the player's CVar: it is saved like any setting.
++   */
++  camera(yards) {
++    const d = Math.max(0, Math.min(50, Number(yards) || 0));
++    return this.lua(
++      `local d = ${d}; local m = tonumber(GetCVar("cameraDistanceMax")) or 15; if m <= 0 then m = 15 end ` +
++      `SetCVar("cameraDistanceMaxFactor", d / m); CameraZoomOut(50); return d`,
++    );
++  },
+ 
+   // World verbs. Each resolves to the wasm's answer, `{op, ok, reason?}` — it never rejects.
+   /** Select a unit (a `units[]` row or its guid) — what a left-click on it does. */
+diff --git a/web/tests/boot.test.mjs b/web/tests/boot.test.mjs
+index 9a2d05d6..c42f8141 100644
+--- a/web/tests/boot.test.mjs
++++ b/web/tests/boot.test.mjs
+@@ -116,3 +116,19 @@ test('a guest pass covers with the inn line, and a share link names where it goe
+   assert.equal(goToastText({ kind: 'x', id: 'a' }), null);
+   assert.equal(goToastText(null), null);
+ });
++
++test('at world entry only the glue models and sounds leave the store; the interface files stay', async () => {
++  const { glueBodyDroppable } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
++  for (const kept of [
++    'interface\\gluexml\\charactercreate.lua',
++    'interface\\gluexml\\glueparent.xml',
++    'interface\\glues\\common\\glue-panel-button-up.blp',
++    'interface\\addons\\foreverui\\glue\\login.lua',
++  ]) assert.equal(glueBodyDroppable(kept), false, kept);
++  for (const dropped of [
++    'interface\\glues\\models\\ui_human\\ui_human.m2',
++    'interface\\glues\\models\\ui_human\\ui_human00.skin',
++    'interface\\glues\\music\\gs_lichking.mp3',
++  ]) assert.equal(glueBodyDroppable(dropped), true, dropped);
++  assert.equal(glueBodyDroppable('world\\maps\\northrend\\northrend_30_21.adt'), false);
++});

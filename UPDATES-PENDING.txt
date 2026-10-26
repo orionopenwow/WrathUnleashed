@@ -158,3 +158,5 @@
 1043c hostkit  Host kit download: checked zip on the public Leyline release
 1043d signin  Site: + Your server links the host kit download and the hosting guide
 1043e check  Server check (with the relay port check)
+1044a client  Client 20261025m (on top of l): faster Dalaran load (colliders in small pieces, no long freezes, shader warm-up), no reveal before the city is built, Dalaran zone and chat, dismount, character select/create and loading art fill the window, no logout hitch, smoother frames
+1044b ship  Save to GitHub (orionopenwow/WrathUnleashed): client 20261025m
