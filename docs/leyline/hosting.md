@@ -4,9 +4,28 @@ Anyone can host a 3.3.5a realm (on AzerothCore) from their own PC. On Leyline a 
 
 ## What you need
 
-- Docker. Every helper runs in containers, so you need no Python on the host.
+- Docker: [Docker Desktop](https://www.docker.com/products/docker-desktop/) on Windows and macOS, Docker Engine on Linux. Every helper runs in containers, so you need no Python on the host.
 - Your own 3.3.5a install. The kit extracts the game data a server needs (dbc and maps) from it, on your PC. Nothing is downloaded from us and nothing leaves your PC.
 - No open ports. The realm talks out to the relay over one connection on port 443.
+- About 10 GB of free disk (the realm images and the database), or about 25 GB if you build the images yourself (below).
+
+## Get the host kit
+
+1. Download the host kit: [WrathUnleashed-host-kit.zip](https://github.com/orionopenwow/Leyline/releases/download/host-kit/WrathUnleashed-host-kit.zip). The same link is on the site's host page, [play.openvanilla.app/wrath/host](https://play.openvanilla.app/wrath/host).
+2. Unzip it anywhere you keep things. You get a folder called `WrathUnleashed host`.
+3. Start Docker and wait until it says it is running.
+4. Windows: double-click `Host a Wrath realm.bat` in that folder. macOS or Linux: open a terminal in it and run `bash leyline host`. Made a realm on the site's host page first? Put its file (`leyline-<id>.bat` or `.sh`) in the folder and run that instead.
+
+The first run downloads the realm images, extracts the game data from your install, imports the databases (5 to 20 minutes) and connects to the relay. Running it again is safe: it keeps your realm, characters and links.
+
+### If the realm images are not published yet
+
+The kit first downloads ready-made realm images. If they are not published yet, it says so (or says your PC seems offline) and gives you two choices:
+
+- `build`: build them on your PC with the same recipe (AzerothCore and the modules at fixed versions). It takes 1 to 2 hours and about 15 GB of disk, once. Later runs use what you built.
+- `stock`: start right away with AzerothCore's own images, without the extras (bots, the boost, transmog and the rest). Run the kit again later to switch.
+
+To answer without the question, set `WU_BUILD=1` (build) or `WU_BUILD=0` (stock).
 
 ## leyline host
 
@@ -139,4 +158,4 @@ The daemon talks to the realm only over SOAP and to Discord over its REST API.
 
 ## More detail
 
-The full operator guide is `hosting/INSTALL-OPERATE.md` and the design is `hosting/README.md`, both in the [repo](https://github.com/orionopenwow/WrathUnleashed/tree/main/hosting).
+The full operator guide is `hosting/INSTALL-OPERATE.md` and the design is `hosting/README.md`, both in the [Leyline repo](https://github.com/orionopenwow/Leyline/tree/main/hosting).

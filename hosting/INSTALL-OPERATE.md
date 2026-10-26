@@ -11,12 +11,13 @@ which steps need your OK), and how to run it afterwards. Design: `README.md`.
 | `relay/` + `kit/tools/wunet/` | the relay VM (`/opt/wu-relay`) | the relay server, its Docker/systemd/Caddy setup, the join page |
 | `site/` | the website repo (`www/`) | `join/index.html`, a snippet for `404.html`, the community-record schema for the Beacons page |
 | `server/set-realm-address.sh` | `WrathUnleashed\server\` (replaces the old one) | same as before, plus a world port and `--relay STATE_DIR` |
-| `.github/workflows/` | the repo that carries `hosting/` | tests (`wu-hosting.yml`) and the image build (`wu-images.yml`: publishes on a push to main, see 9.4) |
+| `tools/github-workflows/` (source copies) | `.github/workflows/`, put there by `Turn on GitHub builds.bat` | tests (`wu-hosting.yml`) and the image build (`wu-images.yml`: publishes on a push to main, see 9.4) in WrathUnleashed; `leyline-launcher.yml` in the public Leyline repo |
 | `tests/` | with the code | unit tests, docker end-to-end, soak |
 
-After copying `kit\` to `WrathUnleashed\host\`, run `Make host kit.bat` there once: it fills
-`realm-files\` from `..\realm\` (profiles, `modules.env`, Lua, the profile SQL) and builds
-`WrathUnleashed-host-kit.zip` for players. Run it again whenever those realm files change.
+The zip players download is published by the Autopilot step `hostkit` (`kit/Publish host kit.bat`, see 9.5):
+https://github.com/orionopenwow/Leyline/releases/download/host-kit/WrathUnleashed-host-kit.zip, the link the
+site's host page uses. For a local copy, `Make host kit.bat` (run from `WrathUnleashed\host\`) still fills
+`realm-files\` from `..\realm\` (profiles, `modules.env`, Lua, the profile SQL, the build recipe) and zips it.
 
 ## 2. Try it on your PC (nothing public, nothing deployed)
 
@@ -54,8 +55,10 @@ This is also the first real-client check of the one thing the sandbox could not 
    `ghcr.io/orionopenwow/wu-ac-wotlk-{db-import,authserver,worldserver}:stable`,
    `wu-host-tools:1`, `wu-relay:1`. They contain AzerothCore + the pinned modules (AGPL: sources
    stay public, `sources.lock` + patches), no Blizzard data. Until then the kit builds the small
-   tools image itself and uses the PC's own realm images (players without them get stock
-   AzerothCore and a warning).
+   tools image itself and uses the PC's own realm images; a host without them is told plainly that the
+   images are not published yet (the registry answers "denied") or that the PC is offline, and picks
+   `build` (the same recipe on their PC, 1-2 hours, `realm-files/build/`, `WU_BUILD=1`) or `stock`
+   (AzerothCore's own images, no modules, `WU_BUILD=0`; the default when nobody can answer).
 5. **Website**: put `site/join/index.html` at `www/join/index.html`, add `site/404-join.js` to
    `www/404.html` (so `openvanilla.app/join/<id>#secret` opens the page; the relay also serves
    `https://relay.openvanilla.app/join/<id>` itself), and teach the Beacons page to read
@@ -114,7 +117,8 @@ over). Records made before this change (seed v1, a website-made key) keep workin
 their key once they connect. No accounts, no passwords: the host makes the GM account on their own join
 link. With `WU_LISTING_SITE_SECRET` (= the relay's `RELAY_LISTING_SITE_SECRET`) in `portal.env`, a listed
 public realm is claimed for its account. Pending realms live in `/srv/wrath/hosted` (mounted at `/hosted`).
-`WU_HOST_KIT_URL` points the page at the host kit zip. Tests: `stream/tests/test_hostflow.py`, and the whole Windows path against the real
+`WU_HOST_KIT_URL` points the page at another host kit zip; unset, it is the published one (9.5). The
+"Hosting guide" link is the public `/wrath/docs/hosting`. Tests: `stream/tests/test_hostflow.py`, and the whole Windows path against the real
 relay: `hosting/tests/test_host_windows_e2e.py`.
 
 ## 4. Hosting (what players do)
@@ -199,8 +203,9 @@ who reinstalls with the same `state\` keeps the same id, ports and listing.
 - DNS: `relay.openvanilla.app` A record (no AAAA).
 - Deploying the relay (`deploy-relay.sh`, 2 SSH connections) and the listing site secret's
   hand-off to the website.
-- Publishing images to ghcr.io (`wu-images.yml`, see 9.4).
-- Pushing the workflows and the code; website changes (join page, 404 snippet, Beacons community list).
+- Publishing images to ghcr.io (`wu-images.yml`, see 9.4): `Turn on GitHub builds.bat`, once.
+- Pushing the workflows: only that bat (it needs the `workflow` permission); website changes (join page, 404
+  snippet, Beacons community list).
 - Opening hosting to everyone vs a closed beta (`RELAY_ALLOW_FILE`), and the default limits.
 - Running the 1-hour soak on the relay VM (`tests/soak/SOAK-PLAN.md`).
 
@@ -219,7 +224,17 @@ runs on the box:
 * **Ports**: game ports 40000-40999 on the host network. 3724 is the realm's own authserver here, so the
   shared port is off (`RELAY_SHARED_AUTH_PORT=0`): players use `set realmlist relay.openvanilla.app:<port>`
   (the join page shows it), which needs the 7.1 check with a real client. ufw is opened if active; a
-  Hetzner Cloud Firewall, if any, needs TCP 40000-40999 by hand.
+  Hetzner Cloud Firewall, if any, needs TCP 40000-40999 by hand (below).
+* **Are the game ports reachable?** After the SSH part, the relay step (and every server check) runs
+  `relay/deploy/portcheck.py` on the owner's PC, outside the box: it probes the ports of live realms from the
+  relay's own `/api/realms/<id>` and both ends of the range. A port nothing listens on answers "refused" at
+  once when packets reach the box and times out when a firewall drops them, so it ends with
+  `game ports 40000-40999: reachable` or `BLOCKED` plus these clicks (read-only; it never fails the step):
+  1. https://console.hetzner.cloud, the project with the play server, **Firewalls** (left menu). No firewall,
+     or none applied to the server: nothing to do there.
+  2. Open the firewall applied to the server, **Rules**, under **Inbound**: **Add rule**.
+  3. Protocol **TCP**, Port **40000-40999**, Source IPs **Any IPv4** (0.0.0.0/0) and **Any IPv6** (::/0), **Add rule** / Save.
+  4. Run the relay step or the server check again: it should say `reachable`.
 * **Memory**: the container is capped at 192 MB (`WU_RELAY_MEM` in `/opt/wu-relay/.env`), 1 CPU, 128 pids.
 * **Backup, health, rollback**: `/opt/wu-relay/backups/<time>/` (compose, relay.env, state/, Caddyfile; the
   last five kept) and the old image as `wu-relay:rollback`. `/healthz` must answer from the box and from
@@ -279,21 +294,51 @@ and only before the very first fetch, so a slow or dead relay never slows the pl
 writes the relay's address on the Docker network to `/srv/wrath/portal/relay-listing.url`, so the list
 works before DNS. Deployed with the `signin` step (it installs the new `wrath_portal.py`).
 
-### 9.4 Publishing the images
+### 9.4 Publishing the images (and the launcher)
 
-`.github/workflows/wu-images.yml`: a push to main that touches `realm/custom/sources.lock`, its patches,
-`fetch.sh`, `hosting/kit/tools/` or `hosting/relay/` (or Actions > wu-images > Run workflow) builds and
-publishes `ghcr.io/orionopenwow/wu-ac-wotlk-{db-import,authserver,worldserver}:stable` (the names the kit
-pulls with `WU_IMAGE=ghcr.io/orionopenwow/wu-ac-wotlk`, `WU_TAG=stable`), `wu-host-tools:1` and
-`wu-relay:1`, each also as `:sha-<commit>`. AzerothCore + modules from source, mod-arac's client DBCs
-removed from the build context, no game data. Only the built-in `GITHUB_TOKEN`; no secrets in files.
-The owner, once:
+`wu-images.yml` (source copy `tools/github-workflows/wu-images.yml`): a push to main that touches
+`realm/custom/sources.lock`, its patches, `fetch.sh`, `hosting/kit/tools/` or `hosting/relay/` (or Actions >
+wu-images > Run workflow) builds and publishes `ghcr.io/orionopenwow/wu-ac-wotlk-{db-import,authserver,worldserver}:stable`
+(the names the kit pulls with `WU_IMAGE=ghcr.io/orionopenwow/wu-ac-wotlk`, `WU_TAG=stable`), `wu-host-tools:1` and
+`wu-relay:1`, each also as `:sha-<commit>`. The realm images use the realm's own recipe
+(`realm/docker-compose.build.yml`: `fetch.sh` at the pinned commits + patches, the core's `apps/docker/Dockerfile`,
+targets db-import / authserver / worldserver, `CTOOLS_BUILD=db-only`, `CWITH_WARNINGS=OFF`, `CTYPE=Release`).
+mod-arac's client files (`patch-contents/`, DBCs) are removed from the build context and the job stops if any
+game-data file is left: no game data. Only the built-in `GITHUB_TOKEN` (`packages: write`); no secrets in files.
+`wu-hosting.yml` runs the hosting tests and the owner tools' tests on every change to them.
 
-1. Push the workflow file: the git credential needs the `workflow` scope (`gh auth refresh -s workflow`).
-2. Organization orionopenwow > Settings > Actions > General: allow Actions; Workflow permissions may stay
-   "Read" (the file asks for `packages: write` itself) unless the org blocks that, then pick "Read and write".
-3. Organization > Settings > Packages: allow public packages. After the first run, open each package
-   (wu-ac-wotlk-db-import, -authserver, -worldserver, wu-host-tools, wu-relay) > Package settings >
-   Change visibility > **Public** (hosts pull without logging in), and check "Manage Actions access"
-   lists WrathUnleashed with **Write** (only needed if a package was created outside this repo).
-4. The first realm build takes 1-2 hours on GitHub's runners.
+The launcher (`leyline-launcher.yml`) builds in the **public Leyline repo**: players can't download release files
+from the private WrathUnleashed repo, and a public repo's Actions minutes are free (the private repo would pay
+10x for every macOS minute, on every push). The launcher's update check reads Leyline's releases.
+
+**The owner, once: double-click `Turn on GitHub builds.bat`** (top of the WrathUnleashed folder; safe to run again).
+It asks GitHub for `workflow`, `write:packages` and `admin:org` (a browser page opens: click **Authorize**), turns
+on Actions for the org and both repos where the API allows it, copies the workflow files from
+`tools/github-workflows/` into `.github/workflows/` (WrathUnleashed: wu-images, wu-hosting, and realm-scripts once
+its deploy secret exists; Leyline: leyline-launcher) and pushes only those (which starts wu-images), pushes the tag
+`launcher-v<version>` (from `launcher/src-tauri/tauri.conf.json`) to Leyline, shows progress, then opens the pages
+GitHub has no API for and prints the checklist:
+
+1. Organization > Settings > Packages > "Package creation": allow **Public**.
+2. After the first run, each package (wu-ac-wotlk-db-import, -authserver, -worldserver, wu-host-tools, wu-relay) >
+   Package settings > Danger Zone > Change visibility > **Public** (hosts pull without logging in). Packages not
+   built yet are listed; run the bat again once wu-images is green and it opens their pages.
+3. The realm build takes 1-3 hours on GitHub's runners; the window can be closed meanwhile.
+
+Never ship `.github/workflows/` before that bat has run: the push needs the `workflow` permission it asks for.
+
+### 9.5 Publishing the host kit
+
+Autopilot step `hostkit` (`kit/Publish host kit.bat` -> `tools/leyline-repo/hostkit.py --upload`, no questions)
+builds `WrathUnleashed-host-kit.zip` from `hosting/kit/` and `realm/`: the five presets, `modules.env` without its
+`DATABASE_INFO` lines (the compose file sets those from the host's own password), the realm Lua, the profile SQL,
+and `realm-files/build/` (`sources.lock`, `fetch.sh`, patches) for hosts who build the images themselves. `.bat`
+files get CRLF, everything else LF. Left out: `state/`, `cache/`, `.env`, the owner tools. Then the safety check:
+the Leyline export's rules over every file (game data, secrets, logs, decompiled code, brand words in
+READMEs/HTML/docs) and, for the realm `.env` files, only AC_/OV_/WU_ settings, none named like a password, secret
+or token. Anything flagged stops it before the upload. It uploads to the release `host-kit` on the public
+`orionopenwow/Leyline` (made on first use, the file replaced after) with the owner's gh sign-in (a release needs no
+workflow permission), checks the link answers without signing in, and prints it:
+https://github.com/orionopenwow/Leyline/releases/download/host-kit/WrathUnleashed-host-kit.zip
+(`stream/hostflow.py`'s default). The Leyline repo must exist first (step `leyline`). Run it again whenever the
+realm files change.

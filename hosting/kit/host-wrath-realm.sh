@@ -17,7 +17,8 @@
 #
 # Answers can come from the environment (no questions): WU_NAME, WU_PROFILE (main|brawl|progression|dalaran),
 # WU_VISIBILITY (private|public), WU_WOW_DIR (your 3.3.5a folder). Images: WU_IMAGE / WU_TAG
-# (prebuilt, default below), falling back to the locally built ov/ac-wotlk-*:custom.
+# (prebuilt, default below), falling back to the locally built ov/ac-wotlk-*:custom. Not published yet and
+# not built here: it asks "build or stock" (WU_BUILD=1 builds, WU_BUILD=0 takes AzerothCore's stock images).
 set -euo pipefail
 
 KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -80,19 +81,63 @@ state_get() {  # value of a top-level key in state/host.json (no jq needed)
   sed -n "s/^ *\"$1\": *\"\{0,1\}\([^\",]*\)\"\{0,1\},\{0,1\}$/\1/p" "$KIT/state/host.json" | head -1
 }
 
+pull_prebuilt() {  # all three realm images, or the first error (stderr) for not_published
+  local part
+  for part in worldserver authserver db-import; do
+    run docker pull -q "$WU_IMAGE-$part:$WU_TAG" >/dev/null || return 1
+  done
+}
+
+not_published() {  # $1 = docker pull's error text: the registry answered, but the image isn't there (or not public)
+  grep -Eiq 'denied|unauthorized|not found|manifest unknown|does not exist|no such manifest' <<<"$1"
+}
+
+build_local() {  # AzerothCore + the modules at the kit's pinned commits, the same recipe the published images use
+  local b="$KIT/cache/build" t
+  [ -f "$KIT/realm-files/build/sources.lock" ] || die "This kit has no realm-files/build/ (download the full kit again)."
+  say "  Building the realm images on this PC: 1-2 hours and about 15 GB of disk, only once."
+  mkdir -p "$b"
+  cp "$KIT/realm-files/build/sources.lock" "$KIT/realm-files/build/fetch.sh" "$b/"
+  rm -rf "$b/patches" && cp -r "$KIT/realm-files/build/patches" "$b/patches"
+  say "  [1/2] Sources at the pinned commits (about 1 GB)..."
+  run docker run --rm --entrypoint sh -v "$b:/w" alpine/git:latest /w/fetch.sh \
+    || die "Getting the sources failed (is this PC online?). Run this again: it carries on where it stopped."
+  say "  [2/2] Compiling (the long part)..."
+  for t in worldserver authserver db-import; do
+    run docker build --target "$t" --build-arg CTOOLS_BUILD=db-only --build-arg CWITH_WARNINGS=OFF \
+      --build-arg CTYPE=Release -f "$b/acore/apps/docker/Dockerfile" -t "$WU_LOCAL_IMAGE-$t:$WU_LOCAL_TAG" "$b/acore" \
+      || die "The build failed (see the first 'error:' above). Run this again: finished parts are kept."
+  done
+  say "  ${G}Built.${N}"
+}
+
 pick_images() {
   step "Realm images"
-  if run docker pull -q "$WU_IMAGE-worldserver:$WU_TAG" >/dev/null 2>&1 \
-     && run docker pull -q "$WU_IMAGE-authserver:$WU_TAG" >/dev/null 2>&1 \
-     && run docker pull -q "$WU_IMAGE-db-import:$WU_TAG" >/dev/null 2>&1; then
+  local err=""
+  if err=$(pull_prebuilt 2>&1); then
     IMG="$WU_IMAGE"; TAG="$WU_TAG"; say "  Using the prebuilt WrathUnleashed images ($IMG-*:$TAG)."
   elif docker image inspect "$WU_LOCAL_IMAGE-worldserver:$WU_LOCAL_TAG" >/dev/null 2>&1; then
     IMG="$WU_LOCAL_IMAGE"; TAG="$WU_LOCAL_TAG"; say "  Using the images built on this PC ($IMG-*:$TAG)."
   else
-    IMG="acore/ac-wotlk"; TAG="master"
-    say "  ${Y}No WrathUnleashed image yet: using AzerothCore's stock images. The realm runs, but without"
-    say "  WrathUnleashed's modules (bots, boost, transmog...). Ask for the prebuilt images, or build them"
-    say "  with realm/'Build custom realm.bat'.${N}"
+    if not_published "$err"; then
+      say "  ${Y}The ready-made realm images are not published yet.${N}"
+    else
+      say "  ${Y}Could not download the ready-made realm images (is this PC online?).${N}"
+    fi
+    say "    build   build them on this PC now: 1-2 hours, about 15 GB of disk, only once (bots, boost, transmog...)"
+    say "    stock   start now with a plain server, without those extras (run this again later to switch)"
+    local how="${WU_BUILD:-}"
+    case "$how" in 1|yes|build) how=build ;; 0|no|stock) how=stock ;; *) how="" ;; esac
+    if [ -z "$how" ]; then
+      if [ -t 0 ]; then ask how "Build or stock" "build" build stock; else how=stock; fi
+    fi
+    if [ "$how" = build ]; then
+      build_local
+      IMG="$WU_LOCAL_IMAGE"; TAG="$WU_LOCAL_TAG"
+    else
+      IMG="acore/ac-wotlk"; TAG="master"
+      say "  Using AzerothCore's stock images: the realm runs without WrathUnleashed's modules."
+    fi
   fi
   ensure_tools
 }

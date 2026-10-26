@@ -59,15 +59,11 @@ What it fetches: the Workshop list and the mods you install, the realm list and 
 
 ## Getting a build
 
-The build workflow is `tools/github-workflows/leyline-launcher.yml`. It runs the tests on every change and, for a tag such as `launcher-v0.2.0`, builds Windows (.msi and setup .exe), macOS (.dmg) and Linux (.AppImage, .deb) and attaches them to a release.
-
-To switch it on, the owner:
-
-1. runs `gh auth refresh -s workflow` (GitHub needs that permission to add a workflow);
-2. copies the file to `.github/workflows/leyline-launcher.yml` and pushes it;
-3. pushes the tag: `git tag launcher-v0.2.0 && git push origin launcher-v0.2.0`.
+Installers are on the [Leyline releases page](https://github.com/orionopenwow/Leyline/releases) (tags `launcher-v*`): Windows (.msi and setup .exe), macOS (.dmg, Apple Silicon and Intel) and Linux (.AppImage, .deb).
 
 Builds are not code-signed yet. On Windows choose "More info, Run anyway"; on macOS right-click the app and choose Open.
+
+The build workflow is `.github/workflows/leyline-launcher.yml` in the Leyline repo. It runs the tests on every change and, for a tag such as `launcher-v0.2.0`, builds the installers and attaches them to a release. The owner turns it on once with `Turn on GitHub builds.bat`, which also pushes the first tag; a new version is a new tag.
 
 To build it yourself, see `launcher/README.md` in the repo.
 

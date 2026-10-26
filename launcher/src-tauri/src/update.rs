@@ -7,8 +7,8 @@ use serde::Serialize;
 use serde_json::Value;
 use std::path::Path;
 
-pub const URL: &str = "https://api.github.com/repos/orionopenwow/WrathUnleashed/releases?per_page=30";
-pub const RELEASES_PAGE: &str = "https://github.com/orionopenwow/WrathUnleashed/releases";
+pub const URL: &str = "https://api.github.com/repos/orionopenwow/Leyline/releases?per_page=30";
+pub const RELEASES_PAGE: &str = "https://github.com/orionopenwow/Leyline/releases";
 pub const TAG_PREFIX: &str = "launcher-v";
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
@@ -66,10 +66,10 @@ mod tests {
     use crate::net::testserver::*;
 
     const LIST: &str = r#"[
-      {"tag_name":"launcher-v0.3.0","draft":true,"html_url":"https://github.com/orionopenwow/WrathUnleashed/releases/tag/launcher-v0.3.0"},
-      {"tag_name":"launcher-v0.2.0","draft":false,"prerelease":true,"html_url":"https://github.com/orionopenwow/WrathUnleashed/releases/tag/launcher-v0.2.0"},
-      {"tag_name":"v9.0.0","draft":false,"html_url":"https://github.com/orionopenwow/WrathUnleashed/releases/tag/v9.0.0"},
-      {"tag_name":"launcher-v0.1.0","draft":false,"html_url":"https://github.com/orionopenwow/WrathUnleashed/releases/tag/launcher-v0.1.0"},
+      {"tag_name":"launcher-v0.3.0","draft":true,"html_url":"https://github.com/orionopenwow/Leyline/releases/tag/launcher-v0.3.0"},
+      {"tag_name":"launcher-v0.2.0","draft":false,"prerelease":true,"html_url":"https://github.com/orionopenwow/Leyline/releases/tag/launcher-v0.2.0"},
+      {"tag_name":"v9.0.0","draft":false,"html_url":"https://github.com/orionopenwow/Leyline/releases/tag/v9.0.0"},
+      {"tag_name":"launcher-v0.1.0","draft":false,"html_url":"https://github.com/orionopenwow/Leyline/releases/tag/launcher-v0.1.0"},
       {"tag_name":"launcher-v5.0.0","draft":false,"html_url":"https://evil.example.com/x"}
     ]"#;
 

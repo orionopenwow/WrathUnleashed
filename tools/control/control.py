@@ -106,6 +106,7 @@ STEPS = {
     "hangout-off": ("hosting/hangout/Take Dalaran hangout off Leyline.bat", "Take the Dalaran Hangout off Leyline", False),
     "leyline": ("tools/leyline-repo/Update Leyline repo.bat", "Leyline repo: copy and push (github.com/orionopenwow/Leyline)", False),
     "mods":  ("mods/Put mods on Wrath.bat", "Mods catalog: realm (live reload), streamed addons and /wrath/mods", False),
+    "hostkit": ("hosting/kit/Publish host kit.bat", "Host kit download (checked zip on the public Leyline release)", False),
 }
 CHECKS = [
     ("Play page", "https://play.openvanilla.app/wrath"),

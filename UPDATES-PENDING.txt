@@ -153,3 +153,8 @@
 1042d-golf ship  Save to GitHub (orionopenwow/WrathUnleashed): golf spectating, Coin Dash, the mode editor
 1041a client  Play page: reads the game cancels itself are not retried (saves bandwidth during loading)
 1041b ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1043a ship  Save to GitHub (orionopenwow/WrathUnleashed): Turn on GitHub builds, image and hosting workflows (not active until the owner runs the bat), host kit publisher, port check
+1043b leyline  Update the public orionopenwow/Leyline repo
+1043c hostkit  Host kit download: checked zip on the public Leyline release
+1043d signin  Site: + Your server links the host kit download and the hosting guide
+1043e check  Server check (with the relay port check)

@@ -7,7 +7,7 @@ rem sees your home IP address. Safe to run again: it keeps your realm, character
 rem
 rem It asks three things the first time: the realm's name, its profile, private or public.
 rem Answers can also come from the environment: WU_NAME, WU_PROFILE (main, brawl, progression, dalaran),
-rem WU_VISIBILITY, WU_WOW_DIR.
+rem WU_VISIBILITY, WU_WOW_DIR, WU_BUILD (1: build the realm images here if they are not published, 0: stock).
 cd /d "%~dp0"
 
 rem ---- images (the prebuilt ones are published by WrathUnleashed's CI; the local build is the fallback)
@@ -69,13 +69,10 @@ if /i not "%WU_VISIBILITY%"=="private" if /i not "%WU_VISIBILITY%"=="public" (ec
 echo.
 echo == Realm images
 set "IMG=" & set "TAG="
-docker pull -q "%WU_IMAGE%-worldserver:%WU_TAG%" >nul 2>&1 && docker pull -q "%WU_IMAGE%-authserver:%WU_TAG%" >nul 2>&1 && docker pull -q "%WU_IMAGE%-db-import:%WU_TAG%" >nul 2>&1 && (set "IMG=%WU_IMAGE%" & set "TAG=%WU_TAG%" & echo   Using the prebuilt WrathUnleashed images.)
+set "PULLERR=%TEMP%\wu-host-pull.txt"
+docker pull -q "%WU_IMAGE%-worldserver:%WU_TAG%" >nul 2>"%PULLERR%" && docker pull -q "%WU_IMAGE%-authserver:%WU_TAG%" >nul 2>>"%PULLERR%" && docker pull -q "%WU_IMAGE%-db-import:%WU_TAG%" >nul 2>>"%PULLERR%" && (set "IMG=%WU_IMAGE%" & set "TAG=%WU_TAG%" & echo   Using the prebuilt WrathUnleashed images.)
 if not defined IMG docker image inspect "%WU_LOCAL_IMAGE%-worldserver:%WU_LOCAL_TAG%" >nul 2>&1 && (set "IMG=%WU_LOCAL_IMAGE%" & set "TAG=%WU_LOCAL_TAG%" & echo   Using the images built on this PC.)
-if not defined IMG (
-  set "IMG=acore/ac-wotlk" & set "TAG=master"
-  echo   No WrathUnleashed image yet: using AzerothCore's stock images. The realm runs, but without
-  echo   WrathUnleashed's modules ^(bots, boost, transmog...^). Build them with realm\"Build custom realm.bat".
-)
+if not defined IMG call :noimages || (pause & exit /b 1)
 docker run --rm -v "%~dp0.:/kit" -e WU_KIT=/kit %WU_TOOLS_IMAGE% python -m wuhost.setup init --name "%WU_NAME%" --profile %WU_PROFILE% --visibility %WU_VISIBILITY% --image %IMG% --tag %TAG% --tools-image %WU_TOOLS_IMAGE% --relay %WU_RELAY% >nul || (echo Setup failed ^(see above^). & pause & exit /b 1)
 
 echo.
@@ -122,13 +119,47 @@ pause
 exit /b 0
 
 rem ------------------------------------------------------------------ helpers
+:noimages
+rem The registry answered "denied / not found": the images aren't published yet. Anything else: offline.
+findstr /i /c:"denied" /c:"unauthorized" /c:"not found" /c:"manifest unknown" /c:"does not exist" "%PULLERR%" >nul 2>&1 && (echo   The ready-made realm images are not published yet.) || (echo   Could not download the ready-made realm images ^(is this PC online?^).)
+echo     build   build them on this PC now: 1-2 hours, about 15 GB of disk, only once ^(bots, boost, transmog...^)
+echo     stock   start now with a plain server, without those extras ^(run this again later to switch^)
+set "HOW=%WU_BUILD%"
+if "%HOW%"=="1" set "HOW=build"
+if "%HOW%"=="0" set "HOW=stock"
+:askhow
+if not defined HOW (set "HOW=build" & set /p "HOW=Build or stock [build]: ")
+if /i not "%HOW%"=="build" if /i not "%HOW%"=="stock" (echo   Please type build or stock. & set "HOW=" & goto askhow)
+if /i "%HOW%"=="stock" (
+  set "IMG=acore/ac-wotlk" & set "TAG=master"
+  echo   Using AzerothCore's stock images: the realm runs without WrathUnleashed's modules.
+  exit /b 0
+)
+if not exist "realm-files\build\sources.lock" (echo This kit has no realm-files\build folder. Download the full kit again. & exit /b 1)
+echo   Building the realm images on this PC: 1-2 hours and about 15 GB of disk, only once.
+set "B=%~dp0cache\build"
+if not exist "%B%" mkdir "%B%"
+copy /y "realm-files\build\sources.lock" "%B%\" >nul
+copy /y "realm-files\build\fetch.sh" "%B%\" >nul
+if exist "%B%\patches" rmdir /s /q "%B%\patches"
+xcopy /e /i /q /y "realm-files\build\patches" "%B%\patches" >nul
+echo   [1/2] Sources at the pinned commits ^(about 1 GB^)...
+docker run --rm --entrypoint sh -v "%B%:/w" alpine/git:latest /w/fetch.sh || (echo Getting the sources failed ^(is this PC online?^). Run this again: it carries on where it stopped. & exit /b 1)
+echo   [2/2] Compiling ^(the long part^)...
+for %%T in (worldserver authserver db-import) do (
+  docker build --target %%T --build-arg CTOOLS_BUILD=db-only --build-arg CWITH_WARNINGS=OFF --build-arg CTYPE=Release -f "%B%\acore\apps\docker\Dockerfile" -t "%WU_LOCAL_IMAGE%-%%T:%WU_LOCAL_TAG%" "%B%\acore" || (echo The build failed: see the first "error:" above. Run this again: finished parts are kept. & exit /b 1)
+)
+set "IMG=%WU_LOCAL_IMAGE%" & set "TAG=%WU_LOCAL_TAG%"
+echo   Built.
+exit /b 0
+
 :extract
 set "WOW="
 for %%D in ("%WU_WOW_DIR%" "%USERPROFILE%\Downloads\World of Warcraft 3.3.5a" "%USERPROFILE%\Desktop\World of Warcraft 3.3.5a" "C:\World of Warcraft 3.3.5a" "C:\Games\World of Warcraft 3.3.5a" "D:\World of Warcraft 3.3.5a" "C:\Program Files (x86)\World of Warcraft") do (
   if not defined WOW if exist "%%~D\Data\lichking.MPQ" set "WOW=%%~D"
 )
 if not defined WOW (
-  set /p "WOW=Where is your World of Warcraft 3.3.5a folder? "
+  set /p "WOW=Where is your 3.3.5a game folder (the one with Data in it)? "
 )
 if not exist "%WOW%\Data\lichking.MPQ" (echo No 3.3.5a game files in "%WOW%". & exit /b 1)
 echo   Extracting dbc + maps from "%WOW%" ^(a few minutes^)...

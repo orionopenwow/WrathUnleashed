@@ -14,6 +14,12 @@ tar -czf "%TGZ%" --exclude=__pycache__ --exclude=*.pyc kit/tools/wunet relay/wur
 ssh -i "%USERPROFILE%\.ssh\openwow" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 root@play.openvanilla.app "T=$(mktemp -d) && tar -xzf - -C $T && sed 's/\r$//' $T/relay/deploy/relay-up.sh > $T/relay-up.sh && bash $T/relay-up.sh $T 2>&1 | tee /tmp/wu-relay-up.log; rm -rf $T; grep -q '^RELAY OK' /tmp/wu-relay-up.log && exit 0; grep -q '^RELAY WAITING FOR DNS' /tmp/wu-relay-up.log && exit 3; exit 1" < "%TGZ%"
 set "RC=%ERRORLEVEL%"
 del /q "%TGZ%" >nul 2>&1
+rem Read-only, from this PC (outside the box): are the game ports 40000-40999 reachable? A Hetzner Cloud
+rem Firewall can't be seen from the box; this prints the console clicks when the ports are blocked.
+set "PY="
+where py >nul 2>&1 && set "PY=py -3"
+if not defined PY where python >nul 2>&1 && set "PY=python"
+if not "%RC%"=="1" if defined PY (echo. & %PY% relay\deploy\portcheck.py)
 if "%RC%"=="3" (echo. & echo The relay is installed, but relay.openvanilla.app has no DNS record pointing at the server yet. & echo Add the A record shown above, then run this step again. & pause & exit /b 3)
 if not "%RC%"=="0" (echo. & echo The relay step did not finish; see above. Nothing is left half-done: it rolled back. & pause & exit /b 1)
 pause

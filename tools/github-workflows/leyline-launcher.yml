@@ -2,8 +2,9 @@
 # desktop app for Windows (.msi and setup .exe), macOS (.dmg, Apple Silicon and Intel) and Linux (.AppImage,
 # .deb) and attach them to a GitHub release for that tag.
 #
-# Lives in tools/github-workflows/ until the owner copies it to .github/workflows/ (that folder needs the
-# owner's permission step). No secrets are needed: there is no code signing yet (owner decision, L0), so
+# Runs in the PUBLIC repo orionopenwow/Leyline (players can't download release files from the private
+# WrathUnleashed repo, and a public repo's Actions minutes are free). Source copy: tools/github-workflows/ in
+# WrathUnleashed; "Turn on GitHub builds.bat" puts it in Leyline's .github/workflows/ and pushes the tag. No secrets are needed: there is no code signing yet (owner decision, L0), so
 # Windows SmartScreen and macOS Gatekeeper will warn on first run; the README says how to open it anyway.
 name: leyline launcher
 on:

@@ -6,5 +6,10 @@ cd /d "%~dp0"
 if not exist diag.sh (echo diag.sh is missing next to this file. & pause & exit /b 1)
 ssh -i "%USERPROFILE%\.ssh\openwow" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 root@play.openvanilla.app "sed 's/\r$//' > /tmp/wu-diag.sh && bash /tmp/wu-diag.sh 2>&1 | tee /tmp/wu-diag.log; grep -q '^DIAG OK' /tmp/wu-diag.log" < diag.sh
 if errorlevel 1 (echo. & echo The check did not finish; see above. & pause & exit /b 1)
+rem Read-only, from this PC: the relay's game ports (40000-40999) as players reach them (warns, never fails).
+set "PY="
+where py >nul 2>&1 && set "PY=py -3"
+if not defined PY where python >nul 2>&1 && set "PY=python"
+if defined PY if exist "..\hosting\relay\deploy\portcheck.py" (echo. & %PY% "..\hosting\relay\deploy\portcheck.py")
 pause
 exit /b 0

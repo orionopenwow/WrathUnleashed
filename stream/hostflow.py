@@ -32,7 +32,8 @@ heartbeat carries the claim token.
 Settings (environment):
   WU_HOST_DIR             where pending realms are kept, one 0600 JSON file each (default /hosted, a
                           writable volume; the portal's /app is read-only)
-  WU_HOST_KIT_URL         the host kit download (shown on the start page; unset: the hosting guide)
+  WU_HOST_KIT_URL         the host kit download (shown on the start page; unset: the zip on the public
+                          Leyline repo's "host-kit" release, published by the "hostkit" step)
   WU_LISTING_SITE_SECRET  the relay's RELAY_LISTING_SITE_SECRET, for claims (unset: no claims)
   WU_HOST_PER_ACCOUNT     realms one account may make (default 3)
 
@@ -58,11 +59,12 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 HOST_DIR = os.environ.get("WU_HOST_DIR", "/hosted")
-KIT_URL = os.environ.get("WU_HOST_KIT_URL", "")
+KIT_URL_DEFAULT = "https://github.com/orionopenwow/Leyline/releases/download/host-kit/WrathUnleashed-host-kit.zip"
+KIT_URL = os.environ.get("WU_HOST_KIT_URL") or KIT_URL_DEFAULT
 SITE_SECRET = os.environ.get("WU_LISTING_SITE_SECRET", "")
 PER_ACCOUNT = int(os.environ.get("WU_HOST_PER_ACCOUNT", "3") or 3)
 MAX_TOTAL = 5000
-GUIDE_URL = "https://github.com/orionopenwow/WrathUnleashed/blob/main/hosting/INSTALL-OPERATE.md"
+GUIDE_URL = "/wrath/docs/hosting"      # docs/leyline/hosting.md, served by the portal (the repo is private)
 
 # The same rules as setup.py and the relay.
 NAME_RE = re.compile(r"^[A-Za-z0-9 _'-]{1,32}$")

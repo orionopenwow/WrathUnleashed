@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fills realm-files/ from the WrathUnleashed realm folder and (optionally) zips the host kit for
-# players. Runs on the owner's PC (WSL/Git Bash) or in CI. Never copies state/, .env or cache/:
+# players (the published zip: tools/leyline-repo/hostkit.py, "Publish host kit.bat"). Runs on the owner's PC (WSL/Git Bash) or in CI. Never copies state/, .env or cache/:
 # those are one host's secrets.
 #   bash make-kit.sh [REALM_DIR] [--zip OUT.zip]      REALM_DIR default: ../realm
 set -euo pipefail
@@ -15,7 +15,12 @@ cp -r "$REALM/custom/lua_scripts" "$KIT/realm-files/lua_scripts"
 for f in brawl_world.sql brawl_world_2.sql main_unbrawl.sql main_world.sql modern_combos.sql; do
   [ -f "$REALM/$f" ] && cp "$REALM/$f" "$KIT/realm-files/sql/"
 done
-sed -i 's/\r$//' "$KIT"/realm-files/profiles/*.env "$KIT/realm-files/modules.env"
+# the realm's build recipe, for hosts who build the realm images themselves (when the published ones are missing)
+mkdir -p "$KIT/realm-files/build/patches"
+cp "$REALM/custom/sources.lock" "$REALM/custom/fetch.sh" "$KIT/realm-files/build/"
+cp "$REALM"/custom/patches/*.patch "$KIT/realm-files/build/patches/" 2>/dev/null || true
+sed -i 's/\r$//' "$KIT"/realm-files/profiles/*.env "$KIT/realm-files/modules.env" "$KIT/realm-files/build/fetch.sh" \
+  "$KIT/realm-files/build/sources.lock"
 ( cd "$KIT/realm-files" && find . -type f | sort | xargs sha256sum > MANIFEST.sha256 )
 echo "realm-files/ ready ($(find "$KIT/realm-files" -type f | wc -l) files)"
 if [ "${2:-}" = "--zip" ]; then
