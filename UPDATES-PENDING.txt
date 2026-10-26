@@ -151,3 +151,5 @@
 1042b-golf foreverui  Minigolf: Live rounds in /golf; Modes: Coin Dash, the in-game mode editor
 1042c-golf client  Client 20261025l: a smoother golf ball and an aim guide before the swing (on top of 20261025k modes)
 1042d-golf ship  Save to GitHub (orionopenwow/WrathUnleashed): golf spectating, Coin Dash, the mode editor
+1041a client  Play page: reads the game cancels itself are not retried (saves bandwidth during loading)
+1041b ship  Save to GitHub (orionopenwow/WrathUnleashed)
