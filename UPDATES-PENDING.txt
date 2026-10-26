@@ -170,3 +170,5 @@
 1047b ship  Save to GitHub (orionopenwow/WrathUnleashed): Dalaran prefetch list, GitHub builds bat installs gh and logs every step
 1048a client  Browsers keep game files (world data a week, UI 10 minutes): until now every visit re-downloaded everything, which is most of the Dalaran load time
 1048b ship  Save to GitHub (orionopenwow/WrathUnleashed): game-file caching on the stream site
+1049a client  Game files no longer stall 1-3 s in bursts: the sign-in check now queues connections instead of dropping them (50 files at once: 2.6 s before)
+1049b ship  Save to GitHub (orionopenwow/WrathUnleashed): stream portal connection queue

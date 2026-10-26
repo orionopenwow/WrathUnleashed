@@ -2518,15 +2518,24 @@ def _load_guest():
 guest = _load_guest()
 
 
+class Server(ThreadingHTTPServer):
+    """ThreadingHTTPServer with a real listen backlog. The default (5) made Caddy's burst of
+    forward_auth checks overflow it whenever the game opened dozens of /data requests at once:
+    the extra connections were dropped and retried by TCP after 1 s and 3 s, which was most of
+    the time a streamed load spent waiting on game files."""
+    request_queue_size = 1024
+    daemon_threads = True
+
+
 def main() -> int:
     logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     if not SOAP_USER or not SOAP_PASS:
         log.error("SOAP_USER and SOAP_PASS must be set (/srv/wrath/portal.env)")
         return 2
-    bridge = ThreadingHTTPServer(("0.0.0.0", BRIDGE_PORT), BridgeHandler)
+    bridge = Server(("0.0.0.0", BRIDGE_PORT), BridgeHandler)
     bridge.daemon_threads = True
     threading.Thread(target=bridge.serve_forever, daemon=True).start()
-    page = ThreadingHTTPServer(("0.0.0.0", PAGE_PORT), PageHandler)
+    page = Server(("0.0.0.0", PAGE_PORT), PageHandler)
     page.daemon_threads = True
     log.info("page :%d, bridge :%d, ac soap %s, portal %s", PAGE_PORT, BRIDGE_PORT, AC_SOAP_URL, PORTAL_URL)
     if guest:
