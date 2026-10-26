@@ -174,3 +174,6 @@
 1049b ship  Save to GitHub (orionopenwow/WrathUnleashed): stream portal connection queue
 1051a client  Faster Enter World: the files entering the world needs download first at character select (was ~54 s of one-at-a-time reads); cancelled sound reads no longer count as failures
 1051b ship  Save to GitHub (orionopenwow/WrathUnleashed): Enter World prefetch order, retry fix, GitHub builds without the second sign-in
+1052a scripts  Modes devices: Pressure Plates sample, device drafts on your account
+1052b foreverui  Modes device editor: place triggers, buttons, timers, counters, teleporters and movers, wire them up, Play and Stop
+1052c ship  Save to GitHub (orionopenwow/WrathUnleashed): Modes devices (M5)

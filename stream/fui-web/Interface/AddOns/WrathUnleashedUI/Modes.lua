@@ -12,6 +12,7 @@
 --   function OnTick(dt) end                                        20 times a second, dt = 0.05
 --   function OnKey(player, key, down) end                          a player pressed or released one of Mode.Keys
 --   function OnLeave(player) end
+--   function OnJoin(player) end                                    someone joined a game already running
 --   Ent.Spawn{ shape = "box"|"ball"|"cyl", x, y, z, sx, sy, sz, yaw, color = "ff8800" } -> id
 --   Ent.Move(id, x, y, z [, yaw]), Ent.Set(id, { color = "...", sx = ... }), Ent.Remove(id), Ent.Get(id) -> table
 --   Players.List() -> names, Players.Count()
@@ -20,6 +21,7 @@
 --   Camera.Follow(player, id [, distance, height]), Camera.Top([height])
 --   Timer.After(seconds, fn)          Random(n) -> 1..n (seeded per session)
 --   Mode.End(text)                    finish: everyone sees the result
+--   Devices.Run[=[ ... ]=]            a mode made of devices and wires, no code (ModeDevices.lua)
 -- Arena coordinates are yards in a frame placed where the host stood: x right, y up, z forward.
 
 local W = WrathUnleashedUI
@@ -77,6 +79,7 @@ local function send(name, data)
     end
     return true
 end
+M.Send = send
 local pump = CreateFrame("Frame")
 pump.sentAt, pump.sent = 0, 0
 pump:SetScript("OnUpdate", function(self)
@@ -277,6 +280,14 @@ function Host.Load(text, players, seed)
     local env = newEnv(H)
     setfenv(chunk, env)
     H.env = env
+    -- Device modes: the device runtime is a library in the mode's own sandbox, under the same guard.
+    if M.DEVICES_LIB and text:find("Devices", 1, true) then
+        local lib = loadstring(M.DEVICES_LIB, "=devices")
+        if lib then
+            setfenv(lib, env)
+            if not call(H, lib) then return nil, "The devices failed to load: " .. H.failed end
+        end
+    end
     if not call(H, chunk) then return nil, "The mode failed to load: " .. H.failed end
     local keys = {}
     for _, k in ipairs(type(env.Mode.Keys) == "table" and env.Mode.Keys or {}) do
@@ -461,6 +472,8 @@ function M.Stop()
     draw("cam off")
     setHud(false)
     M.Refresh()
+    -- The device editor's Play sets this to come back to the editor when the test ends.
+    if M.onStop then local fn = M.onStop; M.onStop = nil; fn() end
 end
 
 function M.Leave()
@@ -474,12 +487,12 @@ updater:SetScript("OnUpdate", function()
 end)
 
 -- Solo: run a mode here, alone (a test of your own script, or a mode for one player).
-function M.Solo(text)
+function M.Solo(text, origin)
     if not has() then status("Modes need the Leyline browser client (20261025k or newer)."); return end
     M.Stop()
     M.state = "solo"
     if win then win:Hide() end
-    M.HostRun(text, { me() }, math.floor(now() * 1000) % 100000 + 1, "here", nil)
+    M.HostRun(text, { me() }, math.floor(now() * 1000) % 100000 + 1, origin or "here", nil)
 end
 
 -- ---------------------------------------------------------------- messages from the realm
@@ -543,7 +556,7 @@ local function dispatch(name, data)
         if M.host then
             local present = false
             for _, p in ipairs(M.host.players) do if p == tidy(data) then present = true end end
-            if not present then table.insert(M.host.players, tidy(data)) end
+            if not present then table.insert(M.host.players, tidy(data)); call(M.host, M.host.env.OnJoin, tidy(data)) end
         end
     elseif name == "left" then
         if M.host then
@@ -564,6 +577,8 @@ local function dispatch(name, data)
         M.Solo(data)
     elseif name == "published" then
         status("Sent for review: " .. tidy(data) .. ". A GM approves new modes before others see them.")
+    elseif name == "drafts" or name == "draft" or name == "dsaved" then
+        if M.OnDraftMessage then M.OnDraftMessage(name, data) end
     end
 end
 
@@ -883,6 +898,8 @@ local function buildEditor()
     button(ed, "Template", 80, function() box:SetText(M.TEMPLATE) end, "BOTTOMLEFT", 274, 40)
     button(ed, "Bumper Balls", 100, function() box:SetText(M.BUILTIN) end, "BOTTOMLEFT", 358, 40)
     button(ed, "Coin Dash", 86, function() box:SetText(M.COINDASH) end, "BOTTOMLEFT", 462, 40)
+    button(ed, "Device editor", 106, function() local t = box:GetText() or ""; ed:Hide(); if M.DeviceEditor then M.DeviceEditor(t) end end,
+        "BOTTOMLEFT", 166, 14)
     ed.mine = button(ed, "Mine: -", 140, function()
         local mine = M.MyModes()
         if #mine == 0 then ed.info:SetText("Nothing saved yet."); return end
@@ -891,8 +908,8 @@ local function buildEditor()
         box:SetText(pick.text)
         ed.mine:SetText(("Mine: " .. pick.title):sub(1, 22))
     end, "BOTTOMLEFT", 22, 14)
-    ed.info = label(ed, "Docs: docs/MODES.md. Run solo tests it here; Publish sends it to a GM for review.", "GameFontHighlightSmall", "BOTTOMLEFT", 170, 20)
-    ed.info:SetWidth(440)
+    ed.info = label(ed, "Docs: docs/MODES.md. Run solo tests it here; Publish sends it to a GM for review.", "GameFontHighlightSmall", "BOTTOMLEFT", 278, 20)
+    ed.info:SetWidth(330)
     ed:Hide()
 end
 
@@ -1021,5 +1038,7 @@ SlashCmdList["LEYLINEMODES"] = function(arg)
     if arg == "bumper" or arg == "solo" then return M.Solo(M.BUILTIN) end
     if arg == "coins" or arg == "coin" then return M.Solo(M.COINDASH) end
     if arg == "edit" or arg == "editor" then return M.Editor() end
+    if (arg == "devices" or arg == "device") and M.DeviceEditor then return M.DeviceEditor() end
+    if (arg == "plates" or arg == "pads") and M.PLATES then return M.Solo(M.PLATES) end
     M.Toggle()
 end

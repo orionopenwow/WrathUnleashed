@@ -14,10 +14,14 @@
 --                      snap <name>\n<state>       the host's catch-up for a late joiner
 --                      end <text>                 the host finishes the game
 --                      publish <script>           (in parts) a mode for review
+--                      dsave <title>\n<script>     save a draft to your account | dlist | dload <title> | ddel <title>
 --   server -> client   modes key,title,author,min,max;...  | invite <id> <host> <title> | lobby <id> <host> <names> <title>
 --                      start <id> <host> <x> <y> <z> <o> <seed> <names>\n<script, for the host only>
 --                      script <script> (solo) | st | keys | in <name> <KEY> <0|1> | joined <name> | left <name>
 --                      msg <text> | end <text> | published <key>
+--                      drafts <title;title...> | draft <title>\n<script> | dsaved <title>
+-- Device modes (Modes.lua / ModeDevices.lua) are ordinary modes whose script is one Devices.Run[=[ ... ]=] block of
+-- data; they publish, host and relay like any other. Review lists them as "(devices)" when that's all they are.
 -- GM: .modes pending | approve <key> | reject <key> | unlist <key>
 -- mod-ale events: 4 ON_LOGOUT, 28 ON_MAP_CHANGE, 42 ON_COMMAND.
 
@@ -40,7 +44,8 @@ local ST_PER_SEC = 25
 local IN_PER_SEC = 30
 local MAX_ST = 4000
 
--- The built-in modes. Copies of Modes.lua's M.BUILTIN and M.COINDASH (stream/tests/test_ov_modes.lua checks they match).
+-- The built-in modes. Copies of Modes.lua's M.BUILTIN and M.COINDASH and ModeDevices.lua's M.PLATES
+-- (stream/tests/test_ov_modes.lua checks they match).
 local BUMPER = [==[
 -- Bumper Balls: push the others off the arena. Last ball rolling wins.
 Mode.Title = "Bumper Balls"
@@ -242,6 +247,43 @@ function OnTick(dt)
 end
 ]==]
 
+-- Pressure Plates: made only of devices. Three pads in order open a door and stop the clock.
+local PLATES = [==[
+-- Made in the device editor. Everything in Devices.Run is data: devices and wires.
+Mode.Title = "Pressure Plates"
+Mode.Players = { 1, 8 }
+Devices.Run[=[
+set area=14 floor=34384a
+d 1 spawn name=Start z=-9
+d 2 trigger name=Pad%201 x=-6 z=-2 once=1 color=ff5a3c
+d 3 trigger name=Pad%202 x=6 z=-2 on=0 once=1 color=ffd23c
+d 4 trigger name=Pad%203 z=3 on=0 once=1 color=3cb4ff
+d 5 counter name=Pads%20done
+d 6 timer name=Clock x=3 z=-9 seconds=0 dir=up auto=1
+d 7 mover name=Door y=1.5 z=8 sx=4 sy=3 sz=0.5 color=b48cff path=0,3.4,0 speed=2.5
+d 8 mover name=Wall%20left x=-8 y=1.5 z=8 sx=12 sy=3 sz=0.5 color=6a5f8a
+d 9 mover name=Wall%20right x=8 y=1.5 z=8 sx=12 sy=3 sz=0.5 color=6a5f8a
+d 10 hud name=Opened text=Door%20open%21%20Your%20time%3A%20%7B6%7D%20s
+d 11 hud name=Wrong%20order text=Not%20yet%3A%20pads%20go%201,%202,%203.
+d 12 trigger name=Finish z=11.5 w=4 d=2 on=0 once=1 color=50ff78
+d 13 round name=Game delay=0 endtext=%7Bplayer%7D%20got%20through%20in%20%7B6%7D%20s%21
+d 14 hud name=Hello x=-3 z=-9 text=Step%20on%20the%20pads%20in%20order%3A%201,%202,%203.
+w 13 roundstart 14 show
+w 2 enter 3 enable
+w 3 enter 4 enable
+w 2 enter 5 add
+w 3 enter 5 add
+w 4 enter 5 add
+w 3 denied 11 show
+w 4 denied 11 show
+w 5 reached 7 start
+w 5 reached 6 stop
+w 5 reached 10 show
+w 5 reached 12 enable
+w 12 enter 13 finish
+]=]
+]==]
+
 local modes = {}      -- key -> { key, title, author, guid, min, max, text, approved }
 local order = {}
 
@@ -261,6 +303,20 @@ end
 
 addMode("bumper", BUMPER, "Leyline", 0, true)
 addMode("coindash", COINDASH, "Leyline", 0, true)
+addMode("plates", PLATES, "Leyline", 0, true)
+local BUILTIN = { bumper = true, coindash = true, plates = true }
+
+-- A mode that is nothing but devices: header lines, comments and one Devices.Run block of data.
+local function isDevices(text)
+    local rest = text:gsub("Devices%.Run%s*%[=%[.-%]=%]", "", 1)
+    if rest == text then return false end
+    for line in (rest .. "\n"):gmatch("([^\n]*)\n") do
+        line = line:match("^%s*(.-)%s*$")
+        if line ~= "" and not line:match("^%-%-") and not line:match('^Mode%.Title%s*=%s*"[^"]*"$')
+            and not line:match("^Mode%.Players%s*=%s*{%s*%d+%s*,%s*%d+%s*}$") then return false end
+    end
+    return true
+end
 
 local function exec(sql) if CharDBExecute then pcall(CharDBExecute, sql) end end
 exec([[CREATE TABLE IF NOT EXISTS mod_modes (
@@ -465,15 +521,82 @@ local function publishCommand(player, text)
     send(player, "published", key)
 end
 
+-- Drafts: your saved modes and device layouts, on your account (private; nothing is reviewed or shared).
+local MAX_DRAFTS = 20
+exec([[CREATE TABLE IF NOT EXISTS mod_mode_drafts (
+  account INT UNSIGNED NOT NULL, title VARCHAR(40) NOT NULL, script MEDIUMTEXT NOT NULL,
+  updated_at INT UNSIGNED NOT NULL, PRIMARY KEY (account, title))]])
+local drafts, draftAt = {}, {}
+
+local function accountOf(player)
+    -- Without GetAccountId (an old core), drafts follow the character instead.
+    return tonumber(try(player, "GetAccountId")) or player:GetGUIDLow()
+end
+local function draftTitle(t) return ((t or ""):gsub("[^%w %-!&%.]", "")):sub(1, 40) end
+local function draftsOf(player)
+    local a = accountOf(player)
+    if not drafts[a] then
+        drafts[a] = {}
+        if CharDBQuery then
+            local ok, q = pcall(CharDBQuery, string.format("SELECT title, script FROM mod_mode_drafts WHERE account = %d", a))
+            if ok and q then
+                repeat drafts[a][q:GetString(0)] = unhex(q:GetString(1)) until not q:NextRow()
+            end
+        end
+    end
+    return drafts[a], a
+end
+
+local function dsaveCommand(player, data)
+    local title, text = data:match("^([^\n]*)\n(.*)$")
+    title = draftTitle(title)
+    if not text or title == "" then return say(player, "A draft needs a name.") end
+    if #text < 20 or #text > MAX_SCRIPT then return say(player, "A draft must be between 20 bytes and 14 KB.") end
+    if text:find("\27", 1, true) then return say(player, "Compiled chunks aren't allowed.") end
+    local g = player:GetGUIDLow()
+    if draftAt[g] and now() - draftAt[g] < 2 then return say(player, "Saving too fast; try again in a moment.") end
+    draftAt[g] = now()
+    local mine, a = draftsOf(player)
+    local n = 0
+    for _ in pairs(mine) do n = n + 1 end
+    if not mine[title] and n >= MAX_DRAFTS then return say(player, "You have " .. MAX_DRAFTS .. " drafts; delete one first.") end
+    mine[title] = text
+    exec(string.format("REPLACE INTO mod_mode_drafts (account, title, script, updated_at) VALUES (%d, '%s', '%s', %d)", a, title, hex(text), now()))
+    send(player, "dsaved", title)
+end
+
+local function dlistCommand(player)
+    local l = {}
+    for t in pairs(draftsOf(player)) do l[#l + 1] = t end
+    table.sort(l)
+    send(player, "drafts", table.concat(l, ";"))
+end
+
+local function dloadCommand(player, title)
+    title = draftTitle(title)
+    local text = draftsOf(player)[title]
+    if not text then return say(player, "No draft called '" .. title .. "'.") end
+    send(player, "draft", title .. "\n" .. text)
+end
+
+local function ddelCommand(player, title)
+    title = draftTitle(title)
+    local mine, a = draftsOf(player)
+    if not mine[title] then return end
+    mine[title] = nil
+    exec(string.format("DELETE FROM mod_mode_drafts WHERE account = %d AND title = '%s'", a, title))
+    dlistCommand(player)
+end
+
 local function gmCommand(player, word, key)
     if not isGM(player) then return say(player, "That's for GMs.") end
     if word == "pending" then
         local l = {}
-        for _, k in ipairs(order) do local m = modes[k] if m and not m.approved then l[#l + 1] = k .. " (" .. m.title .. " by " .. m.author .. ")" end end
+        for _, k in ipairs(order) do local m = modes[k] if m and not m.approved then l[#l + 1] = k .. " (" .. m.title .. " by " .. m.author .. (isDevices(m.text) and ", devices" or "") .. ")" end end
         return say(player, #l > 0 and ("Waiting: " .. table.concat(l, ", ")) or "Nothing waiting for review.")
     end
     local m = modes[key or ""]
-    if not m or key == "bumper" or key == "coindash" then return say(player, "No such mode: " .. tostring(key)) end
+    if not m or BUILTIN[key] then return say(player, "No such mode: " .. tostring(key)) end
     if word == "approve" then
         m.approved = true
         exec(string.format("UPDATE mod_modes SET approved = 1 WHERE mkey = '%s'", (key:gsub("[^%w_]", ""))))
@@ -503,6 +626,7 @@ local handlers = {
     leave = function(p) leave(p) end,
     ["in"] = inCommand, st = stCommand, keys = keysCommand, snap = snapCommand, ["end"] = endCommand,
     publish = publishCommand,
+    dsave = dsaveCommand, dlist = function(p) dlistCommand(p) end, dload = dloadCommand, ddel = ddelCommand,
 }
 for name, fn in pairs(handlers) do OVMod.On(MOD, name, function(player, data) fn(player, data or "") end) end
 
@@ -517,4 +641,4 @@ end)
 RegisterPlayerEvent(4, function(event, player) leave(player) end)
 RegisterPlayerEvent(28, function(event, player) leave(player) end)
 
-return { sessions = sessions, modes = modes, BUMPER = BUMPER, COINDASH = COINDASH }
+return { sessions = sessions, modes = modes, drafts = drafts, BUMPER = BUMPER, COINDASH = COINDASH, PLATES = PLATES, isDevices = isDevices }
