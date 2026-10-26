@@ -186,3 +186,5 @@
 1054c ship  Save to GitHub (orionopenwow/WrathUnleashed): building suite (M3)
 1055a foreverui  Windows get solid backgrounds (they showed the world through them); Workshop panel rows no longer overlap
 1055b ship  Save to GitHub (orionopenwow/WrathUnleashed): solid window backgrounds
+1056a client  Client 20261026a: character-select sky (no black), build handles (axis arrows, turn ring, box select, hold Q spawn menu, Ctrl+C/V), no 30 fps cap, faster first world frame, your character hidden behind a mode camera
+1056b ship  Save to GitHub (orionopenwow/WrathUnleashed): client 20261026a and its patch
