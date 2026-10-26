@@ -172,3 +172,5 @@
 1048b ship  Save to GitHub (orionopenwow/WrathUnleashed): game-file caching on the stream site
 1049a client  Game files no longer stall 1-3 s in bursts: the sign-in check now queues connections instead of dropping them (50 files at once: 2.6 s before)
 1049b ship  Save to GitHub (orionopenwow/WrathUnleashed): stream portal connection queue
+1051a client  Faster Enter World: the files entering the world needs download first at character select (was ~54 s of one-at-a-time reads); cancelled sound reads no longer count as failures
+1051b ship  Save to GitHub (orionopenwow/WrathUnleashed): Enter World prefetch order, retry fix, GitHub builds without the second sign-in

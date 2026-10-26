@@ -73,6 +73,9 @@
               stats.retried++;
               return new Promise(function (r) { setTimeout(r, waits[n]); }).then(function () { return attempt(n + 1); });
             }, function (err) {
+              // a read the game cancelled itself (AbortController: a sound it no longer needs) is not a failure
+              var sig = (init && init.signal) || (input && input.signal);
+              if ((err && err.name === 'AbortError') || (sig && sig.aborted)) throw err;
               if (n >= waits.length) { stats.failed++; note(url, 'network'); throw err; }
               stats.retried++;
               return new Promise(function (r) { setTimeout(r, waits[n]); }).then(function () { return attempt(n + 1); });

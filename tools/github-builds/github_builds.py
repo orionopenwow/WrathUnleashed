@@ -138,16 +138,22 @@ def signin(gh: GitHub) -> str:
         raise Fail(f"The GitHub CLI is signed in as {login or '?'}. Switch to the owner's account (gh auth switch), "
                    "then run this again.")
     missing = has_scopes(parse_scopes(out))
-    if missing:
-        say(f"  GitHub needs {', '.join(missing)} for the builds. A browser page opens: sign in if asked, enter the")
-        say("  code shown here, and click Authorize.")
-        rc, _ = gh.run(["gh", "auth", "refresh", "-h", "github.com", "-s", ",".join(NEED_SCOPES)], capture=False)
+    if "workflow" in missing:
+        # The one permission the builds can't do without (pushing .github/workflows files).
+        say("  GitHub needs the 'workflow' permission. In this window: note the code, press Enter, type the")
+        say("  code on the GitHub page that opens, and click Authorize.")
+        rc, _ = gh.run(["gh", "auth", "refresh", "-h", "github.com", "-s", "workflow"], capture=False)
         if rc != 0:
             raise Fail("The permission step did not finish. Run this again and click Authorize in the browser.")
         rc, out = gh.api("user", "-i")
         missing = has_scopes(parse_scopes(out))
-        if missing:
-            raise Fail(f"GitHub still lacks {', '.join(missing)}. Run this again.")
+        if "workflow" in missing:
+            raise Fail("GitHub still lacks the 'workflow' permission. Run this again.")
+    optional = [m for m in missing if m != "workflow"]
+    if optional:
+        # write:packages / admin:org only let this script flip org settings itself; without them those
+        # settings land on the checklist at the end instead. Never block on a second browser sign-in.
+        say(f"  (without {', '.join(optional)}: the organization settings go on the checklist at the end)")
     say(f"  signed in as {login}, permissions ok")
     return login
 

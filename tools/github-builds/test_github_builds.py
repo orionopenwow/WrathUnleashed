@@ -160,10 +160,10 @@ class TurnOn(unittest.TestCase):
         rc, out = self.go()
         self.assertEqual(rc, 0, out)
         self.assertIn("GITHUB BUILDS OK", out)
-        # the permissions: one refresh, with exactly the three scopes, in the owner's own console
+        # the permissions: one refresh, only for the scope the builds can't do without
         refresh = self.calls("gh", "auth", "refresh")
         self.assertEqual(len(refresh), 1)
-        self.assertEqual(refresh[0][0][-1], "workflow,write:packages,admin:org")
+        self.assertEqual(refresh[0][0][-1], "workflow")
         # Actions turned on (org was off, WrathUnleashed was off)
         self.assertEqual(self.gh.org_actions["enabled_repositories"], "all")
         self.assertTrue(self.gh.repo_actions[gb.WU_REPO])
@@ -273,6 +273,16 @@ class TurnOn(unittest.TestCase):
                                5, sleep=lambda s: None)
         self.assertEqual(set(res.values()), {"success"})
         self.assertIn("wu-images: success", out.getvalue())
+
+    def test_owner_token_without_org_scopes(self):
+        # The owner's real token (2026-10-25): repo + workflow, no write:packages/admin:org. The second
+        # browser sign-in stalled three times, so it must not be asked for at all.
+        self.gh.scopes = "delete_repo, gist, read:org, repo, workflow"
+        rc, out = self.go()
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.calls("gh", "auth", "refresh"), [])
+        self.assertIn("checklist at the end", out)
+        self.assertIn("GITHUB BUILDS OK", out)
 
     def test_scopes(self):
         self.assertEqual(gb.parse_scopes("x-oauth-scopes: repo, workflow, admin:org\n"), {"repo", "workflow", "admin:org"})
