@@ -164,3 +164,5 @@
 1045b-golf foreverui  Minigolf window: the help text no longer overlaps the buttons
 1045c-golf client  Client 20261025n (20261025m + minigolf camera): the hole fly-over plays, practice tees off clear of you
 1045d-golf ship  Save to GitHub (orionopenwow/WrathUnleashed): client 20261025n, golf camera fixes
+1046a client  Client 20261025o (on top of n): loading screen no longer waits ~2 minutes on shader warm-up, Dalaran zone and chat, smoother frames, no black on character select, IsMounted, load timing readout
+1046b ship  Save to GitHub (orionopenwow/WrathUnleashed): client 20261025o, GitHub builds log
