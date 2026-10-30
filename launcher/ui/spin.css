@@ -30,10 +30,6 @@
 .busy > .ly-spin:first-child { --ly-spin-size: 15px; margin: -2px 7px 0 0; }
 /* a server pill that is checking: the spinner takes the dot's place */
 .srv-state:has(.busy) > .dot, .pill:has(.busy) > .dot { display: none; }
-/* the header mark: the same spinner in its ring, calmer (class slow) */
-.brand .ly-spin {
-  width: 40px; height: 40px; border-radius: 50%;
-  background: radial-gradient(circle at 50% 45%, rgba(91, 141, 239, 0.18), rgba(139, 108, 240, 0.06) 70%);
-  box-shadow: 0 0 0 1px var(--t-border-strong);
-}
-.brand .ly-spin::before, .brand .ly-spin::after { inset: 3px; }
+/* the header mark: just the cut mark, spinning (calmer, class slow); no ring or disc behind it (owner 2026-10-30) */
+.brand .ly-spin { width: 40px; height: 40px; background: none; box-shadow: none; }
+.brand .ly-spin::before, .brand .ly-spin::after { inset: 0; }

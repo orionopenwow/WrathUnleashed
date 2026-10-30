@@ -2305,8 +2305,8 @@ background:rgba(24,27,35,.86);-webkit-backdrop-filter:blur(10px);backdrop-filter
 @supports (animation-timeline:scroll()){.hb-top{animation:hb-edge linear both;animation-timeline:scroll(root);animation-range:0 56px}}
 @keyframes hb-edge{from{border-bottom-color:transparent;box-shadow:none}to{border-bottom-color:var(--lk-border);box-shadow:0 6px 22px rgba(0,0,0,.35)}}
 .hb-brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none;color:var(--lk-text)!important;flex:none}
-.hb-mark{border-radius:50%;background:radial-gradient(circle at 50% 45%,rgba(91,141,239,.18),rgba(139,108,240,.06) 70%);box-shadow:0 0 0 1px var(--lk-border-strong)}
-.hb-mark::before,.hb-mark::after{inset:3px}
+.hb-mark{background:none;box-shadow:none}
+.hb-mark::before,.hb-mark::after{inset:0}
 .hb-word{display:grid;line-height:1.05}.hb-word b{font-size:23px;font-weight:700;letter-spacing:-.01em}
 .hb-word i{font-style:normal;font-weight:600;font-size:15.5px;color:var(--lk-accent)}
 .hb-nav{display:flex;align-items:center;gap:clamp(2px,.6vw,12px);margin:0 auto}

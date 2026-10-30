@@ -221,8 +221,9 @@
     b.append(img, txt);
     img.addEventListener("error", () => b.remove());
     b.addEventListener("click", () => show(FEATURED));
-    const h1 = news.querySelector("h1");
-    news.insertBefore(b, h1 || null);
+    img.addEventListener("error", () => news.classList.remove("has-feat"));
+    news.classList.add("has-feat");      // the art fills the whole hero card; its words sit on top
+    news.insertBefore(b, news.firstChild);
   }
   featureBanner();
 
