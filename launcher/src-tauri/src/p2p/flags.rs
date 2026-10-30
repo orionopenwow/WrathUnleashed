@@ -27,6 +27,7 @@ pub const KNOWN: &[(&str, &str)] = &[
     ("mesh_realms", "Read the realm list from the Leyline network (signed records), with our site as fallback"),
     ("mesh_relays", "Play through community relays when they are closer (our relay stays the fallback)"),
     ("relay_volunteer", "Help the network: relay for others (only when you turn it on for this PC)"),
+    ("herokey_sso", "Sign in to community realms with your Hero Key (no account per realm)"),
 ];
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -53,6 +54,8 @@ pub struct Flags {
     /// "Help the network: relay for others" is offered. It never starts on the site's word alone: see
     /// `volunteer_allowed`.
     pub relay_volunteer: bool,
+    /// Hero Key sign-in on Beacons (`crate::herokey`, docs/HERO-KEY-SSO.md): "Sign in with your Hero Key" on join.
+    pub herokey_sso: bool,
     pub limits: Limits,
     /// STUN servers for the NAT check (`host:port`), only used when `p2p_hosting` is on.
     pub stun: Vec<String>,
@@ -68,6 +71,7 @@ impl Flags {
             "mesh_realms" => self.mesh_realms,
             "mesh_relays" => self.mesh_relays,
             "relay_volunteer" => self.relay_volunteer,
+            "herokey_sso" => self.herokey_sso,
             _ => return None,
         })
     }
@@ -80,6 +84,7 @@ impl Flags {
             "mesh_realms" => self.mesh_realms = on,
             "mesh_relays" => self.mesh_relays = on,
             "relay_volunteer" => self.relay_volunteer = on,
+            "herokey_sso" => self.herokey_sso = on,
             _ => {}
         }
     }
@@ -294,7 +299,7 @@ pub mod tests {
     fn site_file_is_hash_checked() {
         let good = doc(&[("torrent_downloads", true)]);
         // The same document from stream/leyline_net.py make_doc() (stream/tests/test_leyline_net.py checks it too).
-        assert_eq!(good["sha256"], "eff5c094c2e8e1fb66c46eec8a20068320eb11a76746d3e91f60e96845df00e7");
+        assert_eq!(good["sha256"], "7e272c43782845c39be73543e62f7d095792b4529ca9c8b063f94e09f5ab725c");
         assert!(check(&good).is_ok());
         let f = from_doc(&good);
         assert!(f.torrent_downloads && !f.p2p_hosting);
@@ -324,6 +329,7 @@ pub mod tests {
         set_local(d.path(), "relay_volunteer", Some(false)).unwrap();
         assert!(!volunteer_allowed(&site, &load_local(d.path())));
         assert!(!Flags::default().mesh_realms && !Flags::default().relay_volunteer);
+        assert!(!Flags::default().herokey_sso && !from_doc(&doc(&[])).herokey_sso, "Hero Key sign-in ships off");
     }
 
     #[test]

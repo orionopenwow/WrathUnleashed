@@ -22,11 +22,13 @@ function storage(init = {}) {
   return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k), m };
 }
 
-function page(env, { store = storage(), protocol = 'https:', host = 'wrath.example' } = {}) {
+function page(env, { store = storage(), protocol = 'https:', host = 'wrath.example', fetch } = {}) {
   const opened = [];
   function FakeWS(url, protocols) { this.url = url; this.protocols = protocols; opened.push(url); }
   FakeWS.OPEN = 1;
-  const win = { __wenilla_env: env, location: { protocol, host }, localStorage: store, WebSocket: FakeWS, console };
+  const win = { __wenilla_env: env, location: { protocol, host, href: `${protocol}//${host}/` }, localStorage: store,
+                WebSocket: FakeWS, console, URL, setTimeout, clearTimeout };
+  if (fetch) win.fetch = fetch;
   win.window = win;
   vm.runInNewContext(HOP_SRC, win);
   return { win, opened, FakeWS };
@@ -222,4 +224,121 @@ test('__wuHop.status(): the hop, the rewritten sockets, the watcher; never a pas
   const plain = page({ user: 'WR000123', pass: 'x' }).win.__wuHop.status();
   assert.equal(plain.hop, null);
   assert.deepEqual(Array.from(plain.sockets), []);
+});
+
+// ---- Hero Key sign-in (docs/HERO-KEY-SSO.md; the site's herokey_sso flag): the env carries hop_sso and a one-time
+// login; the page redeems it at the relay before the client starts, with no join page and nothing kept.
+const SIG = 'ab'.repeat(64);
+const ssoEnv = (over = {}) => Object.assign(hopEnv(), {
+  user: 'HKABCDEFGHIJKLMN', pass: 'Q7W8E9R2T3Y4U5I6',
+  hop_sso: { assertion: { aud: RID, sub: 'x'.repeat(26), nonce: '00' }, sig: SIG,
+             redeem: `https://relay.example/api/realms/${RID}/herokey` } }, over);
+
+function fakeFetch(answer) {
+  const calls = [];
+  const f = (url, init) => {
+    calls.push({ url: String(url), init });
+    if (String(url).endsWith('/herokey')) return answer();
+    return Promise.resolve({ ok: true, url: String(url), wasm: true });
+  };
+  f.calls = calls;
+  return f;
+}
+const ok = () => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true }) });
+const refuse = (status, code) => () => Promise.resolve({ ok: false, status, json: () => Promise.resolve({ code }) });
+
+test('hero key: redeemed at the relay before the client starts; the one-time login, nothing kept', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const f = fakeFetch(() => gate.then(ok));
+  const store = storage({ ['wu.leyline.login.' + RID]: JSON.stringify({ user: 'friend1', pass: 'hunter22' }) });
+  const env = ssoEnv();
+  const { win } = page(env, { fetch: f, store });
+  const H = win.__wuHop;
+  assert.equal(H.state.login, true, 'no join page while it is redeemed');
+  assert.equal(H.state.sso, 'pending');
+  assert.equal(env.hop_sso, undefined, 'the assertion is not left for the client');
+  assert.equal(env.user, 'HKABCDEFGHIJKLMN', 'the one-time login, not the kept one');
+  const post = f.calls[0];
+  assert.equal(post.url, `https://relay.example/api/realms/${RID}/herokey`);
+  assert.equal(post.init.method, 'POST');
+  assert.equal(post.init.credentials, 'omit');
+  assert.deepEqual(Object.keys(JSON.parse(post.init.body)).sort(), ['assertion', 'sig']);
+  assert.ok(!post.init.body.includes('Q7W8E9R2T3Y4U5I6'), 'the password never goes to the relay');
+  // the client's wasm waits for the realm's answer
+  let started = false;
+  const wasm = win.fetch('https://wrath.example/wenilla_bg.wasm').then(() => { started = true; });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(started, false);
+  const other = await win.fetch('https://wrath.example/data/x');   // nothing else waits
+  assert.ok(other.ok);
+  release();
+  await wasm;
+  assert.equal(started, true);
+  assert.equal(H.state.sso, 'ok');
+  assert.equal(env.pass, 'Q7W8E9R2T3Y4U5I6');
+  assert.equal(store.m.get('wu.leyline.login.' + RID), JSON.stringify({ user: 'friend1', pass: 'hunter22' }), 'storage untouched');
+  assert.equal(store.m.size, 1);
+  assert.ok(!JSON.stringify(H.status()).includes('Q7W8E9R2T3Y4U5I6'), 'no password in the status');
+  assert.equal(H.status().hop.sso, 'ok');
+});
+
+test('hero key: a realm that refuses it falls back to the kept login, else the join page', async () => {
+  const store = storage({ ['wu.leyline.login.' + RID]: JSON.stringify({ user: 'friend1', pass: 'hunter22' }) });
+  const env = ssoEnv();
+  const { win } = page(env, { fetch: fakeFetch(refuse(403, 'off')), store });
+  assert.equal(await win.__wuHop.state.ssoPending, false);
+  assert.equal(win.__wuHop.state.sso, 'failed:off');
+  assert.equal(win.__wuHop.state.login, true);
+  assert.equal(env.user, 'FRIEND1');
+  assert.equal(env.pass, 'hunter22');
+  const env2 = ssoEnv();
+  const p2 = page(env2, { fetch: fakeFetch(() => Promise.reject(new Error('down'))) });
+  assert.equal(await p2.win.__wuHop.state.ssoPending, false);
+  assert.equal(p2.win.__wuHop.state.sso, 'failed:network');
+  assert.equal(p2.win.__wuHop.state.login, false, 'the join page shows');
+  assert.equal(env2.user, undefined);
+  assert.equal(env2.pass, undefined);
+});
+
+test('hero key: "Use another account" declines it for this realm; a bad ticket is ignored', () => {
+  const store = storage();
+  const f = fakeFetch(ok);
+  const { win } = page(ssoEnv(), { fetch: f, store });
+  win.__wuHop.setSso(store, RID, false);
+  assert.equal(store.m.get('wu.leyline.sso.off.' + RID), '1');
+  const env = ssoEnv();
+  const f2 = fakeFetch(ok);
+  const p = page(env, { fetch: f2, store });
+  assert.equal(f2.calls.length, 0, 'declined: not redeemed');
+  assert.equal(p.win.__wuHop.state.login, false);
+  assert.equal(p.win.__wuHop.state.ssoOffer, true, 'the join page offers it back');
+  assert.equal(env.user, undefined);
+  win.__wuHop.setSso(store, RID, true);
+  assert.equal(store.m.has('wu.leyline.sso.off.' + RID), false);
+  // tickets that don't fit this hop: another realm, another relay, a non-HK login, a bad signature field
+  for (const over of [
+    { hop_sso: Object.assign(ssoEnv().hop_sso, { redeem: 'https://evil.example/api/realms/' + RID + '/herokey' }) },
+    { hop_sso: Object.assign(ssoEnv().hop_sso, { assertion: { aud: 'qrstuvwxyz234567' } }) },
+    { hop_sso: Object.assign(ssoEnv().hop_sso, { sig: 'nope' }) },
+    { user: 'WR000123' },
+  ]) {
+    const e = ssoEnv(over);
+    const f3 = fakeFetch(ok);
+    const q = page(e, { fetch: f3 });
+    assert.equal(f3.calls.length, 0, JSON.stringify(over));
+    assert.equal(q.win.__wuHop.state.login, false);
+    assert.equal(e.user, undefined);
+  }
+});
+
+test('hero key off (no hop_sso): exactly the old hop', () => {
+  const f = fakeFetch(ok);
+  const env = hopEnv();
+  const { win } = page(env, { fetch: f });
+  assert.equal(f.calls.length, 0);
+  assert.equal(win.__wuHop.state.sso, null);
+  assert.equal(win.__wuHop.state.ssoPending, null);
+  assert.equal(win.__wuHop.state.login, false);
+  assert.equal(win.fetch, f, 'fetch not wrapped');
 });

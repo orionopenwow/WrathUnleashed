@@ -609,6 +609,15 @@ def cmd_signup(a):
     _edit(lambda c: c.update(signup=a.mode))
 
 
+def cmd_herokey(a):
+    """Hero Key sign-in (docs/HERO-KEY-SSO.md): players signed in on the Leyline website get an account here
+    without the join page. Off by default; it only works once the kit pins the website's key (wunet/herokey.py)."""
+    _edit(lambda c: c.update(herokey=a.state == "on"))
+    from wunet import herokey
+    if a.state == "on" and not herokey.pinned_keys():
+        sys.stderr.write("Saved. Hero Key sign-in starts once this kit knows the website's key (a kit update).\n")
+
+
 def cmd_rules(a):
     """Re-read state/rules.txt and state/beacon.json; the agent sends the new text with its next heartbeat."""
     _edit(lambda c: None)
@@ -716,6 +725,9 @@ def main(argv=None):
     p = sub.add_parser("signup")
     p.add_argument("mode", choices=["invite", "open", "off"])
     p.set_defaults(fn=cmd_signup)
+    p = sub.add_parser("herokey", help="Hero Key sign-in: players from the Leyline website, no join page (off by default)")
+    p.add_argument("state", choices=["on", "off"])
+    p.set_defaults(fn=cmd_herokey)
     sub.add_parser("rules").set_defaults(fn=cmd_rules)
     p = sub.add_parser("volunteer-relay", help="relay for others (the Leyline mesh's community relay; off by default)")
     p.add_argument("--host", help="this PC's public DNS name (needed for TLS)")

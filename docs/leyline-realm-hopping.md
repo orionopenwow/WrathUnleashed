@@ -219,6 +219,12 @@ reloads signed in to that realm (`status().hop.login: true`, the login in `local
 
 ## Next step (design only): Hero Key single sign-on for Beacons
 
+**Built (2026-10-30), behind the `herokey_sso` flag, off by default: see [HERO-KEY-SSO.md](HERO-KEY-SSO.md).** The
+build differs from the sketch below in one way: the website signs a per-realm assertion (Ed25519, site key pinned in
+the host kit) carrying the per-realm pseudonym and the SRP verifier of a one-time password, instead of the browser
+deriving a per-realm key from the Hero Key secret. The rest (per-realm ids, one-time SRP login, the relay passing an
+opaque blob, a realm opt-in, bans per pseudonym) is as sketched. The original design, kept for the record:
+
 The goal: hop with no account step and no password kept in the browser. A player's Hero Key identity is their
 login on every Beacon that opts in.
 

@@ -172,3 +172,34 @@ test('without the relay\'s COEP + CORP headers, the isolated game page blocks th
     rl.stop();
   }
 });
+
+test('hero key: the page posts the assertion to the real relay (CORS from the game origin); refused -> join page', async () => {
+  // docs/HERO-KEY-SSO.md: no realm is online on this relay, so it answers 404 "offline" with CORS for the game page;
+  // the page then shows the realm's join page as before, and the one-time login is dropped
+  const envRef = { env: {} };
+  const site = await gamePage(envRef);
+  const gameOrigin = `http://localhost:${site.port}`;
+  const rl = await relay([gameOrigin]);
+  envRef.env = Object.assign(hopEnv(rl.port), {
+    user: 'HKABCDEFGHIJKLMN', pass: 'Q7W8E9R2T3Y4U5I6',
+    hop_sso: { assertion: { aud: RID }, sig: 'ab'.repeat(64), redeem: `http://127.0.0.1:${rl.port}/api/realms/${RID}/herokey` } });
+  const browser = await chromium.launch();
+  try {
+    const page = await (await browser.newContext()).newPage();
+    const posts = [];
+    page.on('request', (r) => { if (r.url().endsWith('/herokey')) posts.push(r.method()); });
+    await page.goto(`${gameOrigin}/?multitab=1`);
+    await page.waitForSelector('#wu-hop-join iframe', { timeout: 15000 });
+    const st = await page.evaluate(() => ({ s: window.__wuHop.status(), env: window.__wenilla_env }));
+    assert.ok(posts.includes('POST'), 'the assertion was posted');
+    assert.equal(st.s.hop.sso, 'failed:offline', 'the relay answered, readable from the game origin (CORS)');
+    assert.equal(st.s.hop.login, false);
+    assert.equal(st.env.user, undefined);
+    assert.equal(st.env.pass, undefined);
+    assert.equal(st.env.hop_sso, undefined);
+  } finally {
+    await browser.close();
+    site.stop();
+    rl.stop();
+  }
+});

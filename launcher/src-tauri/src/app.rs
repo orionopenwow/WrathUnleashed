@@ -250,6 +250,34 @@ async fn play_realm(core: State<'_, Core>, client: String, slug: String) -> Resu
     Ok(msg)
 }
 
+/// "Sign in with your Hero Key" on a community realm (the herokey_sso flag; docs/HERO-KEY-SSO.md): the website's
+/// ticket for that realm, redeemed at its relay (the realm makes or finds this player's account and sets a one-time
+/// login), the account name written into the client's Config.wtf, then the client pointed at the realm and started.
+/// The one-time password comes back for the UI to show: the 3.3.5a client can't take one from outside.
+#[tauri::command]
+async fn play_realm_herokey(core: State<'_, Core>, client: String, slug: String) -> Result<crate::herokey::Login, String> {
+    let dir = core.dir.clone();
+    if !crate::p2p::flags::current(&dir).herokey_sso {
+        return Err("Hero Key sign-in for community realms isn't on yet.".into());
+    }
+    let realm = realms::cached(&dir).into_iter().find(|r| r.slug == slug).ok_or("That realm is not on the list any more.")?;
+    let rid = realm.realm_id.clone().filter(|_| !realm.official).ok_or("Hero Key sign-in is for community realms.")?;
+    let client = {
+        let s = core.snapshot();
+        realms::pick_client(&realm, &s.clients, Some(&client))?.id.clone()
+    };
+    let d2 = dir.clone();
+    let login = blocking(move || crate::herokey::sign_in(&d2, &rid)).await.map_err(|e| {
+        if e == "signed_out" { "Sign in on the Friends page first (your Hero Key, on the web).".to_string() } else { e }
+    })?;
+    let profile = core.client(&client)?;
+    let _ = crate::herokey::set_account_name(&profile.path, &login.user);
+    let r2 = realm.clone();
+    let addr = blocking(move || realms::desktop_address(&r2, |relay| format!("https://{relay}"))).await?;
+    point_and_play(&core, &client, &addr, true)?;
+    Ok(login)
+}
+
 #[derive(Serialize)]
 struct Joined {
     address: String,
@@ -808,6 +836,7 @@ pub fn run() {
             set_wine,
             play,
             play_realm,
+            play_realm_herokey,
             join_invite,
             back_to_official,
             restore_realmlist,

@@ -215,6 +215,7 @@ docs = _load_module("wu_docs", "docs.py")   # /wrath/docs (stream/docs.py: the L
 hostflow = _load_module("wu_hostflow", "hostflow.py")   # /wrath/host: "+ Your server" (stream/hostflow.py)
 creations = _load_module("wu_creations", "creations.py")   # /wrath/workshop: what players made (stream/creations.py)
 leyline_net = _load_module("wu_leyline_net", "leyline_net.py")   # /wrath/leyline/flags.json + the Host pack (stream/leyline_net.py)
+herokey_mod = _load_module("wu_herokey", "herokey_sso.py")   # Hero Key sign-in on Beacons (stream/herokey_sso.py)
 hub_mod = _load_module("wu_hub", "hub.py")   # /wrath/leyline-preview: the hidden Leyline hub (stream/hub.py)
 playmodes = _load_module("wu_playmodes", "playmodes.py")   # game modes: /wrath/modes.json, Games, ?go=mode: (stream/playmodes.py)
 if hub_mod is not None:
@@ -756,11 +757,84 @@ def hop_env(sess: dict) -> dict:
         # (the same account; the relay and the Beacon agent only carry SRP, never the password).
         env.update(user=sess["user"], hop_home="1")
         env["pass"] = sess["pass"]
+    else:
+        # Hero Key sign-in (the herokey_sso flag; off: nothing here, the join page as before): a signed assertion
+        # for this realm and the one-time login it sets there. wrath-early.js redeems it at the relay before the
+        # client starts; a realm that doesn't take it falls back to the join page.
+        t = herokey_issue(sess["user"], rid, herokey_mod.LOGIN_TTL_WEB if herokey_mod else 120)
+        if t:
+            env["hop_sso"] = {"assertion": t["assertion"], "sig": t["sig"], "redeem": herokey_redeem_url(rid)}
+            env.update(user=t["login"]["user"])
+            env["pass"] = t["login"]["pass"]
     if sess.get("mode") == OWN:
         env["mode"] = OWN
     else:
         env.update(slice=sess["slice"], slice_tier=str(sess["tier"]))
     return env
+
+
+# ----------------------------------------------------------------------------------------------
+# Hero Key sign-in on Beacons (docs/HERO-KEY-SSO.md): behind the herokey_sso flag, OFF by default
+# ----------------------------------------------------------------------------------------------
+# The site key and the pseudonym pepper live beside the flags file (/data/leyline, 0600), made on first use.
+HEROKEY_DIR = os.environ.get("WU_HEROKEY_DIR", "") or getattr(leyline_net, "DIR", "/data/leyline")
+herokey_keys = herokey_mod.Keys(HEROKEY_DIR) if herokey_mod is not None else None
+
+
+def herokey_on() -> bool:
+    """The owner turned herokey_sso on (the admin console's flags). Read on every use, so turning it off is instant."""
+    if herokey_keys is None or leyline_net is None:
+        return False
+    try:
+        return leyline_net.load().get("flags", {}).get("herokey_sso") is True
+    except Exception:   # noqa: BLE001: a broken flags file means off
+        return False
+
+
+def herokey_redeem_url(rid: str) -> str:
+    return f"{JOIN_BASE}/api/realms/{rid}/herokey"
+
+
+def herokey_issue(user: str, rid: str, login_ttl: int) -> dict | None:
+    """An assertion and one-time login for this account on this realm, or None (flag off, too many, a key problem).
+    Never logged: the login is the player's alone."""
+    if not herokey_on() or not REALM_ID_RE.match(rid or "") or not ACCOUNT_RE.match(user or ""):
+        return None
+    if not herokey_limit.hit("hk:" + user.upper(), 60) or not herokey_limit.hit("hk-all", 20000):
+        return None
+    try:
+        return herokey_mod.issue(herokey_keys.secret(), herokey_keys.pepper(), user, rid, PUBLIC_HOST, login_ttl)
+    except Exception as e:   # noqa: BLE001: the hop falls back to the join page
+        logging.getLogger("wrath-portal").warning("herokey: could not issue (%s)", type(e).__name__)
+        return None
+
+
+def herokey_issue_api(acct: str, realm, via: str) -> tuple[int, dict]:
+    """POST /wrath/api/social/herokey {realm} (stream/social.py): the launcher's Hero Key sign-in to a Beacon."""
+    if not herokey_on():
+        return 404, {"error": "Hero Key sign-in for community realms isn't on yet."}
+    if not isinstance(realm, str) or not REALM_ID_RE.match(realm):
+        return 400, {"error": "That is not a realm id."}
+    if realm == hangout_id():
+        return 400, {"error": "The Dalaran Hangout uses your own game login."}
+    if not any(r["id"] == realm and r["live"] for r in community_realms()[0]):
+        return 404, {"error": "That realm isn't online right now."}
+    t = herokey_issue(acct, realm, herokey_mod.LOGIN_TTL_LAUNCHER if via == "launcher" else herokey_mod.LOGIN_TTL_WEB)
+    if not t:
+        return 429, {"error": "Too many sign-ins. Try again later."}
+    return 200, {"ok": True, "realm": realm, "assertion": t["assertion"], "sig": t["sig"], "login": t["login"],
+                 "redeem": herokey_redeem_url(realm)}
+
+
+def herokey_public() -> tuple[int, bytes, str] | None:
+    """GET /wrath/leyline/herokey.json: the site's public key(s), for the host kit to pin. Only while the flag is on."""
+    if not herokey_on():
+        return None
+    try:
+        doc = herokey_keys.public_doc()
+    except Exception:   # noqa: BLE001
+        return None
+    return 200, json.dumps(doc, separators=(",", ":")).encode(), "application/json; charset=utf-8"
 
 
 def env_js(sess: dict) -> bytes:
@@ -2149,6 +2223,7 @@ class _Window:
 page_limit = _Window(60)
 browse_limit = _Window(60)   # public read-only pages (Leyline, realms, modes, armory, mods, share links): 600 a minute
 gate_limit = _Window(60)
+herokey_limit = _Window(3600)   # Hero Key sign-in assertions: 60 an hour per account
 armory_limit = _Window(60)   # armory searches: 30 a minute per address, on top of page_limit
 
 
@@ -2726,6 +2801,11 @@ class PageHandler(BaseHTTPRequestHandler):
         if path.startswith("/wrath/art/"):
             self.art(urllib.parse.unquote(path[len("/wrath/art/"):]))
             return
+        if path == "/wrath/leyline/herokey.json":   # the Hero Key sign-in public key (only with herokey_sso on)
+            got = herokey_public()
+            if got:
+                self.send(got[0], got[1], got[2], public=True)
+                return
         if leyline_net is not None and path.startswith("/wrath/leyline/"):   # flags.json, hostpack.json
             got = leyline_net.serve(path)
             if got:

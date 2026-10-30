@@ -182,3 +182,40 @@ test('A website\'s Open in launcher (leyline://realm/<id>) shows that realm with
   assert.deepEqual(started, [], 'nothing starts by itself');
   assert.deepEqual(errors, []);
 });
+
+// Hero Key sign-in on community realms (docs/HERO-KEY-SSO.md): only with the herokey_sso flag on, only on live
+// community realms; the one-time password is shown, never kept in the page.
+test('Hero Key sign-in: hidden with the flag off; on: live community realms only, password shown once', async () => {
+  const off = await open(false);
+  await off.page.click('#rl-refresh');
+  await off.page.waitForTimeout(100);
+  assert.equal(await off.page.locator('button:has-text("Sign in with your Hero Key")').count(), 0, 'flag off: no button');
+  assert.deepEqual(off.errors, []);
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.addInitScript(FAKE, false);
+  await page.addInitScript(() => {
+    const inner = window.__TAURI__.core.invoke;
+    window.__TAURI__.core.invoke = async (cmd, args) => {
+      if (cmd === 'play_realm_herokey') { window.__calls.push([cmd, args]); return { realm: 'bbbbbbbbbbbbbbbb', user: 'HKABCDEFGHIJKLMN', pass: 'Q7W8E9R2T3Y4U5I6', valid_s: 600 }; }
+      const r = await inner(cmd, args);
+      if (cmd === 'p2p_flags') r.effective.herokey_sso = true;
+      return r;
+    };
+  });
+  await page.goto(INDEX);
+  await page.click('.nav[data-page="realms"]');
+  await page.waitForFunction(() => document.querySelectorAll('#rl-list .realm-card').length > 0);
+  await page.click('#rl-refresh');
+  await page.waitForTimeout(100);
+  const cards = page.locator('#rl-list .realm-card');
+  const hk = (i) => cards.nth(i).locator('button:has-text("Sign in with your Hero Key")').count();
+  assert.deepEqual([await hk(0), await hk(1), await hk(2), await hk(3)], [1, 0, 1, 0], 'live community realms only (not the official one, not offline)');
+  await cards.nth(2).locator('button:has-text("Sign in with your Hero Key")').click();
+  await page.waitForFunction(() => /one-time password/.test(document.querySelector('#rl-status').textContent));
+  assert.match(await page.textContent('#rl-status'), /HKABCDEFGHIJKLMN.*Q7W8E9R2T3Y4U5I6.*10 minutes/);
+  assert.ok(await page.evaluate(() => window.__calls.some(([c, a]) => c === 'play_realm_herokey' && a.slug === 'c-bbbbbbbbbbbbbbbb')));
+  assert.ok(!(await page.evaluate(() => JSON.stringify(localStorage))).includes('Q7W8'), 'never kept in the page');
+  assert.deepEqual(errors, []);
+});
