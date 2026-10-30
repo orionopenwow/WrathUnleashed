@@ -132,13 +132,13 @@ test('no painted art, display font or old theme names in the window', async () =
       }
       const fonts = new Set([...document.querySelectorAll('*')].map((e) => getComputedStyle(e).fontFamily));
       return { urls, fonts: [...fonts], text: document.body.innerText, brand: document.querySelector('.titlebar .brand').innerText,
-        mark: document.querySelector('.titlebar .brand img').getAttribute('src') };
+        mark: getComputedStyle(document.querySelector('.titlebar .brand .ly-spin'), '::before').backgroundImage };
     });
     assert.ok(!r.urls.some((u) => /art\/kit|parchment|stone|play\.png|crest/.test(u)), r.urls.join('\n'));
     assert.ok(r.urls.some((u) => /leyline-mark-512\.png/.test(u)), 'the Home card has the Leyline mark');
     assert.ok(!r.fonts.some((f) => /Cinzel|Leyline Display|Impact/.test(f)), r.fonts.join(' | '));
     assert.equal(r.brand.replace(/\s+/g, ' ').trim(), 'Leyline Launcher');
-    assert.equal(r.mark, 'art/brand/leyline-mark-512.png');
+    assert.match(r.mark, /art\/brand\/leyline-swirl-256\.webp/, 'the header mark is the spinning Leyline mark');
     for (const bad of ['Leyline Classic', 'Rounded', 'parchment', 'World of Warcraft', 'Warcraft', 'Blizzard', 'Lich King']) {
       assert.ok(!r.text.includes(bad), `${bad} in the window`);
     }

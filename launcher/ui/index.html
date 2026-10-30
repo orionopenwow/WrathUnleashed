@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Leyline Launcher</title>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="spin.css"><!-- the spinning mark: the header logo and every loading state (spin.js) -->
 <!-- themes (themes agent): Dark (style.css) or Light; the Themes section; themes.js applies the theme before paint -->
 <link rel="stylesheet" href="themes/themes.css"><script src="themes.js"></script>
 <link rel="stylesheet" href="social.css">
@@ -15,7 +16,7 @@
 
 <!-- Title bar: drag to move the window -->
 <header class="titlebar" data-tauri-drag-region>
-  <div class="brand" data-tauri-drag-region><img src="art/brand/leyline-mark-512.png" alt="" draggable="false"><span data-tauri-drag-region><b>Leyline</b><i>Launcher</i></span></div>
+  <div class="brand" data-tauri-drag-region><div class="ly-spin slow" role="img" aria-label="Leyline" data-tauri-drag-region></div><span data-tauri-drag-region><b>Leyline</b><i>Launcher</i></span></div>
   <form class="search" id="search-form" role="search">
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
     <input id="search" type="search" placeholder="Search mods, realms and players" aria-label="Search mods, realms and players" autocomplete="off" spellcheck="false">
@@ -386,6 +387,7 @@
 </form>
 
 </div>
+<script src="spin.js"></script>
 <script src="social.js"></script>
 <script src="modes.js"></script>
 <script src="app.js"></script>
