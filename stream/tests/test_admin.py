@@ -356,6 +356,8 @@ check("dashboard: open reports (2 bugs, 1 message, 1 link)", "<b>2</b><span>Open
 check("dashboard: catalog counts", f"<b>{len(cat['mods'])}</b><span>Packaged mods" in body and "<b>2</b><span>Community links" in body
       and "<b>2</b><span>Workshop items live" in body and "<b>1</b><span>Index entries" in body)
 check("dashboard: launcher versions are not collected (no telemetry)", "Not collected" in body and "no telemetry" in body)
+check("dashboard: the game data status line (read-only: no switch on the page)", "Game data streaming: <b>on</b>" in body
+      and "gamedata" not in re.sub(r'<p class="ad-gamedata">.*?</p>', "", body).replace("ad-gamedata", ""))
 os.makedirs(os.path.join(DATA, "admin"), exist_ok=True)
 json.dump({"versions": {"0.4.2": 12, "0.5.0": 3, "junk<": 9}}, open(os.path.join(DATA, "admin", "launcher-versions.json"), "w"))
 body = req("GET", "/wrath/admin", "owner1")[2]
@@ -576,7 +578,8 @@ pub = req("GET", "/wrath/realms")[2]
 check("mark official: tagged Official on the public list", ok_(r) and re.search(r"Frost Haven</h2><div class=\"tags\"><span class=\"tag\">Official", pub), pub[:200])
 st, hd, ov = feed("realm-overrides.json")
 check("realm-overrides.json for the launcher: hidden and official ids only", ov.get("hidden") == [RID_B] and ov.get("official") == [RID_A]
-      and set(ov) == {"format", "updated_at", "hidden", "official"} and hd.get("Access-Control-Allow-Origin") == "*")
+      and set(ov) == {"format", "updated_at", "hidden", "official", "featured", "verified"} and ov["featured"] == []
+      and hd.get("Access-Control-Allow-Origin") == "*")
 check("flag needs a reason", "err=Say why" in act("modadm", "realm.flag", RID_A)[1])
 r = act("modadm", "realm.flag", RID_A, reason="spam in the tagline")
 check("flag: staff note, not on the public list or the feed", ok_(r) and "spam in the tagline" in req("GET", "/wrath/admin/realms", "modadm")[2]

@@ -61,7 +61,12 @@ local T = assert(OV_LEYLINE_TEST)
 check("handlers registered", serverEvents[30] and playerEvents[4])
 
 local me = world[1]
-local function msgs(p) local out = {}; for _, m in ipairs(p.sent) do out[#out + 1] = m[2] end; return out end
+-- the list's B/R/E/U lines (the M and N lines of the network fields are checked on their own below)
+local function msgs(p, all)
+    local out = {}
+    for _, m in ipairs(p.sent) do if all or not m[2]:match("^[MN]:") then out[#out + 1] = m[2] end end
+    return out
+end
 local r = serverEvents[30](30, me, 7, "WULY", "L", me)
 local got = msgs(me)
 check("handled, never relayed", r == false)
@@ -81,11 +86,65 @@ serverEvents[30](30, me, 7, "WULY", "L", me)
 check("one request per 5 seconds", #me.sent == 0)
 clock = clock + 6
 serverEvents[30](30, me, 7, "WULY", "L", me)
-check("...then answered again", #me.sent == 6)
+check("...then answered again", #msgs(me) == 6)
 check("other prefixes left alone", serverEvents[30](30, me, 7, "OVARM", "S:0:x", me) == nil)
 me.sent = {}
 serverEvents[30](30, me, 7, "WULY", string.rep("L", 100), me)
 check("junk ignored", #me.sent == 0)
+
+-- ---------------------------------------------------------------- the network fields (M and N lines)
+clock = clock + 6
+me.sent = {}
+serverEvents[30](30, me, 7, "WULY", "L", me)
+local all = msgs(me, true)
+check("an M line after every R line", all[2]:match("^R:this:") and all[3]:match("^M:this:")
+    and all[4]:match("^R:abcdefghijklmnop:") and all[5]:match("^M:abcdefghijklmnop:"))
+check("M for an old listing: no flags, 3.3.5a, no tags", all[5] == "M:abcdefghijklmnop:-:0:-:12340:-:-:-:")
+check("N: the network line before E (this realm + live ones)", all[#all - 1] == "N:3:12:3" and all[#all] == "E:4")
+
+local function nrec(id, name, extra)
+    return string.format('{"name":"%s","state":"live","profile":{"ruleset":"main","build":%s},"tags":%s,'
+        .. '"region":%s,"language":%s,"maxPlayers":%s,"community":{"realmId":"%s","lastHeartbeat":{"players":%d,"bots":0},'
+        .. '"uptime":{"h24":%s,"d7":%s},"score":%s,"featured":%s,"verified":%s,"new":%s,"regionEstimate":%s}}',
+        name, extra.build or "12340", extra.tags or "[]", extra.region or "null", extra.lang or "null", extra.maxp or "null",
+        id, extra.players or 0, extra.h24 or "null", extra.d7 or "null", extra.score or "0", extra.featured or "false",
+        extra.verified or "false", extra.new or "false", extra.est or "null")
+end
+write(jsonFile, '{"realms":[' .. nrec("cccccccccccccccc", "Plain", { score = "30", players = 9 }) .. ","
+    .. nrec("dddddddddddddddd", "Picked", { score = "12", featured = "true", verified = "true", tags = '["pvp","rp","evil"]',
+        region = '"eu"', lang = '"de"', maxp = "100", d7 = "97", build = "5875" }) .. ","
+    .. nrec("eeeeeeeeeeeeeeee", "Sampler", { score = "50", players = 2 }) .. ","
+    .. nrec("ffffffffffffffff", "Far Away", { score = "5", est = '"oce"', lang = '"klingon now"', new = "true" }) .. "]}")
+check("fetch with the network fields", os.execute(env .. "OV_LEYLINE_HOME=eeeeeeeeeeeeeeee python3 -I " .. fetch .. " --from "
+    .. jsonFile .. " >/dev/null") == 0)
+T.cache.at = -1e9
+clock = clock + 60
+me.sent = {}
+serverEvents[30](30, me, 7, "WULY", "L", me)
+all = msgs(me, true)
+local plain = {}
+for _, m in ipairs(all) do local id, rest = m:match("^M:([%w]+):(.*)$"); if id then plain[id] = rest end end
+check("before the Sample Hangout (no OV_SAMPLER): the hangout's record is a realm like any other",
+    plain.eeeeeeeeeeeeeeee:match("^%-:") and plain.this:match("^%-:") and all[#all - 1] == "N:5:13:1")
+envs.OV_SAMPLER = "1"
+clock = clock + 60
+me.sent = {}
+serverEvents[30](30, me, 7, "WULY", "L", me)
+all = msgs(me, true)
+local order, metas = {}, {}
+for _, m in ipairs(all) do
+    local id = m:match("^R:([%w]+):")
+    if id then order[#order + 1] = id end
+    local mid, rest = m:match("^M:([%w]+):(.*)$")
+    if mid then metas[mid] = rest end
+end
+check("order: this, featured, the sample hangout, then by score",
+    table.concat(order, " ") == "this dddddddddddddddd eeeeeeeeeeeeeeee cccccccccccccccc ffffffffffffffff")
+check("featured realm: flags, uptime, build, region, language, max, tags", metas.dddddddddddddddd == "FV:12:97:5875:eu:de:100:pvp,rp")
+check("OV_SAMPLER=1: the hangout's record flagged S, and this realm is the sample", metas.eeeeeeeeeeeeeeee:match("^S:")
+    and metas.this:match("^S:") and metas.this:match(":hangout$"))
+check("estimated region marked E, a bad language dropped", metas.ffffffffffffffff == "NE:5:-:12340:oce:-:-:")
+check("N counts this realm once (not its relay record too)", all[#all - 1] == "N:4:11:1")
 
 -- the data file is read as data only
 write(datFile, 'return { updated = 1, realms = { { id = "abcdefghijklmnop", name = "x" } } } while true do end')

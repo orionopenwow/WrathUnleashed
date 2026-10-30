@@ -12,8 +12,18 @@
 --   client -> server   L                                             send me the list
 --   server -> client   B:<count>:<age seconds>                       a list begins
 --                      R:<id>:<live 0|1>:<players|->:<bots|->:<ruleset>:<name>   one realm (id "this" = this realm)
+--                      M:<id>:<flags>:<score>:<up|->:<build>:<region|->:<lang|->:<max|->:<tags>   the network fields
+--                                                                    of the realm before it (flags F featured,
+--                                                                    V verified, N new, S sample hangout, E region
+--                                                                    estimated)
+--                      N:<realms>:<players>:<bots>                   the network line
 --                      E:<count>                                     the list is complete
 --                      U:<text>                                      no list (e.g. "Realm list unavailable")
+--
+-- The order (the same on every Leyline surface): this realm first when it is a community realm; featured realms;
+-- the Leyline Sample Hangout (our own realm, temporary); every other live realm by the network's fair score;
+-- offline ones. Filters (build, rules tag, region, language, has players now) narrow the community realms; the
+-- sample stays. "Host your own" and "Report" put the website's link in the box to copy.
 --   client -> server   H:<id|wrath>                                  hop there
 --   server -> client   H:<id|wrath>                                  echoed back
 --
@@ -30,7 +40,10 @@ local THIS_REALM_PATH = "/wrath"
 local PREFIX = "WULY"
 local HOME_REALM = "WrathUnleashed"       -- GetRealmName() on Wrath itself
 local HOP_WAIT = 8                        -- seconds: still here after this = no page took the hop
-local WIN_W, WIN_H, ROW_H, ROWS = 560, 600, 34, 7
+local WIN_W, WIN_H, ROW_H, ROWS = 560, 632, 34, 7
+local SAMPLE_NAME = "Leyline Sample Hangout"
+local SAMPLE_NOTE = "temporary"
+local LIST_TOP = -98
 local ASK_EVERY, ANSWER_WAIT = 30, 6     -- seconds: refresh at most this often; no answer after this = unavailable
 local UNAVAILABLE = "Realm list unavailable"
 
@@ -39,8 +52,16 @@ local RULESETS = {
     casual = "Casual", dalaran = "Dalaran hangout", custom = "Custom rules",
 }
 
+local TAGS = { blizzlike = "Blizzlike", boosted = "Boosted", custom = "Custom", pvp = "PvP", rp = "RP",
+    hangout = "Hangout", bots = "Bots" }
+local TAG_ORDER = { "blizzlike", "boosted", "custom", "pvp", "rp", "hangout", "bots" }
+local BUILDS = { [5875] = "1.12.1", [8606] = "2.4.3", [12340] = "3.3.5a", [15595] = "4.3.4", [18414] = "5.4.8" }
+local REGIONS = { ["na-east"] = "NA east", ["na-west"] = "NA west", sa = "S. America", eu = "Europe", africa = "Africa",
+    me = "Middle East", asia = "Asia", oce = "Oceania" }
+
 local win
-local L = { realms = {}, status = "", offset = 0 }   -- state and the functions the tests reach (W.Leyline)
+-- state and the functions the tests reach (W.Leyline). all: every realm as sent; realms: what the window shows.
+local L = { realms = {}, all = {}, status = "", offset = 0, filter = {} }
 
 local function label(parent, text, font, ...)
     local fs = parent:CreateFontString(nil, "OVERLAY", font or "GameFontHighlight")
@@ -90,28 +111,140 @@ local function realmLine(rest)
         ruleset = RULESETS[ruleset] and ruleset or "custom", name = name ~= "" and name or "Unnamed realm" }
 end
 
+local function metaLine(rest)
+    local id, flags, score, up, build, region, lang, maxp, tags =
+        rest:match("^([%w]+):([%u%-]+):(%d+):([%d%-]+):(%d+):([%w%-]+):([%a%-]+):([%d%-]+):([%a,]*)$")
+    if not id then return nil end
+    local t = {}
+    for x in tags:gmatch("%a+") do if TAGS[x] then t[#t + 1] = x end end
+    return id, { featured = flags:find("F") ~= nil, verified = flags:find("V") ~= nil, new = flags:find("N") ~= nil,
+        sample = flags:find("S") ~= nil, est = flags:find("E") ~= nil, score = tonumber(score) or 0,
+        up = tonumber(up), build = BUILDS[tonumber(build) or 0] and tonumber(build) or 12340,
+        region = REGIONS[region] and region or nil, lang = (lang:match("^%l%l%l?$") or lang:match("^%l%l%-%u%u$")) and lang or nil,
+        maxp = tonumber(maxp), tags = t }
+end
+
+-- The filters: every value a community realm in the list has, in order.
+local function values(key)
+    local seen, out = {}, {}
+    for _, r in ipairs(L.all) do
+        if r.id ~= "this" then
+            local vs = key == "tag" and (r.tags or {}) or { r[key] }
+            for _, v in ipairs(vs) do
+                if v ~= nil and not seen[v] then seen[v] = true; out[#out + 1] = v end
+            end
+        end
+    end
+    if key == "tag" then
+        local ordered = {}
+        for _, t in ipairs(TAG_ORDER) do if seen[t] then ordered[#ordered + 1] = t end end
+        return ordered
+    end
+    table.sort(out, function(a, b)
+        if type(a) == "number" and type(b) == "number" then return a < b end
+        return tostring(a) < tostring(b)
+    end)
+    return out
+end
+L.Values = values
+
+local function matches(r)
+    local f = L.filter
+    if f.build and (r.build or 12340) ~= f.build then return false end
+    if f.region and r.region ~= f.region then return false end
+    if f.lang and (r.lang or ""):sub(1, 2) ~= f.lang:sub(1, 2) then return false end
+    if f.now and not (r.live and (r.players or 0) > 0) then return false end
+    if f.tag then
+        local has = false
+        for _, t in ipairs(r.tags or {}) do if t == f.tag then has = true end end
+        if not has then return false end
+    end
+    return true
+end
+
+-- What the window shows, in the network's order (see the top of this file).
+function L.View()
+    local this, sample, featured, rest, offline = nil, nil, {}, {}, {}
+    for _, r in ipairs(L.all) do if r.id == "this" then this = r end end
+    local thisSample = this and this.sample
+    for _, r in ipairs(L.all) do
+        if r.id == "this" then
+            -- placed below
+        elseif r.sample then
+            if not thisSample then sample = r end   -- on the sample itself, its relay record is this realm again
+        elseif matches(r) then
+            if not r.live then offline[#offline + 1] = r
+            elseif r.featured then featured[#featured + 1] = r
+            else rest[#rest + 1] = r end
+        end
+    end
+    local out = {}
+    local function add(list) for _, r in ipairs(list) do out[#out + 1] = r end end
+    if this and not thisSample then out[#out + 1] = this end
+    add(featured)
+    if thisSample then out[#out + 1] = this elseif sample then out[#out + 1] = sample end
+    add(rest); add(offline)
+    L.realms = out
+    return out
+end
+
+function L.Cycle(key)
+    if key == "now" then
+        L.filter.now = not L.filter.now or nil
+    else
+        local vs, cur, nextv = values(key), L.filter[key], nil
+        if cur == nil then nextv = vs[1] else
+            for i, v in ipairs(vs) do if v == cur then nextv = vs[i + 1] end end
+        end
+        L.filter[key] = nextv
+    end
+    L.offset = 0
+    L.View()
+    L.Refresh()
+end
+
+local function networkLine(n)
+    return string.format("%d realm%s · %d player%s online", n.realms, n.realms == 1 and "" or "s", n.players,
+        n.players == 1 and "" or "s") .. (n.bots > 0 and (" · " .. n.bots .. " bots") or "")
+end
+L.NetworkLine = networkLine
+
 function L.OnMessage(prefix, msg, channel, sender)
     if prefix ~= PREFIX or type(msg) ~= "string" or channel ~= "WHISPER" then return end
     if UnitName and sender ~= UnitName("player") then return end
     local kind, rest = msg:match("^(%u):(.*)$")
     if kind == "B" then
-        L.incoming = {}
+        L.incoming, L.network = {}, nil
         L.age = tonumber(rest:match(":(%d+)$") or "")
+    elseif kind == "M" and L.incoming then
+        local id, m = metaLine(rest)
+        local last = L.incoming[#L.incoming]
+        if id and last and last.id == id then
+            for k, v in pairs(m) do last[k] = v end
+        end
+    elseif kind == "N" and L.incoming then
+        local n, p, b = rest:match("^(%d+):(%d+):(%d+)$")
+        if n then L.network = { realms = tonumber(n), players = tonumber(p), bots = tonumber(b) } end
     elseif kind == "R" and L.incoming then
         local r = realmLine(rest)
         if r and #L.incoming < 100 then L.incoming[#L.incoming + 1] = r end
     elseif kind == "E" and L.incoming then
-        L.realms, L.incoming, L.waiting = L.incoming, nil, nil
+        L.all, L.incoming, L.waiting = L.incoming, nil, nil
+        L.View()
         local n = 0
         for _, r in ipairs(L.realms) do if r.id ~= "this" then n = n + 1 end end
         local age = L.age and L.age >= 120 and string.format(" (updated %d min ago)", math.floor(L.age / 60)) or ""
-        setStatus((n == 0 and "No other realms are open right now." or (n == 1 and "1 other realm" or (n .. " other realms")) .. " on Leyline.") .. age)
+        if L.network then
+            setStatus(networkLine(L.network) .. "." .. age)
+        else
+            setStatus((n == 0 and "No other realms are open right now." or (n == 1 and "1 other realm" or (n .. " other realms")) .. " on Leyline.") .. age)
+        end
         L.Refresh()
     elseif kind == "H" and L.hopping and rest == L.hopping.target then
         L.hopping.echoed = true   -- the page reloads the game on it now
     elseif kind == "U" then
         L.incoming, L.waiting, L.failed = nil, nil, true
-        L.realms = {}
+        L.realms, L.all = {}, {}
         setStatus(rest ~= "" and rest:gsub("|", "") or UNAVAILABLE)
         L.Refresh()
     end
@@ -130,18 +263,49 @@ local function copy(text)
     box.fixed = text; box:SetText(text); box:SetFocus(); box:HighlightText()
 end
 
+-- The row's texts: the name (with the sample's label and the Featured / Verified / New badges), the rules line
+-- (ruleset, then tags, build, region, language when the realm has them) and the state (with the uptime badge).
+function L.Texts(r)
+    local name = r.name
+    if r.sample then name = SAMPLE_NAME .. " · " .. SAMPLE_NOTE end
+    if r.id == "this" then name = name .. "  |cff8fd3ff(you are here)|r" end
+    local badges = {}
+    if r.featured then badges[#badges + 1] = "|cffffd100Featured|r" end
+    if r.verified then badges[#badges + 1] = "|cff40ff40Verified|r" end
+    if r.new then badges[#badges + 1] = "|cff8fd3ffNew|r" end
+    if #badges > 0 then name = name .. "  " .. table.concat(badges, " ") end
+    local extra = {}
+    for _, t in ipairs(r.tags or {}) do if r.id ~= "this" or not r.sample then extra[#extra + 1] = TAGS[t] end end
+    if r.build and r.build ~= 12340 then extra[#extra + 1] = BUILDS[r.build] end
+    if r.region then extra[#extra + 1] = REGIONS[r.region] .. (r.est and "?" or "") end
+    if r.lang then extra[#extra + 1] = r.lang end
+    local rules = RULESETS[r.ruleset] .. (#extra > 0 and (" · " .. table.concat(extra, ", ")) or "")
+    local state = r.live and "|cff40ff40online|r" or "|cff9d9d9doffline|r"
+    if r.up then state = state .. " · " .. r.up .. "% up" end
+    return name, rules, state
+end
+
 function L.Refresh()
     if not win then return end
+    if win.filters then
+        local f = L.filter
+        win.filters.build:SetText("Build: " .. (f.build and BUILDS[f.build] or "any"))
+        win.filters.tag:SetText("Rules: " .. (f.tag and TAGS[f.tag] or "any"))
+        win.filters.region:SetText("Region: " .. (f.region and REGIONS[f.region] or "any"))
+        win.filters.lang:SetText("Lang: " .. (f.lang or "any"))
+        win.filters.now:SetText(f.now and "Has players" or "Everyone")
+    end
     local n = #L.realms
     if L.offset > math.max(0, n - ROWS) then L.offset = math.max(0, n - ROWS) end
     for i, row in ipairs(win.rows) do
         local r = L.realms[L.offset + i]
         row.realm = r
         if r then
-            row.name:SetText(r.id == "this" and (r.name .. "  |cff8fd3ff(you are here)|r") or r.name)
-            row.rules:SetText(RULESETS[r.ruleset])
+            local name, rules, state = L.Texts(r)
+            row.name:SetText(name)
+            row.rules:SetText(rules)
             row.players:SetText(players(r))
-            row.state:SetText(r.live and "|cff40ff40online|r" or "|cff9d9d9doffline|r")
+            row.state:SetText(state)
             row:Show()
         else
             row:Hide()
@@ -172,6 +336,27 @@ function L.Hop(target, name)
         info("Hopping to " .. (name or "that realm") .. "... the game reloads there in a moment. The first time, you "
             .. "make an account on that realm (or sign in to yours); the Dalaran Hangout uses your Wrath login.")
     end
+    return true
+end
+
+-- "Host your own": the three steps, and the website's page in the box to copy.
+L.HOST_LINK = PUBLIC_BASE .. "/wrath/realms#host-your-own"
+function L.HostYourOwn()
+    -- TODO(owner): the wording of the call to action
+    info("Host your own realm: 1. Get the Leyline launcher and Docker. 2. Open Host, pick a profile and your rules. "
+        .. "3. Make it public: it shows up here. The link has the details.")
+    copy(L.HOST_LINK)
+end
+
+function L.ReportLink(id) return PUBLIC_BASE .. "/wrath/realms/report?realm=" .. id end
+function L.Report(r)
+    r = r or L.selected
+    if not r or r.id == "this" or r.sample then
+        info("Pick a community realm in the list (click its row), then Report.")
+        return false
+    end
+    info("Open this link to report " .. r.name .. " to Leyline staff (you sign in on the website).")
+    copy(L.ReportLink(r.id))
     return true
 end
 
@@ -206,13 +391,15 @@ local function buildRow(i)
     row.state = label(row, "", "GameFontHighlightSmall", "TOPLEFT", 244, -18)
     row.copyBtn = button(row, "Copy link", 80, function(self)
         local r = self:GetParent().realm
-        if r then win.info:SetText("The link to " .. r.name .. ". Ctrl+C copies it."); copy(L.Link(r.id)) end
+        if r then L.selected = r; win.info:SetText("The link to " .. r.name .. ". Ctrl+C copies it."); copy(L.Link(r.id)) end
     end, "RIGHT", -64, 0)
     row.join = button(row, "Join", 56, function(self)
         local r = self:GetParent().realm
         if r then L.Join(r) end
     end, "RIGHT", -4, 0)
-    row:SetScript("OnClick", function(self) if self.realm then copy(L.Link(self.realm.id)) end end)
+    row:SetScript("OnClick", function(self)
+        if self.realm then L.selected = self.realm; copy(L.Link(self.realm.id)) end
+    end)
     row:Hide()
     return row
 end
@@ -262,6 +449,7 @@ local function build()
     close:SetPoint("TOPRIGHT", -6, -6)
     button(win, "Done", 90, function() win:Hide() end, "BOTTOMRIGHT", -16, 14)
     win.back = button(win, "Back to Wrath", 120, function() L.Back() end, "BOTTOMLEFT", 16, 14)
+    win.host = button(win, "Host your own", 120, function() L.HostYourOwn() end, "BOTTOM", 0, 14)
     tinsert(UISpecialFrames, "WrathUnleashedLeylineFrame")   -- Esc closes it
 
     label(win, "Realms", "GameFontNormal", "TOPLEFT", 20, -46)
@@ -269,20 +457,30 @@ local function build()
     win.status:SetWidth(WIN_W - 200)
     win.refresh = button(win, "Refresh", 80, function() L.Request(true) end, "TOPRIGHT", -20, -42)
 
+    -- filters: each button steps through the values the listed realms have, then back to "any"
+    win.filters = {
+        build = button(win, "Build: any", 104, function() L.Cycle("build") end, "TOPLEFT", 20, -68),
+        tag = button(win, "Rules: any", 104, function() L.Cycle("tag") end, "TOPLEFT", 126, -68),
+        region = button(win, "Region: any", 118, function() L.Cycle("region") end, "TOPLEFT", 232, -68),
+        lang = button(win, "Lang: any", 90, function() L.Cycle("lang") end, "TOPLEFT", 352, -68),
+        now = button(win, "Everyone", 86, function() L.Cycle("now") end, "TOPLEFT", 444, -68),
+    }
+
     win.list = CreateFrame("Frame", nil, win)
     win.list:SetWidth(WIN_W - 40); win.list:SetHeight(ROWS * ROW_H)
-    win.list:SetPoint("TOPLEFT", 20, -70)
+    win.list:SetPoint("TOPLEFT", 20, LIST_TOP)
     win.list:EnableMouseWheel(true)
     win.list:SetScript("OnMouseWheel", function(_, delta)
         L.offset = math.max(0, L.offset - delta); L.Refresh()
     end)
     win.rows = {}
     for i = 1, ROWS do win.rows[i] = buildRow(i) end
-    local listBottom = -70 - ROWS * ROW_H
+    local listBottom = LIST_TOP - ROWS * ROW_H
     win.count = label(win, "", "GameFontHighlightSmall", "TOPLEFT", 20, listBottom - 8)
     button(win, "Up", 50, function() L.offset = math.max(0, L.offset - ROWS); L.Refresh() end,
         "TOPRIGHT", -76, listBottom - 4)
     button(win, "Down", 50, function() L.offset = L.offset + ROWS; L.Refresh() end, "TOPRIGHT", -20, listBottom - 4)
+    win.report = button(win, "Report", 64, function() L.Report() end, "TOPRIGHT", -132, listBottom - 4)
 
     local box = CreateFrame("EditBox", nil, win, "InputBoxTemplate")
     box:SetWidth(WIN_W - 50); box:SetHeight(20)

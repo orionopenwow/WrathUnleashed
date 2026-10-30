@@ -78,7 +78,12 @@ Play in the browser, streamed (a small "mini" slice of the game, never the full 
                                "End my browser pass" drop the lease. Same-origin JSON POSTs with the session
                                cookie only. (On /__gate because Caddy already sends that path here.)
   The off switch: WU_STREAM=0 (the default until stream-up.sh sets 1). /wrath/play then says
-  streaming is off and /__auth refuses the game data. Sessions are in memory: a restart of this
+  streaming is off and /__auth refuses the game data.
+  The game data killswitch (stream/server/gamedata-switch.sh, docs/GAME-DATA-ON-OUR-SERVER.md): while the flag
+  file WU_GAMEDATA_FLAG (/app/gamedata-off) exists, this server serves no game data at all: streaming is off
+  whatever WU_STREAM says, /wrath/play sends everyone to "Play with my own game files", /__auth answers 410 Gone
+  for /data (Caddy answers 410 before it, too), the page env says WU_GAMEDATA_OFF, the game screenshots in
+  /wrath/art answer 410, and /wrath/status.json says "gamedata_streaming": false (and since when). Sessions are in memory: a restart of this
   service signs stream players out of the stream site (they click Play again).
 
 Settings (environment, /srv/wrath/portal.env):
@@ -93,6 +98,8 @@ Settings (environment, /srv/wrath/portal.env):
   STREAM_HOST            default wrath.openvanilla.app
   STREAM_SLICES          the slice names /wrath/play accepts (default mini)
   WU_SLICE_DIR           where <slice>.json lives (default /app/slices; maxTier is read from it)
+  WU_GAMEDATA_FLAG       the killswitch's flag file (default /app/gamedata-off = /srv/wrath/portal/gamedata-off);
+                         read on every request, so gamedata-switch.sh needs no restart of this service
   WU_OWNFILES            1 = show "Play with my own game files" (the browser client on STREAM_HOST
                          with the player's own Data folder); 0 = off (default; stream-up.sh sets 1)
   WU_RELAY_LISTING       the Beacons relay's listing for GET /wrath/realms. Unset: the URL in
@@ -213,6 +220,9 @@ if hostflow is not None:
 social = _load_module("wu_social", "social.py")   # Leyline friends and messages (stream/social.py)
 if social is not None:
     social.bind(lambda name: globals()[name])
+network = _load_module("wu_network", "network.py")   # the realm browser, /wrath/realms.json, realm reports (stream/network.py)
+if network is not None:
+    network.bind(lambda name: globals()[name])
 admin = _load_module("wu_admin", "admin.py")   # /wrath/admin: the Leyline Admin Console (stream/admin.py)
 if admin is not None:
     admin.bind(lambda name: globals()[name])
@@ -404,9 +414,58 @@ def portal_get(path: str, cookie: str, ip: str, ua: str) -> tuple[int, dict]:
 SLUG_RE = re.compile(r"^[a-z0-9-]{1,32}$")
 
 
+def gamedata_flag() -> str:
+    return os.environ.get("WU_GAMEDATA_FLAG", "/app/gamedata-off")
+
+
+def gamedata_off() -> bool:
+    """The game data killswitch (gamedata-switch.sh): the flag file exists. Read on every request."""
+    return os.path.exists(gamedata_flag())
+
+
+def gamedata_state() -> dict:
+    """{"gamedata_streaming": bool, "gamedata_since": ISO time or None} for status.json and the admin console.
+    "since" is when the switch was thrown (the flag's own record, else the file's time); while streaming, the last
+    "on" of the switch, or None when it never ran."""
+    p = gamedata_flag()
+    try:
+        st = os.stat(p)
+    except OSError:
+        # Streaming: since the last "on" of the switch, when it ever ran (gamedata-switch.sh writes gamedata-last.json).
+        since = None
+        try:
+            with open(os.path.join(os.path.dirname(p), "gamedata-last.json"), encoding="utf-8") as f:
+                last = json.loads(f.read(4096) or "{}")
+            v = last.get("at") if isinstance(last, dict) and last.get("state") == "on" else None
+            if isinstance(v, str) and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", v):
+                since = v
+        except (OSError, ValueError):
+            pass
+        return {"gamedata_streaming": True, "gamedata_since": since}
+    since = None
+    try:
+        with open(p, encoding="utf-8") as f:
+            doc = json.loads(f.read(4096) or "{}")
+        v = doc.get("since") if isinstance(doc, dict) else None
+        if isinstance(v, str) and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", v):
+            since = v
+    except (OSError, ValueError):
+        pass
+    return {"gamedata_streaming": False,
+            "gamedata_since": since or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(st.st_mtime))}
+
+
+# What /data and the other game-data routes answer while the killswitch is on (the same words as Caddy's block,
+# stream/server/gamedata-caddy.py; Caddy answers first, this is the second lock).
+GAMEDATA_GONE = (json.dumps({"error": "gamedata_off", "gamedata_streaming": False,
+                             "message": "This realm needs your own game folder. Drop your 3.3.5a game folder on the game page.",
+                             "own_files": "https://play.openvanilla.app/wrath/play?mode=own"},
+                            separators=(",", ":")) + "\n").encode("utf-8")
+
+
 def stream_on() -> bool:
-    """The off switch, read on every request (WU_STREAM=1 turns streaming on)."""
-    return os.environ.get("WU_STREAM", "0").strip() == "1"
+    """The off switch, read on every request (WU_STREAM=1 turns streaming on). The game data killswitch wins."""
+    return os.environ.get("WU_STREAM", "0").strip() == "1" and not gamedata_off()
 
 
 def ownfiles_on() -> bool:
@@ -673,6 +732,9 @@ def env_js(sess: dict) -> bytes:
     # The env object outranks the query string in the client, so ?foreverui=0 (or 1) is copied in.
     out += ("(function(e){try{var v=new URLSearchParams(location.search).get('foreverui');"
             "if(v!==null)e.foreverui=v;}catch(_){}})(window.__wenilla_env);\n")
+    if gamedata_off():
+        # The killswitch: ownfiles.js goes straight to "drop your game folder" and never asks /data.
+        out += "window.WU_GAMEDATA_OFF = true;\n"
     if sess.get("mode") == OWN:
         # ownfiles.js offers "Stream a mini version instead" when streaming is on.
         url = json.dumps(f"https://{PUBLIC_HOST}/wrath/play?mini=mini")
@@ -709,6 +771,9 @@ ART_TYPES = {
     "leyline-shot-city.webp": "image/webp", "leyline-shot-durotar.webp": "image/webp",
 }
 ART_MAX_AGE = 7 * 86400
+# Screenshots of the running game (rendered from the game's own files): the killswitch takes them off too
+# (410; the pages that show them fall back to a painted panel). docs/GAME-DATA-ON-OUR-SERVER.md
+GAMEDATA_ART = frozenset(n for n in ART_TYPES if n.startswith("leyline-shot-"))
 _theme_ver = {"key": None, "v": ""}
 
 
@@ -840,6 +905,16 @@ def stream_off_page() -> bytes:
         f'<a href="{DISCORD_URL}">{DISCORD_URL}</a></p>', title="Streaming is off", current="play")
 
 
+def gamedata_off_page() -> bytes:
+    return render(
+        f'{crest(REALM_NAME)}{RULE}'
+        '<p class="center">This realm needs your own game folder: it streams no game files.</p>'
+        '<p class="center">Play with your own 3.3.5a game client, or use your 3.3.5a game folder in the browser.</p>'
+        '<p class="center"><a class="btn primary" href="/wrath">Get your game login</a></p>'
+        f'<p class="fine">{html.escape(DISCORD_HELP.split(DISCORD_URL)[0])}'
+        f'<a href="{DISCORD_URL}">{DISCORD_URL}</a></p>', title="Bring your game folder", current="play")
+
+
 def stream_ended_page() -> bytes:
     return render(
         f'{crest(REALM_NAME)}{RULE}'
@@ -939,7 +1014,11 @@ def account_page(display: str, user: str, password: str, nonce: str) -> bytes:
             if online else "status unavailable")
     streamed = stream_on() and slice_info("mini")
     dalaran_btn = ('<a class="btn primary" href="/wrath/play?mini=mini">Play now</a>' if streamed
-                   else '<span class="btn off">Opening soon</span>')
+                   else '<a class="btn primary" href="/wrath/play?mode=own">Play with my game folder</a>'
+                   if gamedata_off() and ownfiles_on() else '<span class="btn off">Opening soon</span>')
+    if gamedata_off():   # the game data killswitch: say plainly what the browser needs now
+        dalaran_btn += ('<br><span class="fine">This realm needs your own game folder: drop your 3.3.5a game folder '
+                        f'on the game page. <a href="{GAME_FOLDER_HELP}">Where is it?</a></span>')
     pkg = (f'<li><a href="{html.escape(PACKAGE_URL)}">Download the player package</a> and unzip it.</li>'
            if PACKAGE_URL else '<li>Unzip the player package you were sent.</li>')
     dots = "\u2022" * len(password)
@@ -1072,11 +1151,14 @@ def clean_listing_record(rec) -> dict | None:
 
     def txt(v, n):
         return " ".join(v.split())[:n] if isinstance(v, str) else ""
-    return {"id": rid, "name": txt(rec.get("name"), 32) or "Unnamed realm", "tagline": txt(rec.get("tagline"), 80),
-            "type": txt(rec.get("type"), 8) or "PvE", "ruleset": ruleset, "live": rec.get("state") == "live",
-            "players": _nonneg(hb.get("players")), "bots": _nonneg(hb.get("bots")),
-            "claimed": bool(com.get("claimed")),
-            "rules": [t for t in (txt(x, 120) for x in (rec.get("rules") if isinstance(rec.get("rules"), list) else [])[:10]) if t]}
+    out = {"id": rid, "name": txt(rec.get("name"), 32) or "Unnamed realm", "tagline": txt(rec.get("tagline"), 80),
+           "type": txt(rec.get("type"), 8) or "PvE", "ruleset": ruleset, "live": rec.get("state") == "live",
+           "players": _nonneg(hb.get("players")), "bots": _nonneg(hb.get("bots")),
+           "claimed": bool(com.get("claimed")),
+           "rules": [t for t in (txt(x, 120) for x in (rec.get("rules") if isinstance(rec.get("rules"), list) else [])[:10]) if t]}
+    if network is not None:   # build, core, tags, region, language, uptime, score, ... (stream/network.py)
+        out.update(network.extra(rec))
+    return out
 
 
 def listing_url() -> str:
@@ -1124,8 +1206,10 @@ def fetch_listing() -> list[dict]:
     home = hangout_id()
     for r in out:
         r["hangout"] = r["id"] == home
-    # the Dalaran Hangout first (the network's meeting place), then live realms, busiest first
-    out.sort(key=lambda r: (not r["hangout"], not r["live"], -(r["players"] or 0), r["name"].lower()))
+    # the Dalaran Hangout first, then live realms by the listing's fair score (stream/network.py order() makes the
+    # display order: featured, the sample hangout, the rest)
+    out.sort(key=lambda r: (not r["hangout"], not r["live"], -(r.get("score") or 0), -(r["players"] or 0),
+                            r["name"].lower()))
     return out
 
 
@@ -1181,8 +1265,38 @@ def _players_text(players, bots, live) -> str:
     return s + (f" · {bots} bots" if bots else "")
 
 
-def realms_page() -> bytes:
+def sample_info() -> dict:
+    """Our own realm on the network's lists (stream/network.py): the Leyline Sample Hangout, temporary, while
+    WU_SAMPLER=1 (realm/sampler.sh); before that, this realm under its own name."""
+    if SAMPLER:
+        return {"name": SAMPLER_NAME, "temporary": True,
+                "blurb_html": f'<p>{html.escape(SAMPLER_NOTE)} (<a href="{GAME_FOLDER_HELP}">How to add your game folder</a>.)</p>'}
+    return {"name": REALM_NAME, "temporary": False,
+            "blurb_html": '<p>The WrathUnleashed realm: Dalaran in your browser, or the whole world with your own game files '
+                          f'(drop your 3.3.5a game folder on the game page: <a href="{GAME_FOLDER_HELP}">how</a>).</p>'}
+
+
+def realms_page(query: dict | None = None) -> bytes:
     st = realm_status()
+    if network is not None:
+        realms, ok = community_realms()
+        pack = leyline_net.hostpack() if leyline_net is not None else None
+        with _listing_lock:
+            when = _listing["when"]
+        stamps = [x for x in (updated_text(st.get("updated_at"), "Realm status"),
+                              updated_text(when, "Community list") if ok else "") if x]
+        body = (f'<style>{REALM_CSS}{network.NET_CSS}</style>'
+                f'{crest("Realms")}<p class="sub">The Leyline network: realms hosted by players</p>{RULE}'
+                + host_plus("realms")
+                + network.page_body(realms, ok, query or {}, st, JOIN_BASE, RULESET_LABELS, share_box,
+                                    pack["download"] if pack else None, sample=sample_info())
+                + '<p class="fine foot">Community realms are run by players on their own PCs, through the Leyline relay '
+                '(nobody sees anyone\'s home address). Each host sets their own house rules and is the GM there. The order '
+                'is players online, uptime and staff picks: nothing can be bought. '
+                '<a href="/wrath/leyline">What is Leyline?</a></p>'
+                + (f'<p class="fine">{" · ".join(stamps)}</p>' if stamps else ''))
+        return render(body, wide=True, meta=card_meta("/wrath/realms", f"Realms · {REALM_NAME}"), title="Realms",
+                      current="realms", next_step="host")
     official = (
         f'<div class="realm"><h2>{html.escape(SAMPLER_NAME if SAMPLER else REALM_NAME)}</h2>'
         '<div class="tags"><span class="tag">Official</span>'
@@ -1977,6 +2091,19 @@ def status_json() -> bytes:
         _status_refresh.release()
 
 
+def status_with_gamedata(body: bytes) -> bytes:
+    """The status document with the killswitch's state ("gamedata_streaming", "gamedata_since"), added per request
+    (the SOAP part is cached 30 s; the switch shows at once). The launcher's BROWSER mode and the admin console read it."""
+    try:
+        doc = json.loads(body.decode("utf-8"))
+    except ValueError:
+        return body
+    if not isinstance(doc, dict):
+        return body
+    doc.update(gamedata_state())
+    return (json.dumps(doc, separators=(",", ":")) + "\n").encode("utf-8")
+
+
 class PageHandler(BaseHTTPRequestHandler):
     server_version = "wrath-portal"
     sys_version = ""
@@ -2019,6 +2146,9 @@ class PageHandler(BaseHTTPRequestHandler):
     def art(self, name: str) -> None:
         """GET /wrath/art/<name>: the site art and theme, from the allow-list only, cached for a week.
         Readable from any site (fonts need CORS; it is our own art, nothing private)."""
+        if name in GAMEDATA_ART and gamedata_off():
+            self.send(410, GAMEDATA_GONE, "application/json; charset=utf-8")
+            return
         body = art_bytes(name)
         if body is None:
             self.send(404, b"not found\n", "text/plain")
@@ -2105,6 +2235,13 @@ class PageHandler(BaseHTTPRequestHandler):
         if (query.get("mode") or [""])[0] == OWN:
             self.own_play(query)
             return
+        if gamedata_off():
+            # The game data killswitch: no streamed slice; the browser client runs on the player's own folder.
+            if ownfiles_on():
+                self.own_play(query)
+            else:
+                self.send(200, gamedata_off_page())
+            return
         if not stream_on():
             self.send(200, stream_off_page())
             return
@@ -2184,6 +2321,10 @@ class PageHandler(BaseHTTPRequestHandler):
         """GET /__auth: Caddy forward_auth. The original request is in X-Forwarded-Uri."""
         uri = self.headers.get("X-Forwarded-Uri", "/")
         game = uri.startswith("/data") or uri.startswith("/ws")
+        if gamedata_off() and (uri.startswith("/data") or uri.split("?")[0] in ("/boot-manifest.json", "/world-manifest.json")):
+            # The game data killswitch: gone for everyone, whatever the session (Caddy copies this answer).
+            self.send(410, GAMEDATA_GONE, "application/json; charset=utf-8", same_origin=True)
+            return
         sess = self.stream_session()
         if sess and sess.get("mode") == OWN:
             # Own game files: the page, its scripts and the realm connection (/ws), never the
@@ -2339,6 +2480,9 @@ class PageHandler(BaseHTTPRequestHandler):
             return
         if admin is not None and admin.match(path):   # POST /wrath/admin/act: the Admin Console (stream/admin.py)
             admin.post(self, path)
+        if network is not None and network.match(path):   # POST /wrath/realms/report (stream/network.py)
+            network.post(self, path)
+            return
         if hub_mod is not None and hub_mod.match(path):   # POST /wrath/leyline-preview/submit (stream/hub.py)
             hub_mod.post(self, path)
             return
@@ -2394,7 +2538,7 @@ class PageHandler(BaseHTTPRequestHandler):
             self.stream_end()
             return
         if path == "/wrath/status.json":
-            self.send(200, status_json(), "application/json; charset=utf-8", public=True)
+            self.send(200, status_with_gamedata(status_json()), "application/json; charset=utf-8", public=True)
             return
         if path == "/wrath/healthz":
             ok, kind = health()
@@ -2477,11 +2621,14 @@ class PageHandler(BaseHTTPRequestHandler):
         if social is not None and social.match(path):   # Leyline friends and messages (stream/social.py)
             social.get(self, path, query)
             return
+        if network is not None and network.match(path):   # /wrath/realms.json, /wrath/realms/report (stream/network.py)
+            network.get(self, path, query)
+            return
         if path == "/wrath/realms":
             if not browse_limit.hit(self.ip(), 600):
                 self.send(429, busy_page(back=path))
                 return
-            self.send(200, realms_page())
+            self.send(200, realms_page(query))
             return
         if path == "/wrath/demo" or (path == "/wrath" and (query.get("demo") or [""])[0] == "1"):
             self.demo(path)

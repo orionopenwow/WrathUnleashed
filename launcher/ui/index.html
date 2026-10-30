@@ -177,8 +177,27 @@
         <button type="button" class="btn small" id="rl-refresh">REFRESH</button>
         <label class="check inline"><input type="checkbox" id="rl-mine"> Only realms my clients can play</label>
       </div>
+      <p class="net-line" id="rl-net" aria-live="polite"></p>
+      <div class="toolbar rl-filters" aria-label="Filter realms">
+        <label class="inline">Build <select id="rl-f-build"><option value="">any</option></select></label>
+        <label class="inline">Rules <select id="rl-f-tag"><option value="">any</option></select></label>
+        <label class="inline">Region <select id="rl-f-region"><option value="">any</option></select></label>
+        <label class="inline">Language <select id="rl-f-lang"><option value="">any</option></select></label>
+        <label class="check inline"><input type="checkbox" id="rl-f-now"> Has players now</label>
+      </div>
       <p class="status" id="rl-status" role="status"></p>
       <div class="realm-list" id="rl-list"></div>
+      <section class="card stone host-cta" id="rl-host-cta">
+        <!-- TODO(owner): the "Host your own" heading and lede -->
+        <div class="card-head"><span>HOST YOUR OWN</span></div>
+        <p class="lede">Community realms are the Leyline network. Anyone can run one from their own PC.</p>
+        <ol class="steps">
+          <li>Get the Host pack (on the Host page) and Docker.</li>
+          <li>Pick a profile, a name and your house rules. The realm runs on your PC.</li>
+          <li>Make it public: it shows up here for everyone, with no port forwarding. You are its GM.</li>
+        </ol>
+        <div class="row"><button type="button" class="btn" id="rl-host">OPEN HOST</button></div>
+      </section>
       <h3>A private realm</h3>
       <p class="lede">Got an invite link from a friend? Paste it here: Leyline opens the realm for this PC and points your client at it.
         Make your account on the link's page in your browser first (your password never leaves it).</p>
@@ -187,7 +206,7 @@
       <div class="form">
         <label>Play on
           <select id="play-realm">
-            <option value="official">WrathUnleashed (play.openvanilla.app)</option>
+            <option value="official">Leyline Sample Hangout (play.openvanilla.app)</option>
             <option value="custom">Another realm address…</option>
           </select>
         </label>

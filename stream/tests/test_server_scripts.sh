@@ -11,7 +11,7 @@ check() { if eval "$2"; then pass=$((pass+1)); echo "PASS $1"; else fail=$((fail
 export WU_DIR=$T/srv/wrath WU_CADDYFILE=$T/opt/Caddyfile WU_CADDY_DIR=$T/opt
 WU=$WU_DIR; ST=$WU/stream
 mkdir -p "$ST"/{bin,lua,sql,slices/mini/DBFilesClient,www} "$WU"/{portal,custom/lua_scripts,client-data/dbc} "$T/opt" "$T/fake"
-cp "$HERE"/server/*.sh "$HERE"/server/displays.py "$HERE"/server/www-patch.py "$ST/"
+cp "$HERE"/server/*.sh "$HERE"/server/displays.py "$HERE"/server/www-patch.py "$HERE"/server/gamedata-caddy.py "$ST/"
 mkdir -p "$ST/www-files"; cp "$HERE"/www-files/* "$ST/www-files/"
 cp "$BIN" "$ST/bin/wenilla-host"; chmod 755 "$ST/bin/wenilla-host"
 cp "$HERE"/lua/* "$ST/lua/"; cp "$HERE"/sql/*.sql "$ST/sql/"; cp "$HERE/slices/mini.json" "$ST/slices/"
@@ -168,6 +168,69 @@ tar -cf - -C "$T/bad" mini | bash "$ST/slice-install.sh" mini 10 > "$T/inst2.log
 check "slice-install refuses a non-slice and keeps the old one" "[ $rc != 0 ] && grep -qx new $ST/slices/mini/DBFilesClient/Map.dbc"
 echo | bash "$ST/slice-install.sh" '../x' > /dev/null 2>&1; rc=$?
 check "slice-install refuses a bad name" "[ $rc != 0 ]"
+
+# --- the game data killswitch (gamedata-switch.sh): fakes for Caddy's answers (410 once its block is in)
+cat > "$T/fake/curl" <<'C'
+#!/bin/sh
+url=""; for a in "$@"; do case "$a" in http*) url=$a ;; esac; done
+case "$url" in *ipify*) printf 1.2.3.4; exit 0 ;; esac
+if grep -q "game data killswitch" "$WU_CADDYFILE" 2>/dev/null; then
+  case "$url" in */data*|*manifest.json) printf 410; exit 0 ;; esac
+fi
+case "$url" in *.wasm|*.webp) printf 200 ;; *) printf 302 ;; esac
+C
+chmod +x "$T/fake/curl"
+sed -i '2i [ "$1 $2" = "exec wu-portal" ] \&\& [ -n "${FAKE_EXEC_FAIL:-}" ] \&\& exit 1' "$T/fake/docker"
+export WU_BACKUPS=$T/backups WU_SETTLE=0 WU_PLAY_WAIT=1
+mkdir -p "$ST/overlays/foreverui/Interface/ForeverUI"; echo art > "$ST/overlays/foreverui/Interface/ForeverUI/x.blp"
+echo '{"names":["Interface\\GlueXML\\GlueParent.lua"]}' > "$ST/www/boot-manifest.json"
+GD=$WU/portal/gamedata-off
+cp "$WU_CADDYFILE" "$T/cf.before-gd"
+: > "$WU/sql.log"
+bash "$ST/gamedata-switch.sh" off > "$T/gd1.log" 2>&1; rc=$?
+check "gamedata off: succeeds" "[ $rc = 0 ] && grep -q '^GAMEDATA OFF OK' $T/gd1.log || { tail -30 $T/gd1.log; false; }"
+check "gamedata off: the flag with since" "grep -q '\"gamedata_streaming\": false, \"since\": \"20' $GD"
+check "gamedata off: one 410 block, inside the stream site" "[ \$(grep -c '# >>> game data killswitch' $WU_CADDYFILE) = 1 ] && python3 -I $ST/gamedata-caddy.py status $WU_CADDYFILE | grep -qx on"
+check "gamedata off: Caddy backup kept" "ls $T/backups/*/Caddyfile >/dev/null 2>&1"
+check "gamedata off: stream accounts released" "grep -q 'DELETE FROM ov_stream_accounts' $WU/sql.log"
+check "gamedata off: before 302 (gated), after 410" "grep -A12 -- '-- before --' $T/gd1.log | grep -q 'index.json  302' && grep -A14 -- '-- after --' $T/gd1.log | grep -q 'index.json  410'"
+check "gamedata off: the checks name the tier index and a slice file" "grep -q 'CHECK /data/__tier/index.json -> 410' $T/gd1.log && grep -q 'CHECK /data/DBFilesClient%5CMap.dbc -> 410' $T/gd1.log"
+check "gamedata off: logged" "grep -q ' off by=.* checks=1' $WU/gamedata-switch.log && grep -q '\"state\": \"off\"' $WU/portal/gamedata-last.json"
+check "gamedata off: nothing moved without --park" "[ -f $ST/slices/mini/DBFilesClient/Map.dbc ] && [ ! -e $WU/offline-gamedata/CURRENT ]"
+bash "$ST/gamedata-switch.sh" off > "$T/gd2.log" 2>&1; rc=$?
+check "gamedata off twice: still one block" "[ $rc = 0 ] && [ \$(grep -c '# >>> game data killswitch' $WU_CADDYFILE) = 1 ] && grep -q 'already off' $T/gd2.log"
+tar -cf - -C "$T/work" mini | bash "$ST/slice-install.sh" mini 1000 > "$T/gd-inst.log" 2>&1; rc=$?
+check "gamedata off: a slice upload is refused" "[ $rc != 0 ] && grep -q 'game data is switched off' $T/gd-inst.log && grep -qx new $ST/slices/mini/DBFilesClient/Map.dbc"
+bash "$ST/stream-up.sh" > "$T/gd-up.log" 2>&1; rc=$?
+check "gamedata off: stream-up keeps the 410 block" "[ $rc = 0 ] && [ \$(grep -c '# >>> game data killswitch' $WU_CADDYFILE) = 1 ] && grep -q 'game data is switched off here' $T/gd-up.log"
+bash "$ST/gamedata-switch.sh" status > "$T/gd-st.log" 2>&1; rc=$?
+check "gamedata status" "[ $rc = 0 ] && grep -q 'game data streaming: OFF since' $T/gd-st.log && grep -q '^GAMEDATA STATUS OK' $T/gd-st.log"
+bash "$ST/gamedata-switch.sh" on > "$T/gd3.log" 2>&1; rc=$?
+check "gamedata on: succeeds, the Caddyfile as before, no flag" "[ $rc = 0 ] && grep -q '^GAMEDATA ON OK' $T/gd3.log && cmp -s $WU_CADDYFILE $T/cf.before-gd && [ ! -e $GD ]"
+check "gamedata on: logged, since" "grep -q ' on by=.* checks=1' $WU/gamedata-switch.log && grep -q '\"state\": \"on\"' $WU/portal/gamedata-last.json"
+# --park: off the served folders, never deleted, and back
+: > "$WU/docker.log"
+bash "$ST/gamedata-switch.sh" off --park > "$T/gd4.log" 2>&1; rc=$?
+P=$(cat "$WU/offline-gamedata/CURRENT" 2>/dev/null)
+check "gamedata off --park: succeeds" "[ $rc = 0 ] && grep -q '^GAMEDATA OFF OK' $T/gd4.log || { tail -20 $T/gd4.log; false; }"
+check "park: the slice moved, a placeholder served" "[ -n '$P' ] && grep -qx new $P/slices/mini/DBFilesClient/Map.dbc && [ -f $ST/slices/mini/.gamedata-parked ] && [ ! -e $ST/slices/mini/DBFilesClient/Map.dbc ]"
+check "park: the Forever UI overlay and the manifest moved" "[ -f $P/overlays/foreverui/Interface/ForeverUI/x.blp ] && [ ! -e $ST/overlays/foreverui ] && [ -f $P/www/boot-manifest.json ] && [ ! -e $ST/www/boot-manifest.json ]"
+check "park: wu-play restarted" "grep -q 'restart wu-play' $WU/docker.log"
+bash "$ST/gamedata-switch.sh" on > "$T/gd5.log" 2>&1; rc=$?
+check "on after park: everything back" "[ $rc = 0 ] && grep -qx new $ST/slices/mini/DBFilesClient/Map.dbc && [ ! -e $ST/slices/mini/.gamedata-parked ] && [ -f $ST/overlays/foreverui/Interface/ForeverUI/x.blp ] && [ -f $ST/www/boot-manifest.json ] && [ ! -e $WU/offline-gamedata/CURRENT ]"
+check "on after park: the record kept" "ls $P/restored-*.txt >/dev/null 2>&1"
+# park, but wu-play no longer serves the page on the placeholders: everything goes back, the flag stays (fail safe)
+FAKE_EXEC_FAIL=1 bash "$ST/gamedata-switch.sh" off --park > "$T/gd6.log" 2>&1; rc=$?
+check "park refused by wu-play: fails, files back, still off" "[ $rc != 0 ] && grep -qx new $ST/slices/mini/DBFilesClient/Map.dbc && [ ! -e $WU/offline-gamedata/CURRENT ] && [ -f $GD ]"
+bash "$ST/gamedata-switch.sh" on > /dev/null 2>&1
+# Caddy refusing the 410 block: its old file back, the flag stays (the gate still answers 410)
+FAKE_CADDY_FAIL=1 bash "$ST/gamedata-switch.sh" off > "$T/gd7.log" 2>&1; rc=$?
+check "gamedata off, Caddy refusing: fails, Caddyfile restored, flag kept" "[ $rc != 0 ] && cmp -s $WU_CADDYFILE $T/cf.before-gd && [ -f $GD ]"
+FAKE_CADDY_FAIL=1 bash "$ST/gamedata-switch.sh" on > "$T/gd8.log" 2>&1; rc=$?
+check "gamedata on with no block to remove: no Caddy reload needed, flag gone" "[ $rc = 0 ] && [ ! -e $GD ]"
+bash "$ST/gamedata-switch.sh" sideways > /dev/null 2>&1; rc=$?
+check "gamedata: bad argument refused" "[ $rc != 0 ]"
+rm -rf "$ST/overlays"
 
 # --- stream-down
 : > "$WU/sql.log"

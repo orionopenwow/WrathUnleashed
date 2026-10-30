@@ -297,7 +297,7 @@ async fn realm_listing(core: State<'_, Core>) -> Result<Listing, String> {
 async fn realms_list(core: State<'_, Core>) -> Result<RealmList, String> {
     let dir = core.dir.clone();
     let l = blocking(move || Ok(realms::fetch_all(&dir))).await?;
-    core.allow(l.realms.iter().flat_map(|r| [r.join_url.clone(), r.discord.clone()]).flatten());
+    core.allow(l.realms.iter().flat_map(|r| [r.join_url.clone(), r.discord.clone(), r.report_url.clone()]).flatten());
     Ok(l)
 }
 
@@ -782,6 +782,8 @@ pub fn run() {
             crate::p2p::cmds::host_logs,
             crate::p2p::cmds::host_invite,
             crate::p2p::cmds::host_new_invite,
+            crate::p2p::cmds::host_listing, // the realm list details (host.rs ListingDetails)
+            crate::p2p::cmds::host_listing_set,
             crate::p2p::cmds::p2p_flags,
             crate::p2p::cmds::p2p_set_flag,
             crate::p2p::cmds::p2p_set_limits,

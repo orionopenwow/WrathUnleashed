@@ -92,6 +92,11 @@ class Config:
 
         self.listing = e("RELAY_LISTING", "1") == "1"
         self.listing_site_secret = e("RELAY_LISTING_SITE_SECRET", "")
+        # Where this relay runs (na-east na-west sa eu africa me asia oce, or empty): the listing's coarse region
+        # estimate for realms whose tunnel answers fast (wurelay/listing.py).
+        self.region = e("RELAY_REGION", "")
+        # Ready but off: list "direct connect available" for hosts who allow it (the launcher's p2p_hosting flag).
+        self.advertise_direct = e("RELAY_ADVERTISE_DIRECT", "0") == "1"
         # --- limits per realm
         self.max_streams = _env_int("RELAY_MAX_STREAMS", 128)          # a player uses 2 (auth, world)
         self.kbps = _env_int("RELAY_KBPS", 512)                          # both directions together
@@ -255,6 +260,9 @@ class Session:
         self.next_req = 1
         self.closed = False
         self.status_cache = (0.0, None)
+        self.rtt_ms = None          # the tunnel's round trip (the fastest of the recent probes), for the listing
+        self.rtt_samples = collections.deque(maxlen=5)
+        self.rtt_at = 0.0
 
     # control requests to the agent ("status", "create_account")
     async def request(self, op, **fields):
@@ -267,6 +275,19 @@ class Session:
             return await asyncio.wait_for(fut, self.relay.cfg.request_timeout)
         finally:
             self.pending.pop(rid, None)
+
+    async def probe_rtt(self):
+        """Time one control round trip. "rtt" is an op no agent knows, so every agent version answers it at once
+        ({"ok": false}) without touching its realm."""
+        self.rtt_at = time.monotonic()
+        t0 = time.monotonic()
+        try:
+            await self.request("rtt")
+        except (asyncio.TimeoutError, ConnectionError, ws.WSClosed):
+            return None
+        self.rtt_samples.append((time.monotonic() - t0) * 1000)
+        self.rtt_ms = round(min(self.rtt_samples), 1)
+        return self.rtt_ms
 
     def open_stream(self, port, conn, ip) -> Stream:
         sid = self.next_sid
@@ -1073,6 +1094,8 @@ class Relay:
                 for st in list(s.streams.values()):
                     if now - st.last > self.cfg.stream_idle:
                         s.close_stream(st, why="idle")
+                if self.listing and now - s.rtt_at > (60 if not s.rtt_samples else 1800):
+                    self._spawn(s.probe_rtt())
             for ip in [ip for ip, t in self.knocks.items() if all(e <= now for e in t.values())]:
                 del self.knocks[ip]
             for k in [k for k, q in self.auth_fails.items() if not q or now - q[-1] > self.cfg.auth_fail_window]:

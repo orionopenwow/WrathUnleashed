@@ -243,7 +243,10 @@ namespace
         }
         if (scale > 0.f)
             go->SetObjectScale(scale);
-        if (!map->AddToMap(go))
+        // As a plain GameObject: Map::AddToMap<T> is only instantiated (Map.cpp) for the core's own types, and a
+        // class in this file's anonymous namespace has no linkage, so AddToMap<SandboxGameObject> can't link
+        // (wu-images 2026-10-30: "is used but not defined in this translation unit").
+        if (!map->AddToMap(static_cast<GameObject*>(go)))
         {
             delete go;
             return ST_FAILED;

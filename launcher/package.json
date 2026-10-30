@@ -1,7 +1,7 @@
 {
   "name": "leyline-launcher",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Leyline desktop launcher (Tauri 2). The UI in ui/ is plain HTML, CSS and JS: no bundler, no build step.",
   "license": "MIT",
   "scripts": {

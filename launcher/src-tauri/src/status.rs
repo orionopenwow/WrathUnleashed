@@ -24,6 +24,10 @@ pub struct RealmStatus {
     pub ping_ms: Option<u32>,
     pub players: Option<u64>,
     pub bots: Option<u64>,
+    /// The official realm's game data killswitch (`"gamedata_streaming"` in its status file): `Some(false)` when
+    /// its server streams no game data, so browser play needs the player's own game folder. None: not said.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gamedata_streaming: Option<bool>,
 }
 
 /// "host" or "host:port" to (host, port).
@@ -55,14 +59,20 @@ pub fn parse_status(v: &Value) -> Option<(bool, Option<u64>, Option<u64>)> {
     Some((online, v.get("players").and_then(Value::as_u64), v.get("bots").and_then(Value::as_u64)))
 }
 
+/// `"gamedata_streaming"` from a status file: false = the realm's server streams no game data (browser play needs
+/// the player's own game folder), true = it streams; None when the file doesn't say.
+pub fn gamedata_streaming(v: &Value) -> Option<bool> {
+    v.get("gamedata_streaming").and_then(Value::as_bool)
+}
+
 /// Put the ping and the status file together the way the Open Vanilla launcher did.
 pub fn combine(ping_ms: Option<u32>, file: Option<(bool, Option<u64>, Option<u64>)>) -> RealmStatus {
     match file {
-        Some((true, players, bots)) => RealmStatus { state: "online", ping_ms, players, bots },
+        Some((true, players, bots)) => RealmStatus { state: "online", ping_ms, players, bots, gamedata_streaming: None },
         Some((false, _, _)) => {
-            RealmStatus { state: if ping_ms.is_some() { "partial" } else { "offline" }, ping_ms, players: None, bots: None }
+            RealmStatus { state: if ping_ms.is_some() { "partial" } else { "offline" }, ping_ms, players: None, bots: None, gamedata_streaming: None }
         }
-        None => RealmStatus { state: if ping_ms.is_some() { "online" } else { "unknown" }, ping_ms, players: None, bots: None },
+        None => RealmStatus { state: if ping_ms.is_some() { "online" } else { "unknown" }, ping_ms, players: None, bots: None, gamedata_streaming: None },
     }
 }
 
@@ -70,10 +80,12 @@ pub fn combine(ping_ms: Option<u32>, file: Option<(bool, Option<u64>, Option<u64
 pub fn check(realm: &str, status_url: Option<&str>) -> RealmStatus {
     let (host, port) = host_port(realm);
     let ping_ms = ping(&host, port, PING_TIMEOUT);
-    let file = status_url.and_then(|u| crate::net::get(u, STATUS_TIMEOUT).ok()).and_then(|body| {
-        serde_json::from_str::<Value>(&body).ok().and_then(|v| parse_status(&v))
-    });
-    combine(ping_ms, file)
+    let doc = status_url
+        .and_then(|u| crate::net::get(u, STATUS_TIMEOUT).ok())
+        .and_then(|body| serde_json::from_str::<Value>(&body).ok());
+    let mut s = combine(ping_ms, doc.as_ref().and_then(parse_status));
+    s.gamedata_streaming = doc.as_ref().and_then(gamedata_streaming);
+    s
 }
 
 #[cfg(test)]
@@ -102,12 +114,30 @@ mod tests {
         let v: Value = serde_json::from_str(r#"{"online":true,"players":1,"bots":60,"uptime_s":5}"#).unwrap();
         let f = parse_status(&v);
         assert_eq!(f, Some((true, Some(1), Some(60))));
-        assert_eq!(combine(Some(38), f), RealmStatus { state: "online", ping_ms: Some(38), players: Some(1), bots: Some(60) });
+        assert_eq!(combine(Some(38), f), RealmStatus { state: "online", ping_ms: Some(38), players: Some(1), bots: Some(60), gamedata_streaming: None });
         assert_eq!(combine(Some(40), Some((false, None, None))).state, "partial");
         assert_eq!(combine(None, Some((false, None, None))).state, "offline");
         assert_eq!(combine(Some(12), None).state, "online");
         assert_eq!(combine(None, None).state, "unknown");
         assert!(parse_status(&serde_json::from_str::<Value>(r#"{"players":3}"#).unwrap()).is_none());
+    }
+
+    #[test]
+    fn the_game_data_killswitch_is_read() {
+        let off: Value = serde_json::from_str(r#"{"online":true,"players":1,"gamedata_streaming":false,"gamedata_since":"2026-10-29T18:04:00Z"}"#).unwrap();
+        assert_eq!(gamedata_streaming(&off), Some(false));
+        assert_eq!(gamedata_streaming(&serde_json::from_str::<Value>(r#"{"online":true,"gamedata_streaming":true}"#).unwrap()), Some(true));
+        assert_eq!(gamedata_streaming(&serde_json::from_str::<Value>(r#"{"online":true}"#).unwrap()), None);
+        assert_eq!(gamedata_streaming(&serde_json::from_str::<Value>(r#"{"gamedata_streaming":"no"}"#).unwrap()), None);
+        // the page gets the field only when the realm says it
+        let s = combine(None, None);
+        assert!(!serde_json::to_string(&s).unwrap().contains("gamedata"));
+        let url = crate::net::testserver::serve_once("200 OK", r#"{"online":true,"players":2,"bots":5,"gamedata_streaming":false}"#);
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let realm = format!("127.0.0.1:{}", l.local_addr().unwrap().port());
+        let s = check(&realm, Some(&url));
+        assert_eq!((s.state, s.gamedata_streaming), ("online", Some(false)));
+        assert!(serde_json::to_string(&s).unwrap().contains(r#""gamedata_streaming":false"#));
     }
 
     #[test]

@@ -1,6 +1,6 @@
 [package]
 name = "leyline"
-version = "0.3.0"
+version = "0.3.1"
 description = "Leyline: pick a game client, manage mods, find and host realms"
 authors = ["WrathUnleashed contributors"]
 license = "MIT"

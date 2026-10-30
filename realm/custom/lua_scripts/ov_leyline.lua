@@ -13,6 +13,13 @@
 --   server -> client   B:<count>:<age seconds>                       a list begins
 --                      R:<id>:<live 0|1>:<players|->:<bots|->:<ruleset>:<name>   one realm per message
 --                                                                    (id "this" = this realm, always first)
+--                      M:<id>:<flags>:<score>:<up|->:<build>:<region|->:<lang|->:<max|->:<tags>
+--                                                                    after its R line: the network fields (older
+--                                                                    windows ignore it). flags: letters F featured,
+--                                                                    V verified, N new, S the sample hangout (this
+--                                                                    realm and its relay record, OV_SAMPLER=1), E region
+--                                                                    estimated, or "-"; up = uptime %; tags a,b,c
+--                      N:<realms>:<players>:<bots>                   the network line (online now), before E
 --                      E:<count>                                     the list is complete
 --                      U:Realm list unavailable                      the file is missing or unreadable
 --   client -> server   H:<id|wrath>                                  hop there (the window's Join / Back to Wrath)
@@ -60,7 +67,33 @@ local function count(v)
 end
 
 local DATA_WORDS = { ["return"] = true, ["true"] = true, ["false"] = true, updated = true, realms = true, id = true,
-    name = true, ruleset = true, live = true, players = true, bots = true }
+    name = true, ruleset = true, live = true, players = true, bots = true, score = true, up = true, build = true,
+    region = true, est = true, lang = true, maxp = true, tags = true, featured = true, verified = true, new = true,
+    sample = true }
+local BUILDS = { [5875] = true, [8606] = true, [12340] = true, [15595] = true, [18414] = true }
+local REGIONS = { ["na-east"] = true, ["na-west"] = true, sa = true, eu = true, africa = true, me = true, asia = true,
+    oce = true }
+local TAG_ORDER = { "blizzlike", "boosted", "custom", "pvp", "rp", "hangout", "bots" }
+
+local function inRange(v, lo, hi)
+    v = tonumber(v)
+    if not v or v < lo or v > hi then return nil end
+    return math.floor(v)
+end
+
+local function cleanTags(s)
+    if type(s) ~= "string" then return "" end
+    local have, out = {}, {}
+    for t in s:gmatch("[%a]+") do have[t] = true end
+    for _, t in ipairs(TAG_ORDER) do if have[t] then out[#out + 1] = t end end
+    return table.concat(out, ",")
+end
+
+local function cleanLang(s)
+    if type(s) ~= "string" then return nil end
+    if s:match("^%l%l%l?$") or s:match("^%l%l%-%u%u$") then return s end
+    return nil
+end
 
 local cache = { at = -1e9, list = nil, updated = nil }
 
@@ -94,7 +127,12 @@ local function readFile()
             and not seen[r.id] then
             seen[r.id] = true
             list[#list + 1] = { id = r.id, name = cleanName(r.name), live = r.live == true,
-                ruleset = RULESETS[r.ruleset] and r.ruleset or "custom", players = count(r.players), bots = count(r.bots) }
+                ruleset = RULESETS[r.ruleset] and r.ruleset or "custom", players = count(r.players), bots = count(r.bots),
+                score = inRange(r.score, 0, 1000) or 0, up = inRange(r.up, 0, 100),
+                build = BUILDS[tonumber(r.build) or 0] and tonumber(r.build) or 12340,
+                region = REGIONS[r.region] and r.region or nil, est = r.est == true, lang = cleanLang(r.lang),
+                maxp = inRange(r.maxp, 1, 10000), tags = cleanTags(r.tags), featured = r.featured == true,
+                verified = r.verified == true, new = r.new == true, sample = r.sample == true }
         end
     end
     return list, count(doc.updated)
@@ -136,17 +174,38 @@ local function send(player, msg) player:SendAddonMessage(PREFIX, msg, WHISPER, p
 
 local function dash(n) return n and tostring(n) or "-" end
 
+local function flags(r)
+    local f = (r.featured and "F" or "") .. (r.verified and "V" or "") .. (r.new and "N" or "")
+        .. (r.sample and "S" or "") .. ((r.region and r.est) and "E" or "")
+    return f ~= "" and f or "-"
+end
+
+local function meta(id, r, isSample)
+    if r.sample and not isSample then r = setmetatable({ sample = false }, { __index = r }) end
+    return string.format("M:%s:%s:%d:%s:%d:%s:%s:%s:%s", id, flags(r), r.score or 0, dash(r.up), r.build or 12340,
+        r.region or "-", r.lang or "-", dash(r.maxp), r.tags or "")
+end
+
 local function sendList(player)
     local list, updated = realms()
     if not list then return send(player, "U:" .. UNAVAILABLE) end
     local age = updated and math.max(0, os.time() - updated) or 0
     send(player, string.format("B:%d:%d", #list + 1, age))
     local people, bots = here()
+    -- this realm is the network's Leyline Sample Hangout while OV_SAMPLER=1 (realm/profiles/sampler.env): then it and
+    -- its own relay record (sample in the file: the hangout id) are flagged S, and the window pins it. Before
+    -- that, the relay record is listed as any other realm.
+    local isSample = os.getenv("OV_SAMPLER") == "1"
     send(player, string.format("R:this:1:%d:%d:main:%s", people, bots, cleanName(REALM_NAME)))
+    send(player, meta("this", { sample = isSample, score = 0, build = 12340, tags = isSample and "hangout" or "" }, isSample))
+    local n, p, b = 1, people, bots
     for _, r in ipairs(list) do
         send(player, string.format("R:%s:%d:%s:%s:%s:%s", r.id, r.live and 1 or 0, dash(r.players), dash(r.bots),
             r.ruleset, r.name))
+        send(player, meta(r.id, r, isSample))
+        if r.live and not (r.sample and isSample) then n, p, b = n + 1, p + (r.players or 0), b + (r.bots or 0) end
     end
+    send(player, string.format("N:%d:%d:%d", n, p, b))
     send(player, "E:" .. (#list + 1))
 end
 

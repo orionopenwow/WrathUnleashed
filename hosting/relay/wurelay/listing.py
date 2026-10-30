@@ -23,12 +23,24 @@ POST /api/listing/claims with that token: the listing checks the latest SIGNED h
 it (only the realm key's holder could put it there) and marks the record claimed by that account.
 Unclaimed records are listed as "unclaimed". Ordering never depends on money or votes.
 
-Records leave the list 24 h after the last heartbeat; after 3 missed beats they show as offline.
+Listing quality (2026-10-29, all optional in the beat, so older agents keep working): the record may also carry
+  core ("azerothcore", ...), build (12340, ...), tags (blizzlike boosted custom pvp rp hangout bots), region
+  (host-chosen: na-east na-west sa eu africa me asia oce), language ("en", "pt-BR"), max_players, and
+  direct (the host allows direct connections). Each is checked here and dropped when it is not one of those.
+The listing works out the rest itself from the heartbeats: uptime over 24 h and 7 d (hourly buckets of the seconds
+a realm was seen online), "new" (first seen in the last 7 days), a coarse region estimate (the relay's own
+RELAY_REGION when the realm's tunnel answers in under 45 ms) and a fair score (players, bots counted apart and
+worth little, uptime, new; never money or votes). "Direct connect available" is only advertised when the relay
+operator turns RELAY_ADVERTISE_DIRECT on (off by default) and the host allows it.
+
+Auto-hide: a realm whose tunnel to this relay is gone, or that missed 3 beats, shows as offline at once; 6 h after
+its last heartbeat it leaves the list; its entry (uptime history, first seen) is forgotten after 7 days.
 State lives in memory and in RELAY_STATE's sibling listing.json (no player data in it).
 """
 import collections
 import hmac
 import json
+import math
 import os
 import re
 import time
@@ -44,8 +56,44 @@ CLAIM_RE = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
 SKEW = 300
 MIN_INTERVAL = 20
 OFFLINE_AFTER = 180
-FORGET_AFTER = 86400
+HIDE_AFTER = 6 * 3600          # offline this long: not listed any more
+FORGET_AFTER = 7 * 86400       # silent this long: the entry (and its uptime history) is dropped
+NEW_FOR = 7 * 86400
 MAX_RECORDS = 2000
+TAGS = ("blizzlike", "boosted", "custom", "pvp", "rp", "hangout", "bots")
+REGIONS = ("na-east", "na-west", "sa", "eu", "africa", "me", "asia", "oce")
+CORES = ("azerothcore", "trinitycore", "cmangos", "vmangos", "mangos", "other")
+# client build number -> (version, the profile's "game")
+BUILDS = {5875: ("1.12.1", "classic-1.12.1"), 8606: ("2.4.3", "tbc-2.4.3"), 12340: ("3.3.5a", "wrath-3.3.5a"),
+          15595: ("4.3.4", "cata-4.3.4"), 18414: ("5.4.8", "mop-5.4.8")}
+LANG_RE = re.compile(r"^[a-z]{2,3}(-[A-Z]{2})?$")
+NEAR_MS = 45
+
+
+def _tags(v):
+    if not isinstance(v, list):
+        return []
+    want = {x.strip().lower() for x in v[:20] if isinstance(x, str)}
+    return [t for t in TAGS if t in want]
+
+
+def _int_in(v, lo, hi):
+    return v if isinstance(v, int) and not isinstance(v, bool) and lo <= v <= hi else None
+
+
+def score(live, players, bots, up24, up7, new) -> float:
+    """The fair order of the list, highest first: people playing now (diminishing, so one big realm can't bury the
+    rest), bots counted apart and worth at most 5, uptime (7 d weighs more than 24 h; unknown counts as 50 %), and a
+    small boost while a realm is new so it can be found. Offline is 0. Nothing here can be bought or voted on."""
+    if not live:
+        return 0.0
+    p = min(40.0, 8 * math.sqrt(players or 0))
+    b = min(5.0, math.sqrt(bots or 0) / 2)
+    if up7 is None:
+        u = 20.0
+    else:
+        u = 0.25 * up7 + 0.15 * (up24 if up24 is not None else up7)
+    return round(p + b + u + (10.0 if new else 0.0), 1)
 
 
 def _text(v, n):
@@ -66,7 +114,13 @@ def clean_record(rec: dict) -> dict:
         "rules": [t for t in (_text(x, 120) for x in (rec.get("rules") or [])[:10]) if t],
         "discord": rec.get("discord") if isinstance(rec.get("discord"), str) and HTTPS_DISCORD.match(rec["discord"]) else None,
         "warden": rec.get("warden") if isinstance(rec.get("warden"), bool) else None,
-        "language": _text(rec.get("language"), 8) or None,
+        "language": rec.get("language") if isinstance(rec.get("language"), str) and LANG_RE.match(rec["language"]) else None,
+        "core": rec.get("core") if rec.get("core") in CORES else "azerothcore",
+        "build": rec.get("build") if rec.get("build") in BUILDS and not isinstance(rec.get("build"), bool) else 12340,
+        "tags": _tags(rec.get("tags")),
+        "region": rec.get("region") if rec.get("region") in REGIONS else None,
+        "max_players": _int_in(rec.get("max_players"), 1, 10000),
+        "direct": rec.get("direct") is True,
     }
     return out
 
@@ -155,17 +209,55 @@ class Listing:
             v = st.get(k)
             return v if isinstance(v, int) and 0 <= v < 1_000_000 else None
         claim = beat.get("claim") if isinstance(beat.get("claim"), str) and CLAIM_RE.match(beat["claim"]) else None
+        online_now = bool(st.get("online"))
+        e.setdefault("up_since", now)
+        if "last_seen" in e and e.get("status", {}).get("online") and online_now and now - e["last_seen"] <= OFFLINE_AFTER:
+            self.credit(e, e["last_seen"], now)
         e.update(realm_id=rid, pubkey=pub.hex(), seq=seq, last_seen=now, record=rec,
-                 status={"online": bool(st.get("online")), "players": num("players"), "bots": num("bots"),
+                 status={"online": online_now, "players": num("players"), "bots": num("bots"),
                          "uptime_s": num("uptime_s")},
                  claim=claim, relay=_text(beat.get("relay"), 253) or (self.cfg.name if self.cfg else None))
         self.entries[rid] = e
         self.dirty = True
         return 200, {"ok": True, "listed": True, "next_in": 60, "claimed": bool(e.get("claimed_by"))}
 
+    # ------------------------------------------------------------------ uptime
+    @staticmethod
+    def credit(e, t0, t1):
+        """Count t0..t1 as online, in hourly buckets ({"<hour number>": seconds}); a week of them is kept."""
+        up = e.setdefault("up", {})
+        while t0 < t1:
+            h = int(t0 // 3600)
+            end = min(t1, (h + 1) * 3600)
+            up[str(h)] = round(min(3600.0, up.get(str(h), 0) + (end - t0)), 1)
+            t0 = end
+        oldest = int(t1 // 3600) - 7 * 24
+        for k in [k for k in up if not k.isdigit() or int(k) < oldest]:
+            del up[k]
+
+    @staticmethod
+    def uptime(e, now, window):
+        """Percent of the last `window` seconds the realm was seen online (whole numbers), or None while the
+        listing has watched it for less than an hour. Only the time since the listing started watching counts."""
+        covered = min(window, now - e.get("up_since", now))
+        if covered < 3600:
+            return None
+        lo = int((now - covered) // 3600)
+        total = sum(v for k, v in (e.get("up") or {}).items() if k.isdigit() and int(k) >= lo
+                    and isinstance(v, (int, float)))
+        return max(0, min(100, round(100 * total / covered)))
+
+    def rtt_ms(self, rid):
+        s = self.relay.sessions.get(rid) if self.relay is not None else None
+        v = getattr(s, "rtt_ms", None)
+        return v if isinstance(v, (int, float)) else None
+
     def delist(self, rid):
         if self.entries.pop(rid, None) is not None:
             self.dirty = True
+
+    def hidden(self, e, now):
+        return now - e["last_seen"] > HIDE_AFTER
 
     def forget(self, now=None):
         now = time.time() if now is None else now
@@ -192,10 +284,19 @@ class Listing:
         relay = e.get("relay") or domains.RELAY
         join = getattr(self.cfg, "join_base", None) or f"https://{relay}"
         online = now - e["last_seen"] <= OFFLINE_AFTER and e["status"]["online"]
+        if self.relay is not None and rid not in self.relay.sessions:
+            online = False   # the tunnel is gone: nobody can get in, whatever the last beat said
         auth_port = None
         if self.relay:
             alloc = self.relay.state["realms"].get(rid)
             auth_port = alloc["auth"] if alloc else None
+        build = rec.get("build") if rec.get("build") in BUILDS else 12340
+        version, game = BUILDS[build]
+        up24, up7 = self.uptime(e, now, 86400), self.uptime(e, now, 7 * 86400)
+        new = now - e["first_seen"] < NEW_FOR
+        rtt = self.rtt_ms(rid)
+        region_cfg = getattr(self.cfg, "region", "") or ""
+        st = e["status"]
         return {
             "schema": 1,
             "slug": "c-" + rid,
@@ -207,9 +308,13 @@ class Listing:
             "tagline": rec["tagline"],
             "summary": rec["summary"],
             "type": rec["type"],
-            "profile": {"game": "wrath-3.3.5a", "version": "3.3.5a", "build": 12340,
+            "profile": {"game": game, "version": version, "build": build, "core": rec.get("core") or "azerothcore",
                         "address": relay, "port": auth_port, "warden": rec["warden"],
                         "ruleset": rec["ruleset"], "patches": None, "clientFiles": "own"},
+            "tags": list(rec.get("tags") or []),
+            "region": rec.get("region"),
+            "language": rec.get("language"),
+            "maxPlayers": rec.get("max_players"),
             "connect": {"kind": "web-signin", "url": f"{join}/join/{rid}", "label": "Join this realm",
                         "note": "Opens the realm's join page: make a game account there, then set your realmlist."},
             "rules": rec["rules"],
@@ -225,6 +330,13 @@ class Listing:
                 "firstSeen": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(e["first_seen"])),
                 "lastSeen": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(e["last_seen"])),
                 "lastHeartbeat": e["status"],
+                "uptime": {"h24": up24, "d7": up7},
+                "new": new,
+                "score": score(online, st.get("players"), st.get("bots"), up24, up7, new),
+                "regionEstimate": region_cfg if (region_cfg in REGIONS and rtt is not None and rtt < NEAR_MS) else None,
+                "latency": None if rtt is None else ("near" if rtt < NEAR_MS else "mid" if rtt < 120 else "far"),
+                # ready but off: only when the relay operator turns it on AND the host allows it
+                "directConnect": bool(getattr(self.cfg, "advertise_direct", False) and rec.get("direct")),
             },
         }
 
@@ -233,9 +345,15 @@ class Listing:
         self.forget(now)
         blocked = self.relay.blocked if self.relay else set()
         private = {rid for rid, s in self.relay.sessions.items() if s.visibility != "public"} if self.relay else set()
-        recs = [self.record(e, now) for rid, e in self.entries.items() if rid not in blocked and rid not in private]
-        recs.sort(key=lambda r: (r["state"] != "live", r["name"].lower(), r["community"]["realmId"]))
+        recs = [self.record(e, now) for rid, e in self.entries.items()
+                if rid not in blocked and rid not in private and not self.hidden(e, now)]
+        recs.sort(key=lambda r: (r["state"] != "live", -r["community"]["score"], r["name"].lower(),
+                                 r["community"]["realmId"]))
+        live = [r for r in recs if r["state"] == "live"]
         return {"schema": 1, "kind": "community", "updated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
+                "network": {"realms": len(live),
+                            "players": sum(r["community"]["lastHeartbeat"].get("players") or 0 for r in live),
+                            "bots": sum(r["community"]["lastHeartbeat"].get("bots") or 0 for r in live)},
                 "realms": recs}
 
     # ------------------------------------------------------------------ HTTP

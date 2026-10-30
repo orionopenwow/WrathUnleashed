@@ -393,8 +393,16 @@ function installShim(eng) {
   if (!eng.layer) window.__ownfiles = { stats: eng.stats };   // sections.js stays off in own mode
 }
 
-/// Does the page's own origin already serve the Data URL scheme (wenilla-host)?
-async function hostServesData() {
+/// The game data killswitch (stream/server/gamedata-switch.sh): the server streams no game data, so the page
+/// never asks /data and goes straight to the player's own folder. The portal's /__env.js sets WU_GAMEDATA_OFF;
+/// a 410 Gone seen during play sets __wuGamedataOff (wrath-early.js).
+export function gamedataOff() {
+  return typeof window !== 'undefined' && (window.WU_GAMEDATA_OFF === true || window.__wuGamedataOff === true);
+}
+
+/// Does the page's own origin already serve the Data URL scheme (wenilla-host)? A 410 Gone (the killswitch),
+/// 403, 404 or anything not JSON is "no": the player's own folder then.
+export async function hostServesData() {
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), 8000);
   try {
@@ -759,9 +767,10 @@ function cover(text, sub) {
 export async function ensureDataSource(opts = {}) {
   const base = opts.base || import.meta.url;
   const q = new URLSearchParams(location.search);
-  if (q.get('data') === 'host') return { mode: 'host' };
+  const off = gamedataOff();
+  if (q.get('data') === 'host' && !off) return { mode: 'host' };
   const forceUi = q.get('ownfiles') === '1';
-  if (!forceUi && opts.probeHost !== false && (await hostServesData())) {
+  if (!off && !forceUi && opts.probeHost !== false && (await hostServesData())) {
     let layer = null;
     if (opts.layer !== false && q.get('layer') !== '0') {
       try { layer = await bootLayer(opts, base); } catch (e) { console.warn('game folder layer:', e); }
@@ -809,9 +818,10 @@ export function ownFilesStats() {
 
 function chooser(opts, base, state) {
   return new Promise((resolve) => {
-    const ui = createUi(opts);
+    const ui = createUi(gamedataOff() ? { ...opts, text: { ...(opts.text || {}),
+      sub: 'This realm needs your own game folder: drop your 3.3.5a game folder below. It streams no game files.' } } : opts);
     const streamUrl = opts.streamUrl || STREAM_URL;
-    if (window.WU_STREAM_AVAILABLE) ui.streamBtn.classList.remove('hidden');
+    if (window.WU_STREAM_AVAILABLE && !gamedataOff()) ui.streamBtn.classList.remove('hidden');
     ui.streamBtn.addEventListener('click', () => { location.href = streamUrl; });
 
     if (state.unsupported) {

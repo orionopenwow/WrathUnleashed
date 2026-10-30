@@ -17,7 +17,7 @@ pub mod docker;
 pub mod pack;
 
 use crate::realms;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -382,6 +382,81 @@ pub fn new_invite(kit: &Path) -> Result<String, String> {
     invite(kit).ok_or_else(|| "The new invite link was not written: try \"Realm tools\" in the kit.".into())
 }
 
+/// The realm list details a host sets: the network's filters (rules tags, region, language, the player limit) and
+/// whether direct connections are allowed (off by default; the network only lists it when its operator turns
+/// direct connections on). Kept in the kit's `state/beacon.json`, which `setup.py` reads on every start and on
+/// `rules` (hosting/kit/tools/wuhost/setup.py `EDITABLE`); the relay checks them again.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ListingDetails {
+    pub tags: Vec<String>,
+    pub region: Option<String>,
+    pub language: Option<String>,
+    pub max_players: Option<u64>,
+    pub direct: bool,
+}
+
+fn beacon_path(kit: &Path) -> PathBuf {
+    kit.join("state").join("beacon.json")
+}
+
+/// The details as the kit has them now (defaults before the first start).
+pub fn listing_details(kit: &Path) -> ListingDetails {
+    let v: Value = fs::read_to_string(beacon_path(kit)).ok().and_then(|t| serde_json::from_str(t.trim_start_matches('\u{feff}')).ok())
+        .unwrap_or(Value::Null);
+    ListingDetails {
+        tags: v.get("tags").and_then(Value::as_array)
+            .map(|a| realms::TAGS.iter().filter(|t| a.iter().any(|x| x.as_str() == Some(t))).map(|t| t.to_string()).collect())
+            .unwrap_or_default(),
+        region: v.get("region").and_then(Value::as_str).filter(|r| realms::REGIONS.contains(r)).map(String::from),
+        language: v.get("language").and_then(Value::as_str).filter(|l| realms::lang_ok(l)).map(String::from),
+        max_players: v.get("max_players").and_then(Value::as_u64).filter(|n| (1..=10000).contains(n)),
+        direct: v.get("direct").and_then(Value::as_bool).unwrap_or(false),
+    }
+}
+
+/// Check the details and put them in `state/beacon.json` (the rest of that file is kept).
+pub fn write_listing_details(kit: &Path, d: &ListingDetails) -> Result<(), String> {
+    if let Some(bad) = d.tags.iter().find(|t| !realms::TAGS.contains(&t.as_str())) {
+        return Err(format!("\"{bad}\" is not a tag. Tags: {}.", realms::TAGS.join(", ")));
+    }
+    if d.region.as_deref().is_some_and(|r| !realms::REGIONS.contains(&r)) {
+        return Err("Pick a region from the list.".into());
+    }
+    if d.language.as_deref().is_some_and(|l| !realms::lang_ok(l)) {
+        return Err("Language: a code like en, de or pt-BR.".into());
+    }
+    if d.max_players.is_some_and(|n| !(1..=10000).contains(&n)) {
+        return Err("Player limit: 1 to 10000, or empty.".into());
+    }
+    let p = beacon_path(kit);
+    let mut doc = fs::read_to_string(&p).ok().and_then(|t| serde_json::from_str::<Value>(t.trim_start_matches('\u{feff}')).ok())
+        .filter(Value::is_object).unwrap_or_else(|| serde_json::json!({}));
+    let tags: Vec<&str> = realms::TAGS.iter().copied().filter(|t| d.tags.iter().any(|x| x == t)).collect();
+    let o = doc.as_object_mut().expect("an object");
+    o.insert("tags".into(), serde_json::json!(tags));
+    o.insert("region".into(), serde_json::json!(d.region));
+    o.insert("language".into(), serde_json::json!(d.language));
+    o.insert("max_players".into(), serde_json::json!(d.max_players));
+    o.insert("direct".into(), serde_json::json!(d.direct));
+    fs::create_dir_all(p.parent().expect("state/")).map_err(|e| e.to_string())?;
+    let text = serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())?;
+    crate::settings::write_atomic(&p, text.as_bytes()).map_err(|e| format!("Could not write state/beacon.json: {e}"))
+}
+
+/// Save the details, then tell a running realm (the kit's `rules` tool re-reads beacon.json; the agent sends it with
+/// its next heartbeat). Without Docker or before the first start, they apply on the next start.
+pub fn set_listing_details(kit: &Path, d: &ListingDetails) -> Result<String, String> {
+    need_kit(kit)?;
+    write_listing_details(kit, d)?;
+    if !kit.join("state").join("host.json").is_file() {
+        return Ok("Saved. They show on the realm list once your realm has started.".into());
+    }
+    match docker_in(kit, docker::tools_args(kit, &["rules"]), DOCKER_SHORT) {
+        Ok(_) => Ok("Saved. The realm list shows them within a minute.".into()),
+        Err(e) => Ok(format!("Saved. They show on the realm list from the next start ({e}).")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -481,6 +556,36 @@ mod tests {
         assert!(stop(k.path()).unwrap_err().contains("docker-compose.host.yml"));
         touch(k.path(), "docker-compose.host.yml", b"services: {}");
         assert!(new_invite(k.path()).unwrap_err().contains("Start your realm once"));
+    }
+
+    #[test]
+    fn listing_details_in_beacon_json() {
+        let d = kit();
+        assert_eq!(listing_details(d.path()), ListingDetails::default(), "nothing set yet");
+        std::fs::create_dir_all(d.path().join("state")).unwrap();
+        std::fs::write(d.path().join("state").join("beacon.json"), r#"{"name":"Frost Haven","tagline":"Duels","tags":["rp","x"]}"#).unwrap();
+        assert_eq!(listing_details(d.path()).tags, vec!["rp".to_string()]);
+        let want = ListingDetails { tags: vec!["rp".into(), "pvp".into()], region: Some("eu".into()), language: Some("pt-BR".into()),
+            max_players: Some(80), direct: false };
+        write_listing_details(d.path(), &want).unwrap();
+        let back = listing_details(d.path());
+        assert_eq!(back.tags, vec!["pvp".to_string(), "rp".to_string()], "in the listing's order");
+        assert_eq!((back.region, back.language, back.max_players, back.direct), (Some("eu".into()), Some("pt-BR".into()), Some(80), false));
+        let doc: Value = serde_json::from_str(&std::fs::read_to_string(d.path().join("state").join("beacon.json")).unwrap()).unwrap();
+        assert_eq!((doc["name"].as_str(), doc["tagline"].as_str()), (Some("Frost Haven"), Some("Duels")), "the rest is kept");
+        for bad in [
+            ListingDetails { tags: vec!["pay2win".into()], ..Default::default() },
+            ListingDetails { region: Some("mars".into()), ..Default::default() },
+            ListingDetails { language: Some("english".into()), ..Default::default() },
+            ListingDetails { max_players: Some(0), ..Default::default() },
+        ] {
+            assert!(write_listing_details(d.path(), &bad).is_err(), "{bad:?}");
+        }
+        assert_eq!(listing_details(d.path()).region.as_deref(), Some("eu"), "a refused change writes nothing");
+        // before the first start: saved, applied later (no Docker call)
+        touch(d.path(), "docker-compose.host.yml", b"services: {}");
+        let msg = set_listing_details(d.path(), &ListingDetails { direct: true, ..Default::default() }).unwrap();
+        assert!(msg.contains("once your realm has started") && listing_details(d.path()).direct);
     }
 
     #[test]

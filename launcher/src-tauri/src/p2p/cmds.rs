@@ -70,6 +70,17 @@ pub async fn host_new_invite() -> Result<String, String> {
     blocking(|| host::new_invite(&kit()?)).await
 }
 
+/// The realm list details (tags, region, language, player limit, direct connections) from the kit's beacon.json.
+#[tauri::command]
+pub fn host_listing() -> Result<host::ListingDetails, String> {
+    Ok(host::listing_details(&kit()?))
+}
+
+#[tauri::command]
+pub async fn host_listing_set(details: host::ListingDetails) -> Result<String, String> {
+    blocking(move || host::set_listing_details(&kit()?, &details)).await
+}
+
 #[tauri::command]
 pub async fn p2p_flags() -> Result<View, String> {
     blocking(|| Ok(flags::load(&settings::app_dir(), flags::URL))).await

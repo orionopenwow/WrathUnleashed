@@ -11,6 +11,8 @@ set -euo pipefail
 NAME="${1:-}"; BYTES="${2:-0}"
 [[ "$NAME" =~ ^[a-z0-9-]{1,32}$ ]] || die "usage: slice-install.sh <slice name> [bytes]"
 [[ "$BYTES" =~ ^[0-9]+$ ]] || BYTES=0
+# The game data killswitch (gamedata-switch.sh): no game data goes onto this server while it is on.
+[ -f "$WU/portal/gamedata-off" ] && die "game data is switched off on this server (gamedata-switch.sh): no slice upload. To stream again: bash $ST/gamedata-switch.sh on"
 D="$ST/slices"; mkdir -p "$D"
 # leftovers of an earlier run that stopped halfway (any slice name), and the client kept for rollback
 rm -rf "$D"/*.new "$D"/*.old "$D"/*.stage "$ST/www.old"

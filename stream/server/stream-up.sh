@@ -28,6 +28,7 @@ docker ps --format '{{.Names}}' | grep -cx wu-portal >/dev/null || die "the Wrat
 [ -f "$WU/soap-cmd.sh" ] || die "$WU/soap-cmd.sh missing"
 [ -d "$WU/custom/lua_scripts" ] || die "$WU/custom/lua_scripts missing (the realm's mod-ale scripts)"
 [ -f "$CF" ] || die "$CF not found"
+[ -f "$WU/portal/gamedata-off" ] && [ ! -f "$ST/gamedata-caddy.py" ] && die "game data is switched off here but $ST/gamedata-caddy.py is missing: upload the streaming kit again (Update browser client.bat)"
 for f in bin/wenilla-host wrath_portal.py lua/ov_slices.lua lua/lfg_ids.py lua/tiers_lua.py sql/ov_stream_accounts.sql "slices/$SLICE.json"; do
   [ -f "$ST/$f" ] || die "$ST/$f missing: upload the streaming kit (Make mini slice.bat does)"
 done
@@ -169,6 +170,11 @@ $STREAM_HOST {
 }
 $MARK_END
 EOF
+# The game data killswitch (gamedata-switch.sh): while it is on, the site keeps answering 410 for game data.
+if [ -f "$WU/portal/gamedata-off" ]; then
+  python3 -I "$ST/gamedata-caddy.py" add "$CF" "$STREAM_HOST" || die "game data is switched off but gamedata-caddy.py could not add its 410 block (bash $ST/gamedata-switch.sh status)"
+  echo "  game data is switched off here (gamedata-switch.sh): /data and the manifests answer 410"
+fi
 if ! caddy_reload; then
   cat "$WU/Caddyfile.stream-backup" > "$CF"
   caddy_reload || true
@@ -181,6 +187,7 @@ code=$(curl -s -m 25 -o /dev/null -w '%{http_code}' "https://${UPSTREAM}/wrath/p
 echo "  https://${UPSTREAM}/wrath/play?mini=$SLICE -> $code (200 = sign-in page for a signed-out visitor)"
 
 echo
+[ -f "$WU/portal/gamedata-off" ] && echo "NOTE: game data is switched OFF (gamedata-switch.sh): players play with their own game folder. On: bash $ST/gamedata-switch.sh on"
 echo "Streaming is on. Players: sign in at https://${UPSTREAM}/wrath and press \"Play in your browser\"."
 echo "Off switch: bash $ST/stream-switch.sh off   (on again: stream-switch.sh on)"
 echo "Remove it all: bash $ST/stream-down.sh"

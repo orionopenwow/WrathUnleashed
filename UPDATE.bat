@@ -15,6 +15,8 @@ rem           slice    stream\Make mini slice.bat              (streamed game fi
 rem           mods     mods\Put mods on Wrath.bat           (the mods catalog: realm, streamed addons, /wrath/mods)
 rem           ship     Ship WrathUnleashed.bat                 (save everything to GitHub: asks you to type yes)
 rem           leyline  tools\leyline-repo\Update Leyline repo.bat   (public Leyline copy; also runs after every ship)
+rem           gamedata-off  stream\Game data killswitch ON.bat   (our server serves no game data; only when you ask)
+rem           gamedata-on   stream\Game data killswitch OFF.bat  (stream the slim sampler again)
 cd /d "%~dp0"
 set "PEND=UPDATES-PENDING.txt"
 set "DONE=UPDATES-DONE.txt"
@@ -67,6 +69,8 @@ if /i "%STEP%"=="hangout" set "BAT=hosting\hangout\Deploy Dalaran hangout.bat"
 if /i "%STEP%"=="hangout-off" set "BAT=hosting\hangout\Take Dalaran hangout off Leyline.bat"
 if /i "%STEP%"=="foreverui" set "BAT=stream\Add Forever UI to the stream.bat"
 if /i "%STEP%"=="mods"    set "BAT=mods\Put mods on Wrath.bat"
+if /i "%STEP%"=="gamedata-off" set "BAT=stream\Game data killswitch ON.bat"
+if /i "%STEP%"=="gamedata-on"  set "BAT=stream\Game data killswitch OFF.bat"
 if /i "%STEP%"=="leyline" set "BAT=tools\leyline-repo\Update Leyline repo.bat"
 if /i "%STEP%"=="slice"   (set "BAT=stream\Make mini slice.bat" & set "INTERACTIVE=1")
 if /i "%STEP%"=="ship"    (set "BAT=Ship WrathUnleashed.bat" & set "INTERACTIVE=1")

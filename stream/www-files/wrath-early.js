@@ -48,6 +48,39 @@
   // 502 once left Stormwind City unbuilt). Async fetches retry up to 3 times (0.4 s, 1.2 s, 3 s);
   // synchronous XHRs (the chain's sync reads) retry twice at once. A 404 (not in the slice) is never
   // retried. window.__wuRetries counts what was retried and what still failed. ?noretry=1 turns it off.
+  // 410 Gone (the game data killswitch, stream/server/gamedata-switch.sh: this server streams no game data any
+  // more) is never retried either: the page says once "This realm needs your own game folder" and offers the
+  // game-folder page (/?ownfiles=1), instead of a black screen or endless retries. window.__wuGamedataOff is set.
+  var gamedataGone = function () {
+    if (window.__wuGamedataOff) return;
+    window.__wuGamedataOff = true;
+    try {
+      var show = function () {
+        if (!document.body || document.getElementById('wu-gamedata-off')) return;
+        var box = document.createElement('div');
+        box.id = 'wu-gamedata-off';
+        box.setAttribute('role', 'alertdialog');
+        box.setAttribute('style', 'position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;'
+          + 'background:rgba(0,0,0,.82);color:#eee;font:15px system-ui,sans-serif;text-align:center;padding:16px');
+        var card = document.createElement('div');
+        card.setAttribute('style', 'max-width:28rem;background:#15121c;border:1px solid #6b5a2e;border-radius:8px;padding:1.4rem');
+        var h = document.createElement('p');
+        h.setAttribute('style', 'font-size:18px;margin:0 0 .6rem');
+        h.textContent = 'This realm needs your own game folder.';
+        var p = document.createElement('p');
+        p.setAttribute('style', 'margin:0 0 1rem;color:#ccc');
+        p.textContent = 'It no longer streams game files. Drop your 3.3.5a game folder on the next page: it is read on your computer and never uploaded.';
+        var a = document.createElement('a');
+        a.href = '/?ownfiles=1';
+        a.textContent = 'Use my game folder';
+        a.setAttribute('style', 'display:inline-block;padding:.5rem 1rem;background:#c9a24a;color:#111;border-radius:4px;text-decoration:none;font-weight:600');
+        card.appendChild(h); card.appendChild(p); card.appendChild(a); box.appendChild(card);
+        document.body.appendChild(box);
+      };
+      if (document.body) show(); else document.addEventListener('DOMContentLoaded', show);
+    } catch (e) { /* the note is optional */ }
+  };
+  window.__wuGamedataGone = gamedataGone;
   try {
     if (!/[?&]noretry=1\b/.test(location.search)) {
       var stats = { retried: 0, recovered: 0, failed: 0, last: [] };
@@ -66,6 +99,7 @@
           var self = this, args = arguments;
           var attempt = function (n) {
             return origFetch.apply(self, args).then(function (res) {
+              if (res.status === 410) gamedataGone();
               if (res.status < 500 || n >= waits.length) {
                 if (n > 0) { if (res.status < 500) stats.recovered++; else { stats.failed++; note(url, 'HTTP ' + res.status); } }
                 return res;
@@ -98,6 +132,7 @@
           var out, thrown = null;
           if (!this.__wuSync) return origSend.apply(this, arguments);
           try { out = origSend.apply(this, arguments); } catch (e) { thrown = e; }
+          if (!thrown && this.status === 410) gamedataGone();
           if (!thrown && this.status !== 0 && this.status < 500) return out;
           var url = this.__wuSync, mime = this.__wuMime, rt = this.responseType;
           for (var n = 0; n < 2; n++) {

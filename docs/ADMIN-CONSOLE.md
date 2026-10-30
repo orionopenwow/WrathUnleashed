@@ -33,7 +33,7 @@ These people are staff too, without a grant:
 
 | Section | What staff can do |
 |---|---|
-| **Dashboard** | Realm (online, players, bots, login queue) and relay (community realms); queues (Workshop items waiting, index submissions, theme packs waiting); open reports; catalog counts; launchers in the wild (see below). |
+| **Dashboard** | Realm (online, players, bots, login queue) and relay (community realms); queues (Workshop items waiting, index submissions, theme packs waiting); open reports; catalog counts; launchers in the wild (see below); the read-only line "Game data streaming: on/off since …" (docs/GAME-DATA-ON-OUR-SERVER.md: the switch is the owner's bat or the Autopilot step `gamedata-off` / `gamedata-on`, never a button here). |
 | **Catalog** | Packaged mods: approve, reject, unpublish, feature, edit name, description and category, re-run the checker (`mods/wu-mod.py`) and read its findings. Community links: hide, unhide, feature, edit, dismiss reports. |
 | **Workshop** | What players made (`characters.mod_workshop_items`): approve, reject, unpublish (back to waiting), feature, edit title and description, re-run the checks (the word filter and reference checks). |
 | **Index** | The community index: the submissions queue (approve, or reject with a reason), delist or list again, re-scan one entry or all. |
@@ -42,7 +42,7 @@ These people are staff too, without a grant:
 | **Flags** | The P2P/torrent feature flags (owner only to change). |
 | **Themes** | Theme packs (the Workshop category `themes`): approve, reject, feature. |
 | **Reports** | `.bug` reports (seen, resolve, won't fix), message reports (done, dismiss, reopen), reported community links; notes on any of them. |
-| **Health** | What the server can see: SOAP, `ov_admin.lua`, the relay listing, the Workshop export's age, the mods catalog, writable folders, the checker, GitHub. |
+| **Health** | What the server can see: SOAP, `ov_admin.lua`, the relay listing, the Workshop export's age, the mods catalog, writable folders, the checker, GitHub, and game data streaming on/off (read-only). |
 | **Audit** | Every action: who, what, when, before and after, and refusals. |
 
 Owner only: grant or revoke staff, change a feature flag, set the stable or beta channel, hold or release updates.

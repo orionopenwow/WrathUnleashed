@@ -166,6 +166,7 @@ function renderRealmRows() {
 }
 
 let statusSeq = 0;
+let officialGamedata;   // false = the official realm's server streams no game data (browser play needs the player's folder)
 async function refreshStatus() {
   const realm = chosenRealm();
   const seq = ++statusSeq;
@@ -188,6 +189,8 @@ async function refreshStatus() {
   try {
     const beacon = realmsCache.find((x) => !x.official && x.address === realm && x.status_url);
     const s = await invoke("realm_status", beacon ? { realm, statusUrl: beacon.status_url } : { realm });
+    // The official realm's game data killswitch (status.json "gamedata_streaming"): BROWSER mode says what it needs.
+    if (seq === statusSeq && !beacon && isOfficial()) { officialGamedata = s.gamedata_streaming; renderPlayBar(); }
     const ms = s.ping_ms != null ? `${s.ping_ms} ms` : "";
     const counts = [s.players != null ? `Players: ${s.players}` : "", s.bots != null ? `Bots: ${s.bots}` : ""].filter(Boolean);
     const host = realm.includes(":") ? realm : `${realm}:3724`;
@@ -272,7 +275,10 @@ function renderPlayBar() {
   const c = currentClient();
   const bar = $("play-headline").parentElement;
   let head = "READY TO PLAY", detail = "", warn = false;
-  if (mode === "browser") {
+  if (mode === "browser" && officialGamedata === false) {
+    head = "BROWSER PLAY · NEEDS YOUR GAME FOLDER"; warn = true;
+    detail = "This realm streams no game files: the browser asks for your own 3.3.5a game folder (read on your PC, never uploaded)";
+  } else if (mode === "browser") {
     head = "READY · PLAYS IN YOUR BROWSER";
     detail = "WrathUnleashed · plays in your web browser, nothing to install";
   } else if (!c) {
@@ -892,9 +898,11 @@ async function loadRealms(quiet) {
     realmNames = l.realms.map((r) => r.name);
     const when = l.saved_at ? new Date(l.saved_at * 1000).toLocaleString() : "an earlier visit";
     const n = l.realms.length - 1;
+    networkTotals = l.network || null;
     if (l.from_cache) say("rl-status", `Offline: showing the list as it was ${when}.`, "warn");
     else if (l.error) say("rl-status", "The community list is not reachable right now: " + l.error, "warn");
     else say("rl-status", `${n} community realm${n === 1 ? "" : "s"} on the Leyline network.`, "ok");
+    fillRealmFilters();
   } catch (e) {
     say("rl-status", String(e), "bad");
   }
@@ -903,24 +911,79 @@ async function loadRealms(quiet) {
   $("srv-name").textContent = realmLabel();
 }
 
+// The network (realms.rs order): featured community realms, the Leyline Sample Hangout (ours, temporary), the
+// other live realms by the network's fair score, offline ones. The filters narrow the community realms.
+let networkTotals = null;
+let p2pHosting = false;   // direct connections are shown only when the p2p_hosting flag is on (Settings > Advanced)
+const TAG_LABELS = { blizzlike: "Blizzlike", boosted: "Boosted", custom: "Custom", pvp: "PvP", rp: "RP", hangout: "Hangout", bots: "Bots" };
+const REGION_LABELS = { "na-east": "North America east", "na-west": "North America west", sa: "South America", eu: "Europe",
+  africa: "Africa", me: "Middle East", asia: "Asia", oce: "Oceania" };
+const RL_FILTERS = [
+  ["rl-f-build", (r) => (r.build ? [r.build] : []), (v) => v],
+  ["rl-f-tag", (r) => r.tags || [], (v) => TAG_LABELS[v] || v],
+  ["rl-f-region", (r) => (r.region ? [r.region] : []), (v) => REGION_LABELS[v] || v],
+  ["rl-f-lang", (r) => (r.language ? [r.language.split("-")[0]] : []), (v) => v],
+];
+function fillRealmFilters() {
+  for (const [id, values, label] of RL_FILTERS) {
+    const sel = $(id);
+    if (!sel) continue;
+    const cur = sel.value;
+    const vs = [...new Set(realmsCache.filter((r) => !r.official).flatMap(values))].sort();
+    sel.replaceChildren(el("option", "", "any"), ...vs.map((v) => { const o = el("option", "", label(v)); o.value = v; return o; }));
+    sel.firstChild.value = "";
+    sel.value = vs.includes(cur) ? cur : "";
+  }
+}
+function realmMatches(r) {
+  if (r.official) return true;   // the sample stays pinned
+  for (const [id, values] of RL_FILTERS) {
+    const v = $(id) && $(id).value;
+    if (v && !values(r).includes(v)) return false;
+  }
+  if ($("rl-f-now") && $("rl-f-now").checked && !(r.state === "live" && (r.players || 0) > 0)) return false;
+  return true;
+}
+function networkLine(t) {
+  if (!t) return "";
+  return `${t.realms} realm${t.realms === 1 ? "" : "s"} · ${t.players} player${t.players === 1 ? "" : "s"} online` + (t.bots ? ` · ${t.bots} bots` : "");
+}
+function uptimeTag(r) {
+  const u = r.uptime_7d != null ? r.uptime_7d : r.uptime_24h;
+  if (u == null) return null;
+  return el("span", "tag" + (u >= 95 ? " good" : u >= 75 ? "" : " warn"), `${u}% up · ${r.uptime_7d != null ? "7 d" : "24 h"}`);
+}
+
 function renderRealms() {
   const box = $("rl-list");
   box.replaceChildren();
   const now = state.settings.selected_realm;
   const mine = $("rl-mine").checked;
+  if ($("rl-net")) $("rl-net").textContent = networkLine(networkTotals);
   let shown = 0;
   for (const r of realmsCache) {
     const fit = clientFor(r);
     if (mine && !fit) continue;
+    if (!realmMatches(r)) continue;
     shown++;
-    const card = el("article", "realm-card" + (r.address && r.address === now ? " on" : ""));
+    const card = el("article", "realm-card" + (r.address && r.address === now ? " on" : "") + (r.featured ? " featured" : "") + (r.official ? " official" : ""));
     const head = el("div", "top");
     const st = el("span", "state " + (r.state === "live" ? "is-online" : "is-offline"));
     st.append(el("span", "dot"), el("span", "", r.state === "live" ? "Online" : "Offline"));
     head.append(el("b", "name", r.name), st);
-    const counts = [r.players != null ? `${r.players} players` : "", r.bots ? `${r.bots} bots` : ""].filter(Boolean).join(" · ");
-    const facts = [r.official ? "Official" : "Beacon", r.kind, r.ruleset, counts].filter(Boolean).join(" · ");
+    const counts = [r.players != null ? `${r.players}${r.max_players ? " of " + r.max_players : ""} players` : "", r.bots ? `${r.bots} bots` : ""].filter(Boolean).join(" · ");
+    const facts = [r.official ? "Run by Leyline" : "Community realm", r.kind, r.ruleset, counts].filter(Boolean).join(" · ");
     const tags = el("div", "tags");
+    if (r.official && r.temporary) tags.append(el("span", "tag warn", "temporary"));
+    if (r.featured) tags.append(el("span", "tag gold", "Featured"));
+    if (r.verified) tags.append(el("span", "tag good", "Verified host"));
+    if (r.is_new) tags.append(el("span", "tag", "New"));
+    const up = uptimeTag(r);
+    if (up) tags.append(up);
+    for (const t of r.tags || []) if (!r.official) tags.append(el("span", "tag", TAG_LABELS[t] || t));
+    if (r.region) tags.append(el("span", "tag", (REGION_LABELS[r.region] || r.region) + (r.region_estimated ? " (estimated)" : "")));
+    if (r.language) tags.append(el("span", "tag", r.language));
+    if (r.direct && p2pHosting) tags.append(el("span", "tag good", "Direct connect available"));
     tags.append(el("span", "tag", r.build ? buildLabel(r.build) : (r.version || "Build not listed")));
     tags.append(el("span", "tag", CORE_LABELS[r.core] || "Other server"));
     if (r.build && !fit) tags.append(el("span", "tag warn", `Needs your own ${r.build} client`));
@@ -941,12 +1004,19 @@ function renderRealms() {
     acts.append(play);
     if (r.join_url) acts.append(linkBtn("Make an account", r.join_url));
     if (r.discord) acts.append(linkBtn("Discord", r.discord));
+    if (r.report_url && !r.official) { const rep = linkBtn("Report", r.report_url); rep.title = "Report this realm to Leyline staff (on the website)"; acts.append(rep); }
     card.append(acts);
     box.append(card);
   }
-  if (realmsCache.length <= 1) box.append(el("p", "hint", "No community realms listed right now. Host one: see Host."));
-  else if (!shown) box.append(el("p", "hint", "None of the listed realms fits your clients. Untick the box to see them all."));
+  if (realmsCache.length <= 1) box.append(el("p", "hint", "No community realms listed right now. Host one: see Host your own below."));
+  else if (shown <= 1 && mine) box.append(el("p", "hint", "None of the listed realms fits your clients. Untick the box to see them all."));
+  else if (shown <= 1) box.append(el("p", "hint", "No community realms match these filters."));
 }
+for (const id of ["rl-f-build", "rl-f-tag", "rl-f-region", "rl-f-lang", "rl-f-now"]) {
+  if ($(id)) $(id).addEventListener("change", () => renderRealms());
+}
+if ($("rl-host")) $("rl-host").addEventListener("click", () => show("host"));
+invoke("p2p_flags").then((v) => { p2pHosting = !!(v && v.effective && v.effective.p2p_hosting); }).catch(() => {});
 const CORE_LABELS = { azerothcore: "AzerothCore", trinitycore: "TrinityCore", cmangos: "CMaNGOS", vmangos: "vMaNGOS", mangos: "MaNGOS", other: "Other server" };
 $("rl-mine").addEventListener("change", () => renderRealms());
 

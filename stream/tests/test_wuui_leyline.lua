@@ -158,7 +158,7 @@ check("name, ruleset, players, online", rows[2].name:GetText() == "Frost Haven" 
     and rows[2].players:GetText() == "7 playing +2 bots" and rows[2].state:GetText():find("online"))
 check("offline realm", rows[3].state:GetText():find("offline") and rows[3].players:GetText() == ""
     and rows[3].rules:GetText() == "Level 1 or boost to 80")
-check("status counts the other realms", win.status:GetText():find("^2 other realms on Leyline"))
+check("status: the network line (this realm + the live ones)", win.status:GetText():find("^2 realms · 9 players online · 2 bots"))
 
 rows[2].copyBtn:Fire("OnClick")
 check("Copy link fills the box with /r/<id>", win.copy:GetText() == "https://play.openvanilla.app/r/abcdefghijklmnop")
@@ -267,6 +267,64 @@ for _, m in ipairs(msgs) do fireClient("WULY", m, "WHISPER", "Tester") end
 check("a page of 7 of 12", #shown() == 7 and win.count:GetText() == "1-7 of 12")
 win.list:Fire("OnMouseWheel", -1)
 check("mouse wheel scrolls", shown()[1].name:GetText() == "Realm 2")
+
+-- ---------------------------------------------------------------- the network fields: order, badges, filters
+local function list(lines)
+    for _, m in ipairs(lines) do fireClient("WULY", m, "WHISPER", "Tester") end
+end
+list({ "B:6:0", "R:this:1:3:0:main:WrathUnleashed", "M:this:S:0:-:12340:-:-:-:hangout",
+    "R:cccccccccccccccc:1:9:0:main:Plain", "M:cccccccccccccccc:-:30:88:12340:na-east:en:-:pvp",
+    "R:dddddddddddddddd:1:0:0:main:Picked", "M:dddddddddddddddd:FV:12:97:5875:eu:de:100:pvp,rp",
+    "R:eeeeeeeeeeeeeeee:1:2:0:dalaran:Hangout relay", "M:eeeeeeeeeeeeeeee:S:50:-:12340:-:-:-:hangout",
+    "R:ffffffffffffffff:1:0:0:custom:Far Away", "M:ffffffffffffffff:NE:5:-:12340:oce:-:-:",
+    "R:gggggggggggggggg:0:0:0:main:Sleepy", "M:gggggggggggggggg:-:0:40:12340:eu:-:-:rp",
+    "N:4:14:0", "E:6" })
+local ids = {}
+for _, r in ipairs(L.realms) do ids[#ids + 1] = r.id end
+check("order: featured, this realm (the sample), then by score, offline last; its relay record not twice",
+    table.concat(ids, " ") == "dddddddddddddddd this cccccccccccccccc ffffffffffffffff gggggggggggggggg")
+rows = shown()
+check("featured row: badges, tags, build, region, language, uptime", rows[1].name:GetText():find("^Picked")
+    and rows[1].name:GetText():find("Featured") and rows[1].name:GetText():find("Verified")
+    and rows[1].rules:GetText() == "Level 1 or boost to 80 · PvP, RP, 1.12.1, Europe, de"
+    and rows[1].state:GetText():find("97%% up"))
+check("the sample: Leyline Sample Hangout · temporary (you are here)", rows[2].name:GetText():find("^Leyline Sample Hangout · temporary")
+    and rows[2].name:GetText():find("you are here"))
+check("estimated region marked, new badge", rows[4].rules:GetText():find("Oceania%?") and rows[4].name:GetText():find("New"))
+check("status: the network line", win.status:GetText():find("^4 realms · 14 players online"))
+L.Cycle("tag")
+check("filter Rules: PvP (the first tag any realm has)", win.filters.tag:GetText() == "Rules: PvP" and #L.realms == 3
+    and L.realms[2].id == "this")
+L.Cycle("tag"); L.Cycle("tag"); L.Cycle("tag")
+check("filter cycles back to any", L.filter.tag == nil and win.filters.tag:GetText() == "Rules: any")
+L.Cycle("region")
+check("filter Region: Europe", L.filter.region == "eu" and #L.realms == 3)
+L.Cycle("region"); L.Cycle("region"); L.Cycle("region")
+L.Cycle("build")
+check("filter Build: 1.12.1", win.filters.build:GetText() == "Build: 1.12.1" and #L.realms == 2)
+L.filter = {}
+L.Cycle("now")
+check("filter Has players: only realms with people now (the sample stays)", win.filters.now:GetText() == "Has players"
+    and #L.realms == 2 and L.realms[1].id == "this" and L.realms[2].id == "cccccccccccccccc")
+L.Cycle("now")
+check("and back to everyone", #L.realms == 5 and win.filters.now:GetText() == "Everyone")
+
+-- Host your own and Report
+win.host:Fire("OnClick")
+check("Host your own: the three steps and the link", win.info:GetText():find("Host your own realm: 1%.") and
+    win.copy:GetText() == "https://play.openvanilla.app/wrath/realms#host-your-own")
+L.selected = nil
+win.report:Fire("OnClick")
+check("Report with nothing picked: says how", win.info:GetText():find("^Pick a community realm"))
+shown()[3]:Fire("OnClick")
+win.report:Fire("OnClick")
+check("Report: the website's report link for the picked realm", win.copy:GetText() ==
+    "https://play.openvanilla.app/wrath/realms/report?realm=cccccccccccccccc" and win.info:GetText():find("^Open this link to report Plain"))
+check("no Report for the sample", L.Report(L.realms[2]) == false)
+check("a malformed M line is ignored", (function()
+    list({ "B:1:0", "R:hhhhhhhhhhhhhhhh:1:1:0:main:X", "M:hhhhhhhhhhhhhhhh:<script>:1:1:1:x:y:z:w", "E:1" })
+    return #L.realms == 1 and not L.realms[1].featured and L.realms[1].build == nil end)())
+L.filter = {}
 
 -- nothing the window shows names the game or its maker
 local bad

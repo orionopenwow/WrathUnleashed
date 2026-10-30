@@ -603,7 +603,7 @@ def realm_overrides() -> dict:
 
 
 def apply_realm_overrides(realms: list[dict]) -> list[dict]:
-    """Hidden realms left out, official ones marked (r["official"] = True). Never raises."""
+    """Hidden realms left out; official (the sample hangout), featured and verified ones marked. Never raises."""
     try:
         ov = realm_overrides()
         if not ov:
@@ -613,8 +613,9 @@ def apply_realm_overrides(realms: list[dict]) -> list[dict]:
             o = ov.get(r.get("id")) or {}
             if o.get("hidden"):
                 continue
-            if o.get("official"):
-                r = dict(r, official=True)
+            for k in ("official", "featured", "verified"):
+                if o.get(k):
+                    r = dict(r, **{k: True})
             out.append(r)
         return out
     except Exception:   # noqa: BLE001
@@ -1044,6 +1045,42 @@ def _when(t) -> str:
 
 # ---------------------------------------------------------------------------------------- dashboard
 
+def gamedata_status() -> dict:
+    """The game data killswitch's state (the portal's gamedata_state(); stream/server/gamedata-switch.sh flips it).
+    Read-only here: the switch is the owner's bat / Autopilot step, never a button on this console."""
+    fn = P("gamedata_state")
+    if fn:
+        try:
+            got = fn()
+            if isinstance(got, dict) and "gamedata_streaming" in got:
+                return got
+        except Exception:   # noqa: BLE001
+            pass
+    off = os.path.exists(os.environ.get("WU_GAMEDATA_FLAG", "/app/gamedata-off"))
+    return {"gamedata_streaming": not off, "gamedata_since": None}
+
+
+def gamedata_line() -> str:
+    """'Game data streaming: on/off since ...', for the Dashboard and Health."""
+    g = gamedata_status()
+    on = bool(g.get("gamedata_streaming"))
+    since = g.get("gamedata_since")
+    when = f" since {e(_when_iso(since))}" if since else ""
+    if on:
+        return (f'<p class="ad-gamedata">Game data streaming: <b>on</b>{when}. '
+                '<span class="fine">The slim streamed sampler is served from this server. Off: the owner\'s '
+                '"Game data killswitch ON.bat" (or the Autopilot step gamedata-off).</span></p>')
+    return (f'<p class="ad-gamedata">Game data streaming: <b>off</b>{when}. '
+            '<span class="fine">This server serves no game data: players use their own 3.3.5a game folder. On again: the '
+            'owner\'s "Game data killswitch OFF.bat" (or the Autopilot step gamedata-on).</span></p>')
+
+
+def _when_iso(v) -> str:
+    """'2026-10-29 18:04 UTC' for an ISO time; the text itself otherwise."""
+    m = re.fullmatch(r"(\d{4}-\d\d-\d\d)T(\d\d:\d\d):\d\dZ", str(v))
+    return f"{m.group(1)} {m.group(2)} UTC" if m else str(v)
+
+
 def dashboard(user: dict) -> str:
     st = {}
     try:
@@ -1088,7 +1125,8 @@ def dashboard(user: dict) -> str:
                + stat(len(projs), "Community links") + stat(sum(1 for p in projs if p.get("hidden")), "Links hidden")
                + stat(ws_live, "Workshop items live") + stat(len(hub_entries()), "Index entries") + stat(len(themes), "Theme packs"))
     reports = (stat((bc.get("new", 0) + bc.get("seen", 0)) if bc_ok else None, "Open .bug reports")
-               + stat(soc_n, "Open message reports") + stat(links_reported, "Reported links"))
+               + stat(soc_n, "Open message reports") + stat(links_reported, "Reported links")
+               + stat(len(P("network").reports("open")) if P("network") is not None else None, "Open realm reports"))
     queues = (stat(len(ws_pending) if ws_ok else None, "Workshop waiting") + stat(hub_pending, "Index submissions")
               + stat(th_pending, "Theme packs waiting"))
     if lv:
@@ -1099,7 +1137,7 @@ def dashboard(user: dict) -> str:
         lv_html = ('<p class="fine">Not collected. The launcher asks GitHub for updates directly, so no server of ours sees '
                    'which versions are out there, and there is no telemetry. If an update endpoint ever logs the anonymous '
                    'version string, point WU_LAUNCHER_VERSIONS at its {"versions": {"x.y.z": n}} summary.</p>')
-    return (f'<section class="ly-panel"><h2>Realm and relay</h2><div class="ad-stats">{realm}</div></section>'
+    return (f'<section class="ly-panel"><h2>Realm and relay</h2><div class="ad-stats">{realm}</div>{gamedata_line()}</section>'
             f'<section class="ly-panel"><h2>Queues</h2><div class="ad-stats">{queues}</div>'
             f'<p class="fine"><a href="/wrath/admin/workshop">Workshop</a> · <a href="/wrath/admin/hub">Index</a> · '
             f'<a href="/wrath/admin/themes">Themes</a></p></section>'
@@ -1354,23 +1392,45 @@ def realms_page(user: dict) -> str:
     return (f'<section class="ly-panel"><h2>Community realms</h2><p class="fine">From the Beacons relay\'s listing. Hide '
             f'takes a realm off /wrath/realms, the share links and /wrath/leyline/realm-overrides.json (which the launcher '
             f'can honour); it does not stop the realm. To refuse a realm at the relay itself, add its id to the relay\'s '
-            f'RELAY_BLOCK_FILE. Flags are a staff note only.</p>{warn}{table}</section>')
+            f'RELAY_BLOCK_FILE. Flags are a staff note only. Featured realms go above the sample hangout on every '
+            f'realm list; Verified is a badge (a host staff know). Player reports show under each realm. A realm whose '
+            f'heartbeats stop shows offline at once and leaves the list after 6 h by itself.</p>{warn}{table}</section>')
+
+
+def _realm_reports_html(user: dict, rid: str, back: str) -> str:
+    net = P("network")
+    reps = net.reports("open", rid) if net is not None else []
+    if not reps:
+        return ""
+    lines = "".join(f'<li>{e(net.REPORT_REASON.get(x.get("reason"), "?"))}{": " + e(x["note"]) if x.get("note") else ""}'
+                    f' <span class="sub">{e(x.get("at", ""))} · {e(x.get("by_name") or x.get("by", ""))}</span></li>'
+                    for x in reps[:8])
+    return (f'<details><summary>{len(reps)} open report{"s" if len(reps) != 1 else ""}</summary><ul>{lines}</ul>'
+            + act(user, "realm.reports", rid, "Resolve reports", back, '<input type="hidden" name="how" value="resolved">')
+            + act(user, "realm.reports", rid, "Dismiss reports", back, '<input type="hidden" name="how" value="dismissed">')
+            + '</details>')
 
 
 def _realm_row(user: dict, r: dict, o: dict, back: str) -> str:
     rid = r["id"]
     hb = ", ".join(f"{k}: {v}" for k, v in r.get("hb", {}).items())
+    net = P("network")
+    nrep = (net.open_counts().get(rid, 0) if net is not None else 0)
     acts = ((act(user, "realm.unhide", rid, "Unhide", back) if o.get("hidden") else
              act(user, "realm.hide", rid, "Hide", back, confirm=rid, danger=True))
             + (act(user, "realm.unofficial", rid, "Not official", back) if o.get("official") else
                act(user, "realm.official", rid, "Mark official", back, confirm=rid))
+            + (act(user, "realm.unfeature", rid, "Not featured", back) if o.get("featured") else
+               act(user, "realm.feature", rid, "Feature", back))
+            + (act(user, "realm.unverify", rid, "Not verified", back) if o.get("verified") else
+               act(user, "realm.verify", rid, "Verify host", back))
             + (act(user, "realm.unflag", rid, "Clear flag", back) if o.get("flag") else
                act(user, "realm.flag", rid, "Flag", back, '<input type="text" name="reason" maxlength="200" '
                    'placeholder="why (staff only)" aria-label="Reason" required>')))
     return (f'<tr><td class="name"><b>{e(r["name"])}</b><span class="sub"><code>{e(rid)}</code> · {e(r.get("relay", ""))}</span>'
             f'{"<span class=sub>" + e(r["tagline"]) + "</span>" if r.get("tagline") else ""}'
-            f'{_tags((r.get("state") or "", "good" if r.get("state") == "live" else ""), ("claimed", "") if r.get("claimed") else ("unclaimed", ""), ("hidden", "bad") if o.get("hidden") else ("", ""), ("official", "good") if o.get("official") else ("", ""), ("flagged", "hot") if o.get("flag") else ("", ""))}'
-            f'{"<span class=sub>Flag: " + e(o["flag"]) + "</span>" if o.get("flag") else ""}</td>'
+            f'{_tags((r.get("state") or "", "good" if r.get("state") == "live" else ""), ("claimed", "") if r.get("claimed") else ("unclaimed", ""), ("hidden", "bad") if o.get("hidden") else ("", ""), ("official", "good") if o.get("official") else ("", ""), ("flagged", "hot") if o.get("flag") else ("", ""), ("featured", "hot") if o.get("featured") else ("", ""), ("verified", "good") if o.get("verified") else ("", ""), (f"{nrep} reports", "bad") if nrep else ("", ""))}'
+            f'{"<span class=sub>Flag: " + e(o["flag"]) + "</span>" if o.get("flag") else ""}{_realm_reports_html(user, rid, back)}</td>'
             f'<td><span class="sub">last {e(r.get("last", ""))}</span><span class="sub">first {e(r.get("first", ""))}</span>'
             f'<span class="sub">{e(hb)[:300]}</span></td><td>{acts}</td></tr>')
 
@@ -1572,7 +1632,18 @@ def reports_page(user: dict, query: dict) -> str:
                     f'{act(user, "link.dismiss", pid, "Dismiss reports", back)}{note_html("link:" + pid)}</td></tr>')
     links_html = ('<table class="ly-table"><thead><tr><th>Reported link</th><th>Actions</th></tr></thead><tbody>' + "".join(lrow)
                   + '</tbody></table>') if lrow else '<p class="fine">No reported links.</p>'
+    net = P("network")
+    rrow = []
+    for x in (net.reports("open") if net is not None else [])[:200]:
+        rrow.append(f'<tr><td class="name"><b>{e(x.get("name") or x.get("realm"))}</b><span class="sub"><code>{e(x.get("realm", ""))}</code>'
+                    f' · {e(x.get("at", ""))} · {e(x.get("by_name") or x.get("by", ""))}</span></td>'
+                    f'<td>{e(net.REPORT_REASON.get(x.get("reason"), "?"))}{"<span class=sub>" + e(x["note"]) + "</span>" if x.get("note") else ""}</td>'
+                    f'<td><a href="/wrath/admin/realms">Realms</a></td></tr>')
+    realm_html = ('<table class="ly-table"><thead><tr><th>Realm</th><th>Reason</th><th></th></tr></thead><tbody>'
+                  + "".join(rrow) + '</tbody></table>') if rrow else '<p class="fine">No open realm reports.</p>'
     return (f'<section class="ly-panel"><h2>.bug reports</h2><p>{bug_tabs}</p>{bugs_html}</section>'
+            f'<section class="ly-panel"><h2>Realm reports</h2><p class="fine">From players on /wrath/realms. Resolve, '
+            f'dismiss, hide or flag a realm on the Realms tab.</p>{realm_html}</section>'
             f'<section class="ly-panel"><h2>Message reports</h2>{msg_html}</section>'
             f'<section class="ly-panel"><h2>Workshop link reports</h2>{links_html}</section>')
 
@@ -1604,6 +1675,10 @@ def health_checks() -> list[tuple[str, bool | None, str]]:
             out.append(("Workshop export (items.json)", False, "unreadable"))
     mods, _ = mods_raw()
     out.append(("Mods catalog", bool(mods), f"{len(mods)} mods" if mods else "empty or missing"))
+    g = gamedata_status()
+    out.append(("Game data streaming", True, ("on" if g.get("gamedata_streaming") else "off: players use their own game folder")
+                + (f" since {_when_iso(g['gamedata_since'])}" if g.get("gamedata_since") else "")
+                + " (read-only here; the owner's killswitch bat flips it)"))
     out.append(("Admin folder writable", _writable(admin_dir()), admin_dir()))
     out.append(("Leyline feeds folder writable", _writable(leyline_dir()), leyline_dir()))
     out.append(("Checker (wu-mod.py)", _wu_mod() is not None, "found" if _wu_mod() is not None else "not on this server"))
@@ -1626,7 +1701,7 @@ def health_page(user: dict) -> str:
         auto = ('<p class="fine">Skipped: Autopilot runs on the owner\'s PC (control/last-run.json there) and its check logs '
                 'stay there, so this server cannot see them. Set WU_AUTOPILOT_STATUS to a copy of last-run.json if a step '
                 'ever uploads one.</p>')
-    return (f'<section class="ly-panel"><h2>This server</h2><table class="ly-table"><tbody>{rows}</tbody></table></section>'
+    return (f'<section class="ly-panel"><h2>This server</h2>{gamedata_line()}<table class="ly-table"><tbody>{rows}</tbody></table></section>'
             f'<section class="ly-panel"><h2>Autopilot</h2>{auto}</section>')
 
 
@@ -1904,6 +1979,18 @@ def _realm_target(target: str) -> str:
     return target
 
 
+def a_realm_reports(user: dict, target: str, form: dict):
+    """Close the open player reports on a realm (stream/network.py). form "how": resolved or dismissed."""
+    _realm_target(target)
+    net = P("network")
+    if net is None:
+        raise Refused("The realm reports module is not on this portal.")
+    before = {"open_reports": len(net.reports("open", target))}
+    how = form.get("how") if form.get("how") in ("resolved", "dismissed") else "resolved"
+    n = net.resolve(target, user.get("name") or user.get("account") or "staff", how)
+    return before, {"open_reports": before["open_reports"] - n, "closed": how}
+
+
 def a_realm(changes_fn):
     def fn(user, target, form):
         _realm_target(target)
@@ -2135,6 +2222,11 @@ ACTIONS = {
     "realm.unofficial": (a_realm(lambda f: {"official": None}), "staff", None),
     "realm.flag": (a_realm(_flag_reason), "staff", None),
     "realm.unflag": (a_realm(lambda f: {"flag": None}), "staff", None),
+    "realm.feature": (a_realm(lambda f: {"featured": True}), "staff", None),
+    "realm.unfeature": (a_realm(lambda f: {"featured": None}), "staff", None),
+    "realm.verify": (a_realm(lambda f: {"verified": True}), "staff", None),
+    "realm.unverify": (a_realm(lambda f: {"verified": None}), "staff", None),
+    "realm.reports": (a_realm_reports, "staff", None),
     "channel.set": (a_channel_set, "owner", None),      # stable: types the version (checked inside)
     "channel.hold": (a_channel_hold, "owner", "hold"),
     "news.add": (a_news_add, "staff", None),
@@ -2216,7 +2308,9 @@ def feed(path: str) -> bytes:
         ov = realm_overrides()
         doc = {"format": 1, "updated_at": _read_json(_apath("realm-overrides.json"), {}).get("updated_at"),
                "hidden": sorted(k for k, v in ov.items() if v.get("hidden")),
-               "official": sorted(k for k, v in ov.items() if v.get("official") and not v.get("hidden"))}
+               "official": sorted(k for k, v in ov.items() if v.get("official") and not v.get("hidden")),
+               "featured": sorted(k for k, v in ov.items() if v.get("featured") and not v.get("hidden")),
+               "verified": sorted(k for k, v in ov.items() if v.get("verified") and not v.get("hidden"))}
     return (json.dumps(doc, indent=1, ensure_ascii=False) + "\n").encode("utf-8")
 
 

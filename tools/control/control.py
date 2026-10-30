@@ -112,6 +112,9 @@ STEPS = {
     "sampler-off": ("realm/Sample hangout - off.bat", "Leyline Sample Hangout off: back to the full realm (5-min restart)", False),
     "slice-sampler": ("stream/Make sampler slice.bat", "Sample Hangout streamed game files (30-60 min)", False),
     "builds-why": ("tools/github-builds/Why did the build fail.bat", "Why the last GitHub build failed (read-only)", False),
+    # The game data killswitch (docs/GAME-DATA-ON-OUR-SERVER.md): only when the owner asks for it.
+    "gamedata-off": ("stream/Game data killswitch ON.bat", "Game data OFF: our server serves no game data (players use their own game folder)", False),
+    "gamedata-on": ("stream/Game data killswitch OFF.bat", "Game data back ON: stream the slim sampler again", False),
 }
 CHECKS = [
     ("Play page", "https://play.openvanilla.app/wrath"),
@@ -343,7 +346,7 @@ def check_health() -> None:
                 with urllib.request.urlopen(req, timeout=10) as r:
                     res[name] = {"ok": r.status < 400, "ms": int((time.time() - t0) * 1000), "code": r.status}
             except urllib.error.HTTPError as e:
-                ok = e.code in (401, 403)          # the gate answering = up
+                ok = e.code in (401, 403, 410)     # the gate answering = up; 410 = game data switched off on purpose
                 res[name] = {"ok": ok, "ms": int((time.time() - t0) * 1000), "code": e.code}
             except Exception as e:
                 res[name] = {"ok": False, "ms": None, "code": type(e).__name__}

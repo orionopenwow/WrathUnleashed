@@ -50,7 +50,16 @@ PROFILES = {"main": "WrathUnleashed main: normal Wrath from level 1, or a one-ti
 PROFILE_ENV = {"dalaran": {"WU_DB_BUFFER": "256M", "WU_PLAYER_LIMIT": "40"}}
 PROFILE_BOTS = {"dalaran": 0}
 # The text the realm list and the join page show; the host edits these two files (then: Realm tools > rules).
-EDITABLE = ("tagline", "summary", "type", "discord")
+EDITABLE = ("tagline", "summary", "type", "discord", "tags", "region", "language", "max_players", "direct")
+# The realm list's filters (hosting/relay/wurelay/listing.py checks them again). Tags a profile starts with; the
+# host changes them in state/beacon.json or the launcher's Host page. "bots" follows the bot count by itself.
+TAGS = ("blizzlike", "boosted", "custom", "pvp", "rp", "hangout", "bots")
+REGIONS = ("na-east", "na-west", "sa", "eu", "africa", "me", "asia", "oce")
+LANG_RE = re.compile(r"^[a-z]{2,3}(-[A-Z]{2})?$")
+PROFILE_TAGS = {"main": ["boosted"], "brawl": ["boosted", "pvp", "custom"], "progression": ["blizzlike"],
+                "dalaran": ["hangout", "boosted"]}
+PROFILE_MAX = {"dalaran": 40}
+CORE, BUILD = "azerothcore", 12340   # what the host kit runs
 DEFAULT_RULES = {"dalaran": [
     "Be kind: no harassment, hate speech or spam.",
     "Duel anyone who agrees; no griefing in Dalaran.",
@@ -224,7 +233,36 @@ def beacon_record(cfg):
     rec.setdefault("discord", None)
     rec.update(name=cfg["name"], type=rec.get("type", "PvE"), ruleset=cfg["profile"],
                warden=cfg["warden"])
+    return listing_fields(rec, cfg)
+
+
+def listing_fields(rec, cfg):
+    """The realm list's filter fields, checked: tags, region, language, max players, direct (off unless the host
+    turns it on), and the core and build the kit runs."""
+    tags = rec.get("tags") if isinstance(rec.get("tags"), list) else list(PROFILE_TAGS.get(cfg.get("profile"), []))
+    tags = {t.strip().lower() for t in tags if isinstance(t, str)}
+    tags.discard("bots")
+    if (cfg.get("bots") or 0) > 0:
+        tags.add("bots")
+    rec["tags"] = [t for t in TAGS if t in tags]
+    rec["region"] = rec.get("region") if rec.get("region") in REGIONS else None
+    lang = rec.get("language")
+    rec["language"] = lang if isinstance(lang, str) and LANG_RE.match(lang) else None
+    mp = rec.get("max_players", PROFILE_MAX.get(cfg.get("profile")))
+    rec["max_players"] = mp if isinstance(mp, int) and not isinstance(mp, bool) and 1 <= mp <= 10000 else None
+    rec["direct"] = rec.get("direct") is True
+    rec.update(core=CORE, build=BUILD)
     return rec
+
+
+def csv_tags(v):
+    if v is None:
+        return None
+    want = [t.strip().lower() for t in v.split(",") if t.strip()]
+    bad = [t for t in want if t not in TAGS]
+    if bad:
+        sys.exit("Tags: " + ", ".join(TAGS) + f" (not {', '.join(bad)})")
+    return want
 
 
 def write_env(cfg, image, tag, tools_image):
@@ -313,6 +351,7 @@ def cmd_init(a):
             b_full["tagline"] = cfg["record"]["tagline"]
             with open(path("beacon.json"), "w", encoding="utf-8") as f:
                 json.dump(b_full, f, indent=1)
+    listing_args(a, cfg)
     if "gm" not in cfg and not cfg.get("gm_name"):
         # Legacy kit flow (Host a Wrath realm.bat): a generated GM login. The leyline command never
         # does this: it asks for the operator's account name and they make the account themselves.
@@ -335,6 +374,53 @@ def cmd_init(a):
         except OSError:
             pass
     print(json.dumps({"realm_id": rid, "first_run": first, "invite": invite_link(cfg)}))
+
+
+def listing_args(a, cfg):
+    """--tags --region --language --max-players --direct: into the record and the host's beacon.json."""
+    ch = {}
+    if getattr(a, "tags", None) is not None:
+        ch["tags"] = csv_tags(a.tags)
+    if getattr(a, "region", None) is not None:
+        if a.region not in REGIONS + ("none",):
+            sys.exit("Region: " + ", ".join(REGIONS) + " or none")
+        ch["region"] = None if a.region == "none" else a.region
+    if getattr(a, "language", None) is not None:
+        if a.language != "none" and not LANG_RE.match(a.language):
+            sys.exit("Language: a code like en, de or pt-BR (or none)")
+        ch["language"] = None if a.language == "none" else a.language
+    if getattr(a, "max_players", None) is not None:
+        if not 0 <= a.max_players <= 10000:
+            sys.exit("Max players: 1-10000 (0 = not shown)")
+        ch["max_players"] = a.max_players or None
+    if getattr(a, "direct", None) is not None:
+        ch["direct"] = a.direct == "on"
+    if not ch:
+        return
+    cfg.setdefault("record", {}).update(ch)
+    try:
+        with open(path("beacon.json"), encoding="utf-8-sig") as f:
+            b_full = json.load(f)
+    except (OSError, ValueError):
+        return
+    if isinstance(b_full, dict):   # beacon.json is the host's copy of the text: keep it in step
+        b_full.update(ch)
+        with open(path("beacon.json"), "w", encoding="utf-8") as f:
+            json.dump(b_full, f, indent=1)
+
+
+def cmd_listing(a):
+    """Change the realm list details (tags, region, language, max players, direct); sent with the next heartbeat."""
+    _edit(lambda c: listing_args(a, c))
+
+
+def add_listing_args(p):
+    p.add_argument("--tags", help="comma list: " + ",".join(TAGS))
+    p.add_argument("--region", help="where the realm runs: " + ", ".join(REGIONS) + " or none")
+    p.add_argument("--language", help="the realm's language: en, de, pt-BR, ... or none")
+    p.add_argument("--max-players", type=int, help="the player limit shown on the list (0 = not shown)")
+    p.add_argument("--direct", choices=["on", "off"], help="allow direct connections (off by default; the network "
+                   "only lists it when its operator turns direct connections on)")
 
 
 def cmd_official(a):
@@ -372,7 +458,9 @@ def cmd_official(a):
         cfg.pop(k, None)   # nothing to invite to, no GM account to make, no database of its own
     cfg["record"] = {"name": cfg["name"], "tagline": " ".join((a.tagline or "").split())[:80],
                      "summary": " ".join((a.summary or "").split())[:400], "type": "PvE", "ruleset": "dalaran",
-                     "rules": rules, "discord": a.discord or None, "warden": None}
+                     "rules": rules, "discord": a.discord or None, "warden": None,
+                     "tags": ["hangout", "boosted"], "max_players": None, "direct": False}
+    cfg["record"] = listing_fields(cfg["record"], cfg)
     save(cfg)
     print(json.dumps({"realm_id": rid, "name": cfg["name"]}))
 
@@ -533,7 +621,11 @@ def main(argv=None):
     p.add_argument("--tagline", help="one line for the realm list")
     p.add_argument("--signup", choices=["invite", "open", "off"])
     p.add_argument("--seed", help="the per-realm file from the website's host page (state/seed.b64)")
+    add_listing_args(p)
     p.set_defaults(fn=cmd_init)
+    p = sub.add_parser("listing", help="the realm list details: tags, region, language, max players, direct")
+    add_listing_args(p)
+    p.set_defaults(fn=cmd_listing)
     p = sub.add_parser("gm")
     p.add_argument("name")
     p.set_defaults(fn=cmd_gm)

@@ -73,6 +73,8 @@ case "$cmd" in
   install)
     U="${2:?usage: fui-install.sh install <upload dir>}"
     [ -d "$U/foreverui" ] || die "the upload holds no foreverui folder"
+    # The game data killswitch (gamedata-switch.sh): Forever UI's art comes from the game client.
+    [ -f "$WU/portal/gamedata-off" ] && die "game data is switched off on this server (gamedata-switch.sh): Forever UI's art is not uploaded. On again: bash $ST/gamedata-switch.sh on"
     fui_py="$U/kit/fui-overlay.py"; [ -f "$fui_py" ] || fui_py="$ST/fui-overlay.py"
     python3 -I "$fui_py" check "$U/foreverui" || die "the upload is not Forever UI: nothing changed"
     log "Forever UI -> the streamed slice"

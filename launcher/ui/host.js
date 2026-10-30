@@ -113,7 +113,61 @@
   );
   if (hostCard) hostCard.append(ctl, inviteLine, ctlStatus, logs);
 
-  function loadHostExtras() { loadPack(); loadDocker(); loadInvite(); }
+  // ---------------------------------------------------------------- Host page: the realm list details
+  // Tags, region, language and the player limit are the network's filters; they live in the kit's state/beacon.json
+  // (host.rs ListingDetails) and reach the list with the next heartbeat. Direct connections stay off unless the
+  // host allows them AND the network turns them on (the p2p_hosting flag); nothing here turns a flag on.
+  const TAGS = [["blizzlike", "Blizzlike"], ["boosted", "Boosted"], ["custom", "Custom"], ["pvp", "PvP"], ["rp", "RP"], ["hangout", "Hangout"], ["bots", "Bots"]];
+  const REGIONS = [["", "Not shown"], ["na-east", "North America east"], ["na-west", "North America west"], ["sa", "South America"],
+    ["eu", "Europe"], ["africa", "Africa"], ["me", "Middle East"], ["asia", "Asia"], ["oce", "Oceania"]];
+  const listCard = mk("section", "card stone");
+  listCard.id = "hl-card";
+  const lhead = mk("div", "card-head");
+  lhead.append(mk("span", "", "ON THE REALM LIST"));
+  const tagBox = mk("div", "row");
+  const tagChecks = TAGS.map(([v, label]) => {
+    const l = mk("label", "check inline"); const c = mk("input", ""); c.type = "checkbox"; c.value = v;
+    l.append(c, document.createTextNode(" " + label)); tagBox.append(l); return c;
+  });
+  const region = mk("select", "");
+  for (const [v, t] of REGIONS) { const o = mk("option", "", t); o.value = v; region.append(o); }
+  const lang = mk("input", ""); lang.placeholder = "en, de, pt-BR"; lang.maxLength = 6; lang.size = 8; lang.spellcheck = false;
+  const maxp = mk("input", ""); maxp.type = "number"; maxp.min = "0"; maxp.max = "10000"; maxp.placeholder = "not shown";
+  const direct = mk("input", ""); direct.type = "checkbox";
+  const fields = mk("div", "row");
+  const lr = mk("label", "inline", "Region "); lr.append(region);
+  const ll = mk("label", "inline", "Language "); ll.append(lang);
+  const lm = mk("label", "inline", "Player limit "); lm.append(maxp);
+  fields.append(lr, ll, lm);
+  const dl = mk("label", "check inline"); dl.append(direct, document.createTextNode(" Allow direct connections (off by default; only used once the network turns direct connections on)"));
+  const listStatus = mk("p", "status");
+  listCard.append(lhead, mk("p", "lede", "How players find your realm: the rules it runs, where it is and its language. Bots are tagged by themselves when your realm runs them."),
+    tagBox, fields, dl, mk("div", "row"), listStatus);
+  listCard.lastChild.previousSibling.append(btn("SAVE", "btn small", saveListing));
+  panel.insertBefore(listCard, packCard.nextSibling);
+
+  async function loadListing() {
+    let d;
+    try { d = await call("host_listing"); } catch (e) { note(listStatus, String(e), "warn"); return; }
+    tagChecks.forEach((c) => { c.checked = d.tags.includes(c.value); });
+    region.value = d.region || "";
+    lang.value = d.language || "";
+    maxp.value = d.max_players || "";
+    direct.checked = !!d.direct;
+  }
+  async function saveListing() {
+    const details = {
+      tags: tagChecks.filter((c) => c.checked).map((c) => c.value),
+      region: region.value || null,
+      language: lang.value.trim() || null,
+      max_players: +maxp.value > 0 ? Math.floor(+maxp.value) : null,
+      direct: direct.checked,
+    };
+    note(listStatus, "Saving…");
+    try { note(listStatus, await call("host_listing_set", { details }), "ok"); } catch (e) { note(listStatus, String(e), "bad"); }
+  }
+
+  function loadHostExtras() { loadPack(); loadDocker(); loadInvite(); loadListing(); }
 
   // ---------------------------------------------------------------- Settings > Advanced: P2P and torrent
   const setPanel = byId("page-settings") && byId("page-settings").querySelector(".panel");

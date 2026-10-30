@@ -173,10 +173,10 @@ check("back to Wrath: lands in Dalaran", "ovgo set WR000123 h:dalaran" in gos(),
 realms, _ok = wp.community_realms()
 check("hangout first in the community list", [r["id"] for r in realms][:1] == [HANG] and realms[0]["hangout"], [r["id"] for r in realms])
 page = wp.realms_page().decode()
-i_h, i_l = page.find("Dalaran Hangout"), page.find("Frost Haven")
+i_h, i_l = page.find("<h2>WrathUnleashed</h2>"), page.find("Frost Haven")   # the hangout's record is our own card
 check("realms page: the hangout before the other Beacons", 0 < i_h < i_l, (i_h, i_l))
-check("realms page: Play in Dalaran, run by WrathUnleashed", 'href="/wrath?go=h:dalaran">Play in Dalaran</a>' in page
-      and "Run by WrathUnleashed" in page and f"/join/{HANG}" not in page)
+check("realms page: Play in Dalaran, run by Leyline", 'href="/wrath?go=h:dalaran">Play in Dalaran</a>' in page
+      and "Run by Leyline" in page and f"/join/{HANG}" not in page)
 # no hangout configured (unset, or junk): nothing special
 saved = wp.HANGOUT_REALM
 wp.HANGOUT_REALM = "not-an-id"

@@ -3,6 +3,20 @@
 Each `## <version>` section is the text of that GitHub release (`launcher-v<version>`); the release workflow
 copies it.
 
+## 0.3.1 (2026-10-29)
+
+<!-- TODO(owner): the release's opening line -->
+- **Community realms first.** The Realms page lists the realms players host first, in the network's fair order:
+  featured realms, then the Leyline Sample Hangout (our own realm, for now), then every other realm by players
+  online and uptime. Nothing can be bought or voted on. A line on top says how many realms and players are online.
+- **Find a realm.** Filter by build, rules (Blizzlike, Boosted, Custom, PvP, RP, Hangout, Bots), region, language,
+  or "Has players now". "Only realms my clients can play" still works with them.
+- **Know a realm.** Each card shows its uptime over the last 7 days (or 24 hours), New, Featured and Verified host,
+  its region (or the relay's estimate) and its player limit. REPORT sends a realm to Leyline staff, on the website.
+- **Host your own.** A short how-to on the Realms page, and on the Host page an **ON THE REALM LIST** card: your
+  realm's tags, region, language and player limit, saved into your kit and shown on the list within a minute.
+- Direct connections stay off: a host can allow them, and they only show once the network turns them on.
+
 ## 0.3.0 (2026-10-29)
 
 - **Every client you have.** Leyline reads the build from your own client's executable: 1.12.1 (5875),

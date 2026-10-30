@@ -2023,7 +2023,7 @@ dependencies = [
 
 [[package]]
 name = "leyline"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "dirs 5.0.1",
  "serde",

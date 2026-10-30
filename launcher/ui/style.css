@@ -480,3 +480,11 @@ label.inline select { width: auto; min-width: 220px; }
 .dlg p { margin: 0 0 8px; font-size: 13px; color: #3a2812; }
 .dlg p.small { font-size: 12px; color: var(--ink-soft); }
 .dlg ul { margin: 0 0 10px; padding-left: 18px; font: 12px ui-monospace, Consolas, monospace; color: #2a1a06; max-height: 140px; overflow: auto; user-select: text; }
+
+/* the Leyline network on the Realms page (app.js renderRealms) */
+.net-line { margin: 0 0 4px; color: var(--gold-hi); font-weight: 600; }
+.rl-filters select { min-width: 90px; }
+.realm-card.featured { border-color: var(--bronze-hi); }
+.realm-card.official { border-style: dashed; }
+.tag.good { color: #9fe0ae; border-color: #2f5a3a; }
+.host-cta { margin-top: 14px; }

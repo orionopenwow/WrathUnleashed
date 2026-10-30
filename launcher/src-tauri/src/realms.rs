@@ -8,6 +8,12 @@
 //! gives it too. A private realm only lets in an internet address that opened its invite link, which is
 //! what the invite knock (`POST /api/realms/<id>/knock {"invite"}`) does. Accounts are made on the realm's
 //! join page in the browser (the password never leaves it), so the launcher only opens that page.
+//!
+//! The network (2026-10-29): community realms are the front of Leyline. The list comes from the website's network
+//! listing (`NETWORK_URL`: the relay's records with the staff overrides, hidden realms left out, featured and
+//! verified marked) and, when that does not answer, from the relay itself. `order` puts it the same way as every
+//! other surface: featured live realms, the official realm (the "Leyline Sample Hangout", temporary), the other live
+//! realms by the listing's fair score (players, uptime, new; bots worth little; never money or votes), then offline.
 
 use crate::clients::{Build, ClientProfile};
 use crate::net::{self, Listing};
@@ -17,6 +23,14 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 pub const URL: &str = "https://relay.openvanilla.app/api/listing/realms.json";
+/// The website's network listing (stream/network.py), tried first.
+pub const NETWORK_URL: &str = "https://play.openvanilla.app/wrath/realms.json";
+/// Where a player reports a realm (signed in on the website).
+pub const REPORT_BASE: &str = "https://play.openvanilla.app/wrath/realms/report?realm=";
+pub const SAMPLE_NAME: &str = "Leyline Sample Hangout";
+/// The rules tags a listing may carry, in order.
+pub const TAGS: &[&str] = &["blizzlike", "boosted", "custom", "pvp", "rp", "hangout", "bots"];
+pub const REGIONS: &[&str] = &["na-east", "na-west", "sa", "eu", "africa", "me", "asia", "oce"];
 pub const RELAY: &str = "relay.openvanilla.app";
 pub const LOOKUP_TIMEOUT: Duration = Duration::from_secs(8);
 
@@ -51,6 +65,36 @@ pub struct Realm {
     pub core: String,
     /// The client build the realm takes, when known.
     pub build: Option<Build>,
+    /// Rules tags (`TAGS`), the host's region (or the relay's estimate, then `region_estimated`), language, limit.
+    pub tags: Vec<String>,
+    pub region: Option<String>,
+    pub region_estimated: bool,
+    pub language: Option<String>,
+    pub max_players: Option<u64>,
+    /// Percent of the last 24 h / 7 d the listing saw it online (None: watched for under an hour).
+    pub uptime_24h: Option<u8>,
+    pub uptime_7d: Option<u8>,
+    pub is_new: bool,
+    /// The listing's fair score (higher first).
+    pub score: f64,
+    pub featured: bool,
+    pub verified: bool,
+    /// The host allows direct connections and the network advertises it (ready but off: only used with `p2p_hosting`).
+    pub direct: bool,
+    /// featured, official, community or offline (see `order`).
+    pub group: String,
+    /// The website's report page for this realm.
+    pub report_url: Option<String>,
+    /// The official realm is the temporary Leyline Sample Hangout (the network listing's `sample` block says).
+    pub temporary: bool,
+}
+
+/// The network line: realms online, players online, bots (counted apart).
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+pub struct Totals {
+    pub realms: u64,
+    pub players: u64,
+    pub bots: u64,
 }
 
 /// The server cores Leyline names, as (tag, label).
@@ -106,18 +150,24 @@ pub fn pick_client<'a>(realm: &Realm, clients: &'a [ClientProfile], picked: Opti
 #[derive(Debug, Clone, Serialize)]
 pub struct RealmList {
     pub realms: Vec<Realm>,
+    pub network: Totals,
     pub from_cache: bool,
     pub saved_at: Option<u64>,
     pub error: Option<String>,
 }
 
-/// The official WrathUnleashed realm.
+/// The official realm: for now the Leyline Sample Hangout, ours, temporary (owner, 2026-10-29). Community realms
+/// are the network; this one is pinned below the featured ones.
 pub fn official() -> Realm {
     Realm {
         slug: "official".into(),
-        name: "WrathUnleashed".into(),
+        name: SAMPLE_NAME.into(),
         official: true,
-        tagline: "The official realm: 3.3.5a, bots, the Workshop's mods.".into(),
+        // TODO(owner): the sample hangout's one line
+        tagline: "Temporary: our own realm to sample the game and meet people. The realms around it are run by players.".into(),
+        tags: vec!["hangout".into()],
+        group: "official".into(),
+        temporary: true,
         kind: "PvE".into(),
         ruleset: "main".into(),
         state: "live".into(),
@@ -150,6 +200,61 @@ pub fn relay_ok(h: &str) -> bool {
         && parts.iter().all(|p| !p.is_empty() && p.len() <= 63 && p.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'))
 }
 
+fn pct(v: Option<&Value>) -> Option<u8> {
+    v.and_then(Value::as_u64).filter(|p| *p <= 100).map(|p| p as u8)
+}
+
+fn one_of(v: Option<&Value>, set: &[&str]) -> Option<String> {
+    v.and_then(Value::as_str).filter(|x| set.contains(x)).map(String::from)
+}
+
+/// A language code as the listing writes it: `en`, `deu`, `pt-BR`.
+pub fn lang_ok(s: &str) -> bool {
+    let (a, b) = s.split_once('-').map(|(a, b)| (a, Some(b))).unwrap_or((s, None));
+    (2..=3).contains(&a.len()) && a.chars().all(|c| c.is_ascii_lowercase())
+        && b.map_or(true, |b| b.len() == 2 && b.chars().all(|c| c.is_ascii_uppercase()))
+}
+
+/// The network's order (the same as the website, the hub and the in-game window): featured live realms, the official
+/// realm, every other live realm by score (higher first), offline realms by name. Sets `group`.
+pub fn order(realms: &mut Vec<Realm>) {
+    for r in realms.iter_mut() {
+        r.group = if r.official {
+            "official"
+        } else if r.state != "live" {
+            "offline"
+        } else if r.featured {
+            "featured"
+        } else {
+            "community"
+        }
+        .into();
+    }
+    let rank = |g: &str| match g {
+        "featured" => 0,
+        "official" => 1,
+        "community" => 2,
+        _ => 3,
+    };
+    realms.sort_by(|a, b| {
+        rank(&a.group)
+            .cmp(&rank(&b.group))
+            .then(if a.group == "offline" { std::cmp::Ordering::Equal } else { b.score.total_cmp(&a.score) })
+            .then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+            .then(a.slug.cmp(&b.slug))
+    });
+}
+
+/// Realms and players online now (live realms only; bots apart).
+pub fn totals(realms: &[Realm]) -> Totals {
+    let live: Vec<&Realm> = realms.iter().filter(|r| r.state == "live").collect();
+    Totals {
+        realms: live.len() as u64,
+        players: live.iter().filter_map(|r| r.players).sum(),
+        bots: live.iter().filter_map(|r| r.bots).sum(),
+    }
+}
+
 fn s(v: &Value, k: &str, n: usize) -> String {
     v.get(k).and_then(Value::as_str).map(|x| x.chars().filter(|c| !c.is_control()).take(n).collect()).unwrap_or_default()
 }
@@ -162,6 +267,10 @@ pub fn parse_community(v: &Value) -> Vec<Realm> {
         .take(2000)
         .filter_map(|r| {
             let c = r.get("community")?;
+            // the network listing's own sample hangout is the official realm, which `officials` already lists
+            if c.get("sample").and_then(Value::as_bool) == Some(true) {
+                return None;
+            }
             let rid = c.get("realmId").and_then(Value::as_str).filter(|x| realm_id_ok(x))?.to_string();
             let profile = r.get("profile").cloned().unwrap_or(Value::Null);
             let relay = c.get("relay").and_then(Value::as_str).or_else(|| profile.get("address").and_then(Value::as_str))
@@ -175,6 +284,15 @@ pub fn parse_community(v: &Value) -> Vec<Realm> {
             let join_url = r.get("connect").and_then(|st| st.get("url")).and_then(Value::as_str).map(String::from)
                 .filter(|u| net::plain_https(u) && *u == format!("https://{relay}/join/{rid}"));
             let state = if s(r, "state", 16) == "live" { "live" } else { "offline" };
+            let up = c.get("uptime").cloned().unwrap_or(Value::Null);
+            let tags_in: Vec<&str> = r.get("tags").and_then(Value::as_array).map(|a| a.iter().take(20).filter_map(Value::as_str).collect()).unwrap_or_default();
+            let (region, region_estimated) = match one_of(r.get("region"), REGIONS) {
+                Some(g) => (Some(g), false),
+                None => match one_of(c.get("regionEstimate"), REGIONS) {
+                    Some(g) => (Some(g), true),
+                    None => (None, false),
+                },
+            };
             Some(Realm {
                 slug: format!("c-{rid}"),
                 name: Some(s(r, "name", 32)).filter(|n| !n.is_empty()).unwrap_or_else(|| rid.clone()),
@@ -187,7 +305,6 @@ pub fn parse_community(v: &Value) -> Vec<Realm> {
                 version: s(&profile, "version", 12),
                 address: port.map(|p| format!("{relay}:{p}")),
                 relay: Some(relay),
-                realm_id: Some(rid),
                 players: num("players"),
                 bots: num("bots"),
                 status_url,
@@ -204,6 +321,22 @@ pub fn parse_community(v: &Value) -> Vec<Realm> {
                     .unwrap_or_else(|| "azerothcore".into()))
                 .into(),
                 build: listing_build(&profile),
+                tags: TAGS.iter().filter(|t| tags_in.contains(t)).map(|t| t.to_string()).collect(),
+                region,
+                region_estimated,
+                language: r.get("language").and_then(Value::as_str).filter(|l| lang_ok(l)).map(String::from),
+                max_players: r.get("maxPlayers").and_then(Value::as_u64).filter(|n| (1..=10000).contains(n)),
+                uptime_24h: pct(up.get("h24")),
+                uptime_7d: pct(up.get("d7")),
+                is_new: c.get("new").and_then(Value::as_bool).unwrap_or(false),
+                score: c.get("score").and_then(Value::as_f64).filter(|x| x.is_finite() && (0.0..=1000.0).contains(x)).unwrap_or(0.0),
+                featured: c.get("featured").and_then(Value::as_bool).unwrap_or(false),
+                verified: c.get("verified").and_then(Value::as_bool).unwrap_or(false),
+                direct: c.get("directConnect").and_then(Value::as_bool).unwrap_or(false),
+                group: String::new(),
+                report_url: Some(format!("{REPORT_BASE}{rid}")),
+                temporary: false,
+                realm_id: Some(rid),
             })
         })
         .collect()
@@ -229,22 +362,76 @@ pub fn cache_path(app_dir: &Path) -> PathBuf {
     app_dir.join("cache").join("realms.json")
 }
 
-/// The official realm first, then every Beacon the relay lists.
+/// Every realm on the network in its order: the website's network listing, else the relay's own.
 pub fn fetch_all(app_dir: &Path) -> RealmList {
-    fetch_all_from(URL, app_dir)
+    fetch_network(&[NETWORK_URL, URL], app_dir)
+}
+
+fn has_realms(v: &Value) -> Result<(), String> {
+    v.get("realms").and_then(Value::as_array).map(|_| ()).ok_or_else(|| "no \"realms\" list in the reply".into())
+}
+
+/// The first of `urls` that answers with a listing (the last one falls back to the cache).
+pub fn fetch_network(urls: &[&str], app_dir: &Path) -> RealmList {
+    let cache = cache_path(app_dir);
+    for u in &urls[..urls.len().saturating_sub(1)] {
+        let got = net::get(u, net::TIMEOUT).and_then(|body| {
+            let v: Value = serde_json::from_str(&body).map_err(|e| format!("not JSON: {e}"))?;
+            has_realms(&v)?;
+            Ok((body, v))
+        });
+        if let Ok((body, v)) = got {
+            let _ = crate::settings::write_atomic(&cache, body.as_bytes());
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).ok();
+            return list_of(&v, false, now, None);
+        }
+    }
+    match urls.last() {
+        Some(u) => fetch_all_from(u, app_dir),
+        None => list_of(&Value::Null, false, None, Some("no listing".into())),
+    }
+}
+
+/// The network listing's `sample` block names the official realm: the Leyline Sample Hangout (temporary) while it
+/// runs, the realm's own name before that.
+pub fn apply_sample(official: &mut Realm, doc: &Value) {
+    let Some(sm) = doc.get("sample").filter(|_| doc.get("kind").and_then(Value::as_str) == Some("network")) else { return };
+    if let Some(n) = sm.get("name").and_then(Value::as_str).map(|n| n.chars().filter(|c| !c.is_control()).take(32).collect::<String>())
+        .filter(|n| !n.trim().is_empty())
+    {
+        official.name = n;
+    }
+    if let Some(t) = sm.get("temporary").and_then(Value::as_bool) {
+        official.temporary = t;
+        if !t {
+            official.tagline = "The official realm: 3.3.5a, bots, the Workshop's mods.".into();
+        }
+    }
+}
+
+fn list_of(doc: &Value, from_cache: bool, saved_at: Option<u64>, error: Option<String>) -> RealmList {
+    let mut realms = officials();
+    for o in realms.iter_mut() {
+        apply_sample(o, doc);
+    }
+    realms.extend(parse_community(doc));
+    order(&mut realms);
+    let mut network = totals(&realms);
+    // the network listing counts every realm online (the sample hangout's own numbers included); a relay's listing
+    // only its community realms, so the count from the list itself is used then
+    if let Some(n) = doc.get("network").filter(|_| doc.get("kind").and_then(Value::as_str) == Some("network")) {
+        let g = |k: &str| n.get(k).and_then(Value::as_u64).filter(|x| *x < 10_000_000);
+        if let (Some(r), Some(p), Some(b)) = (g("realms"), g("players"), g("bots")) {
+            network = Totals { realms: r, players: p, bots: b };
+        }
+    }
+    RealmList { realms, network, from_cache, saved_at, error }
 }
 
 pub fn fetch_all_from(url: &str, app_dir: &Path) -> RealmList {
-    let f = net::fetch_json(url, &cache_path(app_dir), net::TIMEOUT, |v| {
-        v.get("realms").and_then(Value::as_array).map(|_| ()).ok_or_else(|| "no \"realms\" list in the reply".into())
-    });
-    let mut realms = officials();
-    match f {
-        Ok(f) => {
-            realms.extend(parse_community(&f.value));
-            RealmList { realms, from_cache: f.from_cache, saved_at: f.saved_at, error: f.error }
-        }
-        Err(e) => RealmList { realms, from_cache: false, saved_at: None, error: Some(e) },
+    match net::fetch_json(url, &cache_path(app_dir), net::TIMEOUT, has_realms) {
+        Ok(f) => list_of(&f.value, f.from_cache, f.saved_at, f.error),
+        Err(e) => list_of(&Value::Null, false, None, Some(e)),
     }
 }
 
@@ -252,8 +439,12 @@ pub fn fetch_all_from(url: &str, app_dir: &Path) -> RealmList {
 pub fn cached(app_dir: &Path) -> Vec<Realm> {
     let mut v = officials();
     if let Some((doc, _)) = net::read_cache(&cache_path(app_dir)) {
+        for o in v.iter_mut() {
+            apply_sample(o, &doc);
+        }
         v.extend(parse_community(&doc));
     }
+    order(&mut v);
     v
 }
 
@@ -434,6 +625,76 @@ mod tests {
         // The relay's own error text comes through.
         let gone = serve_routes(vec![(Box::leak(format!("/api/realms/{RID}/knock").into_boxed_str()), "404 Not Found", br#"{"error":"realm offline"}"#.to_vec())]);
         assert_eq!(knock(&gone, RID, "ABCDEFGHJKMNPQRS").unwrap_err(), "realm offline");
+    }
+
+    const NETWORK: &str = r#"{"schema":1,"kind":"network","network":{"realms":4,"players":40,"bots":70},"realms":[
+      {"name":"Picked","state":"live","tags":["pvp","rp","evil"],"region":"eu","language":"de","maxPlayers":100,
+       "profile":{"build":5875,"core":"vMaNGOS","address":"relay.openvanilla.app","port":40020},
+       "community":{"realmId":"dddddddddddddddd","relay":"relay.openvanilla.app","score":12.5,"featured":true,"verified":true,
+         "uptime":{"h24":95,"d7":96},"directConnect":false,"lastHeartbeat":{"online":true,"players":2,"bots":0}}},
+      {"name":"Dalaran Hangout","state":"live","community":{"realmId":"eeeeeeeeeeeeeeee","relay":"relay.openvanilla.app","sample":true,
+         "score":60,"lastHeartbeat":{"players":1,"bots":30}}},
+      {"name":"Busy Den","state":"live","tags":["bots"],"community":{"realmId":"bbbbbbbbbbbbbbbb","relay":"relay.openvanilla.app",
+         "score":80.5,"new":true,"regionEstimate":"na-east","uptime":{"h24":101,"d7":null},"lastHeartbeat":{"players":30,"bots":40}}},
+      {"name":"Asleep","state":"offline","community":{"realmId":"cccccccccccccccc","relay":"relay.openvanilla.app","score":0,
+         "featured":true}},
+      {"name":"Plain","state":"live","language":"Klingon!","region":"mars","community":{"realmId":"aaaaaaaaaaaaaaaa",
+         "relay":"relay.openvanilla.app","score":"lots","lastHeartbeat":{"players":0}}}
+    ]}"#;
+
+    #[test]
+    fn network_fields_and_order() {
+        let v: Value = serde_json::from_str(NETWORK).unwrap();
+        let mut r = officials();
+        r.extend(parse_community(&v));
+        order(&mut r);
+        let names: Vec<&str> = r.iter().map(|x| x.name.as_str()).collect();
+        assert_eq!(names, ["Picked", SAMPLE_NAME, "Busy Den", "Plain", "Asleep"], "featured, the sample, by score, offline");
+        assert_eq!(r.iter().map(|x| x.group.as_str()).collect::<Vec<_>>(), ["featured", "official", "community", "community", "offline"]);
+        assert!(!r.iter().any(|x| x.name == "Dalaran Hangout"), "the listing's sample record is the official realm");
+        let p = &r[0];
+        assert_eq!((p.tags.clone(), p.region.as_deref(), p.region_estimated, p.language.as_deref(), p.max_players),
+                   (vec!["pvp".to_string(), "rp".to_string()], Some("eu"), false, Some("de"), Some(100)));
+        assert_eq!((p.uptime_24h, p.uptime_7d, p.featured, p.verified, p.direct, p.build), (Some(95), Some(96), true, true, false, Some(Build::V1121)));
+        assert_eq!(p.report_url.as_deref(), Some("https://play.openvanilla.app/wrath/realms/report?realm=dddddddddddddddd"));
+        let b = &r[2];
+        assert_eq!((b.region.as_deref(), b.region_estimated, b.is_new, b.uptime_24h, b.score), (Some("na-east"), true, true, None, 80.5));
+        let junk = &r[3];
+        assert_eq!((junk.language.clone(), junk.region.clone(), junk.score), (None, None, 0.0));
+        assert!(r[1].official && r[1].tagline.starts_with("Temporary"));
+        assert_eq!(totals(&r), Totals { realms: 4, players: 32, bots: 40 });
+        for (l, ok) in [("en", true), ("pt-BR", true), ("deu", true), ("EN", false), ("pt-br", false), ("english", false), ("", false)] {
+            assert_eq!(lang_ok(l), ok, "{l}");
+        }
+    }
+
+    #[test]
+    fn the_network_listing_first_then_the_relay() {
+        let d = tempfile::tempdir().unwrap();
+        let net_base = serve_routes(vec![("/wrath/realms.json", "200 OK", NETWORK.as_bytes().to_vec())]);
+        let relay = serve_routes(vec![("/api/listing/realms.json", "200 OK", LISTING.as_bytes().to_vec())]);
+        let (nu, ru) = (format!("{net_base}/wrath/realms.json"), format!("{relay}/api/listing/realms.json"));
+        let l = fetch_network(&[&nu, &ru], d.path());
+        assert!(!l.from_cache && l.error.is_none());
+        assert_eq!(l.realms[0].name, "Picked");
+        assert_eq!(l.network, Totals { realms: 4, players: 40, bots: 70 }, "the network listing's own line");
+        assert_eq!((l.realms[1].name.as_str(), l.realms[1].temporary), (SAMPLE_NAME, true), "no sample block: the default");
+        let before: Value = serde_json::from_str(r#"{"kind":"network","sample":{"name":"WrathUnleashed","temporary":false},"realms":[]}"#).unwrap();
+        let mut o = official();
+        apply_sample(&mut o, &before);
+        assert_eq!((o.name.as_str(), o.temporary), ("WrathUnleashed", false), "before the Sample Hangout runs");
+        let relay_doc: Value = serde_json::from_str(r#"{"kind":"community","sample":{"name":"Spoof"},"realms":[]}"#).unwrap();
+        let mut o = official();
+        apply_sample(&mut o, &relay_doc);
+        assert_eq!(o.name, SAMPLE_NAME, "only the network listing names it");
+        // the website down: the relay's listing, ordered the same way, counted from the list
+        let l = fetch_network(&[&dead_url(), &ru], d.path());
+        assert!(!l.from_cache && l.realms[0].official && l.realms.len() == 3);
+        assert_eq!(l.network, Totals { realms: 2, players: 3, bots: 40 });
+        // both down: the cache, still in order
+        let l = fetch_network(&[&dead_url(), &dead_url()], d.path());
+        assert!(l.from_cache && l.realms[0].official);
+        assert_eq!(cached(d.path())[0].group, "official");
     }
 
     #[test]

@@ -114,6 +114,12 @@ these hold:
 
 Otherwise it is the relay, with a reason in plain words.
 
+**The listing side (2026-10-29), also off.** A host allows direct connections with "Allow direct connections" on
+the Host page (`direct` in `state/beacon.json`, default false). The relay lists `community.directConnect: true` only
+when its operator sets `RELAY_ADVERTISE_DIRECT=1` (default 0) and the host allows it; the launcher shows "Direct
+connect available" only when `p2p_hosting` is on. No address is published in the listing: the endpoint exchange
+stays for `p2p::direct`, behind the same rule.
+
 The NAT check (`p2p::nat`) uses STUN Binding requests (RFC 5389) to up to two servers from the flags file. It
 runs only when `p2p_hosting` is on. The STUN server sees the PC's public IP address, as any website does.
 

@@ -39,6 +39,8 @@ had_projects=""
 if [ -f "$WU/portal/projects.py" ]; then cp -p "$WU/portal/projects.py" "$BK/projects.py"; had_projects=1; fi
 had_social=""
 if [ -f "$WU/portal/social.py" ]; then cp -p "$WU/portal/social.py" "$BK/social.py"; had_social=1; fi
+had_network=""
+if [ -f "$WU/portal/network.py" ]; then cp -p "$WU/portal/network.py" "$BK/network.py"; had_network=1; fi
 had_admin=""
 if [ -f "$WU/portal/admin.py" ]; then cp -p "$WU/portal/admin.py" "$BK/"; [ ! -f "$WU/portal/wu-mod.py" ] || cp -p "$WU/portal/wu-mod.py" "$BK/"; had_admin=1; fi
 had_hub=""
@@ -63,6 +65,7 @@ put_back() {
   else rm -f "$WU/portal/hostflow.py"; fi
   if [ -n "$had_projects" ]; then cp -p "$BK/projects.py" "$WU/portal/projects.py"; else rm -f "$WU/portal/projects.py"; fi
   if [ -n "$had_social" ]; then cp -p "$BK/social.py" "$WU/portal/social.py"; else rm -f "$WU/portal/social.py"; fi
+  if [ -n "$had_network" ]; then cp -p "$BK/network.py" "$WU/portal/network.py"; else rm -f "$WU/portal/network.py"; fi
   if [ -n "$had_admin" ]; then cp -p "$BK/admin.py" "$WU/portal/admin.py"; [ ! -f "$BK/wu-mod.py" ] || cp -p "$BK/wu-mod.py" "$WU/portal/"
   else rm -f "$WU/portal/admin.py" "$WU/portal/wu-mod.py"; fi
   rm -rf "$WU/portal/hub"
@@ -114,6 +117,9 @@ if [ -f leyline_net.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.
 fi
 # Leyline friends and messages (/wrath/api/social, /wrath/link): optional; its store is $WU/portal-data/social.sqlite3
 if [ -f social.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' social.py && install -m 644 social.py "$WU/portal/social.py"; fi
+# the Leyline network (/wrath/realms in the network's order, /wrath/realms.json, realm reports): optional; its reports
+# live in $WU/portal-data/network (/data/network)
+if [ -f network.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' network.py && install -m 644 network.py "$WU/portal/network.py"; fi
 # the Leyline Admin Console (/wrath/admin, staff only): admin.py, and wu-mod.py for its "re-run the checker". Its files
 # live in $WU/portal-data/admin and $WU/portal-data/leyline (wu-portal's writable /data)
 if [ -f admin.py ]; then

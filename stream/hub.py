@@ -12,6 +12,8 @@ and runs without it.
     GET  /wrath/leyline-preview/p/<id>        one item (id: link-<12 hex>, mod-<mod id>, theme-<id>)
     GET  /wrath/leyline-preview/creators      for creators: the docs, how the index works, how to submit
     GET  /wrath/leyline-preview/beacon        Host a Beacon (your own realm on the Leyline list)
+    GET  /wrath/leyline-preview/realms        the Leyline network's realms (stream/network.py: community realms first,
+                                              the sample hangout pinned, filters ?build= &tag= &region= &lang= &now=1)
     GET  /wrath/leyline-preview/submit        the "Submit a mod" form;  POST it to queue a submission
     GET  /wrath/leyline-preview/approved.json the approved submissions and delisted repos (the index pipeline reads
                                               it: tools/hub-index/hub_index.py); repo URLs only, no notes
@@ -516,7 +518,7 @@ class Hub:
         sub = (f'<nav class="hb-sub" aria-label="Hub">'
                + "".join(f'<a href="{BASE}{h}"' + (' aria-current="page" class="on"' if path == BASE + h else "") + f">{t}</a>"
                          for h, t in (("", "Hub"), ("/catalog", "Catalog"), ("/creators", "Creators"),
-                                      ("/beacon", "Host a Beacon"), ("/submit", "Submit a mod")))
+                                      ("/realms", "Realms"), ("/beacon", "Host a Beacon"), ("/submit", "Submit a mod")))
                + "</nav>")
         body = (f'<p class="hb-flag">Preview: this page is hidden while it is being built.</p>' if not front_on() else "") + sub + body
         if shell is None:
@@ -557,6 +559,7 @@ class Hub:
             f'<section class="ly-panel" aria-labelledby="hb-c"><h2 id="hb-c">Categories</h2><div class="hb-cats">{cats}</div></section>'
             f'<section class="ly-panel" aria-labelledby="hb-p"><h2 id="hb-p">Worth a look</h2>'
             f'<div class="hb-grid">{"".join(self.card(i) for i in picks[:10])}</div></section>'
+            + self.realms_panel() +
             '<section class="hb-two">'
             f'<div class="ly-panel"><h2>For creators</h2><p>Make an addon, a realm script or a whole mode. '
             f'The docs, the package format and how the index works.</p><p><a href="{BASE}/creators">Start here</a></p></div>'
@@ -565,6 +568,64 @@ class Hub:
             '<p class="hb-fine">Community projects are links: nothing of theirs is hosted here. Each belongs to its '
             'authors, under the licence they chose. Nothing to buy.</p>')
         return self._shell("Leyline", body, path)
+
+    def _network(self):
+        """(network module, realms, ok, the sample's status) from the portal, or None when it has no realm list."""
+        net, cr = self.portal("network"), self.portal("community_realms")
+        if net is None or cr is None:
+            return None
+        try:
+            realms, ok = cr()
+        except Exception:   # noqa: BLE001
+            realms, ok = [], False
+        rs = self.portal("realm_status")
+        try:
+            st = rs() if rs else {}
+        except Exception:   # noqa: BLE001
+            st = {}
+        return net, realms, ok, st
+
+    def realms_panel(self) -> str:
+        """The front page's "Realms on the network": the network line, the first realms in the network's order."""
+        got = self._network()
+        if got is None:
+            return ""
+        net, realms, ok, st = got
+        e = html.escape
+        t, top = net.summary(realms, st, 5)
+        lis = []
+        for r in top:
+            sm = (self.portal("sample_info") or (lambda: {}))() or {}
+            name = ((sm.get("name") or net.SAMPLE_NAME) + (" · temporary" if sm.get("temporary", True) else "")
+                    if r.get("sample") else r["name"])
+            who = f'{r["players"]} playing' if r.get("players") is not None else "online"
+            lis.append(f'<li><b>{e(name)}</b> · {e(who)}{" · " + net.uptime_badge(r) if not r.get("sample") else ""}'
+                       f'{" · Featured" if r.get("featured") else ""}</li>')
+        body = ('<ul class="hb-list">' + "".join(lis) + '</ul>') if lis else (
+            '<p>No community realms are open right now.</p>' if ok else '<p>The realm list isn\'t reachable right now.</p>')
+        return (f'<section class="ly-panel" aria-labelledby="hb-r"><h2 id="hb-r">Realms on the network</h2>'
+                f'<p class="hb-count">{e(net.network_line(t))}</p>{body}'
+                f'<p><a href="{BASE}/realms">All realms</a> · <a href="{BASE}/beacon">Host your own</a></p></section>')
+
+    def realms_page(self, query: dict) -> bytes:
+        got = self._network()
+        if got is None:
+            body = '<section class="ly-panel"><h2>Realms</h2><p><a href="/wrath/realms">The realm list</a></p></section>'
+            return self._shell("Realms · Leyline", body, BASE + "/realms")
+        net, realms, ok, st = got
+        ln = self.portal("leyline_net")
+        try:
+            pack = ln.hostpack() if ln is not None else None
+        except Exception:   # noqa: BLE001
+            pack = None
+        css = (self.portal("REALM_CSS") or "") + net.NET_CSS
+        body = (f'<style>{css}</style><section class="ly-panel"><h1>Realms</h1>'
+                '<p>The Leyline network is realms hosted by players. The order is players online, uptime and staff '
+                'picks: nothing can be bought.</p></section>'
+                + net.page_body(realms, ok, query, st, self.portal("JOIN_BASE") or "https://relay.openvanilla.app",
+                                self.portal("RULESET_LABELS") or {}, None, pack["download"] if pack else None,
+                                base=BASE + "/realms", sample=si() if (si := self.portal("sample_info")) else None))
+        return self._shell("Realms · Leyline", body, BASE + "/realms")
 
     def card(self, i: dict) -> str:
         e = html.escape
@@ -714,6 +775,11 @@ class Hub:
                 '<ol class="hb-list"><li>Get the host kit and start a realm: one command, your rules, your GM login.</li>'
                 '<li>Pick a preset or add realm scripts from the catalog.</li>'
                 '<li>Turn on the Beacon: the relay lists it, no port forwarding needed.</li></ol>'
+                '<p>In the Leyline launcher: open Host, get the Host pack, pick a profile and your house rules, then '
+                'set the realm list details (tags, region, language, player limit). Community realms are listed first '
+                'everywhere: on the website, in the launcher and in the game\'s Leyline window.</p>'
+                '<p class="hb-actions"><a class="ly-btn" href="/wrath/leyline">Get the launcher</a> '
+                '<a class="ly-btn hb-alt" href="/wrath/host">Start on the website</a></p>'
                 f'<p class="hb-actions"><a class="ly-btn" href="{e(host_url)}" rel="noopener noreferrer">The host guide</a> '
                 '<a class="ly-btn hb-alt" href="/wrath/realms">See live realms</a></p></section>'
                 f'<section class="ly-panel"><h2>Server presets and realm scripts</h2><p>'
@@ -901,6 +967,9 @@ def get(handler, path: str, query: dict) -> None:
         return
     if path == BASE + "/creators":
         handler.send(200, hub.creators_page(), headers=_robots())
+        return
+    if path == BASE + "/realms":
+        handler.send(200, hub.realms_page(query), headers=_robots())
         return
     if path == BASE + "/beacon":
         handler.send(200, hub.beacon_page(), headers=_robots())
