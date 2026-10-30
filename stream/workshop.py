@@ -312,6 +312,8 @@ class Workshop:
                 projects = None
         self.projects = projects
         self._secret = os.environ.get("WU_FORM_SECRET", "").encode() or secrets.token_bytes(32)
+        # The Admin Console's overrides (stream/admin.py adjust_catalog, set by the portal): None = as published.
+        self.adjust = None
         self._who_cache: dict[str, tuple[float, object]] = {}
 
     # ---------------------------------------------------------------- data
@@ -372,9 +374,14 @@ class Workshop:
     def category(self, cat_id: str) -> dict | None:
         return next((c for c in self.categories()[0] if c["id"] == cat_id), None)
 
-    def load(self) -> tuple[list[dict], dict]:
+    def load(self, raw: bool = False) -> tuple[list[dict], dict]:
         """(mods, {id: installed version}), reread only when the files change. Each mod's "category" is a
-        known category id (its own, else the default for its kind) or "" when there is no category list."""
+        known category id (its own, else the default for its kind) or "" when there is no category list.
+        Staff overrides (self.adjust) are applied unless raw."""
+        mods, installed = self._load()
+        return (mods if raw or self.adjust is None else self.adjust("mods", mods, "id")), installed
+
+    def _load(self) -> tuple[list[dict], dict]:
         cats, defaults = self.categories()
         key = (self._stat("catalog.json"), self._stat("installed.json"), self._cats["key"])
         with self._lock:
@@ -460,7 +467,7 @@ class Workshop:
                         "submitted_by": t("submitted_by", 40), "submitted_at": t("submitted_at", 25),
                         "last_checked": t("last_checked", 25),
                         "reports": len(r["reports"]) if isinstance(r.get("reports"), list) else 0})
-        return out
+        return out if self.adjust is None else self.adjust("projects", out, "pid")
 
     def everything(self) -> list[dict]:
         """Packaged mods and community projects in one shape for the pages and all.json, sorted by name."""
@@ -470,12 +477,13 @@ class Workshop:
             items.append({"source": "packaged", "id": "mod:" + m["id"], "href": f"/wrath/mods/{m['id']}", "m": m,
                           "name": m["name"], "description": m["description"], "category": m["category"],
                           "builds": m["builds"], "author": m["author"], "author_url": "", "licence": m["licence"],
-                          "repo": m["repo"], "on_wrath": installed.get(m["id"]) == m["version"]})
+                          "repo": m["repo"], "on_wrath": installed.get(m["id"]) == m["version"],
+                          "featured": bool(m.get("featured"))})
         for p in self.community():
             items.append({"source": "community", "id": "link:" + p["pid"], "href": f"/wrath/mods/p/{p['pid']}", "p": p,
                           "name": p["name"], "description": p["description"], "category": p["category"],
                           "builds": p["builds"], "author": p["author"], "author_url": p["author_url"],
-                          "licence": p["licence"], "repo": p["url"], "on_wrath": False})
+                          "licence": p["licence"], "repo": p["url"], "on_wrath": False, "featured": bool(p.get("featured"))})
         items.sort(key=lambda x: (x["name"].lower(), x["source"]))
         return items
 
@@ -890,6 +898,7 @@ class Workshop:
                 "permissions": m["permissions"] if m else None, "on_wrath": it["on_wrath"] if m else None,
                 "download": (PUBLIC_BASE + f"/wrath/mods/{m['id']}/download") if m and m["zip"] else None,
                 "sha256": m["sha256"] if m and m["zip"] else None,
+                "featured": it["featured"],
             })
         doc = {"format": 1, "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                "categories": self.categories()[0], "builds": ["3.3.5a", "1.12", "any"], "projects": out}

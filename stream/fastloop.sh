@@ -37,6 +37,13 @@ had_host=""
 if [ -f "$WU/portal/hostflow.py" ]; then cp -p "$WU/portal/hostflow.py" "$BK/"; [ ! -f "$WU/portal/ed25519_pure.py" ] || cp -p "$WU/portal/ed25519_pure.py" "$BK/"; had_host=1; fi
 had_projects=""
 if [ -f "$WU/portal/projects.py" ]; then cp -p "$WU/portal/projects.py" "$BK/projects.py"; had_projects=1; fi
+had_social=""
+if [ -f "$WU/portal/social.py" ]; then cp -p "$WU/portal/social.py" "$BK/social.py"; had_social=1; fi
+had_admin=""
+if [ -f "$WU/portal/admin.py" ]; then cp -p "$WU/portal/admin.py" "$BK/"; [ ! -f "$WU/portal/wu-mod.py" ] || cp -p "$WU/portal/wu-mod.py" "$BK/"; had_admin=1; fi
+had_hub=""
+rm -rf "$BK/hub"
+if [ -f "$WU/portal/hub.py" ]; then cp -p "$WU/portal/hub.py" "$BK/hub.py"; [ ! -d "$WU/portal/hub" ] || cp -a "$WU/portal/hub" "$BK/hub"; had_hub=1; fi
 had_art=""
 rm -rf "$BK/art"
 if [ -d "$WU/portal/art" ]; then cp -a "$WU/portal/art" "$BK/art"; had_art=1; fi
@@ -55,6 +62,12 @@ put_back() {
   if [ -n "$had_host" ]; then cp -p "$BK/hostflow.py" "$WU/portal/hostflow.py"; [ ! -f "$BK/ed25519_pure.py" ] || cp -p "$BK/ed25519_pure.py" "$WU/portal/"
   else rm -f "$WU/portal/hostflow.py"; fi
   if [ -n "$had_projects" ]; then cp -p "$BK/projects.py" "$WU/portal/projects.py"; else rm -f "$WU/portal/projects.py"; fi
+  if [ -n "$had_social" ]; then cp -p "$BK/social.py" "$WU/portal/social.py"; else rm -f "$WU/portal/social.py"; fi
+  if [ -n "$had_admin" ]; then cp -p "$BK/admin.py" "$WU/portal/admin.py"; [ ! -f "$BK/wu-mod.py" ] || cp -p "$BK/wu-mod.py" "$WU/portal/"
+  else rm -f "$WU/portal/admin.py" "$WU/portal/wu-mod.py"; fi
+  rm -rf "$WU/portal/hub"
+  if [ -n "$had_hub" ]; then cp -p "$BK/hub.py" "$WU/portal/hub.py"; [ ! -d "$BK/hub" ] || cp -a "$BK/hub" "$WU/portal/hub"
+  else rm -f "$WU/portal/hub.py"; fi
   rm -rf "$WU/portal/art"
   if [ -n "$had_art" ]; then cp -a "$BK/art" "$WU/portal/art"; fi
 }
@@ -98,6 +111,24 @@ if [ -f projects.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.arg
 if [ -f leyline_net.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' leyline_net.py && install -m 644 leyline_net.py "$WU/portal/leyline_net.py"
   install -d -m 755 "$WU/portal-data/leyline"
   if [ -f hostpack.json ]; then python3 -I -c 'import json,sys;json.load(open(sys.argv[1]))' hostpack.json && install -m 644 hostpack.json "$WU/portal/hostpack.json"; fi
+fi
+# Leyline friends and messages (/wrath/api/social, /wrath/link): optional; its store is $WU/portal-data/social.sqlite3
+if [ -f social.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' social.py && install -m 644 social.py "$WU/portal/social.py"; fi
+# the Leyline Admin Console (/wrath/admin, staff only): admin.py, and wu-mod.py for its "re-run the checker". Its files
+# live in $WU/portal-data/admin and $WU/portal-data/leyline (wu-portal's writable /data)
+if [ -f admin.py ]; then
+  python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' admin.py && install -m 644 admin.py "$WU/portal/admin.py"
+  if [ -f wu-mod.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' wu-mod.py && install -m 644 wu-mod.py "$WU/portal/wu-mod.py"; fi
+fi
+# the hidden Leyline hub (/wrath/leyline-preview, stream/hub.py) and its index (hub/*.json): optional, always as a pair.
+# Its submissions queue lives in $WU/portal-data/hub (the writable /data mount).
+if [ -f hub.py ] && [ -f hub/community-index.json ]; then
+  python3 -I -c 'import ast,sys,json;ast.parse(open(sys.argv[1]).read());json.load(open(sys.argv[2]))' hub.py hub/community-index.json && {
+    install -m 644 hub.py "$WU/portal/hub.py"
+    rm -rf "$WU/portal/hub"; install -d -m 755 "$WU/portal/hub"
+    install -m 644 hub/*.json "$WU/portal/hub/"
+    echo "  hub: $(ls hub/*.json | wc -l) data files -> $WU/portal/hub"
+  }
 fi
 if [ -d www-files/art ] && [ -f www-files/art/wu-theme.css ]; then
   install -d -m 755 "$WU/portal/art"
@@ -209,6 +240,12 @@ echo "  /wrath/workshop player creations (200 = on): $c8w"
 echo "  /wrath/docs Leyline docs (200 = on): $c8"
 c9=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/host || true)
 echo "  /wrath/host + Your server (302 to sign-in = on): $c9"
+c10=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/api/social/me || true)
+echo "  /wrath/api/social/me Leyline friends (401 signed out = on): $c10"
+c11=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/admin || true)
+echo "  /wrath/admin Admin Console (302 to sign-in = on): $c11"
+c12=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/leyline-preview || true)
+echo "  /wrath/leyline-preview hidden hub (200 = on): $c12"
 echo "  warm.html (public): $c1   /data (must stay gated, 302/401/403): $c2   /wrath signed out (200 = saved-key page): $c3"
 echo "  /wrath/art/wu-card.webp (200 = the art is served): $c4"
 echo "  backups: $BK"

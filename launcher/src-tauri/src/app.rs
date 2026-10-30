@@ -785,7 +785,15 @@ pub fn run() {
             crate::p2p::cmds::p2p_flags,
             crate::p2p::cmds::p2p_set_flag,
             crate::p2p::cmds::p2p_set_limits,
-            crate::p2p::cmds::p2p_nat_check
+            crate::p2p::cmds::p2p_nat_check,
+            // Leyline friends and messages (social.rs)
+            crate::social::commands::social_status,
+            crate::social::commands::social_signin_start,
+            crate::social::commands::social_signin_reopen,
+            crate::social::commands::social_signin_poll,
+            crate::social::commands::social_signin_cancel,
+            crate::social::commands::social_call,
+            crate::social::commands::social_signout
         ])
         .run(tauri::generate_context!())
         .expect("error while running Leyline");

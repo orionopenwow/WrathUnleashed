@@ -2,7 +2,10 @@
 -- Mods & Workshop panel's look. Pick a prop from the catalog (search, categories), Spawn it where you stand,
 -- nudge it (x, y, z), turn it 15 degrees at a time, Undo or Delete, and Save / Load / Share builds by name or
 -- code. Also: a budget meter (props and build points), group tools (select mine, copy, paste), prefabs, your
--- plot, the spawn menu (hold Q in edit mode, /spawnmenu) and the properties panel (exact x, y, z, turn, size).
+-- plot, the spawn menu (hold Q in edit mode, /spawnmenu) and the properties panel (exact x, y, z, turn, tilt, size).
+-- One prop's exact numbers go to the realm as one change: ".build move <id> x y z yaw [pitch roll]" and
+-- ".build scale <id> size" (a group uses setpos / setturn / setscale). With mod-sandbox-core on the realm (core=1)
+-- the prop changes in place and keeps its object id; tilt (pitch, roll) needs it.
 -- Opened by Esc > Mods & Workshop > Builder and by /builder.
 --
 -- Everything the buttons do is a ".build ..." command, sent over the realm's OVMOD addon channel (ov_modapi.lua),
@@ -10,7 +13,8 @@
 --   client -> server   wubuild \t cmd \t 1/1 \t <the text after .build>      e.g. "spawn 2413", "move z 0.5"
 --                      wubuild \t catalog \t 1/1 \t                          send me the catalog
 --   server -> client   wubuild \t catalog \t i/n \t id,key,category,name,points;...   (the allowlist)
---                      wubuild \t state \t i/n \t sel=..;mine=..;area=..;code=..;n=..;pos=..;pts=..;tier=..;plot=..;clip=..
+--                      wubuild \t state \t i/n \t sel=..;mine=..;area=..;code=..;n=..;pos=..;pts=..;tier=..;plot=..;clip=..;
+--                                                  ids=..;rot=<yaw>,<pitch>,<roll>;gids=<object GUID counters>;core=0|1
 --                      wubuild \t prefabs \t i/n \t id,name,code,count;...
 -- The realm checks everything (role, area, plot, budget, rate) and answers in chat as for the dot commands. The
 -- window only ever offers props from the realm's catalog. Without the realm script nothing is sent anywhere
@@ -119,9 +123,17 @@ local function parseState(data)
     for k, v in data:gmatch("(%a+)=([^;]*)") do s[k] = v:gsub("|", "") end
     local id, entry, name = (s.sel or ""):match("^(%d+),(%d+),(.*)$")
     s.selName = name
+    s.selId = tonumber(id or "")
     s.count = tonumber(s.n or "") or (name and 1 or 0)
     local x, y, z, t, sc = (s.pos or ""):match("^(%-?[%d%.]+),(%-?[%d%.]+),(%-?[%d%.]+),(%-?[%d%.]+),([%d%.]+)$")
     if x then s.p = { x = tonumber(x), y = tonumber(y), z = tonumber(z), turn = tonumber(t), scale = tonumber(sc) } end
+    local yaw, pitch, roll = (s.rot or ""):match("^(%-?[%d%.]+),(%-?[%d%.]+),(%-?[%d%.]+)$")
+    if s.p then s.p.yaw, s.p.pitch, s.p.roll = tonumber(yaw) or s.p.turn, tonumber(pitch) or 0, tonumber(roll) or 0 end
+    -- ids (prop ids) and gids (their objects' GUID counters, what edit mode clicks and drags), in the same order
+    s.idList, s.gidList = {}, {}
+    for v in (s.ids or ""):gmatch("%d+") do s.idList[#s.idList + 1] = tonumber(v) end
+    for v in (s.gids or ""):gmatch("%d+") do s.gidList[#s.gidList + 1] = tonumber(v) end
+    s.core = s.core == "1"
     s.used, s.cap = pair(s.mine)
     s.ptsUsed, s.ptsCap = pair(s.pts)
     local pid, owner, role, pn, pc, pp, ppc = (s.plot or ""):match("^(%d+),(%w*),(%a+),(%d+)/(%d+),(%d+)/(%d+)$")
@@ -200,10 +212,18 @@ local function dispatch(name, data)
     elseif name == "state" then
         B.waiting = nil
         B.state = parseState(data)
-        -- the browser client (20261026a) carries the whole selection on screen while you drag or carry it
+        -- the browser client (20261026a) carries the whole selection on screen while you drag or carry it; it
+        -- knows objects by their GUID counter (gids), and puts the handles on the realm's selection
         if LeylineEdit then
-            local ids = B.state.ids
-            pcall(LeylineEdit, "group " .. ((ids and ids ~= "-") and ids or ""))
+            local g = B.state.gidList
+            pcall(LeylineEdit, "group " .. table.concat(g, " "))
+            local primary = B.ObjectOfProp(B.state.selId)
+            if primary and primary ~= B.handlesOn then
+                B.handlesOn = primary
+                pcall(LeylineEdit, "select " .. primary)
+            elseif not primary then
+                B.handlesOn = nil
+            end
         end
         if win then
             win.sel:SetText(stateText(B.state))
@@ -305,6 +325,36 @@ function B.Move(axis, sign)
 end
 
 function B.Turn(sign) return B.Command("turn " .. (sign * TURN)) end
+
+-- The prop id behind an object id (GUID counter) in the selection, and back; nil if it isn't selected.
+function B.PropForObject(gid)
+    local s = B.state
+    gid = tonumber(gid)
+    if not gid or gid == 0 or not s.gidList then return nil end
+    for i, g in ipairs(s.gidList) do if g == gid then return s.idList[i] end end
+    return nil
+end
+function B.ObjectOfProp(pid)
+    local s = B.state
+    pid = tonumber(pid)
+    if not pid or not s.idList then return nil end
+    for i, id in ipairs(s.idList) do
+        if id == pid then local g = s.gidList[i]; return (g and g ~= 0) and g or nil end
+    end
+    return nil
+end
+
+-- One prop to an exact place and rotation (degrees), as one change: ".build move <id> x y z yaw [pitch roll]".
+-- Tilt rides along only when the realm can show it (core=1) or the prop has one.
+function B.MoveTo(pid, x, y, z, yaw, pitch, roll)
+    if not (pid and x and y and z and yaw) then return false end
+    local text = string.format("move %d %.3f %.3f %.3f %.1f", pid, x, y, z, yaw % 360)
+    pitch, roll = pitch or 0, roll or 0
+    if B.state.core or math.abs(pitch) > 0.05 or math.abs(roll) > 0.05 then
+        text = text .. string.format(" %.1f %.1f", pitch, roll)
+    end
+    return B.Command(text)
+end
 
 local function nameIn(box)
     local t = (box:GetText() or ""):gsub("%s+", "")
@@ -554,7 +604,9 @@ function B.ToggleMenu() B.ShowMenu(not (menu and menu:IsShown())) end
 
 -- ---------------------------------------------------------------- the properties panel
 
-local FIELDS = { { "x", "X" }, { "y", "Y" }, { "z", "Z" }, { "turn", "Turn" }, { "scale", "Size" } }
+local FIELDS = { { "x", "X" }, { "y", "Y" }, { "z", "Z" }, { "turn", "Turn" }, { "pitch", "Pitch" }, { "roll", "Roll" },
+    { "scale", "Size" } }
+local ANGLE_FIELDS = { turn = true, pitch = true, roll = true }
 
 function B.PropsFill()
     if not panel then return end
@@ -564,7 +616,7 @@ function B.PropsFill()
     if B.propsEditing then return end
     for _, f in ipairs(FIELDS) do
         local v = p and p[f[1]]
-        panel.box[f[1]]:SetText(v and (f[1] == "turn" and string.format("%.0f", v) or string.format("%.2f", v)) or "")
+        panel.box[f[1]]:SetText(v and (ANGLE_FIELDS[f[1]] and string.format("%.0f", v) or string.format("%.2f", v)) or "")
     end
 end
 
@@ -583,19 +635,35 @@ function B.ApplyProps()
         v[f[1]] = tonumber((panel.box[f[1]]:GetText() or ""):match("^%s*(.-)%s*$"))
         if not v[f[1]] or v[f[1]] ~= v[f[1]] then setStatus("Type numbers in the boxes."); return false end
     end
+    if math.abs(v.pitch) > 180 or math.abs(v.roll) > 180 then setStatus("Pitch and roll go from -180 to 180."); return false end
+    local s = B.state
+    local moved = math.abs(v.x - p.x) > 0.004 or math.abs(v.y - p.y) > 0.004 or math.abs(v.z - p.z) > 0.004
+    local turned = angleDiff(v.turn, p.turn) > 0.5
+    local tilted = math.abs(v.pitch - (p.pitch or 0)) > 0.5 or math.abs(v.roll - (p.roll or 0)) > 0.5
+    local sized = math.abs(v.scale - p.scale) > 0.004
     local sent = 0
-    if math.abs(v.x - p.x) > 0.004 or math.abs(v.y - p.y) > 0.004 or math.abs(v.z - p.z) > 0.004 then
-        B.Command(string.format("setpos %.2f %.2f %.2f", v.x, v.y, v.z)); sent = sent + 1
+    if (s.count or 1) <= 1 and s.selId then
+        -- one prop: position and rotation in one change, then the size
+        -- unchanged boxes keep the realm's finer numbers (the boxes show whole degrees)
+        local yaw = turned and v.turn or (p.yaw or p.turn)
+        local pitch, roll = v.pitch, v.roll
+        if not tilted then pitch, roll = p.pitch or 0, p.roll or 0 end
+        if moved or turned or tilted then B.MoveTo(s.selId, v.x, v.y, v.z, yaw, pitch, roll); sent = sent + 1 end
+        if sized then B.Command(string.format("scale %d %.2f", s.selId, v.scale)); sent = sent + 1 end
+    else
+        if moved then B.Command(string.format("setpos %.2f %.2f %.2f", v.x, v.y, v.z)); sent = sent + 1 end
+        if turned then B.Command(string.format("setturn %.0f", v.turn % 360)); sent = sent + 1 end
+        if sized then B.Command(string.format("setscale %.2f", v.scale)); sent = sent + 1 end
+        if tilted then setStatus("Tilt one prop at a time."); return sent > 0 end
     end
-    if angleDiff(v.turn, p.turn) > 0.5 then B.Command(string.format("setturn %.0f", v.turn % 360)); sent = sent + 1 end
-    if math.abs(v.scale - p.scale) > 0.004 then B.Command(string.format("setscale %.2f", v.scale)); sent = sent + 1 end
     if sent == 0 then setStatus("Nothing changed.") end
+    if tilted and not s.core then setStatus("Tilt needs a realm update; the rest was sent.") end
     return sent > 0
 end
 
 local function buildPanel()
     panel = CreateFrame("Frame", "WrathUnleashedPropsFrame", UIParent)
-    panel:SetWidth(250); panel:SetHeight(234)
+    panel:SetWidth(250); panel:SetHeight(310)
     panel:SetPoint("LEFT", UIParent, "LEFT", 24, 0)
     panel:SetFrameStrata("DIALOG")
     panel:EnableMouse(true)
@@ -624,7 +692,7 @@ local function buildPanel()
     button(panel, "Reset", 80, function() B.propsEditing = nil; B.PropsFill() end, "BOTTOMLEFT", 100, 30)
     panel.status = label(panel, "", "GameFontHighlightSmall", "BOTTOMLEFT", 14, 12)
     panel.status:SetWidth(222)
-    label(panel, "", "GameFontHighlightSmall", "TOPLEFT", 14, -184):SetText("Turn in degrees; size where the realm allows.")
+    label(panel, "", "GameFontHighlightSmall", "TOPLEFT", 14, -232):SetText("Angles in degrees. Pitch and roll tilt the prop.")
     panel:SetScript("OnShow", function() B.propsEditing = nil; B.PropsFill() end)
     panel:Hide()
 end

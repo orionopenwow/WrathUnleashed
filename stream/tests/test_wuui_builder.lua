@@ -397,6 +397,108 @@ check("hold Q: the spawn menu", menu:IsShown())
 E.SpawnMenu(false)
 check("let go: it closes", not menu:IsShown())
 
+-- Gmod-style edits: the gizmo previews on the client and commits once on release; the panel's tilt -------------------
+do
+    local function nearly(a, b, eps) return a and b and math.abs(a - b) <= (eps or 0.02) end
+    local function lastCmd() return (sent[#sent][2]:match("^wubuild\tcmd\t1/1\t(.*)$")) or "" end
+    local calls = {}
+    LeylineEdit = function(text) calls[#calls + 1] = text; return "ok" end
+    E.Clicked(nil, nil, nil, T.live[ids[1]])
+    local pid = T.selected[7]
+    local gp = T.props[pid]
+    local gid = T.live[pid]
+    local function called(text) for _, c in ipairs(calls) do if c == text then return true end end end
+    check("gizmo: the state's object ids reach the client (group and handles)", called("group " .. gid) and called("select " .. gid))
+    check("gizmo: prop and object ids map both ways", B.PropForObject(gid) == pid and B.ObjectOfProp(pid) == gid and B.PropForObject(424242) == nil)
+    E.GizmoStart("ring")
+    check("gizmo: a drag start says what it does", E.note:find("Turning"))
+    serverClock = serverClock + 1
+    local x0, y0, z0, o0 = gp.x, gp.y, gp.z, gp.o
+    E.GizmoCommit(gid, 1.5, 0, 0, 0, x0 + 1.5, y0, z0)
+    check("gizmo: one prop commits as .build move <id> x y z yaw", lastCmd():find("^move " .. pid .. " [%-%d%.]+ [%-%d%.]+ [%-%d%.]+ [%d%.]+$")
+        and nearly(T.props[pid].x, x0 + 1.5) and nearly(T.props[pid].o, o0, 0.01) and E.note:find("Placed"))
+    serverClock = serverClock + 1
+    gp = T.props[pid]
+    E.GizmoCommit(T.live[pid], 0, 0, 0, 90, gp.x, gp.y, gp.z)
+    check("gizmo: the ring turns it by the drag", nearly(T.props[pid].o, (o0 + math.pi / 2) % (2 * math.pi), 0.01))
+    serverClock = serverClock + 1
+    E.GizmoCommit(424242, 0, 1, 0, 0, gp.x, gp.y + 1, gp.z)
+    check("gizmo: an object the state doesn't know goes the carry way (placeat)", lastCmd():find("^placeat "))
+    -- a group dragged by a member that isn't the last-picked one
+    E.Clicked(nil, nil, nil, T.live[ids[1]])
+    E.Clicked(nil, nil, nil, T.live[ids[2]], true)
+    local a, b = T.props[ids[1]], T.props[ids[2]]
+    local ay, by = a.y, b.y
+    serverClock = serverClock + 1
+    E.GizmoCommit(T.live[ids[1]], 0, 2, 0, 0, a.x, a.y + 2, a.z)
+    check("gizmo: a group moves together by the drag's delta", lastCmd():find("^placeat ") and nearly(a.y, ay + 2) and nearly(b.y, by + 2))
+
+    -- the properties panel: one prop goes as one move; tilt without the module is said
+    E.Clicked(nil, nil, nil, T.live[ids[1]])
+    pid = T.selected[7]
+    gp = T.props[pid]
+    B.ShowProps(true)
+    check("panel: pitch and roll boxes", panel.box.pitch and panel.box.roll and panel.box.pitch:GetText() == "0" and panel.box.roll:GetText() == "0")
+    panel.box.x:SetText(string.format("%.2f", gp.x + 1))
+    serverClock = serverClock + 1
+    local nChat = #chat
+    panel.apply:Fire("OnClick")
+    check("panel: one prop's numbers go as one .build move <id>", lastCmd():find("^move " .. pid .. " ") and nearly(gp.x, T.props[pid].x))
+    panel.box.pitch:SetText("10")
+    serverClock = serverClock + 1
+    panel.apply:Fire("OnClick")
+    check("panel: no module, tilt is said and not kept", gp.pt == nil and panel.status:GetText():find("Tilt needs a realm update")
+        and chat[#chat]:find("tilting needs a realm update"))
+    panel.box.pitch:SetText("400")
+    panel.apply:Fire("OnClick")
+    check("panel: tilt limits", panel.status:GetText():find("from %-180 to 180"))
+
+    -- with mod-sandbox-core (a fake that keeps GUIDs)
+    local function newObj(entry, x, y, z, size)
+        nextGuid = nextGuid + 1
+        local go = { guid = nextGuid, entry = entry, x = x, y = y, z = z, size = size, core = true }
+        function go:GetGUID() return self.guid end
+        function go:RemoveFromWorld() objects[self.guid] = nil end
+        objects[go.guid] = go
+        return go
+    end
+    Sandbox = {
+        Available = function() return true end,
+        Spawn = function(_, entry, _, x, y, z, _, _, _, _, size) return newObj(entry, x, y, z, size).guid end,
+        Move = function(g, x, y, z) local go = objects[g]; if not go or not go.core then return nil end; go.x, go.y, go.z = x, y, z; return g end,
+        SetScale = function(g, size) local go = objects[g]; if not go then return nil end; go.size = size; return true end,
+        Despawn = function(g) objects[g] = nil; return true end,
+    }
+    panel.box.pitch:SetText("10")
+    serverClock = serverClock + 1
+    panel.apply:Fire("OnClick")
+    local g1 = T.live[pid]
+    check("panel with the module: tilt kept, the prop now the module's", nearly(T.props[pid].pt, math.rad(10), 1e-3) and objects[g1] and objects[g1].core
+        and B.state.core and nearly(B.state.p.pitch, 10, 0.05))
+    check("the handles follow the prop's new object id", called("select " .. g1))
+    panel.box.roll:SetText("-5")
+    serverClock = serverClock + 1
+    panel.apply:Fire("OnClick")
+    check("panel with the module: the next change keeps the object id", T.live[pid] == g1 and nearly(T.props[pid].rl, math.rad(-5), 1e-3)
+        and nearly(T.props[pid].pt, math.rad(10), 1e-3) and lastCmd():find(" 10%.0 %-5%.0$"))
+    panel.box.scale:SetText("1.50")
+    serverClock = serverClock + 1
+    panel.apply:Fire("OnClick")
+    check("panel with the module: size as .build scale <id>, in place", lastCmd() == "scale " .. pid .. " 1.50" and T.live[pid] == g1
+        and objects[g1].size == 1.5)
+    gp = T.props[pid]
+    serverClock = serverClock + 1
+    local nCalls = #calls
+    E.GizmoCommit(g1, 0, 0, 1, 0, gp.x, gp.y, gp.z + 1)
+    check("gizmo with the module: moved in place, its tilt kept", T.live[pid] == g1 and nearly(objects[g1].z, gp.z)
+        and nearly(T.props[pid].pt, math.rad(10), 1e-3) and lastCmd():find(" 10%.0 %-5%.0$"))
+    local reselect = false
+    for i = nCalls + 1, #calls do if calls[i]:find("^select ") then reselect = true end end
+    check("gizmo with the module: the handles aren't re-put on the same object", not reselect)
+    B.ShowProps(false)
+    Sandbox, LeylineEdit = nil, nil
+end
+
 -- the client ignores messages that aren't the realm's answer to us
 fireClient("OVMOD", "wubuild\tstate\t1/1\tsel=1,2,Spoof;mine=9/9;area=x;code=-", "WHISPER", "Someone")
 check("ignores other senders", not win.sel:GetText():find("Spoof"))

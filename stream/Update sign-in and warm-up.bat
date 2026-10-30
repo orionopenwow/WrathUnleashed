@@ -27,6 +27,14 @@ if exist projects.py set "LINKS=%LINKS% projects.py"
 rem Leyline flags.json and the Host pack listing (leyline_net.py; hostpack.json from hosting\pack\make-hostpack.py)
 if exist leyline_net.py set "LINKS=%LINKS% leyline_net.py"
 if exist leyline_net.py if exist hostpack.json set "LINKS=%LINKS% hostpack.json"
+rem Leyline friends and messages (/wrath/api/social, /wrath/link)
+if exist social.py set "LINKS=%LINKS% social.py"
+rem the Leyline Admin Console (admin.py, /wrath/admin) and the mod checker it can re-run (mods\wu-mod.py)
+if exist admin.py if exist ..\mods\wu-mod.py copy /y "..\mods\wu-mod.py" wu-mod.py >nul
+if exist admin.py set "LINKS=%LINKS% admin.py"
+if exist admin.py if exist wu-mod.py set "LINKS=%LINKS% wu-mod.py"
+rem the hidden Leyline hub (/wrath/leyline-preview): hub.py and its index (hub\community-index.json), always as a pair
+if exist hub.py if exist hub\community-index.json set "LINKS=%LINKS% hub.py hub"
 rem "+ Your server" (hostflow.py) with the kit's Ed25519, always as a pair
 if exist hostflow.py if exist ..\hosting\kit\tools\wunet\ed25519_pure.py copy /y "..\hosting\kit\tools\wunet\ed25519_pure.py" ed25519_pure.py >nul
 if exist hostflow.py if exist ed25519_pure.py set "LINKS=%LINKS% hostflow.py ed25519_pure.py"
@@ -40,7 +48,7 @@ echo [1/2] Uploading...
 scp %OPTS% "%T%" %HOST%:/tmp/wu-fastloop.tgz || (echo Upload failed. If it says "timed out", wait 2 minutes and run this again. & pause & exit /b 1)
 
 echo [2/2] Applying it on the server (under a minute)...
-ssh %OPTS% %HOST% "mkdir -p /srv/wrath/fastloop && rm -rf /srv/wrath/fastloop/www-files /srv/wrath/fastloop/docs && tar -xzf /tmp/wu-fastloop.tgz -C /srv/wrath/fastloop && rm -f /tmp/wu-fastloop.tgz && cd /srv/wrath/fastloop && sed -i 's/\r$//' fastloop.sh wrath_portal.py $(ls links.py demo.py armory.py modes.py modes_data.py workshop.py creations.py hostflow.py ed25519_pure.py projects.py docs.py leyline_net.py 2>/dev/null) && bash fastloop.sh 2>&1 | tee fastloop.log; grep -q '^FASTLOOP OK' fastloop.log"
+ssh %OPTS% %HOST% "mkdir -p /srv/wrath/fastloop && rm -rf /srv/wrath/fastloop/www-files /srv/wrath/fastloop/docs /srv/wrath/fastloop/hub && tar -xzf /tmp/wu-fastloop.tgz -C /srv/wrath/fastloop && rm -f /tmp/wu-fastloop.tgz && cd /srv/wrath/fastloop && sed -i 's/\r$//' fastloop.sh wrath_portal.py $(ls links.py demo.py armory.py modes.py modes_data.py workshop.py creations.py hostflow.py ed25519_pure.py projects.py social.py docs.py leyline_net.py admin.py wu-mod.py hub.py 2>/dev/null) && bash fastloop.sh 2>&1 | tee fastloop.log; grep -q '^FASTLOOP OK' fastloop.log"
 if errorlevel 1 (
   echo.
   echo It did not report success; see the lines above. Anything it changed was put back.

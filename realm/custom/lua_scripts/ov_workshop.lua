@@ -496,6 +496,36 @@ local function gmCommand(player, word, id)
     end
 end
 
+-- ------------------------------------------------------------------- the website's admin console
+-- ov_admin.lua (console/SOAP "ovadmin ws ...", from stream/admin.py) reviews here. Unlike .workshop unpublish, nothing
+-- is dropped: "pending" takes an item off the list until it is approved again; plays, votes and the row stay.
+function W.Admin(id, action, text)
+    local it = items[tonumber(id) or -1]
+    if not it then return nil, "no such item" end
+    if action == "approve" then it.state = "approved"; applyReview(it, true)
+    elseif action == "reject" then it.state = "rejected"; applyReview(it, false)
+    elseif action == "pending" then it.state = "pending"; applyReview(it, false)
+    elseif action == "title" or action == "descr" then
+        local t = cleanText(text, action == "title" and MAX_TITLE or MAX_DESC)
+        if (action == "title" and t == "") or badWord(t) then return nil, "pick other words" end
+        it[action] = t
+    else return nil, "unknown action" end
+    it.updated = now()
+    save(it)
+    return it
+end
+
+-- The automatic checks, again: what a GM should look at before approving.
+function W.Check(it)
+    local f = {}
+    local w = badWord(it.title); if w then f[#f + 1] = "title: filtered word" end
+    w = badWord(it.descr); if w then f[#f + 1] = "description: filtered word" end
+    if not validRef(it.kind, it.ref) then f[#f + 1] = "reference: not a valid " .. it.kind end
+    if it.kind == "mode" then f[#f + 1] = "mode: new code, runs only in the host's client sandbox; play it once first" end
+    return f
+end
+W.Items = function() return items end
+
 -- --------------------------------------------------------------------------------- the website's Play
 
 local function forget(account)

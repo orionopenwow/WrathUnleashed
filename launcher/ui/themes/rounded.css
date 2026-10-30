@@ -116,8 +116,10 @@ html[data-skin="rounded"] .winbtns #win-close:hover { background: var(--t-danger
 html[data-skin="rounded"] .side { background: var(--t-surface); border-right: var(--t-border-w) solid var(--t-border); box-shadow: none; }
 html[data-skin="rounded"] .side .logo { display: none; }
 html[data-skin="rounded"] .side::before {
-  content: "Leyline"; display: block; padding: 6px 10px 14px;
+  content: "Leyline"; display: block; padding: 6px 10px 14px 40px;
   font: 700 24px/1 var(--t-font-display); letter-spacing: -0.01em; color: var(--t-text);
+  /* the small violet crystal to the left of the name (art/crystal.svg) */
+  background: url("../art/crystal.svg") no-repeat 10px 4px / 24px 24px;
 }
 html[data-skin="rounded"] .nav { border-radius: var(--t-radius-sm); color: var(--t-text-2); font-family: var(--t-font); text-shadow: none; }
 html[data-skin="rounded"] .nav svg { stroke: var(--t-muted); }

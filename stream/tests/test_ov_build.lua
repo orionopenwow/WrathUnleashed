@@ -924,6 +924,231 @@ do
     for k in pairs(extraRows) do extraRows[k] = nil end
 end
 
+-- Gmod-style edits: .build move <id> / rotate <id> / scale <id>, without and with mod-sandbox-core ---------------------
+do
+    local function stateOf(p)
+        for i = #p.addon, 1, -1 do
+            local d = p.addon[i][2]:match("^wubuild\tstate\t%d+/%d+\t(.*)$")
+            if d then local t = {}; for k, v in d:gmatch("(%a+)=([^;]*)") do t[k] = v end; return t end
+        end
+        return {}
+    end
+    local function nearly(a, b, eps) return a and b and math.abs(a - b) <= (eps or 0.002) end
+    local cora = player({ guid = 80, name = "Cora", x = AREA.x + 25, y = AREA.y - 20 })
+    local dora = player({ guid = 81, name = "Dora", x = AREA.x + 22, y = AREA.y - 20 })
+    local stranger = player({ guid = 82, name = "Stray", x = AREA.x + 24, y = AREA.y - 20 })
+    cmd(gm, "build grant Cora"); cmd(gm, "build grant Dora")
+    check("edits: the spot is in the commons", T.plotAt(0, AREA.x + 25, AREA.y - 20, AREA.z) == nil)
+
+    -- without the module: the new commands work through despawn + respawn
+    step(); cmd(cora, "build spawnat chair " .. at(nil, 25, -20))
+    local c1 = T.selected[80]
+    local g0 = T.live[c1]
+    check("no module: state says core=0", stateOf(cora).core == "0" and stateOf(cora).gids == tostring(g0))
+    step(); cmd(cora, "build move " .. c1 .. " " .. at(nil, 26, -21, 0.5) .. " 90")
+    local p1 = T.props[c1]
+    check("no module: .build move <id> x y z yaw", nearly(p1.x, AREA.x + 26) and nearly(p1.y, AREA.y - 21) and nearly(p1.z, AREA.z + 0.5)
+        and nearly(p1.o, math.pi / 2) and last(cora):find("Wooden Chair moved%.$"))
+    check("no module: a respawn (new GUID), the old object gone", T.live[c1] ~= g0 and objects[g0] == nil and liveOf(p1)
+        and nearly(liveOf(p1).x, AREA.x + 26))
+    check("no module: one op with before and after", T.oplog[#T.oplog].op == "move" and #T.oplog[#T.oplog].rows == 1
+        and nearly(T.oplog[#T.oplog].rows[1].before.x, AREA.x + 25) and nearly(T.oplog[#T.oplog].rows[1].after.x, AREA.x + 26))
+    step(); cmd(cora, "build move " .. c1 .. " " .. at(nil, 26, -21, 0.5) .. " 90 20 0")
+    check("no module: tilt is dropped, and said", p1.pt == nil and last(cora):find("tilting needs a realm update"))
+    step(); cmd(cora, "build rotate " .. c1 .. " 180")
+    check("no module: .build rotate <id> <yaw>", nearly(p1.o, math.pi) and last(cora):find("facing 180 degrees"))
+    step(); cmd(cora, "build scale " .. c1 .. " 1.5")
+    check("no module: .build scale <id> <size>", p1.s == 1.5 and liveOf(p1).scale == 1.5)
+    cmd(cora, "build undo")
+    check("no module: undo puts the size back", p1.s == nil)
+    cmd(cora, "build undo")
+    check("no module: undo puts the turn back", nearly(p1.o, math.pi / 2))
+    -- the old forms still work
+    step(); cmd(cora, "build move z 1")
+    check("old .build move x|y|z still works", nearly(p1.z, AREA.z + 1.5))
+    step(); cmd(cora, "build rotate 90")
+    check("old .build rotate <deg> still turns", nearly(p1.o, math.pi))
+
+    -- every check a move has
+    step(); cmd(dora, "build move " .. c1 .. " " .. at(nil, 22, -20))
+    check("checks: not your prop", last(dora):find("isn't yours") and nearly(p1.x, AREA.x + 26))
+    step(); cmd(stranger, "build move " .. c1 .. " " .. at(nil, 22, -20))
+    check("checks: the builder role", last(stranger):find("builder role"))
+    step(); cmd(cora, "build move 999999 " .. at(nil, 22, -20))
+    check("checks: an unknown id", last(cora):find("No prop 999999"))
+    step(); cmd(cora, "build move " .. c1 .. " " .. at(nil, 25, -140))
+    check("checks: a point too far from you", last(cora):find("too far from your character") and nearly(p1.y, AREA.y - 21))
+    step(); cmd(cora, "build move " .. c1 .. " " .. at(nil, 25, -80))
+    check("checks: out of the build area", last(cora):find("out of the build area") and nearly(p1.y, AREA.y - 21))
+    step(); cmd(cora, "build move " .. c1 .. " " .. at(nil, 25, -20) .. " 0 270 0")
+    check("checks: tilt from -180 to 180", last(cora):find("Tilt goes from"))
+    step(); cmd(cora, "build move " .. c1 .. " " .. at(nil, 25, -20) .. " north")
+    check("checks: numbers only", last(cora):find("numbers don't work"))
+    step()
+    for i = 1, 6 do cmd(cora, "build rotate " .. c1 .. " " .. (i * 10)) end
+    check("checks: five moves or turns a second", last(cora):find("Slow down"))
+    cora.x = AREA.x + 200
+    step(); cmd(cora, "build move " .. c1 .. " " .. at(nil, 200, -20))
+    check("checks: a prop too far from you", last(cora):find("That prop is too far away") and nearly(p1.x, AREA.x + 26))
+    cora.x = AREA.x + 25
+
+    -- with the module: a fake Sandbox that keeps GUIDs, as mod-sandbox-core does
+    local mod = { on = true, mode = 0, refuse = {}, calls = {}, byProp = {} }
+    local function newObj(entry, map, x, y, z, q, size)
+        nextGuid = nextGuid + 1
+        local go = { guid = nextGuid, entry = entry, map = map, x = x, y = y, z = z, q = q, size = size, core = true }
+        function go:GetGUID() return self.guid end
+        function go:RemoveFromWorld() objects[self.guid] = nil end
+        objects[go.guid] = go
+        return go
+    end
+    Sandbox = {
+        Available = function() return mod.on end,
+        Spawn = function(propId, entry, map, x, y, z, qx, qy, qz, qw, size)
+            mod.calls[#mod.calls + 1] = { op = "spawn", id = propId, size = size }
+            if mod.refuse.spawn then return nil, "the realm refused" end
+            local go = newObj(entry, map, x, y, z, { qx, qy, qz, qw }, size)
+            go.prop = propId
+            mod.byProp[propId] = go.guid
+            return go.guid
+        end,
+        Find = function(propId)
+            local g = mod.byProp[propId]
+            if g and objects[g] then return g end
+            return nil, "not a builder object"
+        end,
+        Move = function(g, x, y, z, qx, qy, qz, qw)
+            mod.calls[#mod.calls + 1] = { op = "move", g = g, q = { qx, qy, qz, qw } }
+            local go = objects[g]
+            if not go or not go.core then return nil, "not a builder object" end
+            if mod.refuse.move then return nil, "out of bounds" end
+            if mod.mode == 1 then
+                objects[g] = nil
+                local n = newObj(go.entry, go.map, x, y, z, { qx, qy, qz, qw }, go.size)
+                n.prop = go.prop
+                mod.byProp[go.prop] = n.guid
+                return n.guid
+            end
+            go.x, go.y, go.z, go.q = x, y, z, { qx, qy, qz, qw }
+            return g
+        end,
+        SetScale = function(g, size)
+            mod.calls[#mod.calls + 1] = { op = "scale", g = g, size = size }
+            local go = objects[g]
+            if not go then return nil, "not a builder object" end
+            go.size = size
+            return true
+        end,
+        Despawn = function(g, forget)
+            mod.calls[#mod.calls + 1] = { op = "despawn", g = g, forget = forget }
+            objects[g] = nil
+            return true
+        end,
+    }
+    local spawns0 = #spawns
+    step(); cmd(cora, "build spawnat bench " .. at(nil, 24, -19))
+    local c2 = T.selected[80]
+    local p2 = T.props[c2]
+    local g2 = T.live[c2]
+    check("module: the prop is spawned by the module", objects[g2] and objects[g2].core and T.coreLive[c2] and #spawns == spawns0
+        and mod.calls[#mod.calls].op == "spawn" and mod.calls[#mod.calls].id == c2 and mod.calls[#mod.calls].size == 0)
+    check("module: state says core=1 and the object's GUID counter", stateOf(cora).core == "1" and stateOf(cora).gids == tostring(g2)
+        and stateOf(cora).ids == tostring(c2))
+    -- yaw 1.0, pitch 0.3, roll -0.2 radians: the vector the C++ test prints
+    step(); cmd(cora, string.format("build move %d %s %.5f %.5f %.5f", c2, at(nil, 23, -18, 0.25), math.deg(1.0), math.deg(0.3), math.deg(-0.2)))
+    local mv = mod.calls[#mod.calls]
+    check("module: move in place, the GUID kept", T.live[c2] == g2 and mv.op == "move" and mv.g == g2 and nearly(objects[g2].x, AREA.x + 23)
+        and nearly(objects[g2].z, AREA.z + 0.25) and last(cora):find("Wooden Bench moved%.$"))
+    check("module: the quaternion yaw/pitch/roll make", nearly(mv.q[1], -0.157915, 1e-4) and nearly(mv.q[2], 0.083164, 1e-4)
+        and nearly(mv.q[3], 0.484766, 1e-4) and nearly(mv.q[4], 0.856241, 1e-4))
+    check("module: tilt kept (prop, table)", nearly(p2.pt, 0.3) and nearly(p2.rl, -0.2)
+        and sqlHas("^REPLACE INTO mod_builder_prop_tilt %(id, pitch, roll%) VALUES %(" .. c2 .. ", 0%.3000, %-0%.2000%)"))
+    check("module: rotation in the state (yaw, pitch, roll)", stateOf(cora).rot == "57.3,17.2,-11.5")
+    local row = T.oplog[#T.oplog].rows[1]
+    check("module: op log before and after, with tilt", T.oplog[#T.oplog].op == "move" and row.before.pt == nil and nearly(row.after.pt, 0.3)
+        and sqlHas("'move', " .. c2 .. ", '[^']*,0%.0000,0%.0000', '[^']*,0%.3000,%-0%.2000'"))
+    cmd(cora, "build pick " .. g2)
+    check("module: pick by the same GUID after the move", T.selected[80] == c2 and last(cora):find("selected"))
+    cmd(cora, "build undo")
+    check("module: undo moves it back in place, tilt gone", T.live[c2] == g2 and nearly(objects[g2].x, AREA.x + 24) and p2.pt == nil
+        and sqlHas("^DELETE FROM mod_builder_prop_tilt WHERE id = " .. c2 .. "$"))
+    step(); cmd(cora, "build rotate " .. c2 .. " 45 0 30")
+    check("module: .build rotate <id> yaw pitch roll", T.live[c2] == g2 and nearly(p2.o, math.rad(45)) and p2.pt == nil and nearly(p2.rl, math.rad(30)))
+    step(); cmd(cora, "build scale " .. c2 .. " 2")
+    check("module: .build scale in place", T.live[c2] == g2 and objects[g2].size == 2 and p2.s == 2 and mod.calls[#mod.calls].op == "scale")
+    step(); cmd(cora, "build scale " .. c2 .. " 1")
+    check("module: size 1 is the prop's own (0 to the module)", T.live[c2] == g2 and objects[g2].size == 0 and p2.s == nil)
+    -- group ops and the panel's set* go through the same path
+    step(); cmd(cora, "build setpos " .. at(nil, 24, -17))
+    check("module: setpos moves in place", T.live[c2] == g2 and nearly(objects[g2].y, AREA.y - 17))
+    step(); cmd(cora, "build placeat " .. at(nil, 24, -16) .. " 15")
+    check("module: placeat (a gizmo drop) moves in place, tilt kept", T.live[c2] == g2 and nearly(objects[g2].y, AREA.y - 16) and nearly(p2.rl, math.rad(30)))
+    -- the module refuses: the despawn + respawn fallback still lands it
+    mod.refuse.move = true
+    step(); cmd(cora, "build move " .. c2 .. " " .. at(nil, 23, -16))
+    local g3 = T.live[c2]
+    check("module refuses a move: respawned there instead", g3 ~= g2 and objects[g2] == nil and objects[g3] and nearly(objects[g3].x, AREA.x + 23)
+        and T.coreLive[c2])
+    mod.refuse.move = nil
+    -- MoveMode = 1: a fresh GUID per move
+    mod.mode = 1
+    step(); cmd(cora, "build move " .. c2 .. " " .. at(nil, 23, -15))
+    local g4 = T.live[c2]
+    check("module MoveMode 1: the new GUID is used", g4 ~= g3 and objects[g4] and objects[g3] == nil and nearly(objects[g4].y, AREA.y - 15)
+        and stateOf(cora).gids == tostring(g4))
+    mod.mode = 0
+    -- delete, then a GM rollback brings it back through the module
+    cmd(cora, "build delete")
+    check("module: delete despawns through the module (forget)", T.props[c2] == nil and mod.calls[#mod.calls].op == "despawn"
+        and mod.calls[#mod.calls].forget == true and objects[g4] == nil)
+    cmd(gm, "build rollback cora 1")
+    check("module: rollback brings it back, tilt and all", T.props[c2] and T.coreLive[c2] and objects[T.live[c2]]
+        and nearly(T.props[c2].rl, math.rad(30)))
+    -- a grid unload: sync puts it back through the module
+    objects[T.live[c2]] = nil
+    T.sync(cora, true)
+    check("module: sync respawns a missing prop through the module", objects[T.live[c2]] and objects[T.live[c2]].core)
+    -- the module gone (an old image): tilt dropped, moves respawn
+    mod.on = false
+    local spawns1 = #spawns
+    step(); cmd(cora, "build move " .. c2 .. " " .. at(nil, 24, -15) .. " 0 15 0")
+    check("module gone: respawn path, tilt kept on the prop but not changed", #spawns == spawns1 + 1 and not T.coreLive[c2]
+        and nearly(T.props[c2].rl, math.rad(30)) and last(cora):find("tilting needs a realm update") and stateOf(cora).core == "0")
+    mod.on = true
+    env.OV_BUILD_CORE = "0"
+    check("OV_BUILD_CORE=0: the module is not used", (function() step(); cmd(cora, "build move " .. c2 .. " " .. at(nil, 24, -14)); return stateOf(cora).core == "0" end)())
+    env.OV_BUILD_CORE = nil
+
+    -- op-log rows: the old format still reads; the new carries tilt
+    local old = T.parseStateStr(5, "2413,0,1.000,2.000,3.000,1.5000,1.00,80,Cora,1")
+    check("op log: a row from before tilt still reads", old and old.entry == 2413 and old.pt == nil and old.area == "1")
+    local new = T.parseStateStr(5, T.stateStr({ entry = 2413, map = 0, x = 1, y = 2, z = 3, o = 1.5, owner = 80, ownerName = "Cora", area = "1", pt = 0.3, rl = -0.2 }))
+    check("op log: tilt round-trips", new and nearly(new.pt, 0.3) and nearly(new.rl, -0.2) and #T.stateStr(new) <= 120)
+
+    -- back on the module, then a Lua reload: the script adopts the module's object instead of spawning a second one
+    step(); cmd(cora, "build move " .. c2 .. " " .. at(nil, 24, -13))
+    local gKeep = T.live[c2]
+    check("module back: the next move respawns it through the module", T.coreLive[c2] and objects[gKeep] and objects[gKeep].core)
+
+    -- a restart reads the tilt back
+    propRows = {}
+    for _, p in pairs(T.props) do propRows[#propRows + 1] = { p.id, p.owner, p.ownerName, p.area, p.entry, p.map, p.x, p.y, p.z, p.o } end
+    extraRows.mod_builder_prop_tilt = { { c2, 0.25, -0.5 } }
+    dofile(file)
+    T = OV_BUILD_TEST
+    check("restart: tilt read back", T.props[c2] and nearly(T.props[c2].pt, 0.25) and nearly(T.props[c2].rl, -0.5))
+    local spawnCalls = 0
+    for _, c in ipairs(mod.calls) do if c.op == "spawn" and c.id == c2 then spawnCalls = spawnCalls + 1 end end
+    T.sync(cora, true)
+    local after = 0
+    for _, c in ipairs(mod.calls) do if c.op == "spawn" and c.id == c2 then after = after + 1 end end
+    check("Lua reload: the module's object is adopted, not doubled", T.live[c2] == gKeep and T.coreLive[c2] and after == spawnCalls)
+    check("tables: mod_builder_prop_tilt", sqlHas("^CREATE TABLE IF NOT EXISTS mod_builder_prop_tilt"))
+    propRows = nil
+    for k in pairs(extraRows) do extraRows[k] = nil end
+    Sandbox = nil
+end
+
 -- switch off ------------------------------------------------------------------------------------------------
 env.OV_BUILD = "0"
 clock = clock + 1

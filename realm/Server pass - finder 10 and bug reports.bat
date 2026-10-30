@@ -29,12 +29,16 @@ rem The Goldshire Inn guest pass (inert until the website hands out passes) and 
 rem (inert until the bridge daemon is switched on) ride along too.
 if exist "custom\lua_scripts\ov_demo.lua" copy /y "custom\lua_scripts\ov_demo.lua" "%T%\" >nul
 if exist "custom\lua_scripts\ov_discord.lua" copy /y "custom\lua_scripts\ov_discord.lua" "%T%\" >nul
+rem Leyline friends and messages (.lm, .lr, .lf; the portal polls it over SOAP) rides along too.
+if exist "custom\lua_scripts\ov_social.lua" copy /y "custom\lua_scripts\ov_social.lua" "%T%\" >nul
 rem Go anywhere from the website (the Modes hub: ovgo set, .go) rides along too.
 if exist "custom\lua_scripts\ov_go.lua" copy /y "custom\lua_scripts\ov_go.lua" "%T%\" >nul
 rem The Builder (.build: props in build areas, saved builds and share codes) rides along too.
 if exist "custom\lua_scripts\ov_build.lua" copy /y "custom\lua_scripts\ov_build.lua" "%T%\" >nul
 rem The OVMOD addon channel the Builder window talks over (ov_build.lua works without it, dot commands only).
 if exist "custom\lua_scripts\ov_modapi.lua" copy /y "custom\lua_scripts\ov_modapi.lua" "%T%\" >nul
+rem The Builder's link to mod-sandbox-core (moves in place); does nothing on an image without the module.
+if exist "custom\lua_scripts\ov_sandbox_core.lua" copy /y "custom\lua_scripts\ov_sandbox_core.lua" "%T%\" >nul
 rem Leyline minigolf (/golf): the referee for sessions, turns and published courses; needs ov_modapi.lua.
 if exist "custom\lua_scripts\ov_golf.lua" copy /y "custom\lua_scripts\ov_golf.lua" "%T%\" >nul
 rem Leyline Modes (/modes): sessions and the relay for scripted minigames; needs ov_modapi.lua.
@@ -43,6 +47,9 @@ rem The Leyline Workshop (Esc > Mods & Workshop > Workshop, /wrath/workshop): pl
 rem GM review and one-click Play; needs ov_modapi.lua. workshop-export.py fills the web page (step 1c).
 if exist "custom\lua_scripts\ov_workshop.lua" copy /y "custom\lua_scripts\ov_workshop.lua" "%T%\" >nul
 if exist "custom\workshop-export.py" copy /y "custom\workshop-export.py" "%T%\" >nul
+rem The Admin Console's realm half (console/SOAP "ovadmin": Workshop review, .bug reports, GM level) for
+rem play.openvanilla.app/wrath/admin (stream/admin.py).
+if exist "custom\lua_scripts\ov_admin.lua" copy /y "custom\lua_scripts\ov_admin.lua" "%T%\" >nul
 if exist "custom\leyline-fetch.py" copy /y "custom\leyline-fetch.py" "%T%\" >nul
 rem The web armory rides along too: .armory off / .armory on (ov_armory.lua), and armory-export.py, which
 rem serverpass.sh installs with its 5-minute cron (step 1b) to fill play.openvanilla.app/wrath/armory.

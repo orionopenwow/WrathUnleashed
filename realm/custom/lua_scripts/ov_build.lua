@@ -30,6 +30,10 @@
 --   .build copy                       copies the selection; .build pasteat <x> <y> <z> [deg] pastes it around a
 --                                     point (.build paste alone: at your feet)
 --   .build setpos <x> <y> <z> | setturn <deg> | setscale <size>   the properties panel's exact numbers
+--   .build move <id> <x> <y> <z> [yaw pitch roll]   one prop (its id from the state's sel=, or .build near) to an
+--                                     exact point and rotation, in degrees (pitch and roll need mod-sandbox-core)
+--   .build rotate <id> <yaw> [pitch roll]   one prop's rotation;   .build scale <id> <size>   one prop's size
+--                                     (.build move x|y|z, .build rotate <deg> and .build scale <size> still work)
 --   .build prefab save|list|paste|pasteat|share|delete ...   prefabs: a named selection, as JSON
 --   .build plot [claim|add <name> [builder|visitor]|remove <name>|abandon]   your plot, built with friends
 --   GM only: .build grant <name> | revoke <name> | purge <name> | trust <name> <tier>
@@ -61,6 +65,12 @@
 -- every build command, and a 15 s world timer), so builds come back after a restart without touching the
 -- core's tables. A move is despawn + respawn at the new position.
 --
+-- With mod-sandbox-core on the realm image (realm/custom/modules/mod-sandbox-core; Lua side ov_sandbox_core.lua,
+-- the global Sandbox), props are spawned by the module instead and a move, turn, tilt or size change happens in
+-- place: the object keeps its GUID and everyone near it sees the change at once. Pitch and roll (tilt) exist only
+-- there; they are kept in mod_builder_prop_tilt. Without the module (the stock image, or OV_BUILD_CORE=0) all of
+-- this falls back to the despawn + respawn above, so the commands work before the image ships.
+--
 -- Env (os.getenv at each use; defaults live here so no profile key, and no world-server recreate, is needed):
 --   OV_BUILD              on/off                                         default 1
 --   OV_BUILD_ANYWHERE     1 = GMs may build outside the build areas       default 0
@@ -73,6 +83,7 @@
 --   OV_BUILD_PLOT_POINTS  build points in one plot                        default 300
 --   OV_BUILD_PLOTS_EACH   plots one character may claim                   default 1
 --   OV_BUILD_PLOTS_ONLY   1 = outside GMs, build only on plots            default 0
+--   OV_BUILD_CORE         0 = never use mod-sandbox-core                    default 1
 -- Rate: one spawn a second, one load every 5 s, five moves or turns a second.
 -- The in-game Builder window (WrathUnleashedUI/Builder.lua, /builder) talks to this over the OVMOD channel
 -- (ov_modapi.lua), mod "wubuild":
@@ -81,7 +92,10 @@
 --   server -> client   catalog   id,key,category,name,points;...  the props that exist on this realm
 --                      state     sel=<id>,<entry>,<name>;mine=<n>/<cap>;area=<name>;code=<code>;n=<selected>;ids=<id id ...>;
 --                                pos=<x>,<y>,<z>,<deg>,<size>;pts=<used>/<cap>;tier=<tier>;
---                                plot=<id>,<owner>,<your role>,<props>/<cap>,<points>/<cap> (or -);clip=<copied>
+--                                plot=<id>,<owner>,<your role>,<props>/<cap>,<points>/<cap> (or -);clip=<copied>;
+--                                rot=<yaw>,<pitch>,<roll> (degrees, one decimal);gids=<object GUID counter per id, 0 if
+--                                not spawned>;
+--                                core=<1 when mod-sandbox-core moves props in place, else 0>
 --                      prefabs   id,name,code,count;...           your prefabs
 -- mod-ale events: 3 ON_LOGIN, 4 ON_LOGOUT, 27 ON_UPDATE_ZONE, 28 ON_MAP_CHANGE, 42 ON_COMMAND.
 
@@ -587,6 +601,23 @@ local function clampScale(s)
     return math.floor(s * 100 + 0.5) / 100
 end
 
+-- A tilt (pitch or roll) in radians, in [-pi, pi); nil for none.
+local function normTilt(a)
+    a = tonumber(a)
+    if not a or not finite(a) then return nil end
+    a = (a + math.pi) % (2 * math.pi) - math.pi
+    if math.abs(a) < 0.0005 then return nil end
+    return a
+end
+
+-- The quaternion GameObject::SetWorldRotationAngles(yaw, pitch, roll) builds (as Sandbox.QuatFromYawPitchRoll).
+local function quatOf(yaw, pitch, roll)
+    local cy, sy = math.cos(yaw / 2), math.sin(yaw / 2)
+    local cp, sp = math.cos(pitch / 2), math.sin(pitch / 2)
+    local cr, sr = math.cos(roll / 2), math.sin(roll / 2)
+    return sr * cp * cy - cr * sp * sy, cr * sp * cy + sr * cp * sy, cr * cp * sy - sr * sp * cy, cr * cp * cy + sr * sp * sy
+end
+
 -- Character names and build names only ever reach SQL through these (letters, digits, _ and -).
 local function cleanName(s) return (tostring(s or ""):gsub("[^%w]", ""):sub(1, 12)) end
 local function cleanBuild(s)
@@ -623,6 +654,8 @@ exec("CREATE TABLE IF NOT EXISTS mod_builder_builds ("
     .. "created_at INT UNSIGNED NOT NULL DEFAULT 0, UNIQUE KEY owner_name_key (owner, name), UNIQUE KEY code (code))")
 exec("CREATE TABLE IF NOT EXISTS mod_builder_prop_scale ("
     .. "id INT UNSIGNED NOT NULL PRIMARY KEY, scale FLOAT NOT NULL DEFAULT 1)")
+exec("CREATE TABLE IF NOT EXISTS mod_builder_prop_tilt ("
+    .. "id INT UNSIGNED NOT NULL PRIMARY KEY, pitch FLOAT NOT NULL DEFAULT 0, roll FLOAT NOT NULL DEFAULT 0)")
 exec("CREATE TABLE IF NOT EXISTS mod_builder_trust ("
     .. "guid INT UNSIGNED NOT NULL PRIMARY KEY, name VARCHAR(12) NOT NULL, tier TINYINT UNSIGNED NOT NULL, "
     .. "set_by VARCHAR(12) NOT NULL DEFAULT '', set_at INT UNSIGNED NOT NULL DEFAULT 0)")
@@ -697,8 +730,10 @@ end
 ------------------------------------------------------------------------------------------------
 local roles = {}       -- [guid] = { name, lname }
 local trust = {}       -- [guid] = tier index set by a GM
-local props = {}       -- [id] = { id, owner, ownerName, area, entry, map, x, y, z, o, s }
+local props = {}       -- [id] = { id, owner, ownerName, area, entry, map, x, y, z, o, s, pt, rl } (pt, rl: tilt)
 local live = {}        -- [id] = object guid of the spawned prop
+local coreLive = {}    -- [id] = true when mod-sandbox-core spawned it (it can move in place)
+local actor            -- the player the running command (or sync) is for: carries the module's requests
 local selected = {}    -- [guid] = prop id: the selection, or the last one picked in a group
 local group = {}       -- [guid] = { prop ids } when more than one prop is selected
 local clip = {}        -- [guid] = { rel = relative props } from .build copy
@@ -719,21 +754,30 @@ local curOp            -- the op the running command records into
 ------------------------------------------------------------------------------------------------
 local function copyProp(p)
     return { id = p.id, owner = p.owner, ownerName = p.ownerName, area = p.area, entry = p.entry, map = p.map,
-        x = p.x, y = p.y, z = p.z, o = p.o, s = p.s }
+        x = p.x, y = p.y, z = p.z, o = p.o, s = p.s, pt = p.pt, rl = p.rl }
 end
 
+-- ...,area[,pitch,roll]: the tilt rides at the end, so rows written before it existed still read.
 local function stateStr(c)
     if not c then return "" end
-    return string.format("%d,%d,%.3f,%.3f,%.3f,%.4f,%.2f,%d,%s,%s", c.entry, c.map, c.x, c.y, c.z, c.o, c.s or 1,
-        c.owner, cleanName(c.ownerName), tostring(c.area):gsub("[^%w]", ""))
+    return string.format("%d,%d,%.3f,%.3f,%.3f,%.4f,%.2f,%d,%s,%s,%.4f,%.4f", c.entry, c.map, c.x, c.y, c.z, c.o, c.s or 1,
+        c.owner, cleanName(c.ownerName), tostring(c.area):gsub("[^%w]", ""), c.pt or 0, c.rl or 0)
 end
 
 local function parseStateStr(id, s)
-    local e, m, x, y, z, o, sc, ow, on, a = tostring(s or ""):match(
-        "^(%d+),(%d+),(%-?[%d%.]+),(%-?[%d%.]+),(%-?[%d%.]+),(%-?[%d%.]+),([%d%.]+),(%d+),(%w*),(%w+)$")
+    local N = "(%-?[%d%.]+)"
+    s = tostring(s or "")
+    local e, m, x, y, z, o, sc, ow, on, a, pt, rl = s:match(
+        "^(%d+),(%d+)," .. N .. "," .. N .. "," .. N .. "," .. N .. ",([%d%.]+),(%d+),(%w*),(%w+)," .. N .. "," .. N .. "$")
+    if not e then
+        e, m, x, y, z, o, sc, ow, on, a = s:match(
+            "^(%d+),(%d+)," .. N .. "," .. N .. "," .. N .. "," .. N .. ",([%d%.]+),(%d+),(%w*),(%w+)$")
+    end
     if not e then return nil end
+    pt, rl = tonumber(pt or ""), tonumber(rl or "")
     return { id = id, entry = tonumber(e), map = tonumber(m), x = tonumber(x), y = tonumber(y), z = tonumber(z),
-        o = tonumber(o), s = tonumber(sc) ~= 1 and tonumber(sc) or nil, owner = tonumber(ow), ownerName = on, area = a }
+        o = tonumber(o), s = tonumber(sc) ~= 1 and tonumber(sc) or nil, owner = tonumber(ow), ownerName = on, area = a,
+        pt = (pt and pt ~= 0) and pt or nil, rl = (rl and rl ~= 0) and rl or nil }
 end
 
 local function loadState()
@@ -753,6 +797,13 @@ local function loadState()
     end
     q = query("SELECT id, scale FROM mod_builder_prop_scale")
     if q then repeat local p = props[q:GetUInt32(0)]; if p then p.s = clampScale(q:GetFloat(1)); if p.s == 1 then p.s = nil end end until not q:NextRow() end
+    q = query("SELECT id, pitch, roll FROM mod_builder_prop_tilt")
+    if q then
+        repeat
+            local p = props[q:GetUInt32(0)]
+            if p then p.pt, p.rl = normTilt(q:GetFloat(1)), normTilt(q:GetFloat(2)) end
+        until not q:NextRow()
+    end
     q = query("SELECT id, owner, owner_name, area, map, x, y, z, r FROM mod_builder_plots")
     if q then
         repeat
@@ -1031,15 +1082,64 @@ local function liveObject(p, player)
     return try(map, "GetWorldObject", g)
 end
 
-local function despawn(p, player)
+-- mod-sandbox-core, when the realm image has it (ov_sandbox_core.lua defines Sandbox; it checks the module answers).
+local function core(player)
+    if not flag("OV_BUILD_CORE", true) then return nil end
+    local S = rawget(_G, "Sandbox")
+    if type(S) ~= "table" or type(S.Available) ~= "function" then return nil end
+    local ok, yes = pcall(S.Available, player or actor)
+    if ok and yes then return S end
+    return nil
+end
+
+local function coreCall(S, fn, ...)
+    local ok, a, b = pcall(S[fn], ...)
+    if ok then return a, b end
+    return nil, a
+end
+
+-- forget: the prop is gone for good (the module drops its kept size too).
+local function despawn(p, player, forget)
+    local g = live[p.id]
+    if g and coreLive[p.id] then
+        local S = core(player)
+        if S and coreCall(S, "Despawn", g, forget and true or false, player or actor) then
+            live[p.id], coreLive[p.id] = nil, nil
+            return
+        end
+    end
     local go = liveObject(p, player)
     if go then
         if try(go, "RemoveFromWorld", false) == nil then try(go, "Despawn") end
     end
-    live[p.id] = nil
+    live[p.id], coreLive[p.id] = nil, nil
 end
 
 local function spawn(p)
+    local S = core(actor)
+    if S then
+        local qx, qy, qz, qw = quatOf(p.o, p.pt or 0, p.rl or 0)
+        -- After a Lua reload this script has forgotten its objects, but the module still has them: adopt, not double.
+        local found = coreCall(S, "Find", p.id, actor)
+        if found then
+            live[p.id], coreLive[p.id] = found, true
+            local go = liveObject(p, actor)
+            local gx, gy, gz, go_ = tonumber(try(go, "GetX")), tonumber(try(go, "GetY")), tonumber(try(go, "GetZ")), tonumber(try(go, "GetO"))
+            if go and not (gx and gy and gz and go_ and math.abs(gx - p.x) < 0.01 and math.abs(gy - p.y) < 0.01
+                and math.abs(gz - p.z) < 0.01 and math.abs(go_ - p.o) < 0.001) then
+                local g = coreCall(S, "Move", found, p.x, p.y, p.z, qx, qy, qz, qw, actor)
+                if g then live[p.id] = g end
+            end
+            if go then return true end
+            live[p.id], coreLive[p.id] = nil, nil
+        end
+        local g = coreCall(S, "Spawn", p.id, p.entry, p.map, p.x, p.y, p.z, qx, qy, qz, qw, p.s or 0, actor)
+        if g then
+            live[p.id], coreLive[p.id] = g, true
+            return true
+        end
+    end
+    coreLive[p.id] = nil
     if not PerformIngameSpawn then return false end
     local ok, go = pcall(PerformIngameSpawn, 2, p.entry, p.map, 0, p.x, p.y, p.z, p.o, false, 0, 1)
     if not ok or not go then return false end
@@ -1055,6 +1155,8 @@ local function sync(player, force)
     local guid, now = player:GetGUIDLow(), os.time()
     if not force and lastSync[guid] and now - lastSync[guid] < 5 then return 0 end
     lastSync[guid] = now
+    local prevActor = actor
+    actor = player
     local map, x, y = player:GetMapId(), player:GetX(), player:GetY()
     local n = 0
     for _, p in pairs(props) do
@@ -1062,6 +1164,7 @@ local function sync(player, force)
             if spawn(p) then n = n + 1 end
         end
     end
+    actor = prevActor
     return n
 end
 
@@ -1079,14 +1182,23 @@ local function saveScale(p)
     end
 end
 
-local function addProp(owner, ownerName, area, entry, map, x, y, z, o, id, s)
+local function saveTilt(p)
+    if p.pt or p.rl then
+        exec(string.format("REPLACE INTO mod_builder_prop_tilt (id, pitch, roll) VALUES (%d, %.4f, %.4f)", p.id, p.pt or 0, p.rl or 0))
+    else
+        exec(string.format("DELETE FROM mod_builder_prop_tilt WHERE id = %d", p.id))
+    end
+end
+
+local function addProp(owner, ownerName, area, entry, map, x, y, z, o, id, s, pt, rl)
     if not id then nextId = nextId + 1; id = nextId end
     local p = { id = id, owner = owner, ownerName = ownerName, area = area, entry = entry, map = map,
-        x = x, y = y, z = z, o = normO(o) }
+        x = x, y = y, z = z, o = normO(o), pt = normTilt(pt), rl = normTilt(rl) }
     if s and s ~= 1 then p.s = clampScale(s) end
     props[id] = p
     exec(sqlProp(p))
     if p.s then saveScale(p) end
+    if p.pt or p.rl then saveTilt(p) end
     spawn(p)
     rec(id, nil, copyProp(p))
     return p
@@ -1095,31 +1207,47 @@ end
 -- A prop the realm couldn't spawn: gone again, and not in the op log.
 local function unplace(p)
     props[p.id] = nil
-    live[p.id] = nil
+    live[p.id], coreLive[p.id] = nil, nil
     exec(string.format("DELETE FROM mod_builder_props WHERE id = %d", p.id))
     if p.s then exec(string.format("DELETE FROM mod_builder_prop_scale WHERE id = %d", p.id)) end
+    if p.pt or p.rl then exec(string.format("DELETE FROM mod_builder_prop_tilt WHERE id = %d", p.id)) end
     if curOp and curOp.rows[#curOp.rows] and curOp.rows[#curOp.rows].id == p.id then table.remove(curOp.rows) end
 end
 
 local function removeProp(p, player)
     rec(p.id, copyProp(p), nil)
-    despawn(p, player)
+    despawn(p, player, true)
     props[p.id] = nil
     exec(string.format("DELETE FROM mod_builder_props WHERE id = %d", p.id))
     if p.s then exec(string.format("DELETE FROM mod_builder_prop_scale WHERE id = %d", p.id)) end
+    if p.pt or p.rl then exec(string.format("DELETE FROM mod_builder_prop_tilt WHERE id = %d", p.id)) end
 end
 
-local function placeProp(p, x, y, z, o, player, s)
+-- Puts a prop at x, y, z facing o; s (size), pt and rl (tilt, radians) change it when given. With the module the
+-- object moves in place (one request, the GUID kept); otherwise, or if the module refuses, despawn + respawn.
+local function placeProp(p, x, y, z, o, player, s, pt, rl)
     local before = copyProp(p)
-    despawn(p, player)
-    p.x, p.y, p.z, p.o = x, y, z, normO(o)
-    exec(string.format("UPDATE mod_builder_props SET x = %.3f, y = %.3f, z = %.3f, o = %.4f WHERE id = %d", p.x, p.y, p.z, p.o, p.id))
-    if s ~= nil then
-        local ns = clampScale(s)
-        if ns == 1 then ns = nil end
-        if ns ~= p.s then p.s = ns; saveScale(p) end
+    local ns, npt, nrl = p.s, p.pt, p.rl
+    if s ~= nil then ns = clampScale(s); if ns == 1 then ns = nil end end
+    if pt ~= nil then npt = normTilt(pt) end
+    if rl ~= nil then nrl = normTilt(rl) end
+    o = normO(o)
+    local inPlace = false
+    local S = coreLive[p.id] and live[p.id] and core(player)
+    if S and liveObject(p, player) then
+        local qx, qy, qz, qw = quatOf(o, npt or 0, nrl or 0)
+        local g = coreCall(S, "Move", live[p.id], x, y, z, qx, qy, qz, qw, player or actor)
+        if g then
+            live[p.id] = g
+            inPlace = (ns == p.s) or coreCall(S, "SetScale", g, ns or 0, player or actor) == true
+        end
     end
-    spawn(p)
+    if not inPlace then despawn(p, player) end
+    p.x, p.y, p.z, p.o = x, y, z, o
+    exec(string.format("UPDATE mod_builder_props SET x = %.3f, y = %.3f, z = %.3f, o = %.4f WHERE id = %d", p.x, p.y, p.z, p.o, p.id))
+    if ns ~= p.s then p.s = ns; saveScale(p) end
+    if npt ~= p.pt or nrl ~= p.rl then p.pt, p.rl = npt, nrl; saveTilt(p) end
+    if not inPlace then spawn(p) end
     rec(p.id, before, copyProp(p))
 end
 
@@ -1203,7 +1331,7 @@ local function relFrom(list)
     local rel = {}
     table.sort(list, function(a, b) return a.id < b.id end)
     for _, p in ipairs(list) do
-        rel[#rel + 1] = { entry = p.entry, dx = p.x - cx, dy = p.y - cy, dz = p.z - mz, o = normO(p.o), s = p.s }
+        rel[#rel + 1] = { entry = p.entry, dx = p.x - cx, dy = p.y - cy, dz = p.z - mz, o = normO(p.o), s = p.s, pt = p.pt, rl = p.rl }
     end
     return rel, cx, cy, mz
 end
@@ -1244,15 +1372,26 @@ local function sendPrefabs(player)
     pcall(OVMod.Send, player, MOD, "prefabs", table.concat(out, ";"))
 end
 
+-- An object GUID's counter (the number clients and edit mode know an object by).
+local function guidCounter(g)
+    if g == nil then return nil end
+    if GetGUIDLow then
+        local ok, v = pcall(GetGUIDLow, g)
+        if ok and v then return tonumber(v) end
+    end
+    return nil
+end
+
 local function sendState(player)
     if not OVMod then return end
     local guid = player:GetGUIDLow()
     local list = selList(guid)
     local p = (#list > 0) and primary(guid, list) or nil
-    local sel, pos = "-", "-"
+    local sel, pos, rot = "-", "-", "-"
     if p then
         sel = p.id .. "," .. p.entry .. "," .. ((byId[p.entry] and byId[p.entry].name) or ("#" .. p.entry)):gsub("[,;=]", "")
         pos = string.format("%.2f,%.2f,%.2f,%.0f,%.2f", p.x, p.y, p.z, math.deg(p.o) % 360, p.s or 1)
+        rot = string.format("%.1f,%.1f,%.1f", math.deg(p.o) % 360, math.deg(p.pt or 0), math.deg(p.rl or 0))
     end
     local key = buildArea(player)
     local cap = budgetOf(player)
@@ -1265,12 +1404,17 @@ local function sendState(player)
     end
     -- ids: every selected prop's object id, so the browser client can carry the whole group on screen
     -- (LeylineEdit "group", client 20261026a)
-    local ids = {}
-    for i = 1, math.min(#list, 40) do ids[#ids + 1] = tostring(list[i].id) end
-    local data = string.format("sel=%s;mine=%d/%d;area=%s;code=%s;n=%d;pos=%s;pts=%d/%d;tier=%s;plot=%s;clip=%d;ids=%s",
+    -- gids: the same props' object GUID counters, which edit mode's handles and LeylineEdit("group") use.
+    local ids, gids = {}, {}
+    for i = 1, math.min(#list, 40) do
+        ids[#ids + 1] = tostring(list[i].id)
+        gids[#gids + 1] = tostring(guidCounter(live[list[i].id]) or 0)
+    end
+    local data = string.format("sel=%s;mine=%d/%d;area=%s;code=%s;n=%d;pos=%s;pts=%d/%d;tier=%s;plot=%s;clip=%d;ids=%s;rot=%s;gids=%s;core=%d",
         sel, countOwner(guid), cap.props, (areaName(key)):gsub("[;=]", ""), lastCode[guid] or "-",
         #list, pos, pointsOwner(guid), cap.points, cap.tier, plot, clip[guid] and #clip[guid].rel or 0,
-        #ids > 0 and table.concat(ids, " ") or "-")
+        #ids > 0 and table.concat(ids, " ") or "-", rot, #gids > 0 and table.concat(gids, " ") or "-",
+        core(player) and 1 or 0)
     pcall(OVMod.Send, player, MOD, "state", data)
 end
 
@@ -1382,9 +1526,11 @@ local function moveGroup(player, list, fn, what)
     local okB, whyB = checkBudget(player, items)
     if not okB then return say(player, whyB) end
     local back = {}
-    for _, e in ipairs(plan) do back[#back + 1] = { id = e.p.id, x = e.p.x, y = e.p.y, z = e.p.z, o = e.p.o, s = e.p.s } end
+    for _, e in ipairs(plan) do
+        back[#back + 1] = { id = e.p.id, x = e.p.x, y = e.p.y, z = e.p.z, o = e.p.o, s = e.p.s, pt = e.p.pt, rl = e.p.rl }
+    end
     pushUndo(guid, { kind = "places", list = back })
-    for _, e in ipairs(plan) do placeProp(e.p, e.t.x, e.t.y, e.t.z, e.t.o or e.p.o, player, e.t.s) end
+    for _, e in ipairs(plan) do placeProp(e.p, e.t.x, e.t.y, e.t.z, e.t.o or e.p.o, player, e.t.s, e.t.pt, e.t.rl) end
     return true
 end
 
@@ -1473,7 +1619,7 @@ local function undoCommand(player)
         local n, last = 0, nil
         for _, b in ipairs(a.list) do
             local p = props[b.id]
-            if p then placeProp(p, b.x, b.y, b.z, b.o, player, b.s or 1); n = n + 1; last = p end
+            if p then placeProp(p, b.x, b.y, b.z, b.o, player, b.s or 1, b.pt or 0, b.rl or 0); n = n + 1; last = p end
         end
         if n == 0 then return say(player, "That prop is gone already.") end
         local ids = {}
@@ -1487,7 +1633,7 @@ local function undoCommand(player)
         for _, c in ipairs(a.list) do
             if n >= room and c.owner == guid then break end
             if not props[c.id] then
-                addProp(c.owner, c.ownerName, c.area, c.entry, c.map, c.x, c.y, c.z, c.o, c.id, c.s)
+                addProp(c.owner, c.ownerName, c.area, c.entry, c.map, c.x, c.y, c.z, c.o, c.id, c.s, c.pt, c.rl)
                 n = n + 1; ids[#ids + 1] = c.id
             end
         end
@@ -1561,7 +1707,7 @@ local function placeMany(player, rel, origin, label)
     lastLoad[guid] = now
     local ids = {}
     for _, pl in ipairs(placeable) do
-        local p = addProp(guid, player:GetName(), key, pl.e.entry, map, pl.x, pl.y, pl.z, (origin.o or 0) + pl.e.o, nil, pl.e.s)
+        local p = addProp(guid, player:GetName(), key, pl.e.entry, map, pl.x, pl.y, pl.z, (origin.o or 0) + pl.e.o, nil, pl.e.s, pl.e.pt, pl.e.rl)
         if live[p.id] then ids[#ids + 1] = p.id else unplace(p); skipped = skipped + 1 end
     end
     if #ids == 0 then say(player, "The realm couldn't place that here."); return nil end
@@ -1725,15 +1871,6 @@ end
 ------------------------------------------------------------------------------------------------
 -- edit mode: exact points from the browser client's free camera (EditMode.lua)
 ------------------------------------------------------------------------------------------------
-local function guidCounter(g)
-    if g == nil then return nil end
-    if GetGUIDLow then
-        local ok, v = pcall(GetGUIDLow, g)
-        if ok and v then return tonumber(v) end
-    end
-    return nil
-end
-
 -- Three numbers, a real point, near the player.
 local function exactPoint(player, xs, ys, zs)
     local x, y, z = tonumber(xs or ""), tonumber(ys or ""), tonumber(zs or "")
@@ -1894,6 +2031,97 @@ local function setscaleCommand(player, arg)
     end
 end
 
+-- One prop by its id (.build move <id> ..., rotate <id> ..., scale <id> ...): edit mode's gizmo and the
+-- properties panel commit through these, one command (one undo entry, one op) per change.
+local ONE = {}
+do
+    -- One prop by its id, if the player may change it from here; otherwise nil (and says why).
+    local function editOne(player, word)
+        local id = tonumber(word or "")
+        local p = id and props[math.floor(id)]
+        if not p then
+            say(player, "No prop " .. tostring(word or "") .. " (|cffffff00.build near|r lists yours)."); return nil
+        end
+        local ok, why = canEdit(player, p)
+        if not ok then say(player, why); return nil end
+        if p.map ~= player:GetMapId() or dist2(p.x, p.y, player:GetX(), player:GetY()) > K.SYNC_RANGE then
+            say(player, "That prop is too far away."); return nil
+        end
+        return p
+    end
+
+    -- Degrees from the command, or nil (missing), or false (not a number).
+    local function degArg(w)
+        if w == nil then return nil end
+        local d = tonumber(w)
+        if not d or not finite(d) then return false end
+        return d
+    end
+
+    -- yaw (any), pitch and roll (-180 to 180) in degrees -> radians; tilt only with the module, else dropped.
+    -- Returns o, pt, rl, note  or  nil, why.
+    local function rotationArgs(player, p, yw, pw, rw)
+        local yaw, pitch, roll = degArg(yw), degArg(pw), degArg(rw)
+        if yaw == false or pitch == false or roll == false then return nil, "Those numbers don't work." end
+        if (pitch and math.abs(pitch) > 180) or (roll and math.abs(roll) > 180) then return nil, "Tilt goes from -180 to 180 degrees." end
+        local o = yaw and normO(math.rad(yaw)) or p.o
+        local pt, rl, note
+        if pitch or roll then
+            if core(player) then
+                pt, rl = math.rad(pitch or math.deg(p.pt or 0)), math.rad(roll or math.deg(p.rl or 0))
+            elseif (pitch and pitch ~= 0) or (roll and roll ~= 0) then
+                note = " (tilting needs a realm update; turned only)"
+            end
+        end
+        return o, pt, rl, note
+    end
+
+    -- .build move <id> <x> <y> <z> [yaw pitch roll]: one prop to an exact point (and rotation), as one change.
+    function ONE.move(player, words)
+        local p = editOne(player, words[2])
+        if not p then return end
+        local at, why = exactPoint(player, words[3], words[4], words[5])
+        if not at then return pointUsage(player, why, ".build move <id> <x> <y> <z> [yaw pitch roll]") end
+        local o, pt, rl, note = rotationArgs(player, p, words[6], words[7], words[8])
+        if not o then return say(player, pt) end
+        if not rateMove(player:GetGUIDLow()) then return say(player, "Slow down a little.") end
+        if moveGroup(player, { p }, function() return { x = at.x, y = at.y, z = at.z, o = o, pt = pt, rl = rl } end) then
+            selectOne(player:GetGUIDLow(), p.id)
+            say(player, propName(p) .. " moved." .. (note or ""))
+        end
+    end
+
+    -- .build rotate <id> <yaw> [pitch roll]: one prop's rotation, where it stands.
+    function ONE.rotate(player, words)
+        local p = editOne(player, words[2])
+        if not p then return end
+        local o, pt, rl, note = rotationArgs(player, p, words[3], words[4], words[5])
+        if not o then return say(player, pt) end
+        if not rateMove(player:GetGUIDLow()) then return say(player, "Slow down a little.") end
+        if moveGroup(player, { p }, function(q) return { x = q.x, y = q.y, z = q.z, o = o, pt = pt, rl = rl } end) then
+            selectOne(player:GetGUIDLow(), p.id)
+            say(player, string.format("%s facing %d degrees.%s", propName(p), math.floor(math.deg(p.o) + 0.5) % 360, note or ""))
+        end
+    end
+
+    -- .build scale <id> <size>: one prop's size.
+    function ONE.scale(player, words)
+        local p = editOne(player, words[2])
+        if not p then return end
+        local sz = tonumber(words[3] or "")
+        if not sz or not finite(sz) then return say(player, string.format("Usage: |cffffff00.build scale <id> <size>|r (%.1f to %.1f)", SCALE_MIN, SCALE_MAX)) end
+        if sz < SCALE_MIN or sz > SCALE_MAX then return say(player, string.format("Size goes from %.1f to %.1f.", SCALE_MIN, SCALE_MAX)) end
+        local go = liveObject(p, player)
+        if go and not coreLive[p.id] and not has(go, "SetScale") then return say(player, "Size isn't supported on this realm.") end
+        if not rateMove(player:GetGUIDLow()) then return say(player, "Slow down a little.") end
+        sz = clampScale(sz)
+        if moveGroup(player, { p }, function(q) return { x = q.x, y = q.y, z = q.z, s = sz } end) then
+            selectOne(player:GetGUIDLow(), p.id)
+            say(player, string.format("%s at size %.2f.", propName(p), sz))
+        end
+    end
+end
+
 local function dupCommand(player)
     local list = editList(player)
     if not list then return end
@@ -1921,7 +2149,7 @@ local function dupCommand(player)
     lastSpawn[guid] = now
     local ids = {}
     for _, p in ipairs(list) do
-        local c = addProp(guid, player:GetName(), p.area, p.entry, p.map, p.x + ox, p.y + oy, p.z, p.o, nil, p.s)
+        local c = addProp(guid, player:GetName(), p.area, p.entry, p.map, p.x + ox, p.y + oy, p.z, p.o, nil, p.s, p.pt, p.rl)
         if live[c.id] then ids[#ids + 1] = c.id else unplace(c) end
     end
     if #ids == 0 then return say(player, "The realm couldn't place the copy there.") end
@@ -2487,10 +2715,10 @@ do
             if p then removeProp(p, player) end
         elseif row.after then
             if p then
-                placeProp(p, b.x, b.y, b.z, b.o, player, b.s or 1)
+                placeProp(p, b.x, b.y, b.z, b.o, player, b.s or 1, b.pt or 0, b.rl or 0)
             end
         elseif not p then
-            addProp(b.owner, b.ownerName, b.area, b.entry, b.map, b.x, b.y, b.z, b.o, row.id, b.s)
+            addProp(b.owner, b.ownerName, b.area, b.entry, b.map, b.x, b.y, b.z, b.o, row.id, b.s, b.pt, b.rl)
         end
     end
 
@@ -2530,6 +2758,7 @@ local function showHelp(player)
     say(player, "Builder: place props in build areas and share builds as codes. /builder opens the window.")
     say(player, "  |cffffff00.build catalog [word]|r  |cffffff00.build spawn <id|name>|r  |cffffff00.build near|r  |cffffff00.build select <n>|r")
     say(player, "  |cffffff00.build move x|y|z <yards>|r  |cffffff00.build turn <deg>|r  |cffffff00.build undo|r  |cffffff00.build delete|r  |cffffff00.build clear|r")
+    say(player, "  |cffffff00.build move <id> <x> <y> <z> [yaw pitch roll]|r  |cffffff00.build rotate <id> <yaw> [pitch roll]|r  |cffffff00.build scale <id> <size>|r")
     say(player, "  Edit mode (F7 in the browser client): click a prop to select it, Shift-click to add more, G to carry, Q for the spawn menu.")
     say(player, "  |cffffff00.build selall|r  |cffffff00.build copy|r  |cffffff00.build paste|r  |cffffff00.build prefab save <name>|r  |cffffff00.build prefab list|r")
     say(player, "  |cffffff00.build save <name>|r  |cffffff00.build load <name|code>|r  |cffffff00.build share <name>|r  |cffffff00.build saved|r  |cffffff00.build where|r")
@@ -2565,11 +2794,17 @@ local function dispatch(player, sub, words)
     elseif sub == "pasteat" then pasteAtCommand(player, words)
     elseif sub == "near" or sub == "list" then nearCommand(player)
     elseif sub == "select" or sub == "sel" then selectCommand(player, words[2])
-    elseif sub == "move" then moveCommand(player, (words[2] or ""):lower(), words[3])
-    elseif sub == "turn" or sub == "rotate" then turnCommand(player, words[2])
+    elseif sub == "move" then
+        if tonumber(words[2] or "") and words[3] then ONE.move(player, words)
+        else moveCommand(player, (words[2] or ""):lower(), words[3]) end
+    elseif sub == "turn" then turnCommand(player, words[2])
+    elseif sub == "rotate" then
+        if words[3] then ONE.rotate(player, words) else turnCommand(player, words[2]) end
     elseif sub == "setpos" then setposCommand(player, words)
     elseif sub == "setturn" then setturnCommand(player, words[2])
-    elseif sub == "setscale" or sub == "scale" then setscaleCommand(player, words[2])
+    elseif sub == "setscale" then setscaleCommand(player, words[2])
+    elseif sub == "scale" then
+        if words[3] then ONE.scale(player, words) else setscaleCommand(player, words[2]) end
     elseif sub == "undo" then undoCommand(player)
     elseif sub == "delete" or sub == "remove" then deleteCommand(player)
     elseif sub == "clear" then clearCommand(player)
@@ -2591,6 +2826,8 @@ local function run(player, text)
     if sub == "help" or sub == "?" then return showHelp(player) end
     if not onSwitch() then return say(player, "The Builder is off on this realm.") end
     local prev = beginOp(player, sub)
+    local prevActor = actor
+    actor = player
     local ok, err = pcall(function()
         if GM_ONLY[sub] then
             if not isGM(player) then return say(player, "Only GMs can do that.") end
@@ -2600,6 +2837,7 @@ local function run(player, text)
         sync(player)
         dispatch(player, sub, words)
     end)
+    actor = prevActor
     endOp(prev)
     if not ok then error(err, 0) end
 end
@@ -2698,7 +2936,10 @@ function OVBuild.ImportPrefab(data, player, x, y, z, o)
     o = tonumber(o or 0) or 0
     if not finite(o) then o = 0 end
     local prev = beginOp(player, "import")
+    local prevActor = actor
+    actor = player
     local ok, ids = pcall(placeMany, player, rel, { x = at.x, y = at.y, z = at.z, o = o }, "prefab")
+    actor = prevActor
     endOp(prev)
     sendState(player)
     if not ok then return nil, tostring(ids) end
@@ -2737,4 +2978,5 @@ OV_BUILD_TEST = { props = props, live = live, roles = roles, selected = selected
     byCode = byCode, CATALOG = function() return CATALOG end, BUILD_AREAS = BUILD_AREAS, run = run, sync = sync,
     syncAll = syncAll, encode = encode, decode = decode, catalogText = catalogText, areaAt = areaAt,
     group = group, clip = clip, plots = plots, prefabs = prefabs, oplog = oplog, trust = trust,
-    jsonDecode = jsonDecode, budgetOf = budgetOf, plotAt = plotAt, costOf = costOf, TIERS = TIERS }
+    jsonDecode = jsonDecode, budgetOf = budgetOf, plotAt = plotAt, costOf = costOf, TIERS = TIERS,
+    coreLive = coreLive, stateStr = stateStr, parseStateStr = parseStateStr, quatOf = quatOf }

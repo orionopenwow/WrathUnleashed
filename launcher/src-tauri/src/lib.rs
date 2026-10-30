@@ -19,6 +19,7 @@ pub mod p2p;
 pub mod pe_version;
 pub mod realms;
 pub mod settings;
+pub mod social;
 pub mod status;
 pub mod themes; // theme packs (themes agent)
 pub mod update;

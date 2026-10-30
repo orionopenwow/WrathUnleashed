@@ -226,7 +226,7 @@ local function buildFriends(parent)
         insets = { left = 4, right = 4, top = 4, bottom = 4 } })
     box:SetBackdropColor(0, 0, 0, 0.45)
     label(box, "Friends across realms", "GameFontNormal", "TOPLEFT", 12, -10)
-    label(box, "Coming", "GameFontDisableSmall", "TOPRIGHT", -12, -12)
+    box.soon = label(box, "Coming", "GameFontDisableSmall", "TOPRIGHT", -12, -12)
     box.text = label(box, "Your Leyline friends on every realm in one list: who's online, where they are, "
         .. "and a click to join them.", "GameFontHighlightSmall", "TOPLEFT", 12, -30)
     box.text:SetWidth(WIN_W - 60)
@@ -234,6 +234,7 @@ local function buildFriends(parent)
     box.list:SetPoint("TOPLEFT", 12, -50); box.list:SetPoint("BOTTOMRIGHT", -12, 8)
     box.add = button(box, "Add a friend", 110, function() end, "BOTTOMRIGHT", -10, 8)
     box.add:Disable()
+    if W.Social and W.Social.Adopt then W.Social.Adopt(box) end   -- Leyline friends (Social.lua)
     return box
 end
 

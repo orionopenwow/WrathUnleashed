@@ -22,6 +22,7 @@ on:
       - "realm/custom/sources.lock"
       - "realm/custom/patches/**"
       - "realm/custom/fetch.sh"
+      - "realm/custom/modules/**"
       - "hosting/kit/tools/**"
       - "hosting/relay/**"
       - ".github/workflows/wu-images.yml"
@@ -44,6 +45,42 @@ env:
   REG: ghcr.io/orionopenwow
 
 jobs:
+  # mod-sandbox-core (realm/custom/modules/mod-sandbox-core): its standalone test, then a syntax-only compile of the
+  # module against the pinned core's own headers (minutes, not the realm job's hours). It doesn't gate the images:
+  # the realm job compiles the module for real.
+  sandbox-core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: unit test (pure helpers)
+        working-directory: realm/custom/modules/mod-sandbox-core/tests
+        run: g++ -std=c++17 -Wall -Wextra -Werror -I../src test_sandbox_math.cpp -o "$RUNNER_TEMP/sbtest" && "$RUNNER_TEMP/sbtest"
+      - name: headers of the pinned core
+        run: |
+          set -e
+          read -r _ repo _ commit < <(grep '^core ' realm/custom/sources.lock)
+          git init -q "$RUNNER_TEMP/core"
+          cd "$RUNNER_TEMP/core"
+          git remote add origin "$repo"
+          git sparse-checkout init --no-cone
+          printf '%s\n' '/src/' '/deps/' > .git/info/sparse-checkout
+          git fetch -q --depth 1 --filter=blob:none origin "$commit"
+          git checkout -q FETCH_HEAD
+          sudo apt-get update -q && sudo apt-get install -y -q libboost-all-dev libmysqlclient-dev
+      - name: syntax-only compile
+        run: |
+          set -e
+          C="$RUNNER_TEMP/core"
+          INC=$(find "$C/src/common" "$C/src/server/game" "$C/src/server/shared" "$C/src/server/database" -type d | sed 's/^/-I/')
+          for f in realm/custom/modules/mod-sandbox-core/src/*.cpp; do
+            echo "== $f"
+            g++ -std=gnu++20 -fsyntax-only -Wall -Wextra -DAZEROTHCORE -DWOTLK $INC \
+              -I"$C/deps/g3dlite/include" -I"$C/deps/fmt/include" -I"$C/deps/utf8cpp" -I"$C/deps/SFMT" -I"$C/deps/argon2" \
+              -I"$C/deps/recastnavigation/Detour/Include" -I"$C/deps/recastnavigation/Recast/Include" -I"$C/deps/jemalloc" \
+              -I"$C/deps/stdfs" -I/usr/include/mysql -Irealm/custom/modules/mod-sandbox-core/src "$f"
+          done
+
   small:
     if: github.event_name != 'workflow_dispatch' || inputs.only != 'realm'
     runs-on: ubuntu-latest

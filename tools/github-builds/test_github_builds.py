@@ -40,6 +40,8 @@ class FakeGitHub:
         self.packages = {}
         self.calls = []
         self.remotes = {}                   # local folder -> slug
+        self.pr_ok = False                  # "Allow GitHub Actions to create and approve pull requests"
+        self.labels = set()
 
     def __call__(self, args, cwd=None, capture=True):
         self.calls.append((tuple(args), str(cwd) if cwd else None, capture))
@@ -69,6 +71,9 @@ class FakeGitHub:
         if a[:2] == ["run", "list"]:
             wf = a[a.index("--workflow") + 1]
             return 0, json.dumps(self.runs if wf == "wu-images.yml" else self.ly_runs), ""
+        if a[:2] == ["label", "create"]:
+            self.labels.add((a[a.index("-R") + 1], a[2]))
+            return 0, "", ""
         if a[:2] == ["workflow", "run"]:
             self.runs.insert(0, {"status": "queued", "conclusion": None})
             return 0, "", ""
@@ -93,6 +98,12 @@ class FakeGitHub:
                 self.org_actions = {"enabled_repositories": "all", "allowed_actions": "all"}
                 return 0, "", ""
             return 0, json.dumps(self.org_actions), ""
+        if path == f"repos/{gb.WU_REPO}/actions/permissions/workflow":
+            if method == "PUT":
+                assert "can_approve_pull_request_reviews=true" in a and "default_workflow_permissions=read" in a, a
+                self.pr_ok = True
+                return 0, "", ""
+            return 0, json.dumps({"default_workflow_permissions": "read", "can_approve_pull_request_reviews": self.pr_ok}), ""
         for r in (gb.WU_REPO, gb.LY_REPO):
             if path == f"repos/{r}/actions/permissions":
                 if method == "PUT":
@@ -177,6 +188,11 @@ class TurnOn(unittest.TestCase):
         self.assertNotIn(".github/workflows/leyline-launcher.yml", wu_files)   # the launcher builds in Leyline
         self.assertNotIn("work-in-progress.txt", wu_files)
         self.assertIn(".github/workflows/leyline-launcher.yml", self.remote_files("Leyline"))
+        # the hub index: its workflow in WrathUnleashed (and leave to open PRs), the issue form and labels in Leyline
+        self.assertIn(".github/workflows/hub-index.yml", wu_files)
+        self.assertTrue(self.gh.pr_ok)
+        self.assertIn(".github/ISSUE_TEMPLATE/submit-mod.yml", self.remote_files("Leyline"))
+        self.assertEqual(self.gh.labels, {(gb.LY_REPO, "mod-submission"), (gb.LY_REPO, "approved")})
         # the push started wu-images: no second (1-3 hour) build
         self.assertEqual(self.calls("gh", "workflow", "run"), [])
         self.assertIn("wu-images started by the push", out)
@@ -300,6 +316,8 @@ class TurnOn(unittest.TestCase):
         src = gb.ROOT / "tools" / "github-workflows"
         for f in gb.WU_FILES + gb.LY_FILES + (gb.DEPLOY_FILE,):
             self.assertTrue((src / f).is_file(), f)
+        for f in gb.LY_TEMPLATES:
+            self.assertTrue((src / "ISSUE_TEMPLATE" / f).is_file(), f)
 
 
 if __name__ == "__main__":

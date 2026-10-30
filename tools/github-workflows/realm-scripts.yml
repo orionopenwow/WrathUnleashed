@@ -45,6 +45,8 @@ jobs:
         run: |
           lua5.1 stream/tests/test_ov_workshop.lua realm/custom/lua_scripts
           lua5.1 stream/tests/test_wuui_workshop.lua
+      - name: ov_admin (the Admin Console's console words)
+        run: lua5.1 stream/tests/test_ov_admin.lua realm/custom/lua_scripts
       - name: ov_discord (World chat bridge, game side)
         run: lua5.1 hosting/tests/test_ov_discord.lua realm/custom/lua_scripts/ov_discord.lua
       - name: every realm script parses

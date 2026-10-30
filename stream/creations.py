@@ -135,7 +135,8 @@ class Store:
         if _n(iid, 1) is None:
             return None
         self.refresh()
-        return self.by_id.get(iid)
+        it = self.by_id.get(iid)
+        return (_adjusted([it]) or [None])[0] if it else None
 
     def listing(self, kind: str, sort: str) -> list[dict]:
         self.refresh()
@@ -146,10 +147,23 @@ class Store:
             l.sort(key=lambda it: (-it["created"], -it["id"]))
         else:
             l.sort(key=lambda it: (-it["plays"], -it["id"]))
+        l = _adjusted(l)
+        l.sort(key=lambda it: not it.get("featured"))   # stable: featured first, each part in the chosen order
         return l
 
 
 store = Store()
+# The Admin Console's overrides (stream/admin.py adjust_catalog, set by the portal): featured items first.
+adjust = None
+
+
+def _adjusted(items: list[dict]) -> list[dict]:
+    if adjust is None:
+        return items
+    try:
+        return adjust("workshop", items, "id")
+    except Exception:   # noqa: BLE001
+        return items
 
 
 def match(path: str) -> bool:

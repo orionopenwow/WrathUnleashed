@@ -20,4 +20,5 @@ ModeScript.lua
 GameFolder.lua
 Workshop.lua
 Companions.lua
+Social.lua
 Leyline.lua

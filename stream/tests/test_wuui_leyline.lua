@@ -178,8 +178,9 @@ local function says(parent, pat)
         if f.parent == parent and f.kind == "FontString" and (f.text or ""):find(pat) then return true end
     end
 end
-check("Friends across realms placeholder", says(win.friends, "^Friends across realms$") and says(win.friends, "^Coming$")
-    and win.friends.list and win.friends.add.enabled == false)
+check("Friends across realms: Leyline friends (Social.lua) take the box", says(win.friends, "^Friends across realms$")
+    and not says(win.friends, "^Coming$") and win.friends.list and win.friends.add.enabled == true
+    and win.friends.add:GetText() == "Friends" and W.Social.adopted == win.friends)
 
 -- reopening soon after doesn't ask again; Refresh does
 win:Hide(); win:Show()

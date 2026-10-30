@@ -1,0 +1,39 @@
+#
+# mod-sandbox-core: in-place moves, rotation and size for the Builder's props (ov_build.lua).
+# Every key also works as an environment variable (AzerothCore's AC_ form of the key); the defaults below are
+# the module's own, so a realm without this file behaves exactly as described here.
+#
+[worldserver]
+
+#    SandboxCore.Enable
+#        1 = the bridge answers (and the realm scripts use it); 0 = off, ov_build.lua falls back to respawning.
+SandboxCore.Enable = 1
+
+#    SandboxCore.MoveMode
+#        0 = move in place: the prop keeps its GUID (the Leyline browser client shows it at once).
+#        1 = a fresh GUID per move, for stock 3.3.5a clients (they revive a re-created GUID at its old spot).
+SandboxCore.MoveMode = 0
+
+#    SandboxCore.Refresh
+#        1 = players who see the prop get SMSG_DESTROY_OBJECT and then a create block; 0 = the create block only.
+SandboxCore.Refresh = 1
+
+#    SandboxCore.ReuseDelaySec
+#        Seconds a released GUID counter waits on the free list before a new builder prop may take it.
+SandboxCore.ReuseDelaySec = 300
+
+#    SandboxCore.MaxMoveDistance
+#        Yards one move may carry a prop.
+SandboxCore.MaxMoveDistance = 200
+
+#    SandboxCore.MinScale / SandboxCore.MaxScale
+SandboxCore.MinScale = 0.1
+SandboxCore.MaxScale = 5
+
+#    SandboxCore.MaxOpsPerSecond
+#        Bridge requests a second for the whole realm (ov_build.lua limits each player on its own).
+SandboxCore.MaxOpsPerSecond = 400
+
+#    SandboxCore.MaxObjects
+#        Builder props in the world at once.
+SandboxCore.MaxObjects = 20000

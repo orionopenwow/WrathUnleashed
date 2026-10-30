@@ -1,0 +1,196 @@
+diff --git a/crates/benilla-app/src/cvars/table.rs b/crates/benilla-app/src/cvars/table.rs
+index c181e214..490bc4dc 100644
+--- a/crates/benilla-app/src/cvars/table.rs
++++ b/crates/benilla-app/src/cvars/table.rs
+@@ -473,6 +473,16 @@ pub(crate) const REGISTERED_WOTLK: &[Registered] = &[
+          reads enUS alone",
+     ),
+     same("useEnglishAudio", "0"),
++    // Read by stock FrameXML with no knob of ours; unregistered, `GetCVar` answered nil.
++    // `PartyFrame.xml` `PartyMemberBackground` `VARIABLES_LOADED`:
++    // `OpacityFrameSlider:SetValue(tonumber(GetCVar("partyBackgroundOpacity")))`, a nil into the
++    // slider's f32 (smoke 2026-10-29).
++    same("partyBackgroundOpacity", "0.5"),
++    // `TokenFrame.lua` / `HonorFrame.lua` (the currency tab's backpack watch).
++    same("showTokenFrame", "0").per_character(),
++    same("showTokenFrameHonor", "0").per_character(),
++    // `PetPaperDollFrame` talent preview (`TalentFrameBase.lua`).
++    same("previewPetTalents", "0"),
+ ];
+ 
+ /// The host-backed CVars, one row per knob that has a reader: a host knob, or a Lua consumer
+diff --git a/crates/benilla-app/src/player/input.rs b/crates/benilla-app/src/player/input.rs
+index e208d343..a97bd150 100644
+--- a/crates/benilla-app/src/player/input.rs
++++ b/crates/benilla-app/src/player/input.rs
+@@ -156,9 +156,15 @@ pub(super) fn move_axes(
+     // walks you backward. The auto-move is a held forward, W's own bit `0x100000` through W's
+     // setter, so it nets against S like W and never trips the cancel set, which fires on key-down
+     // edges.
++    // A tap: the key's Start and Stop landed in one pass, so the bit is clear again but its press
++    // edge is this frame's. The reference sends the Start from the setter and the Stop from the
++    // clearer, a pair even within one frame; netted on the bit alone, a quick tap moved nothing
++    // and sent nothing (smoke 2026-10-26..29: 20 quick `w` taps, no packet). Counted as held
++    // for this frame, the next frame's clear bit sends the Stop.
++    let held = |i: crate::bindings::Input| binds.pressed(i) || binds.just_pressed(i);
+     let fwd_axis = state::forward_axis(
+-        binds.pressed(crate::bindings::Input::MoveForward) || player.auto_forward,
+-        binds.pressed(crate::bindings::Input::MoveBackward),
++        held(crate::bindings::Input::MoveForward) || player.auto_forward,
++        held(crate::bindings::Input::MoveBackward),
+         both_buttons,
+         autorun,
+     );
+@@ -168,10 +174,10 @@ pub(super) fn move_axes(
+     let mouselook = both_buttons || rig.look == Some(LookButton::Right);
+     // The strafe axis nets like `fwd_axis`: vmangos relays no packet carrying both strafe bits,
+     // and the reference's 1.12.1 capture sends none.
+-    let strafe_left = binds.pressed(crate::bindings::Input::StrafeLeft);
+-    let strafe_right = binds.pressed(crate::bindings::Input::StrafeRight);
+-    let turn_left = binds.pressed(crate::bindings::Input::TurnLeft);
+-    let turn_right = binds.pressed(crate::bindings::Input::TurnRight);
++    let strafe_left = held(crate::bindings::Input::StrafeLeft);
++    let strafe_right = held(crate::bindings::Input::StrafeRight);
++    let turn_left = held(crate::bindings::Input::TurnLeft);
++    let turn_right = held(crate::bindings::Input::TurnRight);
+     let side_axis = i32::from(strafe_right) - i32::from(strafe_left)
+         + if mouselook {
+             i32::from(turn_right) - i32::from(turn_left)
+diff --git a/crates/benilla-assets/src/wmo.rs b/crates/benilla-assets/src/wmo.rs
+index f95cfdff..f57c1c62 100644
+--- a/crates/benilla-assets/src/wmo.rs
++++ b/crates/benilla-assets/src/wmo.rs
+@@ -451,6 +451,9 @@ impl AssetLoader for WmoModelLoader {
+             // ~8 ms of parsing.
+             #[cfg(target_arch = "wasm32")]
+             let mut slicer = crate::web_read::Slicer::new();
++            // Groups the data did not have: a building with all of them missing loads, counts as
++            // resident and draws nothing, so it says so (the empty-Stormwind smoke, 2026-10-26..29).
++            let mut groups_missing = 0u32;
+             for gi in 0..root.group_count() {
+                 #[cfg(target_arch = "wasm32")]
+                 slicer.tick().await;
+@@ -462,6 +465,7 @@ impl AssetLoader for WmoModelLoader {
+                     .await
+                     .ok();
+                 let Some(gbytes) = got else {
++                    groups_missing += 1;
+                     continue; // a missing or unreadable group is skipped
+                 };
+                 if let (Some(h), Some(nav)) =
+@@ -583,6 +587,14 @@ impl AssetLoader for WmoModelLoader {
+             });
+             resolve_shared_liquid_cells(&mut group_liquids);
+             let portals = root.portals();
++            if groups_missing > 0 || submeshes.is_empty() {
++                warn!(
++                    "wmo {root_path}: {groups_missing} of {} group file(s) missing, {} render \
++                     batch(es) loaded",
++                    root.group_count(),
++                    submeshes.len()
++                );
++            }
+             let (group_collision_bounds, collision_bounds) =
+                 collision_tri_bounds(&group_collision_tris);
+             let group_footprint_bounds = footprint_tri_bounds(&group_footprints);
+diff --git a/crates/benilla-ui/src/script/object/attributes.rs b/crates/benilla-ui/src/script/object/attributes.rs
+index 422bb332..7f4903ba 100644
+--- a/crates/benilla-ui/src/script/object/attributes.rs
++++ b/crates/benilla-ui/src/script/object/attributes.rs
+@@ -71,6 +71,20 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
+             get(&name)
+         })?,
+     )?;
++    // `AllowAttributeChanges()`: the reference lets the calling secure code change a protected
++    // frame's attributes during combat lockdown for the rest of the call. Nothing here locks an
++    // attribute, so it is a no-op; stock `SecureTemplates.lua:692` (`SetupUnitButtonConfiguration`,
++    // every secure group header's new child) calls it, and its absence raised there (smoke
++    // 2026-10-29, x10).
++    m.set(
++        "AllowAttributeChanges",
++        lua.create_function(|_, _: mlua::MultiValue| Ok(()))?,
++    )?;
++    // `CanChangeAttribute()`: 1 while attributes may change. Nothing locks them here.
++    m.set(
++        "CanChangeAttribute",
++        lua.create_function(|_, _: mlua::MultiValue| Ok(1))?,
++    )?;
+     Ok(())
+ }
+ 
+diff --git a/web/bridge.js b/web/bridge.js
+index 86fb5743..87801da1 100644
+--- a/web/bridge.js
++++ b/web/bridge.js
+@@ -339,6 +339,71 @@ document.addEventListener('visibilitychange', () => {
+ });
+ if (document.hidden) background.start();
+ 
++// ── The stalled-frame keepalive ──
++//
++// A page can be "visible" and still get no animation frames: an occluded or collapsed pane, a
++// window behind another on some compositors, an embedded view the host stopped painting. No
++// `visibilitychange` fires, so the hidden-tab Worker above never starts and the game sits still:
++// the 2026-10-29 smoke ran in a hidden pane and got 8 frames in its first 30 s in the world, a
++// 54 s black screen after Enter World, and a first update 29 s after page load. A second Worker
++// watches the page's own animation frames; when none has come for STALL_MS while the page reads
++// as visible, it drives `wake` at STALL_HZ until frames come back (the loading screens and the
++// world load are sliced per frame, so they move again). It never runs while frames flow.
++const STALL_MS = 500;
++const STALL_HZ = 10;
++let lastAnimationFrame = performance.now();
++const noteAnimationFrame = () => {
++  lastAnimationFrame = performance.now();
++  requestAnimationFrame(noteAnimationFrame);
++};
++requestAnimationFrame(noteAnimationFrame);
++const stallWatch = {
++  worker: null,
++  wakes: 0,
++  start() {
++    if (this.worker || typeof Worker === 'undefined') return;
++    const src = `setInterval(() => postMessage(0), ${Math.round(1000 / STALL_HZ)});`;
++    const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
++    try {
++      this.worker = new Worker(url);
++    } catch (_) {
++      return;
++    } finally {
++      URL.revokeObjectURL(url);
++    }
++    let stalled = false;
++    let lastTick = 0;
++    let quiet = 0;
++    this.worker.onmessage = () => {
++      // Hidden is the other keepalive's case; with frames flowing there is nothing to do.
++      const now = performance.now();
++      // Ticks that queued up behind a long main-thread task arrive back to back: one wake for
++      // the burst, never one update per queued tick.
++      const burst = now - lastTick < 1000 / STALL_HZ / 2;
++      lastTick = now;
++      if (burst) return;
++      // Two ticks in a row with no frame: a long frame that just ended has its animation frame
++      // coming, and is not a stall.
++      const noFrame = !document.hidden && now - lastAnimationFrame > STALL_MS;
++      quiet = noFrame ? quiet + 1 : 0;
++      const isStalled = quiet >= 2;
++      if (isStalled !== stalled) {
++        stalled = isStalled;
++        console.info(`wenilla: animation frames ${stalled ? 'stopped while visible; driving frames from a worker' : 'are back'}`);
++      }
++      if (!stalled || !hook.wake) return;
++      this.wakes += 1;
++      try {
++        hook.wake();
++      } catch (_) {
++        /* a stale wake: the hidden-tab path stops on this; here the next frame retries */
++      }
++    };
++  },
++};
++wenilla.stallWatch = stallWatch;
++stallWatch.start();
++
+ // ── Notifications ──
+ //
+ // Desktop notifications for the things worth leaving another tab for, built on the event

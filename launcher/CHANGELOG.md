@@ -22,7 +22,8 @@ copies it.
   changed.
 - **Themes.** Settings › Themes: Leyline Classic, Dark Rounded, Light Rounded, and Rounded Auto (follows your
   system's light or dark mode). Install theme packs from Discover › Themes or a zip. Packs are colours,
-  fonts and pictures only, checked before use. Ctrl+Shift+Backspace always goes back to Leyline Classic.
+  fonts and pictures only, checked before use. Ctrl+Shift+Backspace always goes back to Leyline Classic. The rounded themes show a small violet crystal next to the
+  Leyline name.
 - **Host pack.** Host → GET THE HOST PACK downloads the realm tools into Leyline (checked before install), finds
   Docker, and gives you START, STOP, LOGS, COPY INVITE LINK and NEW INVITE LINK. Updates keep your realm, its
   invite and its logins. The old "choose the kit folder" way still works.

@@ -1,4 +1,5 @@
 # name repo branch commit  (core first; the rest go into acore/modules/)
+# repo "local": the module is in this repo, realm/custom/modules/<name> (fetch.sh copies it; branch and commit are -)
 core https://github.com/mod-playerbots/azerothcore-wotlk Playerbot 3f2969ddb0da42b48b4fca050c02b19163ba1e20
 mod-1v1-arena https://github.com/azerothcore/mod-1v1-arena master 5ef5708d031f3b02283e6e599aa655bd320d904e
 mod-ah-bot-plus https://github.com/NathanHandley/mod-ah-bot-plus master f685832994c825f90aa5a3dc0e1620aa568e875b
@@ -16,3 +17,4 @@ mod-transmog https://github.com/azerothcore/mod-transmog master 327753a05b9024f2
 mod-mythic-plus https://github.com/silviu20092/mod-mythic-plus master e2a487d358c1c1c562d686f53a3e269b2cf1b8c5
 mod-multibot-bridge https://github.com/Wishmaster117/mod-multibot-bridge main ebfa01a129dd4c441b2527e42dcc37b6da95e6c2
 mod-questie-bridge https://github.com/Aldori15/mod-questie-bridge main ad6ebd8fd70270992d0d843f0dc8c73ba924be30
+mod-sandbox-core local - -

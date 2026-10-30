@@ -519,8 +519,9 @@ class Projects:
                     return True, "Thanks: the admins will take a look."
         return False, "That link isn't listed."
 
-    def set_hidden(self, pid: str, me, hidden: bool) -> tuple[bool, str]:
-        if not self.is_admin(me):
+    def set_hidden(self, pid: str, me, hidden: bool, staff: bool = False) -> tuple[bool, str]:
+        """staff=True: the Admin Console (stream/admin.py) already checked the caller's role."""
+        if not staff and not self.is_admin(me):
             return False, "Only the Workshop's admins can do that."
         with self._locked():
             recs = list(self.load())
@@ -534,6 +535,17 @@ class Projects:
                     self._save(recs)
                     log.info("community project %s: %s", "hidden" if hidden else "shown again", pid)
                     return True, "Hidden." if hidden else "Shown again."
+        return False, "That link isn't listed."
+
+    def clear_reports(self, pid: str) -> tuple[bool, str]:
+        """The Admin Console's "dismiss reports": the link stays listed, its report list is emptied."""
+        with self._locked():
+            recs = list(self.load())
+            for r in recs:
+                if r["id"] == pid:
+                    r["reports"] = []
+                    self._save(recs)
+                    return True, "Reports dismissed."
         return False, "That link isn't listed."
 
     def refresh_stale(self, limit: int = 10, age: float = 86400) -> int:

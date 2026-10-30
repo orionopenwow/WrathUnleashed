@@ -60,6 +60,7 @@ https://play.openvanilla.app/wrath/mods. It is public, `Access-Control-Allow-Ori
 | `credits` | the credit line exactly as the site prints it under each card |
 | `stars`, `last_push`, `last_checked` | from the forge's public API (GitHub, GitLab, Codeberg); `null` / `""` when unknown |
 | `version` … `sha256` | packaged mods only; `null` for community links |
+| `featured` | `true` when staff featured it in the Admin Console (docs/ADMIN-CONSOLE.md); show it first or badge it |
 
-Sorted by name. Hidden links are left out. New fields may appear in format 1: ignore what you don't know.
+Sorted by name. Hidden links, and mods staff rejected or unpublished, are left out. New fields may appear in format 1: ignore what you don't know.
 Show the text as text (never as HTML) and open `repo` / `page` in the browser.

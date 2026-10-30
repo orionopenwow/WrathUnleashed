@@ -217,3 +217,9 @@
 1067a scripts  Companions: the Bots window's realm side, bots come back after a crash, orders without chat lines
 1067b foreverui  Companions window (/comp): roster, orders, formation, prepare, fill, per-bot spec/role/gear, bot chatter filter
 1067c ship  Save to GitHub (orionopenwow/WrathUnleashed): Companions window and the smarter bots plan
+1068a signin  Leyline friends and messages (/wrath/api/social, /wrath/link), the Admin Console (/wrath/admin, staff only), the hidden Leyline hub (/wrath/leyline-preview) and the launcher catalog feed
+1068b realm  New realm scripts: Leyline friends bridge (ov_social), Admin Console (ov_admin), sandbox core bridge (ov_sandbox_core); .build move/rotate/scale (5-minute warning, then restart)
+1068c foreverui  Leyline Friends panel (/lfriends), Builder: gizmo commits once on release, Properties pitch and roll
+1068d ship  Save to GitHub (orionopenwow/WrathUnleashed): friends and messages, admin console, Leyline hub and mod index, mod-sandbox-core
+1069a client  Browser client 20261029a: quick key taps move, no black screen when the window is not painted, Lua fixes (secure frames, party opacity), a warning that names missing building files
+1069b ship  Save to GitHub (orionopenwow/WrathUnleashed): browser client 20261029a

@@ -329,7 +329,7 @@ doc = json.loads(body) if st == 200 else {}
 ps = doc.get("projects", [])
 keys = {"id", "source", "name", "description", "category", "builds", "author", "author_url", "licence", "repo", "page", "credits",
         "stars", "last_push", "submitted_by", "submitted_at", "last_checked", "version", "kind", "permissions", "on_wrath",
-        "download", "sha256"}
+        "download", "sha256", "featured"}
 check("all.json: format 1, CORS *", doc.get("format") == 1 and hd.get("Access-Control-Allow-Origin") == "*")
 check("all.json: the 13 categories and the builds", [c["id"] for c in doc.get("categories", [])] == CAT_IDS and doc.get("builds") == ["3.3.5a", "1.12", "any"])
 check("all.json: both kinds in one schema", {p["source"] for p in ps} == {"packaged", "community"} and all(set(p) == keys for p in ps))

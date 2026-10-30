@@ -17,11 +17,17 @@
 --   G                  carry the selection on the cursor; wheel lifts it, Q / E or Shift+wheel turn it,
 --                      a click or G drops it (".build placeat x y z turn"), Backspace puts it back
 --   V                  duplicate the selection          Delete  remove it          Ctrl+Z  undo
+--   the handles        drag an arrow (move along it) or the ring (turn): the prop moves on your screen while
+--                      the button is held, and one change goes to the realm when you let go
 --   WASD / Space / C   fly; Ctrl faster; hold the right mouse button to look; F7 back to your character
 --
 -- Hooks the browser client calls (all optional beyond Clicked and Drop):
 --   E.Clicked(x, y, z, objectId, shift)  a click in the world (shift: Shift was held; else IsShiftKeyDown())
 --   E.Drop(x, y, z, turn)                the carried selection was dropped
+--   E.GizmoCommit(objectId, dx, dy, dz, turn, x, y, z)   a handle was let go after a drag (client 20261026a):
+--                                        one prop -> ".build move <id> x y z yaw [pitch roll]" (its tilt kept);
+--                                        a group -> ".build placeat", the whole selection by the same move
+--   E.GizmoStart(kind)                   a handle drag began: "x", "y", "z" or "ring"
 --   E.SpawnMenu(down)                    Q pressed (true) or released (false) while nothing is carried
 --   E.BoxSelect(x1, y1, x2, y2, add)     a drag box's two ground corners, if the client draws one
 
@@ -142,6 +148,34 @@ function E.Drop(x, y, z, turn)
     E.Note("Dropped. G to carry it again.")
 end
 
+local GIZMO_NOTE = { x = "Moving along x", y = "Moving along y", z = "Moving up and down", ring = "Turning" }
+
+-- The client: a handle drag began (the prop moves on this screen only until you let go).
+function E.GizmoStart(kind)
+    E.Note((GIZMO_NOTE[kind] or "Moving") .. ". Let go to place it; Esc puts it back.")
+end
+
+-- The client: a handle was let go. objectId is the dragged object's id (GUID counter); dx, dy, dz and turn are
+-- the change, x, y, z where it is now. The preview happened on this client; this is the one change the realm gets.
+function E.GizmoCommit(objectId, dx, dy, dz, turn, x, y, z)
+    if not (x and y and z) then return end
+    turn = tonumber(turn) or 0
+    local B = builder()
+    local s = (B and B.state) or {}
+    local pid = B and B.PropForObject and B.PropForObject(objectId)
+    if pid and (s.count or 1) <= 1 and s.selId == pid and s.p then
+        -- one prop: exact place and rotation, its tilt kept
+        B.MoveTo(pid, x, y, z, (s.p.yaw or s.p.turn or 0) + turn, s.p.pitch, s.p.roll)
+        E.Note("Placed. Drag a handle again, or G to carry it.")
+    elseif pid and s.p and pid ~= s.selId and math.abs(turn) < 0.05 and dx and dy and dz then
+        -- a group dragged by another member: the same move for the last-picked prop, the rest keep their places
+        cmd(string.format("placeat %.2f %.2f %.2f 0", s.p.x + dx, s.p.y + dy, s.p.z + dz))
+        E.Note("Group placed.")
+    else
+        E.Drop(x, y, z, turn)
+    end
+end
+
 local function cycle(list, current)
     for i, v in ipairs(list) do
         if math.abs(v - current) < 0.001 then return list[i % #list + 1] end
@@ -195,6 +229,7 @@ local KEYS = {
     "Click a prop: select it.  Shift-click: add it to the selection (or take it out)",
     "Hold Q (or Spawn menu): pick a prop, then click the ground. Right-click a prop: favourite",
     "Box select: click two corners.  Select mine: all yours nearby.  Copy, then Paste and click",
+    "Drag an arrow to move it along, the ring to turn it; it is placed when you let go",
     "G: carry the selection (the whole group). Mouse moves it, wheel lifts it,",
     "     Q / E or Shift+wheel turn it, click or G drops it, Backspace puts it back",
     "V: duplicate     Delete: remove     Ctrl+Z: undo",

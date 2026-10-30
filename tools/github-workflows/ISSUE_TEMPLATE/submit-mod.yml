@@ -1,0 +1,66 @@
+# "Submit a mod" for the Leyline hub's community index. Source copy: tools/github-workflows/ISSUE_TEMPLATE/
+# ("Turn on GitHub builds.bat" installs it as .github/ISSUE_TEMPLATE/submit-mod.yml in the public Leyline repo).
+# A maintainer adds the "approved" label; the weekly Hub index workflow then fetches, checks and lists it.
+name: Submit a mod
+description: Add an open project to the Leyline community index.
+title: "Submit a mod: "
+labels: ["mod-submission"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Leyline links to open projects; it never hosts or mirrors them. Please don't add names, emails or other
+        personal details here. Listed projects need an open licence file and no game files, nothing paid,
+        nothing decompiled.
+  - type: input
+    id: repo
+    attributes:
+      label: Repo link
+      description: The repo itself, on GitHub, GitLab or Codeberg.
+      placeholder: https://github.com/you/your-mod
+    validations:
+      required: true
+  - type: dropdown
+    id: build
+    attributes:
+      label: Client build
+      options:
+        - "1.12.1"
+        - "2.4.3"
+        - "3.3.5a"
+        - "4.3.4"
+        - "5.4.8"
+        - "any"
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - Addons and UI
+        - Shaders and graphics
+        - Sandbox and game modes
+        - Custom maps
+        - Builds
+        - Boss fights and encounters
+        - Models and props
+        - Realm scripts
+        - Server presets
+        - Sounds and music
+        - Tools
+        - Total conversions
+    validations:
+      required: true
+  - type: textarea
+    id: note
+    attributes:
+      label: A short note for the reviewers
+      description: Optional. What it does, anything we should know.
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Rules
+      options:
+        - label: It has an open licence file, ships no game files, and nothing in it is paid or decompiled.
+          required: true

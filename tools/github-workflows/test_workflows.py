@@ -31,7 +31,8 @@ def steps(doc, job):
 class Workflows(unittest.TestCase):
     def test_all_parse(self):
         names = sorted(p.name for p in HERE.glob("*.yml"))
-        self.assertEqual(names, ["leyline-launcher.yml", "realm-scripts.yml", "wu-hosting.yml", "wu-images.yml"])
+        self.assertEqual(names, ["hub-index.yml", "leyline-launcher.yml", "realm-scripts.yml", "wu-hosting.yml",
+                                 "wu-images.yml"])
         for n in names:
             text, doc = load(n)
             self.assertTrue(doc["name"] and doc["on"] and doc["jobs"], n)
@@ -42,6 +43,31 @@ class Workflows(unittest.TestCase):
                     if "uses" in s and not s["uses"].startswith("./"):
                         self.assertRegex(s["uses"], r"^[\w.-]+/[\w.-]+@(v\d+|stable)$", f"{n}: pin actions to a major")
             self.assertNotIn("\t", text, n)
+
+    def test_hub_index(self):
+        """Weekly and on demand; the built-in token only; a PR from a refresh branch, never a push to main."""
+        text, doc = load("hub-index.yml")
+        self.assertIn("schedule", doc["on"])
+        self.assertIn("workflow_dispatch", doc["on"])
+        self.assertNotIn("push", doc["on"])
+        self.assertEqual(doc["permissions"], {"contents": "write", "pull-requests": "write", "issues": "read"})
+        self.assertEqual(set(re.findall(r"secrets\.([A-Za-z_]+)", text)), {"GITHUB_TOKEN"})
+        job = doc["jobs"]["refresh"]
+        self.assertEqual(job["env"]["BRANCH"], "hub-index/refresh")
+        run = "\n".join(s.get("run", "") for s in job["steps"])
+        self.assertIn("hub_index.py discover", run)
+        self.assertIn("hub_index.py build", run)
+        self.assertIn("hub_index.py check", run)
+        self.assertIn('git push -q -f origin "$BRANCH"', run)
+        self.assertIn("gh pr create --base main", run)
+        self.assertNotRegex(run, r"push[^\n]*\bmain\b")
+        self.assertNotIn("gh pr merge", run)
+        form = yaml.safe_load((HERE / "ISSUE_TEMPLATE" / "submit-mod.yml").read_text(encoding="utf-8"))
+        self.assertEqual(form["labels"], ["mod-submission"])
+        labels = [b["attributes"]["label"] for b in form["body"] if b["type"] != "markdown"]
+        self.assertEqual(labels[:3], ["Repo link", "Client build", "Category"])
+        builds = next(b for b in form["body"] if b.get("id") == "build")["attributes"]["options"]
+        self.assertEqual(builds, ["1.12.1", "2.4.3", "3.3.5a", "4.3.4", "5.4.8", "any"])
 
     def test_images(self):
         text, doc = load("wu-images.yml")

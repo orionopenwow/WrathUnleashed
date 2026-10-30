@@ -46,9 +46,12 @@ WU_REPO = f"{OWNER}/WrathUnleashed"
 LY_REPO = f"{OWNER}/Leyline"
 SRC = ROOT / "tools" / "github-workflows"
 NEED_SCOPES = ("workflow", "write:packages", "admin:org")
-WU_FILES = ("wu-images.yml", "wu-hosting.yml")
+WU_FILES = ("wu-images.yml", "wu-hosting.yml", "hub-index.yml")
 DEPLOY_FILE, DEPLOY_SECRET = "realm-scripts.yml", "WU_DEPLOY_SSH_KEY"
 LY_FILES = ("leyline-launcher.yml",)
+LY_TEMPLATES = ("submit-mod.yml",)                  # .github/ISSUE_TEMPLATE in Leyline: "Submit a mod" (hub index)
+LY_LABELS = (("mod-submission", "5fe3ff", "A Submit a mod issue (hub index)"),
+             ("approved", "5ef0a0", "Approved for the hub index: the weekly refresh picks it up"))
 PACKAGES = ("wu-ac-wotlk-db-import", "wu-ac-wotlk-authserver", "wu-ac-wotlk-worldserver", "wu-host-tools", "wu-relay")
 NOT_OWNER = ("chumpton",)                           # the helper account never publishes for the owner
 # git pushes with gh's own credential for this one command (no change to git's config, nothing printed)
@@ -198,6 +201,22 @@ def actions_on(gh: GitHub, owner_type: str, todo: list[str]) -> None:
             say(f"  Actions are on for {r}")
 
 
+def pr_ok(gh: GitHub, repo: str, todo: list[str]) -> None:
+    """The hub index workflow opens a pull request with the built-in token: GitHub's "Allow GitHub Actions to
+    create and approve pull requests" must be on for the repo (it never merges anything itself)."""
+    cur = gh.api_json(f"repos/{repo}/actions/permissions/workflow")
+    if cur is None or cur.get("can_approve_pull_request_reviews"):
+        return
+    rc, _ = gh.api(f"repos/{repo}/actions/permissions/workflow", "-X", "PUT", "-f",
+                   f"default_workflow_permissions={cur.get('default_workflow_permissions') or 'read'}",
+                   "-F", "can_approve_pull_request_reviews=true")
+    if rc == 0:
+        say(f"  {repo}: Actions may open pull requests (the weekly hub index)")
+    else:
+        todo.append(f"{repo}: Settings > Actions > General > Workflow permissions: tick 'Allow GitHub Actions to create "
+                    f"and approve pull requests' (the weekly hub index PR): https://github.com/{repo}/settings/actions")
+
+
 # ------------------------------------------------------------------------------------------------ git
 def origin_ok(gh: GitHub, d: Path, slug: str) -> bool:
     rc, out = gh.run(["git", "remote", "get-url", "origin"], cwd=d)
@@ -205,7 +224,8 @@ def origin_ok(gh: GitHub, d: Path, slug: str) -> bool:
     return rc == 0 and (f"github.com/{slug.lower()}" in u or f"github.com:{slug.lower()}" in u)
 
 
-def put_workflows(gh: GitHub, d: Path, slug: str, files, msg: str) -> tuple[list[str], str]:
+def put_workflows(gh: GitHub, d: Path, slug: str, files, msg: str, dest: str = ".github/workflows",
+                  src: Path | None = None) -> tuple[list[str], str]:
     """Commits the files as .github/workflows/<file> on top of GitHub's own main, in a throwaway worktree, and
     pushes that one commit. The folder's own branch, working tree and unshipped commits are never touched or
     pushed (the next Ship / Leyline step merges GitHub's main in as usual). Returns (changed files, commit)."""
@@ -219,11 +239,11 @@ def put_workflows(gh: GitHub, d: Path, slug: str, files, msg: str) -> tuple[list
         shutil.rmtree(tmp, ignore_errors=True)
         raise Fail(f"Could not prepare the commit in {d} (git worktree). Nothing was pushed.")
     try:
-        (wt / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
+        (wt / dest).mkdir(parents=True, exist_ok=True)
         changed = []
         for f in files:
-            (wt / ".github" / "workflows" / f).write_bytes((SRC / f).read_bytes().replace(b"\r\n", b"\n"))
-            rel = f".github/workflows/{f}"
+            (wt / dest / f).write_bytes(((src or SRC) / f).read_bytes().replace(b"\r\n", b"\n"))
+            rel = f"{dest}/{f}"
             gh.run(["git", "add", "--", rel], cwd=wt)
             if gh.run(["git", "diff", "--cached", "--quiet", "--", rel], cwd=wt)[0] != 0:
                 changed.append(f)
@@ -368,6 +388,7 @@ def main(argv=None, gh: GitHub | None = None, sleep=time.sleep, now=time.time, o
         else:
             say(f"  realm-scripts.yml waits for 'Set up automatic deploys.bat' (no {DEPLOY_SECRET} secret yet)")
         changed, _ = put_workflows(gh, wu, WU_REPO, files, "Turn on GitHub builds: image build and hosting tests")
+        pr_ok(gh, WU_REPO, todo)
 
         ly_ok = False
         if gh.run(["gh", "repo", "view", LY_REPO, "--json", "name"])[0] != 0:
@@ -389,6 +410,10 @@ def main(argv=None, gh: GitHub | None = None, sleep=time.sleep, now=time.time, o
                 if rc == 0 and '"TAURI_SIGNING_PRIVATE_KEY"' not in out:
                     todo.append("Launcher self-updates are off until you run 'Turn on launcher updates.bat' once "
                                 "(then Ship, the Leyline step, and this again for the next launcher-v tag).")
+                _, ly_rev = put_workflows(gh, ly, LY_REPO, LY_TEMPLATES, "Hub index: the Submit a mod issue form",
+                                          dest=".github/ISSUE_TEMPLATE", src=SRC / "ISSUE_TEMPLATE")
+                for name, color, desc in LY_LABELS:
+                    gh.run(["gh", "label", "create", name, "-R", LY_REPO, "--color", color, "--description", desc, "--force"])
 
         say("[4/5] Builds")
         images = start_images(gh, "wu-images.yml" in changed, sleep=sleep)

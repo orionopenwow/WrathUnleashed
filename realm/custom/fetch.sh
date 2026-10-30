@@ -1,5 +1,7 @@
 #!/bin/sh
 # Fetches AzerothCore (mod-playerbots fork) and every module at the commits in sources.lock.
+# A module whose repo is "local" lives in this repo, in modules/<name> (e.g. mod-sandbox-core): it is copied in
+# fresh each run (its tests/ folder stays out of the build); a kit without that folder skips it.
 # Runs inside the alpine/git container started by "Build custom realm.bat"; /w is realm\custom.
 # Safe to run again: anything already at the right commit is left alone.
 set -e
@@ -33,6 +35,16 @@ grep -v '^#' sources.lock | while read -r name repo branch commit; do
   [ -z "$name" ] && continue
   if [ "$name" = core ]; then
     fetch acore "$repo" "$commit"; patch_dir acore core
+  elif [ "$repo" = local ]; then
+    if [ -d "modules/$name" ]; then
+      echo "  local   $name"
+      rm -rf "acore/modules/$name"
+      mkdir -p acore/modules
+      cp -R "modules/$name" "acore/modules/$name"
+      rm -rf "acore/modules/$name/tests"
+    else
+      echo "  skip    $name (no modules/$name here)"
+    fi
   else
     fetch "acore/modules/$name" "$repo" "$commit"; patch_dir "acore/modules/$name" "$name"
   fi

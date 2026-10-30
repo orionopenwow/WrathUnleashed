@@ -24,6 +24,9 @@ Two listeners, both inside Docker networks only (never published on the host):
          GET /wrath/status.json  public realm status for the website's Beacons page, the launcher
                                and the GM console (CORS *, cached 30 s, at most one SOAP call per
                                30 s however many visitors ask)
+         GET /wrath/admin[/...], POST /wrath/admin/act   staff only: the Leyline Admin Console (stream/admin.py,
+                               docs/ADMIN-CONSOLE.md); GET /wrath/leyline/{flags,channel,news,themes,realm-overrides}.json
+                               are its public feeds for the launcher
 
   :7878  a SOAP bridge for the realm service, on its network under the name "mangosd". The
          realm service was written for the 1.12 server: it speaks SOAP with the urn:MaNGOS
@@ -202,8 +205,19 @@ docs = _load_module("wu_docs", "docs.py")   # /wrath/docs (stream/docs.py: the L
 hostflow = _load_module("wu_hostflow", "hostflow.py")   # /wrath/host: "+ Your server" (stream/hostflow.py)
 creations = _load_module("wu_creations", "creations.py")   # /wrath/workshop: what players made (stream/creations.py)
 leyline_net = _load_module("wu_leyline_net", "leyline_net.py")   # /wrath/leyline/flags.json + the Host pack (stream/leyline_net.py)
+hub_mod = _load_module("wu_hub", "hub.py")   # /wrath/leyline-preview: the hidden Leyline hub (stream/hub.py)
+if hub_mod is not None:
+    hub_mod.bind(lambda name: globals()[name])
 if hostflow is not None:
     hostflow.bind(lambda name: globals()[name])
+social = _load_module("wu_social", "social.py")   # Leyline friends and messages (stream/social.py)
+if social is not None:
+    social.bind(lambda name: globals()[name])
+admin = _load_module("wu_admin", "admin.py")   # /wrath/admin: the Leyline Admin Console (stream/admin.py)
+if admin is not None:
+    admin.bind(lambda name: globals()[name])
+    if creations is not None:
+        creations.adjust = admin.adjust_catalog
 
 
 def host_plus(where: str) -> str:
@@ -1138,7 +1152,8 @@ def community_realms() -> tuple[list[dict], bool]:
     if not fetched:
         _listing_done.wait(LISTING_WAIT)
     with _listing_lock:
-        return list(_listing["realms"]), _listing["ok"]
+        realms, ok = list(_listing["realms"]), _listing["ok"]
+    return (admin.apply_realm_overrides(realms) if admin is not None else realms), ok   # staff: hidden, official
 
 
 def _players_text(players, bots, live) -> str:
@@ -1164,7 +1179,8 @@ def realms_page() -> bytes:
     rows = []
     for r in realms:
         name = html.escape(r["name"])
-        tags = (f'<span class="tag">{html.escape(RULESET_LABELS[r["ruleset"]])}</span>'
+        tags = (('<span class="tag">Official</span>' if r.get("official") else '')
+                + f'<span class="tag">{html.escape(RULESET_LABELS[r["ruleset"]])}</span>'
                 f'<span class="tag">{html.escape(r["type"])}</span>'
                 + ('' if r["claimed"] else '<span class="tag">unclaimed</span>')
                 + _players_text(r["players"], r["bots"], r["live"]))
@@ -1798,6 +1814,8 @@ if workshop_mod is not None:
         workshop = workshop_mod.Workshop(os.environ.get("WU_MODS_DIR", "/app/mods"), leyline_css, card_meta, REALM_NAME)
     except Exception:   # the rest of the portal must still start
         workshop = None
+if workshop is not None and admin is not None:
+    workshop.adjust = admin.adjust_catalog   # staff overrides: unpublished, featured, edited (stream/admin.py)
 
 
 class _Window:
@@ -2290,8 +2308,16 @@ class PageHandler(BaseHTTPRequestHandler):
         if path in ("/__gate", "/__layer"):
             self.stream_layer(urllib.parse.parse_qs(split.query))
             return
+        if social is not None and social.match(path):   # Leyline friends and messages (stream/social.py)
+            social.post(self, path)
+            return
         if hostflow is not None and hostflow.match(path):   # POST /wrath/host: make a realm (stream/hostflow.py)
             hostflow.post(self, path)
+            return
+        if admin is not None and admin.match(path):   # POST /wrath/admin/act: the Admin Console (stream/admin.py)
+            admin.post(self, path)
+        if hub_mod is not None and hub_mod.match(path):   # POST /wrath/leyline-preview/submit (stream/hub.py)
+            hub_mod.post(self, path)
             return
         if workshop is None or not workshop_mod.match(path):
             self.send(405, b"method not allowed\n", "text/plain")
@@ -2359,6 +2385,11 @@ class PageHandler(BaseHTTPRequestHandler):
             if got:
                 self.send(got[0], got[1], got[2], public=True)
                 return
+        if admin is not None and admin.match(path):   # /wrath/admin and the /wrath/leyline/*.json feeds (stream/admin.py)
+            admin.get(self, path, query)
+        if hub_mod is not None and hub_mod.match(path):   # the hidden Leyline hub and its launcher feed (stream/hub.py)
+            hub_mod.get(self, path, query)
+            return
         if path == "/wrath/leyline":
             if not browse_limit.hit(self.ip(), 600):
                 self.send(429, busy_page(back=path))
@@ -2419,6 +2450,9 @@ class PageHandler(BaseHTTPRequestHandler):
             return
         if hostflow is not None and hostflow.match(path):   # "+ Your server" (stream/hostflow.py)
             hostflow.get(self, path)
+            return
+        if social is not None and social.match(path):   # Leyline friends and messages (stream/social.py)
+            social.get(self, path, query)
             return
         if path == "/wrath/realms":
             if not browse_limit.hit(self.ip(), 600):
@@ -2583,6 +2617,8 @@ def main() -> int:
     if guest:
         guest.start_thread()
     threading.Thread(target=_layer_sweeper, daemon=True, name="layer-sweeper").start()
+    if social is not None:
+        social.setup()   # the store in /data and the realm bridge thread (stream/social.py)
     try:
         page.serve_forever()
     except KeyboardInterrupt:

@@ -1,0 +1,41 @@
+/* Leyline Launcher: the Friends page (social.js). Uses style.css's tokens. */
+.panel.sx { max-width: 1040px; }
+.sx-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.sx-me { color: var(--muted); font-size: 13px; user-select: text; }
+.sx-code { font: 700 34px/1.2 ui-monospace, Consolas, monospace; letter-spacing: 0.16em; color: var(--gold-hi); margin: 6px 0 4px; user-select: text; }
+.sx-grid { display: grid; grid-template-columns: minmax(250px, 340px) minmax(0, 1fr); gap: 14px; min-height: 420px; }
+.sx-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.sx-add { margin-top: 0; }
+.sx-add input, .sx-say input, .sx-report input, .sx-more input:not([type]) { flex: 1; min-width: 0; }
+.sx-req { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 8px; border-radius: 6px;
+  background: rgba(226, 184, 92, 0.08); border: 1px solid var(--bronze); font-size: 13px; }
+.sx-req span { flex: 1; min-width: 120px; }
+.sx-req.out { background: none; color: var(--muted); }
+.sx-list { display: flex; flex-direction: column; gap: 3px; overflow: auto; max-height: 360px; }
+.sx-friend { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border: 1px solid transparent; border-radius: 6px;
+  background: none; color: var(--text); text-align: left; cursor: pointer; font: 13px Inter, sans-serif; }
+.sx-friend:hover { background: rgba(255, 255, 255, 0.05); }
+.sx-friend.on { border-color: var(--bronze-hi); background: rgba(226, 184, 92, 0.1); }
+.sx-ft { display: grid; min-width: 0; flex: 1; }
+.sx-ft b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sx-ft i { font-style: normal; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sx-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: #6b7380; }
+.sx-dot.game { background: var(--ok); box-shadow: 0 0 6px rgba(111, 211, 111, 0.6); }
+.sx-dot.launcher { background: #6fb0f0; }
+.sx-more { margin-top: auto; color: var(--muted); font-size: 13px; }
+.sx-more summary { cursor: pointer; }
+.sx-more > * + * { margin-top: 8px; }
+.sx-chat { display: flex; flex-direction: column; min-width: 0; border: 1px solid #3b424d; border-radius: 7px; background: rgba(0, 0, 0, 0.22); }
+.sx-chat-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-bottom: 1px solid #3b424d; min-height: 46px; }
+.sx-chat-head b { font: 700 15px Cinzel, serif; color: var(--gold-hi); }
+.sx-chat-head span { color: var(--muted); font-size: 12px; }
+.sx-actions { display: flex; gap: 6px; }
+.sx-report { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid #3b424d; font-size: 13px; }
+.sx-report .hint { flex-basis: 100%; }
+.sx-msgs { flex: 1; overflow: auto; padding: 10px; display: flex; flex-direction: column; gap: 6px; min-height: 240px; max-height: 420px; user-select: text; }
+.sx-msg { align-self: flex-start; max-width: 78%; padding: 6px 10px; border-radius: 10px; background: #262b33; display: grid; gap: 2px; }
+.sx-msg.mine { align-self: flex-end; background: rgba(255, 128, 255, 0.14); border: 1px solid rgba(255, 128, 255, 0.25); }
+.sx-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.sx-when { font-size: 11px; color: var(--muted); }
+.sx-say { display: flex; gap: 8px; padding: 8px 10px; border-top: 1px solid #3b424d; }
+@media (max-width: 1100px) { .sx-grid { grid-template-columns: 1fr; } }
