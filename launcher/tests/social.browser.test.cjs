@@ -1,5 +1,5 @@
-// The launcher's Friends page (ui/social.js) in Chromium, with a fake Tauri core: the nav button and page appear and
-// work with app.js's navigation, sign-in by code, the friends list with presence and unread, a conversation, sending,
+// The launcher's Community › Friends tab (ui/social.js) in Chromium, with a fake Tauri core: the Community menu item and
+// its Friends tab work with app.js's navigation, sign-in by code, the friends list with presence and unread, a conversation, sending,
 // accepting a request, names shown as text (never markup), and a revoked sign-in going back to the sign-in screen.
 //
 //   NODE_PATH=$(npm root -g) node --test launcher/tests/social.browser.test.cjs
@@ -56,16 +56,19 @@ let browser;
 test.before(async () => { browser = await chromium.launch(); });
 test.after(async () => { await browser.close(); });
 
-test('Friends page: sign in, list, chat, accept, text only, sign-out on revoke', async () => {
+test('Community › Friends: sign in, list, chat, accept, text only, sign-out on revoke', async () => {
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.addInitScript(FAKE);
   await page.goto(INDEX);
-  const nav = page.locator('.nav[data-page="friends"]');
-  assert.equal(await nav.count(), 1, 'one Friends nav button');
+  assert.equal(await page.locator('.nav[data-page="friends"]').count(), 0, 'no Friends menu item of its own');
+  const nav = page.locator('.nav[data-page="community"]');
+  assert.equal(await nav.count(), 1, 'one Community menu item');
   await nav.click();
-  assert.ok(await page.locator('#page-friends').evaluate((e) => e.classList.contains('on')), "app.js's navigation shows the page");
+  assert.ok(await page.locator('#page-community').evaluate((e) => e.classList.contains('on')), "app.js's navigation shows the page");
+  assert.ok(await page.locator('#pane-friends').evaluate((e) => e.classList.contains('on')), 'on its Friends tab');
+  assert.equal(await page.getAttribute('#tab-community-friends', 'aria-selected'), 'true');
   assert.ok(await page.locator('#sx-out').isVisible(), 'signed out: the sign-in screen');
 
   await page.click('#sx-signin');
@@ -75,7 +78,8 @@ test('Friends page: sign in, list, chat, accept, text only, sign-out on revoke',
   const rows = page.locator('.sx-friend');
   assert.equal(await rows.count(), 2);
   assert.match(await rows.nth(0).textContent(), /Bob.*In game: Bobbert on WrathUnleashed.*2/);
-  assert.equal(await page.textContent('#nav-friends-count'), '3', 'unread + requests on the nav badge');
+  assert.equal(await page.textContent('#nav-friends-count'), '3', 'unread + requests on the Community menu item');
+  assert.equal(await page.textContent('#tab-friends-count'), '3', 'and on the Friends tab');
   assert.match(await rows.nth(1).textContent(), /<img src=x/, 'a name is shown as text');
   assert.equal(await page.evaluate(() => window.__xss), undefined, 'and never runs');
 

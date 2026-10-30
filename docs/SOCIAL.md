@@ -11,7 +11,7 @@ realm), the Leyline launcher and the website.
   - The portal (`stream/social.py`, loaded by `stream/wrath_portal.py`) keeps everything.
   - The realm (`realm/custom/lua_scripts/ov_social.lua`) reports presence and carries `.lm` and `.lf`.
   - The in-game panel is `stream/fui-web/Interface/AddOns/WrathUnleashedUI/Social.lua` (`/lfriends`).
-  - The launcher has a Friends page (`launcher/ui/social.js`, `launcher/src-tauri/src/social.rs`).
+  - The launcher has Community › Friends (`launcher/ui/social.js`, `launcher/src-tauri/src/social.rs`).
 
 ```
  launcher (social.rs) ──Bearer token──┐
@@ -213,5 +213,5 @@ python3 -I stream/tests/test_social.py stream/wrath_portal.py    # the API again
 lua5.1 stream/tests/test_ov_social.lua                           # the realm script
 lua5.1 stream/tests/test_wuui_social.lua                         # the in-game panel with ov_social.lua
 CARGO_TARGET_DIR=/home/claude/.leyline-target cargo test -j1 --no-default-features --manifest-path launcher/src-tauri/Cargo.toml social
-NODE_PATH=$(npm root -g) node --test launcher/tests/social.browser.test.cjs   # the launcher's Friends page (Playwright)
+NODE_PATH=$(npm root -g) node --test launcher/tests/social.browser.test.cjs   # the launcher's Community › Friends (Playwright)
 ```

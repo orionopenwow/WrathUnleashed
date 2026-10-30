@@ -1,6 +1,7 @@
-/* Leyline Launcher: the Friends page (social.js). Uses style.css's tokens. */
-.panel.sx { max-width: 1040px; }
-.sx-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+/* Leyline Launcher: Community › Friends (social.js). Uses style.css's tokens. */
+.sx { max-width: 1040px; }
+.sx-head:has(.sx-me:empty) { display: none; }
+.sx-head { display: flex; align-items: baseline; justify-content: flex-end; gap: 12px; margin: -6px 0 8px; }
 .sx-me { color: var(--muted); font-size: 13px; user-select: text; }
 .sx-code { font: 700 34px/1.2 ui-monospace, Consolas, monospace; letter-spacing: 0.16em; color: var(--gold-hi); margin: 6px 0 4px; user-select: text; }
 .sx-grid { display: grid; grid-template-columns: minmax(250px, 340px) minmax(0, 1fr); gap: 14px; min-height: 420px; }

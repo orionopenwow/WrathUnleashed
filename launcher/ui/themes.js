@@ -1,5 +1,5 @@
 // Leyline themes: applies the chosen theme before the page paints, and draws Settings › Themes and
-// Discover › Themes. Plain JS, no framework. The Rust side is src-tauri/src/themes.rs.
+// Mods › Discover › Themes. Plain JS, no framework. The Rust side is src-tauri/src/themes.rs.
 //
 // Two built-in looks, Dark (the default) and Light. How a theme is applied:
 //   <html data-theme="<id>" data-base="dark|light">      always (style.css is Dark; data-base="light" switches)
@@ -286,14 +286,14 @@
   function renderSettings(box) {
     const builtins = list.filter((t) => t.builtin).map(themeCard);
     const packs = list.filter((t) => !t.builtin).map(themeCard);
-    const go = btn("FIND MORE THEMES", "", () => { const n = document.querySelector('.nav[data-page="discover"]'); if (n) n.click(); showTab("themes"); });
+    const go = btn("FIND MORE THEMES", "", () => { if (window.LeylineNav) window.LeylineNav.show("mods", false, "discover"); showTab("themes"); });
     const actions = localButtons();
     actions.append(go);
     box.replaceChildren(
       el("h3", "", "Themes"),
       el("p", "lede", "How Leyline looks. Themes change colours, corners and fonts, never what the launcher does. Ctrl+Shift+Backspace always goes back to Dark."),
       section("Built in", builtins, ""),
-      section("Installed", packs, "No theme packs yet. Find some under Discover › Themes, or install one from a zip."),
+      section("Installed", packs, "No theme packs yet. Find some under Mods › Discover › Themes, or install one from a zip."),
       actions,
       el("p", "status themes-status"),
     );
@@ -322,11 +322,11 @@
     previewBar();
   }
 
-  // ---------------------------------------------------------------- Discover tabs
+  // ---------------------------------------------------------------- Mods › Discover: Mods | Themes
   let tab = "mods";
   function showTab(t) {
     tab = t;
-    const panel = document.querySelector("#page-discover .panel");
+    const panel = document.getElementById("pane-discover");
     if (!panel) return;
     panel.dataset.tab = t;
     document.querySelectorAll("#discover-tabs .ly-tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === t)));
@@ -345,7 +345,7 @@
     } catch (e) { say(String(e), "bad"); }
   }
 
-  // app.js hands the Workshop catalog through here: theme packs are listed under Discover › Themes, not as mods.
+  // app.js hands the Workshop catalog through here: theme packs are listed under Mods › Discover › Themes, not as mods.
   function takeThemes(c) {
     if (!c || !Array.isArray(c.projects)) return c;
     catalogThemes = c.projects.filter((p) => p.category === "themes");
@@ -364,7 +364,7 @@
       const before = Array.from(settings.querySelectorAll("h3")).find((h) => h.textContent.trim() === "Updates");
       settings.insertBefore(box, before || null);
     }
-    const panel = document.querySelector("#page-discover .panel");
+    const panel = document.getElementById("pane-discover");
     if (panel && !document.getElementById("discover-tabs")) {
       const tabs = el("div", "ly-tabs");
       tabs.id = "discover-tabs";
@@ -377,15 +377,18 @@
         b.addEventListener("click", () => showTab(id));
         tabs.append(b);
       }
-      const h2 = panel.querySelector("h2");
-      panel.insertBefore(tabs, h2 ? h2.nextSibling : panel.firstChild);
+      panel.insertBefore(tabs, panel.firstChild);
       const box = el("div", "themes-box");
       box.id = "themes-discover";
       box.hidden = true;
       panel.append(box);
       showTab(tab);
     }
-    document.querySelectorAll('.nav[data-page="settings"], .nav[data-page="discover"]').forEach((n) => n.addEventListener("click", () => sync().then(render).catch(() => {})));
+    document.querySelectorAll('.nav[data-page="settings"]').forEach((n) => n.addEventListener("click", () => sync().then(render).catch(() => {})));
+    document.addEventListener("leyline:page", (ev) => {
+      const d = ev.detail || {};
+      if (d.page === "mods" && d.tab === "discover") sync().then(render).catch(() => {});
+    });
     render();
     sync().then(render).catch((e) => say(String(e), "bad"));
   }

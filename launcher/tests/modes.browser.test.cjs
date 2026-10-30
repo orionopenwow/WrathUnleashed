@@ -1,4 +1,5 @@
-// The launcher's Modes page (ui/modes.js) in Chromium, with a fake Tauri core: the nav button after Realms, the cards
+// The launcher's Modes page (ui/modes.js) in Chromium, with a fake Tauri core: no menu item (the side menu matches the
+// website's) but reachable from Realms › MODES and show("modes"), the cards
 // (players, kind, credit and license for third-party modes, Coming soon with a source link and no PLAY), PLAY in the
 // browser (mode_open_browser by id), PLAY on the desktop (mode_prepare_desktop, then play on the official realm, with
 // the client picked on the page), a client of another build refused, HOST IT for a realm type, the offline notice,
@@ -53,17 +54,19 @@ async function open(opts = {}) {
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.addInitScript(FAKE, Object.assign({ modes: CATALOG.modes }, opts));
   await page.goto(INDEX);
-  if (!opts.page) await page.click('.nav[data-page="modes"]');
+  if (!opts.page) await page.evaluate(() => window.LeylineNav.show('modes'));
   await page.waitForFunction(() => document.querySelectorAll('#md-list .md-card').length > 0);
   return { page, errors };
 }
 const card = (page, id) => page.locator(`#md-list .md-card[data-mode="${id}"]`);
 const calls = (page, name) => page.evaluate((n) => window.__calls.filter(([c]) => c === n).map(([, a]) => a), name);
 
-test('Modes page: nav after Realms, cards, credit, Coming soon', async () => {
+test('Modes page: no menu item, Realms › MODES opens it, cards, credit, Coming soon', async () => {
   const { page, errors } = await open();
   const navs = await page.$$eval('aside nav .nav', (b) => b.map((x) => x.dataset.page));
-  assert.equal(navs[navs.indexOf('realms') + 1], 'modes', 'Modes comes right after Realms');
+  assert.ok(!navs.includes('modes'), 'Modes left the side menu');
+  await page.click('.nav[data-page="realms"]');
+  await page.click('#page-realms [data-page-go="modes"]');
   assert.ok(await page.isVisible('#page-modes'));
   const names = await page.$$eval('#md-list .md-card .name', (n) => n.map((x) => x.textContent));
   assert.deepEqual(names, CATALOG.modes.map((m) => m.title));
@@ -161,7 +164,7 @@ test('Key art missing: no banner on Home, the card as before', async () => {
   await page.addInitScript(FAKE, { modes: CATALOG.modes });
   await page.goto(INDEX);
   await page.waitForFunction(() => !document.getElementById('feat-mode'));
-  await page.click('.nav[data-page="modes"]');
+  await page.evaluate(() => window.LeylineNav.show('modes'));
   await page.waitForFunction(() => document.querySelectorAll('#md-list .md-card').length > 0);
   await page.waitForFunction(() => !document.querySelector('#md-list .md-card[data-mode="azeroth-survivors"] img'));
   assert.equal(await card(page, 'azeroth-survivors').evaluate((c) => c.classList.contains('has-art')), false);

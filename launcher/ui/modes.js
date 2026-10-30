@@ -2,8 +2,9 @@
 // (src-tauri/src/modes.rs), which read the site's catalog (https://play.openvanilla.app/wrath/modes.json, cached,
 // with a copy built into Leyline).
 //
-// Loaded before app.js: it adds its own nav button (after Realms) and page, so app.js's navigation and its client
-// pickers (.client-pick) pick them up like the others. PLAY follows the Home page's play setting (localStorage
+// Loaded before app.js: it adds its own page, so app.js's navigation and its client pickers (.client-pick) pick it up
+// like the others. It has no menu item since the side menu matches the website's (owner 2026-10-30): Home's featured
+// mode, Realms › MODES and show("modes") (window.LeylineNav) open it. PLAY follows the Home page's play setting (localStorage
 // "leyline.mode"): in the browser it opens the mode's link; on the desktop it writes the pick into your 3.3.5a
 // client (mode_prepare_desktop) and starts it on the official realm (app.rs "play"). The UI only ever names a
 // mode id: every address is built by the core. Everything from the catalog is shown with textContent.
@@ -37,15 +38,11 @@
     return img;
   }
 
-  // ---------------------------------------------------------------- the nav button and the page
-  const nav = document.querySelector("aside nav");
-  const navBtn = el("button", "nav");
-  navBtn.dataset.page = "modes";
-  navBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="11" rx="5"/><path d="M8 10.5v4M6 12.5h4"/><circle cx="15.5" cy="11.5" r="1"/><circle cx="17.5" cy="13.8" r="1"/></svg>';
-  navBtn.appendChild(document.createTextNode("Modes"));
-  const realmsBtn = nav && nav.querySelector('[data-page="realms"]');
-  if (realmsBtn) realmsBtn.after(navBtn); else if (nav) nav.appendChild(navBtn);
-
+  // ---------------------------------------------------------------- the page (no menu item)
+  function openPage() {
+    if (window.LeylineNav) { window.LeylineNav.show("modes"); return; }
+    document.querySelectorAll(".page").forEach((p) => p.classList.toggle("on", p === page));
+  }
   const page = el("section", "page");
   page.id = "page-modes";
   page.innerHTML = `
@@ -193,7 +190,7 @@
   // ---------------------------------------------------------------- the featured mode on Home: its key art as a banner in
   // the hero card, one click to its card on this page. Removed if the art doesn't load (Home stays as it was).
   function show(id) {
-    navBtn.click();
+    openPage();
     const go = () => {
       const c = document.querySelector(`#md-list .md-card[data-mode="${id}"]`);
       if (!c) return false;
@@ -229,9 +226,8 @@
 
   // ---------------------------------------------------------------- start
   $("md-refresh").addEventListener("click", load);
-  navBtn.addEventListener("click", () => { if (!loaded) load(); else renderHow(); });
-  // app.js may open this page itself (the page remembered from last time)
-  new MutationObserver(() => { if (page.classList.contains("on") && !loaded) load(); }).observe(page, { attributes: true, attributeFilter: ["class"] });
+  // whenever the page opens (show("modes"), or the page remembered from last time): load once, then keep "PLAY …" current
+  new MutationObserver(() => { if (page.classList.contains("on")) { if (!loaded) load(); else renderHow(); } }).observe(page, { attributes: true, attributeFilter: ["class"] });
 
-  window.LeylineModes = { load, modes: () => modes, show, ART };
+  window.LeylineModes = { load, modes: () => modes, show, open: openPage, ART };
 })();

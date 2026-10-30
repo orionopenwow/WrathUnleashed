@@ -1,6 +1,7 @@
 // The launcher's Realms page and the Host page's realm list details (ui/app.js, ui/host.js) in Chromium, with a fake
-// Tauri core: the network order as realms.rs gives it, the network line, the badges (featured, verified, new, uptime,
-// temporary), the filters (build, rules tag, region, language, has players now), "Only realms my clients can play",
+// Tauri core: the network order as realms.rs gives it, the network line, each realm dressed like the website's realm
+// list (icon, gold client version, badges: official, featured, verified, new, temporary; the meta line with uptime;
+// players with a fill bar; offline dimmed), the filters (build, rules tag, region, language, has players now), "Only realms my clients can play",
 // Report, direct connect only with the p2p_hosting flag on, Host your own, and saving the details.
 //
 //   NODE_PATH=$(npm root -g) node --test launcher/tests/realms.browser.test.cjs
@@ -67,13 +68,27 @@ test('Realms page: the network order, line, badges, filters, Report, Host your o
   assert.equal(await page.textContent('#rl-net'), '3 realms · 33 players online · 40 bots');
   const cards = page.locator('#rl-list .realm-card');
   const picked = await cards.nth(0).textContent();
-  assert.match(picked, /Featured/); assert.match(picked, /Verified host/); assert.match(picked, /97% up · 7 d/);
+  assert.match(picked, /Featured/); assert.match(picked, /Verified/); assert.match(picked, /97% up · 7 d/);
   assert.match(picked, /PvP/); assert.match(picked, /Europe/); assert.match(picked, /de/);
-  assert.match(await cards.nth(1).textContent(), /temporary/);
-  assert.match(await cards.nth(1).textContent(), /Run by Leyline/);
+  const badges = (i) => cards.nth(i).locator('.rl-bdg').allTextContents();
+  assert.deepEqual(await badges(0), ['Featured', 'Verified', 'Needs your own 1.12.1 client']);
+  assert.deepEqual(await badges(1), ['Official', 'Temporary']);
+  assert.deepEqual(await badges(2), ['New']);
+  assert.deepEqual(await cards.locator('.rl-ver').allTextContents(), ['1.12.1', '3.3.5a', '3.3.5a', '3.3.5a'], 'the gold client version');
+  assert.match(await cards.nth(1).locator('.rl-meta').textContent(), /Run by Leyline/);
+  // the icon: the crystal mark for the official realm, else the initial on a colour from the name
+  assert.equal(await cards.nth(1).locator('.rl-ic img').getAttribute('src'), 'art/brand/leyline-crystal-256.webp');
+  assert.equal(await cards.nth(0).locator('.rl-ic').textContent(), 'P');
+  const hue = (i) => cards.nth(i).locator('.rl-ic').evaluate((e) => e.style.getPropertyValue('--h'));
+  assert.match(await hue(0), /^\d+$/);
+  assert.notEqual(await hue(0), await hue(2), 'a hue from the name');
   const busy = await cards.nth(2).textContent();
   assert.match(busy, /New/); assert.match(busy, /70% up · 24 h/); assert.match(busy, /North America east \(estimated\)/);
-  assert.match(busy, /30 of 100 players · 40 bots/);
+  assert.match(busy, /30 of 100 playing/); assert.match(busy, /40 bots/);
+  assert.equal(await cards.nth(2).locator('.rl-bar i').evaluate((e) => e.style.width), '30%', 'players fill the bar');
+  assert.ok(await cards.nth(3).evaluate((e) => e.classList.contains('off') && getComputedStyle(e).opacity < 1), 'an offline realm is dimmed');
+  assert.equal(await cards.nth(3).locator('.rl-bar').count(), 0);
+  assert.equal(await cards.nth(0).locator('.acts .btn').first().textContent(), 'PLAY');
   assert.doesNotMatch(busy, /Direct connect/, 'direct connect only with p2p_hosting on');
   assert.equal(await cards.nth(1).locator('button:has-text("Report")').count(), 0, 'no Report on the sample');
   await cards.nth(2).locator('button:has-text("Report")').click();

@@ -71,17 +71,97 @@ document.querySelectorAll("[data-link]").forEach((b) => b.addEventListener("clic
 $("tb-account").addEventListener("click", () => openLink("account"));
 
 // ------------------------------------------------------------------ navigation
-const loaders = { discover: () => loadCatalog(), mods: () => loadInstalled(), realms: () => loadRealms(), host: () => loadHost() };
+// The side menu matches the website's (stream/hub.py nav_items): Home (play), Realms, Mods, Host, Community, News,
+// then Settings and Help. Mods and Community are one page each with tabs. The page ids from before (mymods,
+// discover, friends, hub) still work everywhere: show() maps them to the page + tab, so a remembered page, a
+// data-page-go button or a leyline:// link lands where it used to; a page with tabs alone opens its last tab. Modes has no menu item
+// but is still a page (Home's featured mode, Realms › MODES, show("modes")).
+const TABS = { mods: ["installed", "discover"], community: ["friends", "hub"] };
+const ALIASES = { mymods: ["mods", "installed"], installed: ["mods", "installed"], discover: ["mods", "discover"],
+  friends: ["community", "friends"], hub: ["community", "hub"] };
+const loaders = { "mods:discover": () => loadCatalog(), "mods:installed": () => loadInstalled(), realms: () => loadRealms(), host: () => loadHost() };
 let currentPage = "play";
-function show(page, noLoad) {
+let currentTab = "";
+const lastTab = {};
+try { Object.assign(lastTab, JSON.parse(localStorage.getItem("leyline.tabs") || "{}")); } catch (_) { /* storage may be off */ }
+function resolvePage(page, tab) {
+  if (ALIASES[page]) [page, tab] = ALIASES[page];
+  if (!document.getElementById("page-" + page)) return ["play", ""];
+  if (!TABS[page]) return [page, ""];
+  if (!TABS[page].includes(tab)) tab = TABS[page].includes(lastTab[page]) ? lastTab[page] : TABS[page][0];
+  return [page, tab];
+}
+function show(want, noLoad, wantTab) {
+  const [page, tab] = resolvePage(want, wantTab);
   currentPage = page;
+  currentTab = tab;
   document.querySelectorAll(".nav[data-page]").forEach((b) => b.classList.toggle("on", b.dataset.page === page));
   document.querySelectorAll(".page").forEach((p) => p.classList.toggle("on", p.id === "page-" + page));
-  if (loaders[page] && !noLoad) loaders[page]();
-  try { localStorage.setItem("leyline.page", page); } catch (_) { /* storage may be off */ }
+  if (tab) {
+    lastTab[page] = tab;
+    document.querySelectorAll(`.page-tab[data-group="${page}"]`).forEach((b) => {
+      const on = b.dataset.tab === tab;
+      b.setAttribute("aria-selected", String(on));
+      b.tabIndex = on ? 0 : -1;
+    });
+    for (const t of TABS[page]) { const pane = $("pane-" + t); if (pane) pane.classList.toggle("on", t === tab); }
+  }
+  const key = tab ? page + ":" + tab : page;
+  if (loaders[key] && !noLoad) loaders[key]();
+  try { localStorage.setItem("leyline.page", page); localStorage.setItem("leyline.tabs", JSON.stringify(lastTab)); } catch (_) { /* storage may be off */ }
+  document.dispatchEvent(new CustomEvent("leyline:page", { detail: { page, tab } }));
 }
 document.querySelectorAll(".nav[data-page]").forEach((b) => b.addEventListener("click", () => show(b.dataset.page)));
 document.querySelectorAll("[data-page-go]").forEach((b) => b.addEventListener("click", () => show(b.dataset.pageGo)));
+document.querySelectorAll(".page-tab[data-group]").forEach((b) => {
+  b.addEventListener("click", () => show(b.dataset.group, false, b.dataset.tab));
+  // the arrow keys move between a page's tabs (the usual tab list keys)
+  b.addEventListener("keydown", (e) => {
+    const tabs = TABS[b.dataset.group];
+    const i = tabs.indexOf(b.dataset.tab);
+    const j = e.key === "ArrowRight" ? i + 1 : e.key === "ArrowLeft" ? i - 1 : e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : null;
+    if (j === null) return;
+    e.preventDefault();
+    const t = tabs[(j + tabs.length) % tabs.length];
+    show(b.dataset.group, false, t);
+    const next = document.querySelector(`.page-tab[data-group="${b.dataset.group}"][data-tab="${t}"]`);
+    if (next) next.focus();
+  });
+});
+window.LeylineNav = { show, current: () => ({ page: currentPage, tab: currentTab }), TABS, ALIASES };
+
+// ------------------------------------------------------------------ the backdrop behind the pages
+// The website's picture (stream/hub.py BACKDROP), fetched from the site when Leyline starts, never shipped with the
+// app. It sits behind the content area only (not the side bar or the menus), under the theme's wash
+// (--t-backdrop-wash). Until it loads, if it fails, or with Settings › Background picture off: the plain colour.
+// The window's CSP allows images from exactly this origin (tauri.conf.json img-src).
+const BACKDROP_URL = "https://play.openvanilla.app/wrath/art/leyline-shot-backdrop.webp";
+let backdropTried = false;
+function backdropOn() {
+  try { return localStorage.getItem("leyline.backdrop") !== "off"; } catch (_) { return true; }
+}
+function applyBackdrop() {
+  const box = $("backdrop");
+  if (!box) return;
+  const on = backdropOn();
+  if ($("set-backdrop")) $("set-backdrop").checked = on;
+  if (!on) { box.classList.remove("has-pic"); return; }
+  if (backdropTried) { if (box.dataset.loaded === "1") box.classList.add("has-pic"); return; }
+  backdropTried = true;
+  const img = new Image();
+  img.decoding = "async";
+  img.addEventListener("load", () => { box.dataset.loaded = "1"; if (backdropOn()) box.classList.add("has-pic"); });
+  img.addEventListener("error", () => { box.dataset.loaded = "0"; box.classList.remove("has-pic"); });
+  img.src = BACKDROP_URL;
+}
+if ($("set-backdrop")) {
+  $("set-backdrop").addEventListener("change", () => {
+    try { localStorage.setItem("leyline.backdrop", $("set-backdrop").checked ? "on" : "off"); } catch (_) { /* storage may be off */ }
+    if ($("set-backdrop").checked && $("backdrop").dataset.loaded === "0") backdropTried = false;   // offline before: try again
+    applyBackdrop();
+  });
+}
+applyBackdrop();
 
 // ------------------------------------------------------------------ search
 $("search-form").addEventListener("submit", (ev) => {
@@ -93,7 +173,7 @@ $("search-form").addEventListener("submit", (ev) => {
   } else {
     $("cat-q").value = q;
     catFilter.cat = "";
-    show("discover");
+    show("mods", false, "discover");
   }
 });
 
@@ -144,16 +224,22 @@ function saveSelection() {
 }
 
 let lastStatusClass = "";
+// The side bar's "Your realms", dressed like the website's realm list: the realm's icon (the crystal for the official
+// realm, else its initial on a colour from its name), its name, the gold client version and the live dot.
 function renderRealmRows() {
   const rows = $("realm-rows");
   rows.replaceChildren();
-  const add = (name, official) => {
+  const add = (name, official, ver) => {
     const on = official ? isOfficial() : !isOfficial();
     const b = el("button", "realm-row" + (on ? " on" : ""));
     b.type = "button";
     const dot = el("span", "dot");
     if (on && lastStatusClass) b.classList.add(lastStatusClass);
-    b.append(el("span", "letter", name.charAt(0).toUpperCase()), el("span", "name", name), dot);
+    const txt = el("span", "rr-txt");
+    txt.append(el("span", "name", name));
+    if (ver) { const v = el("span", "rl-ver sm", ver); v.title = "Game client version"; txt.append(v); }
+    b.append(realmIcon(name, official, "sm"), txt, dot);
+    b.title = ver ? `${name} · ${ver}` : name;
     b.addEventListener("click", () => {
       $("play-realm").value = official ? "official" : "custom";
       realmChanged();
@@ -162,13 +248,31 @@ function renderRealmRows() {
     });
     rows.append(b);
   };
-  add(officialName(), true);
+  add(officialName(), true, "3.3.5a");
   const saved = state.settings.selected_realm;
   const custom = !isOfficial() ? chosenRealm() : (saved && saved !== state.official_realm ? saved : "");
   if (custom) {
     const beacon = realmsCache.find((x) => x.address === custom);
-    add(beacon ? beacon.name : custom, false);
+    add(beacon ? beacon.name : custom, false, realmVersion(beacon));
   }
+}
+
+// Home's SERVER card: the chosen realm's icon, name and client version (the players bar comes with its status).
+function renderSrvHead() {
+  const name = realmLabel();
+  $("srv-name").textContent = name;
+  const r = isOfficial() ? null : realmAt(chosenRealm());
+  fillRealmIcon($("srv-ic"), name, isOfficial());
+  const ver = isOfficial() ? "3.3.5a" : realmVersion(r);
+  $("srv-ver").hidden = !ver;
+  $("srv-ver").textContent = ver || "";
+}
+function renderSrvBar(players) {
+  const bar = $("srv-bar");
+  if (players == null) { bar.hidden = true; return; }
+  const o = isOfficial() ? (realmsCache || []).find((x) => x.official) : realmAt(chosenRealm());
+  bar.hidden = false;
+  bar.firstElementChild.style.width = playersFill(players, o && o.max_players) + "%";
 }
 
 let statusSeq = 0;
@@ -189,7 +293,8 @@ async function refreshStatus() {
       if (cls) r.classList.add(cls);
     });
   };
-  $("srv-name").textContent = realmLabel();
+  renderSrvHead();
+  renderSrvBar(null);
   if (!realm) return set("", "No realm", "NO REALM CHOSEN", "Type a realm address under Realms.");
   set("", "Checking…", "CHECKING…", realm);
   try {
@@ -200,6 +305,7 @@ async function refreshStatus() {
     const ms = s.ping_ms != null ? `${s.ping_ms} ms` : "";
     const counts = [s.players != null ? `Players: ${s.players}` : "", s.bots != null ? `Bots: ${s.bots}` : ""].filter(Boolean);
     const host = realm.includes(":") ? realm : `${realm}:3724`;
+    if (seq === statusSeq) renderSrvBar(s.state === "online" && s.players != null ? s.players : null);
     if (s.state === "online") set("is-online", ms ? `Online  ${ms}` : "Online", ms ? `ONLINE  (${ms})` : "ONLINE", [...counts, host].join(" · "));
     else if (s.state === "partial") set("is-partial", "Partly up", "PARTLY UP", "Login answers · world server down");
     else if (s.state === "offline") set("is-offline", "Offline", "OFFLINE", "World server down");
@@ -632,7 +738,7 @@ function renderCatalog() {
   for (const p of list) grid.append(projectCard(p, c));
 }
 
-// A card's numbers and its rating stars. Rating needs the Friends sign-in (the same website sign-in).
+// A card's numbers and its rating stars. Rating needs the Community › Friends sign-in (the same website sign-in).
 function statsLine(p) {
   const m = ranked && ranked.metrics ? ranked.metrics[p.id] : null;
   const st = el("div", "stats");
@@ -663,7 +769,7 @@ async function rateProject(p, n, box) {
     if (ranked && ranked.metrics && ranked.metrics[p.id] && r && r.rating) ranked.metrics[p.id].rating = r.rating;
     say("cat-status", `Thanks: you rated ${p.name} ${n} star${n > 1 ? "s" : ""}.`, "ok");
   } catch (e) {
-    say("cat-status", String(e) === "signed_out" ? "Sign in on the Friends page to rate mods (the same sign-in as the website)." : String(e), "bad");
+    say("cat-status", String(e) === "signed_out" ? "Sign in under Community › Friends to rate mods (the same sign-in as the website)." : String(e), "bad");
   }
 }
 
@@ -698,7 +804,7 @@ function projectCard(p, c) {
     acts.append(b);
     if (p.kind === "realm") b.title = "A realm mod: it runs on a realm that installs it, not in your game";
   } else if (p.source !== "packaged") {
-    acts.append(el("span", "hint", "Get it from its page, then drop the zip on My Mods."));
+    acts.append(el("span", "hint", "Get it from its page, then drop the zip on Mods › Installed."));
   }
   if (p.page) acts.append(linkBtn("Page", p.page));
   if (p.repo) acts.append(linkBtn("Source", p.repo));
@@ -771,7 +877,7 @@ async function handleDeepLink() {
   if (link && link.action === "host" && typeof link.id === "string") return showHostLink(link.id);
   if (!link || link.action !== "install" || typeof link.id !== "string") return;
   const p = catalog.projects.find((x) => x.id === link.id);
-  show("discover", true);   // the catalog was just loaded
+  show("mods", true, "discover");   // the catalog was just loaded
   if (!p) { say("cat-status", "That mod is not in the Workshop catalog here yet. Try again after the catalog refreshes.", "warn"); return; }
   linkedId = p.id;
   catFilter.cat = "";
@@ -894,8 +1000,8 @@ function renderModTiles() {
     }
     txt.append(el("b", "", name), el("i", cls, line));
     t.append(el("span", "tile-ico", name.charAt(0).toUpperCase()), txt);
-    t.title = m ? "Open My Mods" : "Open Discover";
-    t.addEventListener("click", () => show(m ? "mods" : "discover"));
+    t.title = m ? "Open Mods › Installed" : "Open Mods › Discover";
+    t.addEventListener("click", () => show("mods", false, m ? "installed" : "discover"));
     box.append(t);
   }
 }
@@ -911,9 +1017,11 @@ async function loadInstalled(quiet) {
     installed = [];
     if (!quiet) say("mods-status", String(e), "bad");
   }
-  const badge = $("nav-mods-count");
-  badge.hidden = !installed.length;
-  badge.textContent = String(installed.length);
+  for (const badge of [$("nav-mods-count"), $("tab-mods-count")]) {
+    if (!badge) continue;
+    badge.hidden = !installed.length;
+    badge.textContent = String(installed.length);
+  }
   renderInstalled();
   renderModTiles();
   refreshModUpdates();
@@ -929,7 +1037,7 @@ async function refreshModUpdates() {
   pill.title = modUpdates.map((u) => `${u.name}: v${u.version || "?"} → v${u.update} (${u.client_name})`).join("\n");
 }
 $("tb-modupd").addEventListener("click", () => {
-  // Open My Mods on a client that has an update, if the picked one has none.
+  // Open Mods › Installed on a client that has an update, if the picked one has none.
   const c = pickedClient();
   const u = modUpdates.find((x) => c && x.client === c.id) || modUpdates[0];
   if (u && (!c || u.client !== c.id)) {
@@ -939,7 +1047,7 @@ $("tb-modupd").addEventListener("click", () => {
     realmChanged();
     saveSelection();
   }
-  show("mods");
+  show("mods", false, "installed");
 });
 
 async function updateMod(c, m) {
@@ -957,7 +1065,7 @@ function renderInstalled() {
   $("mods-update-all").textContent = `UPDATE ALL (${ups.length})`;
   if (!c) { list.append(el("p", "hint", "Add your game client first.")); return; }
   if (buildTag(c.build) === "other" && !installed.length) { list.append(el("p", "hint", "Leyline does not know this client's build, so it installs no mods here. Realms work.")); return; }
-  if (!installed.length) { list.append(el("p", "hint", "No mods in this client yet. Install from Discover, or drop one above.")); return; }
+  if (!installed.length) { list.append(el("p", "hint", "No mods in this client yet. Install from Mods › Discover, or drop one above.")); return; }
   for (const m of installed) {
     const card = el("div", "card" + (m.enabled ? "" : " off") + (m.update ? " has-update" : ""));
     const top = el("div", "top");
@@ -1004,7 +1112,7 @@ function renderInstalled() {
         let t = `Removed ${m.name}: ${r.removed_files} files.`;
         if (r.changed && r.changed.length) t += ` Left the files you changed: ${r.changed.join(", ")}.`;
         if (r.kept.length) t += ` Kept files Leyline did not put there: ${r.kept.join(", ")}.`;
-        if (m.source === "catalog") t += " Install it again any time from Discover.";
+        if (m.source === "catalog") t += " Install it again any time from Mods › Discover.";
         say("mods-status", t, r.changed && r.changed.length ? "warn" : "ok");
       } catch (e) { say("mods-status", String(e), "bad"); }
       await loadInstalled();
@@ -1069,18 +1177,19 @@ $("mods-update-all").addEventListener("click", async () => {
 $("mods-pick-file").addEventListener("click", async () => { const p = await invoke("pick_mod_file").catch(() => null); if (p) installLocal([p]); });
 $("mods-pick-folder").addEventListener("click", async () => { const p = await invoke("pick_mod_folder").catch(() => null); if (p) installLocal([p]); });
 
-// Files dropped on the window (Tauri gives their paths). Only My Mods takes them; anywhere else they lead there.
+// Files dropped on the window (Tauri gives their paths). Only Mods › Installed takes them; anywhere else they lead there.
 function setupDrop() {
   const wv = window.__TAURI__ && window.__TAURI__.webview && window.__TAURI__.webview.getCurrentWebview
     ? window.__TAURI__.webview.getCurrentWebview() : null;
   if (!wv || !wv.onDragDropEvent) return;
   wv.onDragDropEvent((ev) => {
     const t = ev.payload && ev.payload.type;
-    if (t === "enter" || t === "over") { $("drop").classList.add("over"); if (currentPage !== "mods") show("mods"); }
+    const here = currentPage === "mods" && currentTab === "installed";
+    if (t === "enter" || t === "over") { $("drop").classList.add("over"); if (!here) show("mods", false, "installed"); }
     else if (t === "leave") $("drop").classList.remove("over");
     else if (t === "drop") {
       $("drop").classList.remove("over");
-      if (currentPage !== "mods") show("mods");
+      if (!here) show("mods", false, "installed");
       installLocal(ev.payload.paths || []);
     }
   });
@@ -1106,7 +1215,7 @@ async function loadRealms(quiet) {
   }
   renderRealms();
   renderRealmRows();
-  $("srv-name").textContent = realmLabel();
+  renderSrvHead();
 }
 
 // The network (realms.rs order): featured community realms, the Leyline Sample Hangout (ours, temporary), the
@@ -1148,10 +1257,44 @@ function networkLine(t) {
   if (!t) return "";
   return `${t.realms} realm${t.realms === 1 ? "" : "s"} · ${t.players} player${t.players === 1 ? "" : "s"} online` + (t.bots ? ` · ${t.bots} bots` : "");
 }
-function uptimeTag(r) {
-  const u = r.uptime_7d != null ? r.uptime_7d : r.uptime_24h;
-  if (u == null) return null;
-  return el("span", "tag" + (u >= 95 ? " good" : u >= 75 ? "" : " warn"), `${u}% up · ${r.uptime_7d != null ? "7 d" : "24 h"}`);
+// A realm's look, as on the website: a hue from its name, the crystal for the official realm.
+function nameHue(name) {
+  let h = 2166136261;
+  for (const ch of String(name)) h = Math.imul(h ^ ch.codePointAt(0), 16777619) >>> 0;
+  return h % 360;
+}
+function fillRealmIcon(box, name, official) {
+  box.replaceChildren();
+  box.classList.toggle("crystal", !!official);
+  if (official) {
+    const img = el("img");
+    img.src = "art/brand/leyline-crystal-256.webp";
+    img.alt = "";
+    img.decoding = "async";
+    box.append(img);
+    box.style.removeProperty("--h");
+  } else {
+    box.style.setProperty("--h", String(nameHue(name)));
+    box.textContent = ([...String(name).trim()][0] || "?").toUpperCase();
+  }
+  return box;
+}
+function realmIcon(name, official, size) {
+  const box = el("span", "rl-ic" + (size ? " " + size : ""));
+  box.setAttribute("aria-hidden", "true");
+  return fillRealmIcon(box, name, official);
+}
+// The client version a realm takes ("3.3.5a"), when the list says and the build is offered.
+function realmVersion(r) {
+  if (!r) return null;
+  if (r.build) return offeredBuild(r.build) ? r.build : null;
+  return r.version || null;
+}
+// How full a realm is, for the bar: at least a sliver when anyone is on; a realm without a limit counts 100.
+function playersFill(players, max) {
+  if (!players) return 0;
+  const cap = max > 0 ? max : 100;
+  return Math.max(6, Math.min(100, Math.round((100 * players) / cap)));
 }
 
 function renderRealms() {
@@ -1166,37 +1309,65 @@ function renderRealms() {
     if (mine && !fit) continue;
     if (!realmMatches(r)) continue;
     shown++;
-    const card = el("article", "realm-card" + (r.address && r.address === now ? " on" : "") + (r.featured ? " featured" : "") + (r.official ? " official" : ""));
-    const head = el("div", "top");
-    const st = el("span", "state " + (r.state === "live" ? "is-online" : "is-offline"));
-    st.append(el("span", "dot"), el("span", "", r.state === "live" ? "Online" : "Offline"));
-    head.append(el("b", "name", r.name), st);
-    const counts = [r.players != null ? `${r.players}${r.max_players ? " of " + r.max_players : ""} players` : "", r.bots ? `${r.bots} bots` : ""].filter(Boolean).join(" · ");
-    const facts = [r.official ? "Run by Leyline" : "Community realm", r.kind, r.ruleset, counts].filter(Boolean).join(" · ");
-    const tags = el("div", "tags");
-    if (r.official && r.temporary) tags.append(el("span", "tag warn", "temporary"));
-    if (r.featured) tags.append(el("span", "tag gold", "Featured"));
-    if (r.verified) tags.append(el("span", "tag good", "Verified host"));
-    if (r.is_new) tags.append(el("span", "tag", "New"));
-    const up = uptimeTag(r);
-    if (up) tags.append(up);
-    for (const t of r.tags || []) if (!r.official) tags.append(el("span", "tag", TAG_LABELS[t] || t));
-    if (r.region) tags.append(el("span", "tag", (REGION_LABELS[r.region] || r.region) + (r.region_estimated ? " (estimated)" : "")));
-    if (r.language) tags.append(el("span", "tag", r.language));
-    if (r.direct && p2pHosting) tags.append(el("span", "tag good", "Direct connect available"));
-    tags.append(el("span", "tag", r.build ? buildLabel(r.build) : (r.version || "Build not listed")));
-    tags.append(el("span", "tag", CORE_LABELS[r.core] || "Other server"));
-    if (r.build && !fit) tags.append(el("span", "tag warn", `Needs your own ${r.build} client`));
-    card.append(head, el("div", "facts", facts), tags);
-    if (r.tagline) card.append(el("p", "desc", r.tagline));
+    const live = r.state === "live";
+    const card = el("article", "realm-card rl" + (r.address && r.address === now ? " on" : "") + (r.featured ? " featured" : "")
+      + (r.official ? " official" : "") + (live ? "" : " off"));
+    // like the website's realm list (stream/hub.py realm_row): icon · name, version, badges, meta · players · actions
+    const main = el("div", "rl-main");
+    const title = el("div", "rl-title");
+    title.append(el("b", "name", r.name));
+    const ver = realmVersion(r);
+    if (ver) { const v = el("span", "rl-ver", ver); v.title = "Game client version"; title.append(v); }
+    const badge = (text, cls, tip) => { const b = el("span", "rl-bdg" + (cls ? " " + cls : ""), text); if (tip) b.title = tip; title.append(b); };
+    if (r.official) badge("Official", "o");
+    if (r.official && r.temporary) badge("Temporary", "warn");
+    if (r.featured) badge("Featured", "f");
+    if (r.verified) badge("Verified", "v", "Verified host: checked by Leyline staff");
+    if (r.is_new) badge("New", "");
+    if (r.direct && p2pHosting) badge("Direct connect available", "v");
+    if (r.build && !fit) badge(`Needs your own ${r.build} client`, "warn");
+    const meta = el("div", "rl-meta");
+    const m = (text, cls) => { if (text) meta.append(el("span", cls || "", text)); };
+    m(r.official ? "Run by Leyline" : "Community realm");
+    m(r.kind);
+    m(CORE_LABELS[r.core] || "Other server");
+    if (r.region) m((REGION_LABELS[r.region] || r.region) + (r.region_estimated ? " (estimated)" : ""));
+    for (const t of r.tags || []) if (!r.official) m(TAG_LABELS[t] || t);
+    m(r.language);
+    const u = r.uptime_7d != null ? r.uptime_7d : r.uptime_24h;
+    if (u != null) m(`${u}% up · ${r.uptime_7d != null ? "7 d" : "24 h"}`, u >= 95 ? "ok" : u >= 75 ? "" : "warn");
+    main.append(title, meta);
+    if (r.tagline) main.append(el("p", "desc", r.tagline));
     if (r.rules && r.rules.length) {
       const ul = el("ul", "rules");
       ul.replaceChildren(...r.rules.slice(0, 4).map((x) => el("li", "", x)));
-      card.append(ul);
+      main.append(ul);
     }
-    card.append(el("div", "hint", r.address ? `Realmlist: ${r.address}` : "No desktop address yet: PLAY asks the relay"));
+    if (!r.address) main.append(el("div", "hint", "No desktop address yet: PLAY asks the relay"));
+    // players online, with a small fill bar
+    const pop = el("div", "rl-pop");
+    const st = el("span", "state " + (live ? "is-online" : "is-offline"));
+    st.append(el("span", "dot"));
+    if (!live) st.append(el("span", "", "Offline"));
+    else if (r.players == null) st.append(el("span", "", "Online"));
+    else {
+      const n = el("span", "");
+      n.append(el("b", "rl-n", String(r.players)), document.createTextNode(`${r.max_players ? " of " + r.max_players : ""} playing`));
+      st.append(n);
+    }
+    pop.append(st);
+    if (live && r.bots) pop.append(el("small", "rl-bots", `${r.bots} bots`));
+    if (live) {
+      const bar = el("span", "rl-bar");
+      bar.setAttribute("aria-hidden", "true");
+      const fill = el("i");
+      fill.style.width = playersFill(r.players, r.max_players) + "%";
+      bar.append(fill);
+      pop.append(bar);
+    }
+    card.append(realmIcon(r.name, r.official), main, pop);
     const acts = el("div", "acts");
-    const play = el("button", "btn small", "PLAY");
+    const play = el("button", "btn small primary", "PLAY");
     if (!state.settings.clients.length) { play.disabled = true; play.title = "Add a game client first"; }
     else if (!fit) { play.title = `This realm runs ${r.build}: PLAY says what is missing`; }
     else play.title = `Plays with ${fit.name}`;
@@ -1212,6 +1383,7 @@ function renderRealms() {
     if (r.join_url) acts.append(linkBtn("Make an account", r.join_url));
     if (r.discord) acts.append(linkBtn("Discord", r.discord));
     if (r.report_url && !r.official) { const rep = linkBtn("Report", r.report_url); rep.title = "Report this realm to Leyline staff (on the website)"; acts.append(rep); }
+    if (r.address) { const ad = el("code", "rl-addr", r.address); ad.title = "Realmlist: the realm address for a desktop client"; acts.append(ad); }
     card.append(acts);
     box.append(card);
   }
@@ -1448,7 +1620,7 @@ refresh().then(() => {
   setupDrop();
   let page = "play";
   try { page = localStorage.getItem("leyline.page") || "play"; } catch (_) { /* fine */ }
-  show($("page-" + page) ? page : "play");
+  show(page);   // an unknown or old page id: resolvePage maps it, or Home
 }).catch((e) => {
   document.body.prepend(el("p", "status bad", "Leyline could not start: " + e));
 });
