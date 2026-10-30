@@ -43,7 +43,9 @@ checks the output again, and the tests check every checked-in entry.
    hacks, packet editors, multiboxing tools. Server-side playerbots are fine (they run on your own realm).
 7. **An open licence**, as SPDX: from the forge's API, or else from the licence file at the repo root. No licence,
    or one we don't recognise: the repo waits in `holding.json` → `needs_licence` (re-checked every run) and is
-   listed the week it gets one. Non-commercial or no-derivatives terms: left out.
+   listed the week it gets one. Non-commercial or no-derivatives terms: left out, and so is an open licence's text
+   with a rider added on top (an "additional restriction" against commercial game use, the Commons Clause): a
+   field-of-use limit makes it not an open licence, whatever the first paragraph says.
 8. **A supported build.** For an addon the TOC's `## Interface:` decides (11200 = 1.12.1, 20400 = 2.4.3,
    30300 = 3.3.5a, 40300 = 4.3.4, 50400 = 5.4.8; anything else, such as current-game TOCs, is left out). For
    everything else: AzerothCore means 3.3.5a, vMaNGOS 1.12.1; then version numbers and build numbers in the
@@ -55,6 +57,12 @@ checks the output again, and the tests check every checked-in entry.
    game", and the expansion's full title becomes "Wrath"); an author whose name carries one goes to review rather
    than being renamed. Repo links stay as they are and are never shown as text ("View source").
 10. **A little signal** for discovered (not curated or submitted) projects: at least 3 stars.
+
+**Curated waivers.** The file rules go by names alone, so a curated seed may waive named files that trip one by
+their name and nothing else: `"waive": [{"file": "site/docs/index.mdx", "why": "an MDX docs page"}]`. A waiver needs
+its reason, covers only the files it names, and only when every file the probe listed is named and the list is
+complete (the probe keeps five): one more file, or a new one, trips the rule again. First used for Azeroth World
+Editor (two MDX docs pages, and `decompile.ts`, which turns the realm database's SmartAI rows into readable steps).
 
 Dedupe: one entry per canonical repo link (case, `.git`, `www.` and sub-paths folded), and one per display
 name and build set (mirrors and re-uploads); the higher score wins and the other is listed as excluded.
@@ -84,15 +92,76 @@ to 200 characters. Nothing else is copied from a repo.
 * `builds`: `1.12` (shown as 1.12.1), `2.4.3`, `3.3.5a`, `4.3.4`, `5.4.8`, or `any`; in that order.
 * `category`: one of the 12 in `mods/categories.json`. `type`: addon, module, lua, core, tool, preset, other.
 * `source`: `seed` (curated in `seeds.json`), `discovered`, `submitted`. `stars` is `null` when unknown.
-* Sorted by (category, name, id). `hub_index.py check` validates it.
+* Sorted by (category, name, id). `hub_index.py check` validates it (the hub's rules, the thumbnail fields and files,
+  and the `external` list).
+* `thumb`, `thumb_credit` (optional, together): `"/wrath/art/hub-thumbs/<owner>__<repo>.webp"` and exactly
+  `"Preview image from the project's GitHub page"`. Written by `hub_index.py thumbs` (below) only once
+  `stream/hub.py`'s `ENTRY_KEYS` lists both fields: until then `validate_index` would reject the entry and the hub
+  would show no index at all, so the command writes the images and leaves the entries alone.
+* `external` (top level, beside `entries`): the link-only external packs (below), and `external_policy` their
+  one-line policy. `validate_index` reads only `entries`, so this list never affects the entries.
+
+## Thumbnails
+
+`python3 -I tools/hub-index/hub_index.py thumbs [--top 30] [--only owner/repo ...] [--refresh]` (also
+`build --thumbs N`, which runs it after a good build for the top N and the `--only` repos; a thumbnail that can't be
+fetched never fails the build). For each picked GitHub entry (and each external pack with a GitHub `repo`):
+
+1. Read the repo's page on github.com and take its `og:image`: the social preview the owner set, or else the card
+   GitHub draws for every repo.
+2. Fetch it only from GitHub's own image hosts: `opengraph.githubassets.com`, `repository-images.githubusercontent.com`,
+   `avatars.githubusercontent.com` (https only, checked again on every redirect). At most 2 MB is read; a bigger
+   answer is dropped.
+3. Keep it only when its first bytes say PNG, JPEG, GIF or WebP (never SVG, HTML or anything else), then make a
+   640×320 WebP (centre crop, quality 80 stepping down until it is at most 60 KB) with Pillow, or ffmpeg when
+   Pillow isn't installed.
+4. Write `stream/www-files/art/hub-thumbs/<owner>__<repo>.webp` (lowercased; served at `/wrath/art/hub-thumbs/`)
+   only when the bytes changed; a conditional request with the last ETag skips unchanged images
+   (`tools/hub-index/.cache/thumbs.json`). An entry that already has its thumb is left alone without `--refresh`:
+   GitHub's card changes with every star, and each change would be a review.
+
+Why only the project's own GitHub preview: it is the picture the project chose to represent itself where it lives,
+GitHub serves it for exactly this use (link previews), and it is credited as such on the page. Nothing from a README,
+a release, a forum, Reddit or Discord is ever downloaded: those are other people's uploads (user content), and a post's
+images are not the project's to give. GitHub's generated card prints the repo's name and description, so when they
+carry a brand word or a client number (which the hub never shows) the card is skipped and the entry gets the
+hub's generated tile. A custom preview can't be read that way: like any change to an entry beyond a refresh, a new or
+changed thumb waits for a person in the daily review PR (`thumb` is not one of the gate's refresh fields).
+
+## External packs (a policy exception)
+
+The owner, 2026-10-30: "keep the ultraHD links for now and other similar". HD graphics packs (texture and model packs)
+are client patch files, so under rule 1 they can never be index entries. They are listed apart, as link-only items in
+the index's top-level `external` list, curated by hand in `tools/hub-index/external-packs.json`:
+
+```json
+{"id": "ext:994b561c9db9", "name": "UltraHD Graphics Modpack", "author": "", "url": "https://www.reddit.com/r/wowservers/comments/1xiqhdg/...",
+ "category": "graphics", "type": "external-pack", "builds": ["3.3.5a"], "summary": "...", "external": true,
+ "note": "External download, made and hosted by its authors; not checked or hosted by Leyline",
+ "source_thread": "https://www.reddit.com/r/wowservers/comments/1xiqhdg/...", "added": "2026-10-30"}
+```
+
+* `url` is the pack's own page (its repo, official page or announcement thread), never a file, a release asset or a
+  file host (zip/rar/7z/mpq/exe/apk, `/releases/download/`, Mega, MediaFire, Drive, Dropbox: refused).
+* `external: true` and the `note` are fixed and shown with the item. Never mirrored, never installable: no Install,
+  no `leyline://install`, nothing probed beyond the page.
+* A thumbnail only from the pack's GitHub `repo` preview when it has one (as above); otherwise none (the hub's tile).
+* Every other rule still holds: nothing decompiled or leaked, no whole-client downloads or repacks, no blocklisted
+  repos or owners, nothing paid, no brand words or client numbers in the visible text.
+* `id` is `ext:` + the first 12 hex of sha256 of the lowercased `url`. Sorted by (category, name, id).
+
+Items using it: the UltraHD Graphics Modpack (r/wowservers 1xiqhdg), added 2026-10-30 from the thread alone (Reddit
+could not be read from the build machine; a person should open the thread and check the pack's page is a page, free,
+and not a whole client).
 
 `tools/hub-index/holding.json`: `{format: 1, needs_licence: [{repo, name, builds, reason}], review: [{repo,
-reason}], excluded: [{repo, reason}]}`, each sorted by repo. The PR shows what changed in it.
+reason}], excluded: [{repo, reason}]}`, each sorted by repo. The PR shows what changed in it. A `build --only`
+run replaces only the probed repos' places in it and keeps the rest.
 
 ## Inputs
 
 * `seeds.json`: `{"seeds": [{repo, builds (default ["3.3.5a"]), category, type, name, description, needs,
-  author, skip}]}`. `skip` is a policy decision with its reason; skips about a licence, game-format files or patch
+  author, skip, waive, found}]}` (`found`: where we came across it, a thread permalink or a search; a note only). `skip` is a policy decision with its reason; skips about a licence, game-format files or patch
   files are re-checked every run, the others stay out.
 * `candidates.json`: the discovered pool, `{"candidates": [{repo, via: [...], builds: [hints], stars, licence,
   description, topics, archived, pushed}]}`. `discover` adds to it and refreshes what the search says; a repo

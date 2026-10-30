@@ -122,6 +122,16 @@
    "reason": "no open licence file"
   },
   {
+   "repo": "https://github.com/cmangos/playerbots",
+   "name": "CMaNGOS Playerbots",
+   "builds": [
+    "1.12",
+    "2.4.3",
+    "3.3.5a"
+   ],
+   "reason": "no open licence file"
+  },
+  {
    "repo": "https://github.com/coc0nut/AzerothCore-with-Playerbots-Docker-Setup",
    "name": "AzerothCore-with-Playerbots-Docker-Setup",
    "builds": [
@@ -180,6 +190,22 @@
   {
    "repo": "https://github.com/hypopheria2k/xCT_Plus_wotlk",
    "name": "xCT_Plus_wotlk",
+   "builds": [
+    "3.3.5a"
+   ],
+   "reason": "no open licence file"
+  },
+  {
+   "repo": "https://github.com/kasperfriend/azerothcore-oneclick-compiler",
+   "name": "One-Click Realm Compiler",
+   "builds": [
+    "3.3.5a"
+   ],
+   "reason": "no open licence file"
+  },
+  {
+   "repo": "https://github.com/kasperfriend/friends-graphics",
+   "name": "Modern Renderer",
    "builds": [
     "3.3.5a"
    ],
