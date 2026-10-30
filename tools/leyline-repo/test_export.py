@@ -93,6 +93,9 @@ try:
           not any(g.endswith(("ModsPanel.lua", "control.py", "WrathUnleashedUI.lua", "Collections.lua")) for g in got))
     check("allow-list: the launcher without its build output (target/, gen/, node_modules/)",
           not any(g.startswith("launcher/") and any(f"/{d}/" in g for d in ("target", "gen", "node_modules")) for g in got))
+    check("allow-list: no labs/, client patches or private ops folders (2026-10-30 repo map)",
+          not any(g.split("/")[0] in ("labs", "client", "server", "tools", "control", "gmconsole", "play", "players")
+                  for g in got) and not any(e.split("/")[0] == "labs" for e in ex.ALLOW))
     check("allow-list: no __pycache__ / .pyc", not any("__pycache__" in g or g.endswith(".pyc") for g in got))
     lic = (out1 / "LICENSE").read_text()
     check("LICENSE: the repo's MIT license", lic.startswith("MIT License") and "WrathUnleashed contributors" in lic)

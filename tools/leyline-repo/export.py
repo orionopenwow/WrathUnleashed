@@ -34,6 +34,8 @@ REPO = Path(__file__).resolve().parents[2]
 ADDON = "stream/fui-web/Interface/AddOns/WrathUnleashedUI"
 
 # The allow-list: folders (copied whole, minus refusals), single files, and globs. Paths as in this repo.
+# Public = the launcher, the host kit, the relay and their docs (docs/REPO-MAP.md marks them "public"). Never labs/,
+# client/ (our client patches), server/, tools/ or the Autopilot files: those stay in the private repo.
 ALLOW = [
     "hosting/relay",                              # the relay (wurelay, its Dockerfile and deploy scripts)
     "hosting/kit",                                # the host kit: the `leyline` command, host scripts, compose
@@ -183,21 +185,26 @@ def plan(src: Path):
 # --------------------------------------------------------------------------------------------- generated files
 README = """# Leyline
 
-Leyline is an open, peer-to-peer network for playing, hosting and modding community game realms
-(3.3.5a). It grew out of [WrathUnleashed](https://github.com/orionopenwow/WrathUnleashed).
+Leyline is a **mod launcher** and a **peer-to-peer realm network** for classic game clients.
 
-- **Play** in your browser (nothing to install) or in a desktop client.
-- **Host** a realm from your own PC with one command: `leyline host`. Docker is the only thing it needs.
-- **Stay private**: your realm talks out to the Leyline relay, players connect to the relay, and nobody
-  sees your home address. No port forwarding.
-- **Share** invite links, list your realm on the Leyline realm list (Beacons), and share mods.
-- **Launch** your own installed client (3.3.5a or 1.12.1) from the Leyline desktop app (`launcher/`).
-- **Open source**, MIT licensed. No game data is in this repo: hosts extract it from their own install,
-  on their own PC.
+- **Host a realm in one click**, from the browser or the desktop launcher. It runs on your own PC (Docker is
+  the only thing it needs) and is listed for everyone on the Leyline realm list. No port forwarding: your realm
+  talks out to a Leyline relay, players connect to the relay, and nobody sees your home address.
+- **Mods and addons hub**: find, install, update and share mods, addons, game modes and themes. The launcher
+  installs them into your own client in one click and checks every file first.
+- **Play in your browser** (nothing to install), or **with your own client**: the launcher finds the client you
+  already have, points it at the realm you picked and starts it.
+- **A sample realm to try**: our temporary *Dalaran Hangout* (3.3.5a) is a Leyline realm like any other, and
+  it gets our client additions first.
+- **Open source**, MIT licensed. No game data is in this repo: hosts extract what their realm needs from their
+  own install, on their own PC, and it never leaves it.
 
 ## Quick start: host a realm
 
-macOS or Linux, with Docker running:
+From the browser: sign in on the Leyline site, press **Host a realm**, choose a name and house rules, and run
+the one-click setup it gives you. From the desktop launcher: open **Host**.
+
+Or by hand. macOS or Linux, with Docker running:
 
 ```sh
 git clone https://github.com/orionopenwow/Leyline.git
@@ -206,9 +213,11 @@ bash leyline host        # a few questions the first time; safe to run again
 bash leyline status      # your invite or join link
 ```
 
-Windows: double-click `hosting/kit/Host a Wrath realm.bat`. Full guide: `hosting/INSTALL-OPERATE.md`.
+Windows: double-click `hosting/kit/Host a Leyline realm.bat`. Full guide: `hosting/INSTALL-OPERATE.md`.
+The host kit runs 3.3.5a realms (AzerothCore) and, with its profiles, 1.12.1 and 2.4.3 realms too.
 
-To play on a realm, open its join link (`https://relay.<domain>/join/<realm id>`) and follow the page.
+To play on a realm, open its join link (`https://relay.<domain>/join/<realm id>`) and follow the page, or pick
+it on the launcher's **Realms** page.
 
 ## Run the tests
 
@@ -234,7 +243,8 @@ panel); run those there.
 | `stream/www-files/art/` | the Leyline art and display font (SIL OFL 1.1) |
 | `mods/SPEC.md` | the mod package format |
 | `docs/leyline/` | the Leyline docs: play, mods, publishing, hosting, launcher, Hero Key, other servers, commands |
-| `launcher/` | the Leyline desktop app (Windows, macOS, Linux): pick a client, point it at a realm, play. Build steps in `launcher/README.md` |
+| `stream/playmodes.json` | the game-mode catalog the launcher builds in |
+| `launcher/` | the Leyline desktop launcher (Windows, macOS, Linux): clients, mods, realms, hosting. Build steps in `launcher/README.md` |
 
 The Mods & Workshop panel (`ModsPanel.lua`) uses the rest of the WrathUnleashed UI addon, so it stays in
 WrathUnleashed; the in-game window here opens from it.
