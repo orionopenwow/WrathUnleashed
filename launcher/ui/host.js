@@ -167,7 +167,73 @@
     try { note(listStatus, await call("host_listing_set", { details }), "ok"); } catch (e) { note(listStatus, String(e), "bad"); }
   }
 
-  function loadHostExtras() { loadPack(); loadDocker(); loadInvite(); loadListing(); }
+  // ---------------------------------------------------------------- Host page: which game (host any client)
+  // The realm profiles the kit can run for the clients Leyline found on this PC (host/profiles.rs). The pick is
+  // saved in the kit folder; START MY REALM hands it to the kit's script with that client's folder, from which the
+  // server data is made (read-only, nothing downloaded).
+  const gameCard = mk("section", "card stone");
+  gameCard.id = "hg-card";
+  const ghead = mk("div", "card-head");
+  ghead.append(mk("span", "", "WHICH GAME"));
+  const gameSel = mk("select", "");
+  const clientSel = mk("select", "");
+  const gameHint = mk("p", "hint");
+  const gameStatus = mk("p", "status");
+  const gRow = mk("div", "row");
+  const lg = mk("label", "inline", "Realm "); lg.append(gameSel);
+  const lc = mk("label", "inline", "Your client "); lc.append(clientSel);
+  gRow.append(lg, lc);
+  gameCard.append(ghead, mk("p", "lede", "Host a realm for any client you have on this PC. Players need their own client of the same version."),
+    gRow, gameHint, gameStatus);
+  panel.insertBefore(gameCard, packCard.nextSibling);
+  let offers = [];
+  function showClients(keep) {
+    const o = offers.find((x) => x.id === gameSel.value);
+    clientSel.replaceChildren();
+    for (const c of (o ? o.clients : [])) { const op = mk("option", "", `${c.name} · ${c.path}`); op.value = c.id; clientSel.append(op); }
+    lc.hidden = !o || !o.clients.length;
+    if (keep) clientSel.value = keep;
+    gameHint.textContent = o ? (o.note || `Runs ${o.core} for the ${o.version} client. The server data is made from your client's folder (read-only).`) : "";
+    gameHint.className = "hint" + (o && o.note ? " warn" : "");
+  }
+  async function saveGame() {
+    const o = offers.find((x) => x.id === gameSel.value);
+    if (o && o.note) { note(gameStatus, ""); return; }
+    if (!o) {
+      try { await call("host_choose", { profile: "", clientId: null }); note(gameStatus, "The kit keeps the realm it hosts, or asks on its first start.", "ok"); }
+      catch (e) { note(gameStatus, String(e), "bad"); }
+      return;
+    }
+    try {
+      await call("host_choose", { profile: o.id, clientId: clientSel.value || null });
+      note(gameStatus, `Saved: START MY REALM hosts a ${o.version} realm.`, "ok");
+    } catch (e) { note(gameStatus, String(e), "bad"); }
+  }
+  gameSel.addEventListener("change", () => { showClients(); saveGame(); });
+  clientSel.addEventListener("change", saveGame);
+  async function loadGames() {
+    let r;
+    try { r = await call("host_profiles"); } catch (e) { gameHint.textContent = String(e); return; }
+    if (!Array.isArray(r) || !Array.isArray(r[0])) return;
+    const [list, choice] = r;
+    offers = list.filter((o) => o && Array.isArray(o.clients));
+    gameSel.replaceChildren();
+    const first = mk("option", "", "As set up before (or the kit asks)"); first.value = ""; gameSel.append(first);
+    for (const o of offers) {
+      const op = mk("option", "", o.note ? `${o.label} (needs a ${o.version} client)` : o.label);
+      op.value = o.id; op.disabled = !!o.note; gameSel.append(op);
+    }
+    let keep = null;
+    if (choice && offers.some((o) => o.id === choice.profile && !o.note)) {
+      gameSel.value = choice.profile;
+      const o = offers.find((x) => x.id === choice.profile);
+      const c = o.clients.find((x) => x.path === choice.client_dir);
+      keep = c ? c.id : null;
+    }
+    showClients(keep);
+  }
+
+  function loadHostExtras() { loadPack(); loadDocker(); loadInvite(); loadListing(); loadGames(); }
 
   // ---------------------------------------------------------------- Settings > Advanced: P2P and torrent
   const setPanel = byId("page-settings") && byId("page-settings").querySelector(".panel");

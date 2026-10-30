@@ -15,6 +15,7 @@
 
 pub mod docker;
 pub mod pack;
+pub mod profiles;
 
 use crate::realms;
 use serde::{Deserialize, Serialize};
@@ -172,6 +173,10 @@ pub struct HostPlan {
     pub log: Option<PathBuf>,
     /// What the UI says once it started.
     pub note: String,
+    /// The Host page's choice for the kit's script (`profiles::env_for`): the realm profile and the client folder.
+    /// Windows passes it to the console; Mac and Linux put it on the command line (`env K=V ...`), because a
+    /// terminal window does not always hand the launcher's environment on.
+    pub env: Vec<(String, String)>,
 }
 
 fn sh_quote(s: &str) -> String {
@@ -193,6 +198,7 @@ pub fn plan(kit: &Path, seed: Option<&str>, os: HostOs, has: impl Fn(&str) -> bo
         }
     }
     let cwd = kit.to_path_buf();
+    let env = profiles::env_for(kit);
     match os {
         HostOs::Windows => {
             if !info.has_windows_script {
@@ -205,6 +211,7 @@ pub fn plan(kit: &Path, seed: Option<&str>, os: HostOs, has: impl Fn(&str) -> bo
                 cwd,
                 new_console: true,
                 log: None,
+                env,
                 note: "Started in its own window. Leave it open: the first start imports the databases and can take 5 to 20 minutes.".into(),
             })
         }
@@ -212,10 +219,16 @@ pub fn plan(kit: &Path, seed: Option<&str>, os: HostOs, has: impl Fn(&str) -> bo
             if !info.has_unix_script {
                 return Err("The `leyline` script is not in this folder: pick your host kit folder.".into());
             }
-            let cmd: Vec<String> = match seed {
+            let mut cmd: Vec<String> = match seed {
                 Some(s) => vec!["bash".into(), s.into()],
                 None => vec!["bash".into(), LEYLINE_SCRIPT.into(), "host".into()],
             };
+            if !env.is_empty() {
+                let mut e: Vec<String> = vec!["env".into()];
+                e.extend(env.iter().map(|(k, v)| format!("{k}={v}")));
+                e.extend(cmd);
+                cmd = e;
+            }
             let note = "Started in a terminal window. The first start imports the databases and can take 5 to 20 minutes.".to_string();
             if os == HostOs::Mac {
                 let line = format!("cd {} && {}", sh_quote(&kit.display().to_string()), cmd.iter().map(|c| sh_quote(c)).collect::<Vec<_>>().join(" "));
@@ -226,6 +239,7 @@ pub fn plan(kit: &Path, seed: Option<&str>, os: HostOs, has: impl Fn(&str) -> bo
                     cwd,
                     new_console: false,
                     log: None,
+                    env: Vec::new(),
                     note,
                 });
             }
@@ -246,15 +260,16 @@ pub fn plan(kit: &Path, seed: Option<&str>, os: HostOs, has: impl Fn(&str) -> bo
                 if has(t) {
                     let mut args: Vec<String> = pre.iter().map(|s| s.to_string()).collect();
                     args.extend(wrapped.iter().cloned());
-                    return Ok(HostPlan { program: t.to_string(), args, cwd, new_console: false, log: None, note });
+                    return Ok(HostPlan { program: t.to_string(), args, cwd, new_console: false, log: None, env: Vec::new(), note });
                 }
             }
             let log = kit.join("state").join("leyline-launcher.log");
             Ok(HostPlan {
-                program: "bash".into(),
+                program: cmd[0].clone(),
                 args: cmd[1..].to_vec(),
                 cwd,
                 new_console: false,
+                env: Vec::new(),
                 note: format!("No terminal window found, so it runs in the background; its output is in {}.", log.display()),
                 log: Some(log),
             })
@@ -269,7 +284,7 @@ pub fn on_path(name: &str) -> bool {
 
 pub fn run(p: &HostPlan) -> Result<(), String> {
     let mut c = Command::new(&p.program);
-    c.args(&p.args).current_dir(&p.cwd);
+    c.args(&p.args).current_dir(&p.cwd).envs(p.env.iter().map(|(k, v)| (k.as_str(), v.as_str())));
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -523,6 +538,29 @@ mod tests {
         let not = tempfile::tempdir().unwrap();
         assert!(plan(not.path(), None, HostOs::Windows, |_| false).is_err());
         assert!(plan(k.path(), Some("leyline-zzzzzzzzzzzzzzzz.sh"), HostOs::Linux, |_| false).unwrap_err().contains("not in the kit"));
+    }
+
+    #[test]
+    fn the_host_pages_choice_reaches_the_script() {
+        let k = kit();
+        let games = tempfile::tempdir().unwrap();
+        touch(k.path(), "profiles/cmangos-2.4.3/profile.lock", b"LL_PROFILE=cmangos-2.4.3\n");
+        let c = crate::clients::ClientProfile {
+            id: "c1".into(), name: "my 2.4.3".into(), path: games.path().to_path_buf(), build: crate::clients::Build::V243,
+            realmlist: String::new(), locale: None, exe_version: None, exe: None,
+        };
+        profiles::choose(k.path(), "cmangos-2.4.3", Some(&c)).unwrap();
+        let w = plan(k.path(), None, HostOs::Windows, |_| false).unwrap();
+        assert!(w.env.contains(&("WU_PROFILE".into(), "cmangos-2.4.3".into())));
+        assert!(w.env.contains(&("WU_CLIENT_DIR".into(), games.path().display().to_string())));
+        let l = plan(k.path(), None, HostOs::Linux, |t| t == "konsole").unwrap();
+        let at = l.args.iter().position(|a| a == "env").expect("env on the command line");
+        assert_eq!(l.args[at + 1], "WU_PROFILE=cmangos-2.4.3");
+        assert_eq!(&l.args[l.args.len() - 3..], &["bash", "leyline", "host"]);
+        let bg = plan(k.path(), None, HostOs::Linux, |_| false).unwrap();
+        assert_eq!((bg.program.as_str(), bg.args.last().map(String::as_str)), ("env", Some("host")));
+        let m = plan(k.path(), None, HostOs::Mac, |_| false).unwrap();
+        assert!(m.args[1].contains("'env' 'WU_PROFILE=cmangos-2.4.3'"), "{}", m.args[1]);
     }
 
     #[cfg(unix)]

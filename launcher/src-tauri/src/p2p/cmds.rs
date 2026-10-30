@@ -49,6 +49,32 @@ pub async fn docker_info() -> Result<DockerInfo, String> {
     blocking(|| Ok(docker::detect(HostOs::current(), &|a| docker::run_docker(a, None, Duration::from_secs(15))))).await
 }
 
+/// Host any client: the realm profiles the kit can run for the clients Leyline found on this PC, and the saved
+/// choice (host/profiles.rs). Nothing here takes a path from the UI: clients by their id, profiles by their name.
+#[tauri::command]
+pub async fn host_profiles() -> Result<(Vec<host::profiles::Offer>, Option<host::profiles::Choice>), String> {
+    blocking(|| {
+        let s = settings::load(&settings::app_dir());
+        let k = (!s.host_kit.is_empty()).then(|| PathBuf::from(&s.host_kit));
+        let choice = k.as_deref().and_then(host::profiles::read_choice);
+        Ok((host::profiles::offers(k.as_deref(), &s.clients), choice))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn host_choose(profile: String, client_id: Option<String>) -> Result<host::profiles::Choice, String> {
+    blocking(move || {
+        let s = settings::load(&settings::app_dir());
+        let client = match client_id.as_deref() {
+            Some(id) => Some(s.clients.iter().find(|c| c.id == id).ok_or("That client is not in your clients any more.")?),
+            None => None,
+        };
+        host::profiles::choose(&kit()?, &profile, client)
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn host_stop() -> Result<String, String> {
     blocking(|| host::stop(&kit()?)).await
