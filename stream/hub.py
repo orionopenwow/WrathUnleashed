@@ -2539,14 +2539,14 @@ NAV_ICONS = {
 # The gallery (Hub.gallery_tiles). Our in-game screenshots (stream/www-files/art, checked by eye: no logo, no game name;
 # behind the game data killswitch): name -> (width, height, title, line, alt). Words only; no client numbers, no game name.
 GAME_SHOTS = {
-    "dalaran": (1280, 654, "The hangout", "The meeting place on our flagship realm, streamed into a browser tab.",
+    "dalaran": (690, 390, "The hangout", "The meeting place on our flagship realm, streamed into a browser tab.",
                 "In-game screenshot: a robed hero on a cobbled path through a violet city, under a stone archway."),
-    "durotar": (1280, 662, "Red desert, first steps", "A new character by the campfire, every action bar ready with common keys.",
-                "In-game screenshot: two new characters by a campfire on red desert ground, the action bars along the bottom."),
-    "start": (1280, 798, "Your choice at the start", "Begin at level 1, or take a boost with gear, professions and a trip to the city.",
-              "In-game screenshot: a welcome window asks how to start the character, beside a chapel on green grass."),
-    "city": (1280, 699, "A city at night", "Group up, duel and run dungeons; labelled bots fill the empty places.",
-             "In-game screenshot: a character with an axe in a stone city at night, towers and trees against the stars."),
+    "durotar": (865, 475, "Red desert, first steps", "New characters by a campfire in the desert, a few minutes after signing in.",
+                "In-game screenshot: two new characters by a campfire on red desert ground."),
+    "start": (745, 420, "A quiet start", "Begin at level 1 beside the chapel, or take a boost with gear, professions and a trip to the city.",
+              "In-game screenshot: two characters on green grass in front of a stone chapel."),
+    "city": (770, 430, "A city at night", "Group up, duel and run dungeons; labelled bots fill the empty places.",
+             "In-game screenshot: a character in a stone city at night, towers and trees against the stars."),
 }
 # The launcher's own pages (tools/art/leyline-ui-shots.cjs: sample data, no game art): name -> (title, line, alt).
 LAUNCHER_SHOTS = {
