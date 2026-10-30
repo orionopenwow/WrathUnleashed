@@ -732,6 +732,113 @@ export function hopUi(env = window.__wenilla_env || {}, hop = window.__wuHop) {
 }
 // <<< leyline-hop -----------------------------------------------------------------------------------
 
+// >>> leyline-host (host your own, from the game, 2026-10-30) ------------------------------------------
+// The in-game Host window (WrathUnleashedUI/Host.lua) can't open pages, so its "Start hosting" sets the Lua global
+// WUUI_LEYLINE_HOST to the host's choices as one query string. The page takes it (and clears it) on a 1 s poll, the
+// way it takes a hop, checks every name and value again (hostQuery: the same rules as Host.lua, stream/hostflow.py
+// prefill() and the launcher's deeplink.rs), and shows a bar with "Open the host page": the website's /wrath/host
+// with the form filled in, in a new tab (a click: a page can't open tabs on its own). Nothing is sent anywhere until
+// the host signs in there and presses Start server. The poll also sets WUUI_PAGE = true, which tells the addon it
+// runs in the browser game (the desktop client has no page; it shows a leyline:// link instead).
+export const HOST_TAKE = 'WUUI_PAGE = true; local h = WUUI_LEYLINE_HOST; WUUI_LEYLINE_HOST = nil; return h';
+const HOST_PRESETS = { azerothcore: ['dalaran', 'main', 'brawl', 'progression'], cmangos: ['cmangos-1.12.1', 'cmangos-2.4.3'] };
+const HOST_REGIONS = ['na-east', 'na-west', 'sa', 'eu', 'africa', 'me', 'asia', 'oce'];
+const HOST_TAGS = ['blizzlike', 'boosted', 'custom', 'pvp', 'rp', 'hangout'];
+const HOST_BANNED = /world\s*of\s*warcraft|\bwow\b|warcraft|lich\s*king|blizzard/i;
+const HOST_ORDER = ['core', 'preset', 'name', 'type', 'xp', 'loot', 'rep', 'start', 'bots', 'vis', 'signup', 'herokey',
+  'region', 'lang', 'tags', 'max'];
+
+/** The host's choices from the game, checked: a canonical query string, or null when anything is off. */
+export function hostQuery(v) {
+  if (typeof v !== 'string' || v.length > 600) return null;
+  let p;
+  try { p = new URLSearchParams(v); } catch { return null; }
+  const o = {};
+  for (const [k, val] of p) { if (!HOST_ORDER.includes(k) || k in o) return null; o[k] = val; }
+  const int = (x, lo, hi) => (/^\d{1,5}$/.test(x) && +x >= lo && +x <= hi ? +x : null);
+  const presets = HOST_PRESETS[o.core];
+  if (!presets || !presets.includes(o.preset)) return null;
+  const name = (o.name || '').trim();
+  if (!/^[A-Za-z0-9 _'-]{1,32}$/.test(name) || HOST_BANNED.test(name)) return null;
+  if (!['normal', 'pvp', 'rp', 'rppvp'].includes(o.type)) return null;
+  const ac = o.core === 'azerothcore';
+  for (const k of ['xp', 'loot', 'rep']) if (k in o && (!ac || int(o[k], 1, 10) === null)) return null;
+  if ('start' in o && (o.preset !== 'main' || !['level1', 'boost'].includes(o.start))) return null;
+  if ('bots' in o && (!ac || o.preset === 'dalaran' || int(o.bots, 0, 200) === null)) return null;
+  if (!['public', 'private'].includes(o.vis) || !['open', 'invite', 'off'].includes(o.signup) || !['on', 'off'].includes(o.herokey)) return null;
+  if ('region' in o && !HOST_REGIONS.includes(o.region)) return null;
+  if ('lang' in o && !/^[a-z]{2,3}(-[A-Z]{2})?$/.test(o.lang)) return null;
+  if ('tags' in o && !o.tags.split(',').every((t) => HOST_TAGS.includes(t))) return null;
+  if ('max' in o && int(o.max, 0, 10000) === null) return null;
+  o.name = name;
+  return HOST_ORDER.filter((k) => k in o).map((k) => k + '=' + encodeURIComponent(o[k])).join('&');
+}
+
+/** The website's host page with those choices. */
+export function hostPageUrl(q, env = window.__wenilla_env || {}) {
+  const home = typeof env.home === 'string' && /^https:\/\/[a-z0-9.-]+$/i.test(env.home) ? env.home : CONFIG.homeUrl;
+  return q ? home + '/wrath/host?' + q : null;
+}
+
+/** The bar: "Open the host page" (a real link, new tab) and a close button. */
+export function hostBar(url, doc = document) {
+  let bar = doc.getElementById('wu-host-bar');
+  if (!bar) {
+    bar = doc.createElement('div');
+    bar.id = 'wu-host-bar';
+    bar.setAttribute('role', 'status');
+    bar.style.cssText = 'position:fixed;left:50%;bottom:52px;transform:translateX(-50%);z-index:33;display:flex;gap:8px;'
+      + 'align-items:center;padding:6px 8px 6px 14px;border-radius:10px;font:13px system-ui,sans-serif;background:#181b23;'
+      + 'border:1px solid #2b3040;color:#e6e8ef;box-shadow:0 6px 24px rgba(0,0,0,.55)';
+    const t = doc.createElement('span');
+    t.textContent = 'Your realm’s choices are ready.';
+    const a = doc.createElement('a');
+    a.className = 'go';
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = 'Open the host page';
+    a.style.cssText = 'padding:5px 12px;border-radius:7px;background:#5b8def;color:#fff;text-decoration:none;font-weight:600';
+    const x = doc.createElement('button');
+    x.type = 'button';
+    x.textContent = '×';
+    x.title = 'Close';
+    x.style.cssText = 'border:1px solid #2b3040;background:#11131a;color:#9aa3b5;border-radius:7px;padding:3px 9px;cursor:pointer';
+    x.addEventListener('click', () => bar.remove());
+    a.addEventListener('click', () => setTimeout(() => bar.remove(), 0));
+    bar.append(t, a, x);
+    (doc.body || doc.documentElement).append(bar);
+  }
+  bar.querySelector('a.go').href = url;
+  return bar;
+}
+
+/** Watch for the Host window's Start hosting. `show(url)` shows it (tests pass their own). Returns a small handle. */
+export function watchHostAsk(wenilla, { env = window.__wenilla_env || {}, show = (u) => hostBar(u), pollMs = 1000 } = {}) {
+  const h = { polls: 0, taken: null, refused: 0, busy: false, timer: 0, take: null, error: null };
+  if (!wenilla || typeof wenilla.lua !== 'function') return h;
+  h.take = async () => {
+    if (h.busy) return null;
+    h.busy = true;
+    h.polls++;
+    try {
+      let v = null;
+      try { [v] = (await wenilla.lua(HOST_TAKE, 1500)) || []; h.error = null; } catch (e) { h.error = String(e?.message || e).slice(0, 120); }
+      if (v == null) return null;
+      const q = hostQuery(v);
+      if (!q) { h.refused++; return null; }
+      h.taken = hostPageUrl(q, env);
+      show(h.taken);
+      return h.taken;
+    } finally {
+      h.busy = false;
+    }
+  };
+  const vmUp = () => { try { return !!wenilla.ready && !!wenilla.state; } catch { return false; } };
+  if (pollMs > 0) h.timer = setInterval(() => { if (vmUp()) h.take().catch(() => {}); }, pollMs);
+  return h;
+}
+// <<< leyline-host ---------------------------------------------------------------------------------
+
 // >>> game-folder (the layer, 2026-10-25) ------------------------------------------------------------
 // The player's own 3.3.5a game folder as a layer over the streamed slice (ownfiles.js). The game sees it
 // through one Lua global the page sets on a 1 s poll while the bridge has a VM (a /reload wipes globals,
@@ -844,6 +951,7 @@ export async function install(wenilla) {
   step('busy banner', busyBanner);
   step('go link', () => { status.go = goLink(); if (status.go) window.wuGo = status.go; });
   step('leyline hop', () => { status.hop = watchHops(wenilla); });
+  step('host your own', () => { status.host = watchHostAsk(wenilla); });
   step('game folder', () => { if (!window.__wenilla_env?.hop) status.folder = watchGameFolder(wenilla); });
   const ui = () => step('leyline hop page', () => { hopUi(); });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ui, { once: true });

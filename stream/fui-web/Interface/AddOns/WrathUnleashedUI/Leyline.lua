@@ -98,7 +98,7 @@ function L.Link(id)
 end
 
 -- The browser game's page publishes WUUI_GAMEFOLDER = { page = true, ... } (wrath-page.js); the desktop client has none.
-function L.HasPage() return type(WUUI_GAMEFOLDER) == "table" and WUUI_GAMEFOLDER.page == true end
+function L.HasPage() return WUUI_PAGE == true or (type(WUUI_GAMEFOLDER) == "table" and WUUI_GAMEFOLDER.page == true) end
 
 -- A row's link: this realm's is the /wrath page in the browser, its relay link in the desktop client when it is listed.
 function L.RowLink(r)

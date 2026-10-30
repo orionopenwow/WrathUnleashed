@@ -139,8 +139,8 @@ function H.WebLink(o) return PUBLIC_BASE .. "/wrath/host?" .. H.Query(o) end
 function H.DeepLink(o) return "leyline://host?" .. H.Query(o) end
 function H.ManageLink(what) return H.MANAGE[what] and ("leyline://host?manage=" .. what) or nil end
 
--- The browser game's page publishes WUUI_GAMEFOLDER = { page = true, ... } every second (wrath-page.js).
-function H.HasPage() return type(WUUI_GAMEFOLDER) == "table" and WUUI_GAMEFOLDER.page == true end
+-- The browser game's page sets WUUI_PAGE = true (and WUUI_GAMEFOLDER = { page = true, ... }) every second (wrath-page.js).
+function H.HasPage() return WUUI_PAGE == true or (type(WUUI_GAMEFOLDER) == "table" and WUUI_GAMEFOLDER.page == true) end
 
 local function now() return (GetTime and GetTime()) or 0 end
 

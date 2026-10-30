@@ -11,6 +11,11 @@
   python -m wuhost.setup visibility public|private
   python -m wuhost.setup claim TOKEN                the token the website gave your Hero Key account
   python -m wuhost.setup signup invite|open|off     who may make accounts from the join page
+  python -m wuhost.setup options [--type pvp --xp 5 --loot 2 --rep 3 --start level1|boost]
+                                                    the realm's own settings: type, rates, start (state/realm.env,
+                                                    read by the world server at its next start) and its
+                                                    realm-list type; also what a seed's "options" set (the
+                                                    website's More settings, the in-game Host window)
   python -m wuhost.setup rules                      re-read state/rules.txt and state/beacon.json (the
                                                     realm list text) after you edited them
   python -m wuhost.setup init --seed state/seed.b64 a realm made on the website (/wrath/host): its links,
@@ -115,6 +120,10 @@ def read_seed(rel):
           and isinstance(doc.get("rules", []), list) and all(isinstance(r, str) for r in doc.get("rules", [])))
     if not ok:
         sys.exit("The realm file from the website is damaged: download it again.")
+    if "options" in doc:
+        doc["options"] = check_options(doc["options"], doc["profile"])
+        if doc["options"] is None:
+            sys.exit("The realm file from the website is damaged: download it again.")
     if v == 1 and keys.realm_id(keys.public_key(bytes.fromhex(doc["realm_key"]))) != doc.get("realm_id"):
         sys.exit("The realm file from the website does not match its realm id: download it again.")
     doc["_path"] = p
@@ -147,6 +156,7 @@ def apply_seed(seed, a, cfg):
     for k in ("name", "profile", "visibility", "gm_name"):
         if getattr(a, k) is None and not cfg.get(k):
             setattr(a, k, seed[k])
+    apply_options(seed.get("options"), a, cfg)
     if a.tagline is None and seed.get("tagline") and not (cfg.get("record") or {}).get("tagline"):
         a.tagline = seed["tagline"]
     cfg.setdefault("invite_secret", seed["invite_secret"])
@@ -156,6 +166,125 @@ def apply_seed(seed, a, cfg):
     if not os.path.exists(path("rules.txt")) and seed.get("rules"):
         with open(path("rules.txt"), "w", encoding="utf-8") as f:
             f.write(RULES_HELP + "".join(" ".join(r.split())[:120] + "\n" for r in seed["rules"][:10] if r.strip()))
+
+
+# The realm's own settings ("options": the website's More settings, the in-game Host window, `setup.py options`). The
+# same names and rules as stream/hostflow.py options(), WrathUnleashedUI/Host.lua and the launcher's deeplink.rs.
+TYPES = {"normal": ("PvE", 0), "pvp": ("PvP", 1), "rp": ("RP", 6), "rppvp": ("RP-PvP", 8)}   # list type, GameType
+REALM_ENV = "realm.env"
+
+
+def check_options(o, profile):
+    """A seed's options, checked against the profile: the clean dict, or None when anything is wrong."""
+    if not isinstance(o, dict) or len(o) > 16:
+        return None
+    ac = profile not in cores.PROFILES
+    out = {}
+
+    def num(k, lo, hi):
+        v = o[k]
+        return v if isinstance(v, int) and not isinstance(v, bool) and lo <= v <= hi else None
+    for k in o:
+        if k == "type" and o[k] in TYPES:
+            out[k] = o[k]
+        elif k in ("xp", "loot", "rep") and ac and num(k, 1, 10) is not None:
+            out[k] = o[k]
+        elif k == "start" and profile == "main" and o[k] in ("level1", "boost"):
+            out[k] = o[k]
+        elif k == "bots" and num(k, 0, 200) is not None and (o[k] == 0 or (ac and PROFILE_BOTS.get(profile, 40) != 0)):
+            out[k] = o[k]
+        elif k == "signup" and o[k] in ("open", "invite", "off"):
+            out[k] = o[k]
+        elif k == "herokey" and o[k] in ("on", "off"):
+            out[k] = o[k]
+        elif k == "region" and o[k] in REGIONS:
+            out[k] = o[k]
+        elif k == "lang" and isinstance(o[k], str) and LANG_RE.match(o[k]):
+            out[k] = o[k]
+        elif k == "tags" and isinstance(o[k], list) and all(t in TAGS and t != "bots" for t in o[k]):
+            out[k] = [t for t in TAGS if t in o[k]]
+        elif k == "max" and num(k, 0, 10000) is not None:
+            out[k] = o[k]
+        else:
+            return None
+    return out
+
+
+def apply_options(o, a, cfg):
+    """A seed's options wherever this run did not pass its own: bots, sign-up, Hero Key, the realm list fields (type,
+    tags, region, language, max players) and the world server's settings (rates, start, type: state/realm.env)."""
+    if not o:
+        return
+    if a.bots is None and "bots" in o:
+        a.bots = o["bots"]
+    if a.signup is None and "signup" in o and not cfg.get("signup"):
+        a.signup = o["signup"]
+    if "herokey" in o and "herokey" not in cfg:
+        cfg["herokey"] = o["herokey"] == "on"
+    rec = cfg.setdefault("record", {})
+    if "type" in o:
+        rec["type"] = TYPES[o["type"]][0]
+    for k, rk in (("tags", "tags"), ("region", "region"), ("lang", "language"), ("max", "max_players")):
+        if k in o:
+            rec[rk] = o[k] if k != "max" else (o[k] or None)
+    env = cfg.setdefault("realm_env", {})
+    for k in ("type", "xp", "loot", "rep", "start"):
+        if k in o:
+            env[k] = o[k]
+
+
+def realm_env_lines(cfg):
+    """state/realm.env: the world server's own settings over the profile's (docker-compose.host.yml reads it last)."""
+    e = cfg.get("realm_env") or {}
+    out = ["# Your realm's own settings over its ruleset's (written by setup.py; read when the world server starts).",
+           "# Change them with: leyline options ... (or the launcher's Host page), then restart the realm."]
+    if cfg.get("profile") in cores.PROFILES:
+        return out + ["# (this core takes its ruleset's settings)"]
+    if e.get("type") in TYPES:
+        out.append(f"AC_GAME_TYPE={TYPES[e['type']][1]}")
+    if e.get("xp"):
+        out += [f"AC_RATE_XP_{k}={e['xp']}" for k in ("KILL", "QUEST", "QUEST_DF", "EXPLORE")]
+    if e.get("loot"):
+        out += [f"AC_RATE_DROP_ITEM_{k}={e['loot']}" for k in ("POOR", "NORMAL", "UNCOMMON", "RARE", "EPIC")]
+        out.append(f"AC_RATE_DROP_MONEY={e['loot']}")
+    if e.get("rep"):
+        out.append(f"AC_RATE_REPUTATION_GAIN={e['rep']}")
+    if e.get("start") in ("level1", "boost") and cfg.get("profile") == "main":
+        out.append("OV_MAIN=" + ("1" if e["start"] == "boost" else "0"))   # the boost menu (ov_main.lua)
+    return out
+
+
+def write_realm_env(cfg):
+    with open(path(REALM_ENV), "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(realm_env_lines(cfg)) + "\n")
+
+
+def lua_str(v):
+    """A Lua string literal ov_hostctl.lua reads as data only: quotes, backslashes and controls as \\ddd."""
+    return '"' + "".join(c if (32 <= ord(c) < 127 and c not in '"\\') else "".join(f"\\{b:03d}" for b in c.encode())
+                         for c in str(v)) + '"'
+
+
+def write_host_dat(cfg):
+    """realm-files/lua_scripts/host-realm.dat: this realm's facts for its GM's "Your realm" in game (ov_hostctl.lua):
+    no secrets (a private realm's invite carries its secret, so only a public realm's join page is in it)."""
+    d = os.path.join(KIT, "realm-files", "lua_scripts")
+    if not os.path.isdir(d) or cfg.get("official"):
+        return
+    e = cfg.get("realm_env") or {}
+    rates = "/".join(str(e.get(k) or "-") for k in ("xp", "loot", "rep"))
+    fields = [("realm_id", lua_str(cfg["realm_id"])), ("visibility", lua_str(cfg["visibility"])),
+              ("signup", lua_str(cfg.get("signup") or "invite")), ("bots", str(int(cfg.get("bots") or 0))),
+              ("herokey", "true" if cfg.get("herokey") else "false"), ("rates", lua_str(rates))]
+    if cfg["visibility"] == "public":
+        fields.append(("join", lua_str(invite_link(cfg))))
+    tmp = os.path.join(d, "host-realm.dat.tmp")
+    try:
+        with open(tmp, "w", encoding="ascii", newline="\n") as f:
+            f.write("return { " + ", ".join(f"{k} = {v}" for k, v in fields) + " }\n")
+        os.replace(tmp, os.path.join(d, "host-realm.dat"))
+    except OSError:
+        pass
 
 
 def gen(n, alphabet=ALNUM):
@@ -381,7 +510,9 @@ def cmd_init(a):
     save(cfg)
     write_beacon(cfg)
     write_env(cfg, a.image, a.tag, a.tools_image)
+    write_realm_env(cfg)
     write_links(cfg)
+    write_host_dat(cfg)
     if seed:   # used: the key and links live in state/ now
         try:
             os.remove(seed["_path"])
@@ -588,6 +719,8 @@ def _edit(fn):
     save(cfg)
     write_beacon(cfg)
     write_links(cfg)
+    write_realm_env(cfg)
+    write_host_dat(cfg)
     print(invite_link(cfg))
 
 
@@ -616,6 +749,34 @@ def cmd_herokey(a):
     from wunet import herokey
     if a.state == "on" and not herokey.pinned_keys():
         sys.stderr.write("Saved. Hero Key sign-in starts once this kit knows the website's key (a kit update).\n")
+
+
+def cmd_options(a):
+    """The realm's own settings (type, rates, start): state/realm.env for the next start, and the list's type."""
+    o = {k: getattr(a, k) for k in ("type", "xp", "loot", "rep", "start") if getattr(a, k, None) is not None}
+    cfg = load()
+    if not cfg:
+        sys.exit("Run Host a Wrath realm first.")
+    clean = check_options(o, cfg.get("profile"))
+    if clean is None:
+        sys.exit("Options: --type normal|pvp|rp|rppvp, --xp/--loot/--rep 1-10 (AzerothCore rulesets), "
+                 "--start level1|boost (Classic levelling)")
+
+    def ch(c):
+        c.setdefault("realm_env", {}).update(clean)
+        if "type" in clean:
+            c.setdefault("record", {})["type"] = TYPES[clean["type"]][0]
+            try:   # beacon.json is the host's copy of the list text: keep it in step
+                with open(path("beacon.json"), encoding="utf-8-sig") as f:
+                    b_full = json.load(f)
+                if isinstance(b_full, dict):
+                    b_full["type"] = TYPES[clean["type"]][0]
+                    with open(path("beacon.json"), "w", encoding="utf-8") as f:
+                        json.dump(b_full, f, indent=1)
+            except (OSError, ValueError):
+                pass
+    _edit(ch)
+    sys.stderr.write("Saved. Restart your realm for rates and type to take effect.\n")
 
 
 def cmd_rules(a):
@@ -729,6 +890,13 @@ def main(argv=None):
     p.add_argument("state", choices=["on", "off"])
     p.set_defaults(fn=cmd_herokey)
     sub.add_parser("rules").set_defaults(fn=cmd_rules)
+    p = sub.add_parser("options", help="the realm's own settings: type, rates, start (state/realm.env)")
+    p.add_argument("--type", choices=sorted(TYPES))
+    p.add_argument("--xp", type=int)
+    p.add_argument("--loot", type=int)
+    p.add_argument("--rep", type=int)
+    p.add_argument("--start", choices=["level1", "boost"])
+    p.set_defaults(fn=cmd_options)
     p = sub.add_parser("volunteer-relay", help="relay for others (the Leyline mesh's community relay; off by default)")
     p.add_argument("--host", help="this PC's public DNS name (needed for TLS)")
     p.add_argument("--region", choices=["na-east", "na-west", "sa", "eu", "africa", "me", "asia", "oce"])
