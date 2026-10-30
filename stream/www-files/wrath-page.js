@@ -638,6 +638,16 @@ const HOP_CSS = `
   #wu-hop-join iframe { flex: 1; border: 0; width: 100%; background: #15171a; }
 `;
 
+/** The Leyline brand switch (wrath_portal.py LEYLINE_BRAND=1 puts brand and home_name in the env): what the page
+ * calls the main realm. Off (no env.brand): exactly the old words. Also kept in localStorage ("wu-brand") so the
+ * one-tab note page (tab.html, which has no env) names it the same way. */
+export function brand(env = window.__wenilla_env || {}, store = globalThis.localStorage) {
+  const on = env.brand === 'leyline';
+  const home = on ? (String(env.home_name || '').replace(/[\u0000-\u001f<>]/g, '').slice(0, 32) || 'Dalaran Hangout') : 'Wrath';
+  try { if (on) store?.setItem('wu-brand', home); else store?.removeItem('wu-brand'); } catch { /* storage off */ }
+  return { on, home, back: 'Back to ' + home };
+}
+
 /** In a hop session: the "Back to Wrath" bar, and the join page when no login is kept for this realm. */
 export function hopUi(env = window.__wenilla_env || {}, hop = window.__wuHop) {
   if (!hop?.state || !env.hop || document.getElementById('wu-hop-bar')) return null;
@@ -645,6 +655,7 @@ export function hopUi(env = window.__wenilla_env || {}, hop = window.__wuHop) {
   css.textContent = HOP_CSS;
   document.head.append(css);
   const name = String(env.hop_name || 'a community realm').slice(0, 32);
+  const words = brand(env);
   const home = () => location.assign(hopUrl('wrath', env));
   const hangout = !!hop.state.home;   // the Dalaran Hangout: Wrath itself, the player's own login
   const bar = document.createElement('div');
@@ -657,7 +668,7 @@ export function hopUi(env = window.__wenilla_env || {}, hop = window.__wuHop) {
   const back = document.createElement('button');
   back.className = 'home';
   back.type = 'button';
-  back.textContent = 'Back to Wrath';
+  back.textContent = words.back;
   back.addEventListener('click', home);
   const other = document.createElement('button');
   other.type = 'button';
@@ -674,8 +685,9 @@ export function hopUi(env = window.__wenilla_env || {}, hop = window.__wuHop) {
   join.setAttribute('role', 'dialog');
   join.innerHTML = '<div class="panel"><div class="head"><span></span>'
     + '<button type="button" data-x="later">Type my login in the game</button>'
-    + '<button type="button" class="home" data-x="home">Back to Wrath</button></div></div>';
+    + '<button type="button" class="home" data-x="home"></button></div></div>';
   join.querySelector('.head span').textContent = 'Join ' + name;
+  join.querySelector('[data-x="home"]').textContent = words.back;
   const frame = document.createElement('iframe');
   frame.title = 'Join ' + name;
   frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-same-origin');
@@ -795,6 +807,7 @@ export async function install(wenilla) {
   import(BASE + 'input.js').then((m) => m.installInput()).catch((e) => console.warn('input.js:', e));
   const step = (name, fn) => { try { fn(); } catch (e) { console.warn('wrath-page.js ' + name, e); } };
   step('style', style);
+  step('brand', () => { status.brand = brand().on; });
   // the loading screens (wu-loading.css is linked by wrath-early.js; this adds the world cover)
   import(BASE + 'wu-loading.js').then((m) => m.installLoading({ art: CONFIG.loadingArt })).catch((e) => console.warn('wu-loading.js:', e));
   // the page's buttons may not be parsed yet when this runs very early

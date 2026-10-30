@@ -33,6 +33,20 @@ local PREFIX = "WULY"
 local WHISPER = 7
 local FILE = os.getenv("OV_LEYLINE_FILE") or "/azerothcore/lua_scripts/leyline-realms.dat"
 local REALM_NAME = os.getenv("OV_REALM_NAME") or "WrathUnleashed"
+-- This realm's name in the list: "Dalaran Hangout" while the Leyline brand is on (ov_modapi.lua OVMod.Brand,
+-- realm/brand.sh; a host without ov_modapi.lua uses OV_LEYLINE_BRAND / OV_LEYLINE_REALM_NAME), else REALM_NAME.
+local function realmName()
+    local m = rawget(_G, "OVMod")
+    if m and m.Brand then
+        local b = m.Brand()
+        return b.on and b.realm or REALM_NAME
+    end
+    if os.getenv("OV_LEYLINE_BRAND") == "1" then
+        local n = os.getenv("OV_LEYLINE_REALM_NAME")
+        return (n and n ~= "") and n or "Dalaran Hangout"
+    end
+    return REALM_NAME
+end
 local CACHE_SECONDS = 60
 local REQUEST_COOLDOWN = 5
 local MAX_REALMS = 60
@@ -196,7 +210,7 @@ local function sendList(player)
     -- its own relay record (sample in the file: the hangout id) are flagged S, and the window pins it. Before
     -- that, the relay record is listed as any other realm.
     local isSample = os.getenv("OV_SAMPLER") == "1"
-    send(player, string.format("R:this:1:%d:%d:main:%s", people, bots, cleanName(REALM_NAME)))
+    send(player, string.format("R:this:1:%d:%d:main:%s", people, bots, cleanName(realmName())))
     send(player, meta("this", { sample = isSample, score = 0, build = 12340, tags = isSample and "hangout" or "" }, isSample))
     local n, p, b = 1, people, bots
     for _, r in ipairs(list) do

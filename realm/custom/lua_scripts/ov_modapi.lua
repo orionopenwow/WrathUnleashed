@@ -167,9 +167,69 @@ local function onLogout(event, player)
     flood[guid] = nil
 end
 
+-- The Leyline brand switch (owner 2026-10-30; realm/brand.sh on|off). While it is on, the realm's scripts say
+-- "Leyline" and call this realm "Dalaran Hangout" where players read it (chat tags, the welcome, the Leyline
+-- window's home realm), and each login tells the addon: mod "wubrand", name "brand", data
+-- "leyline\t<realm name>" (WrathUnleashedUI.lua W.Brand; the addon also asks with "wubrand"/"ask"). Off: nothing
+-- is sent and every word is the old one. On = OV_LEYLINE_BRAND=1 in the world server's environment (0 forces off),
+-- else the flag file OV_BRAND_FILE (default /azerothcore/lua_scripts/leyline-brand.on = the host's
+-- custom/lua_scripts/leyline-brand.on), looked at no more than every BRAND_CACHE seconds: brand.sh flips it with no
+-- reload and no restart. Prefixes, mod ids, saved variables and every internal name stay as they are.
+local BRAND_FILE = os.getenv("OV_BRAND_FILE") or "/azerothcore/lua_scripts/leyline-brand.on"
+local BRAND_CACHE = 30
+local brandAt, brandOn = -1e9, false
+
+function OVMod.BrandOn()
+    local v = os.getenv("OV_LEYLINE_BRAND")
+    if v == "1" then return true end
+    if v == "0" then return false end
+    local now = os.time()
+    if now - brandAt >= BRAND_CACHE then
+        brandAt = now
+        local f = io.open(BRAND_FILE, "rb")
+        brandOn = f ~= nil
+        if f then f:close() end
+    end
+    return brandOn
+end
+
+local function plainName(s, fallback)
+    s = type(s) == "string" and s:gsub("[%z\1-\31\127|\t]", ""):sub(1, 32) or ""
+    return s ~= "" and s or fallback
+end
+
+-- { on, name = the project ("Leyline" | "WrathUnleashed"), realm = this realm's name, home = what "Back to ..."
+-- says ("Dalaran Hangout" | "Wrath") }
+function OVMod.Brand()
+    if OVMod.BrandOn() then
+        local realm = plainName(os.getenv("OV_LEYLINE_REALM_NAME"), "Dalaran Hangout")
+        return { on = true, name = "Leyline", realm = realm, home = realm }
+    end
+    return { on = false, name = "WrathUnleashed", realm = plainName(os.getenv("OV_REALM_NAME"), "WrathUnleashed"),
+             home = "Wrath" }
+end
+
+function OVMod.SendBrand(player)
+    local b = OVMod.Brand()
+    if not b.on or not player then return false end
+    return OVMod.Send(player, "wubrand", "brand", "leyline\t" .. b.realm)
+end
+
+OVMod.On("wubrand", "ask", function(player) OVMod.SendBrand(player) end)
+
+local function onBrandLogin(event, player)
+    if not player or not OVMod.BrandOn() then return end
+    -- a moment after login, when the addon listens (it also asks itself at PLAYER_ENTERING_WORLD)
+    local ok = pcall(function()
+        player:RegisterEvent(function(_, _, _, p) if p then OVMod.SendBrand(p) end end, 3000, 1)
+    end)
+    if not ok then OVMod.SendBrand(player) end
+end
+
 OVMod._pending = pending
 
 RegisterServerEvent(30, onAddonMessage) -- ADDON_EVENT_ON_MESSAGE
 RegisterPlayerEvent(4, onLogout)        -- PLAYER_EVENT_ON_LOGOUT
+RegisterPlayerEvent(3, onBrandLogin)    -- PLAYER_EVENT_ON_LOGIN: the brand, while it is on
 
 return OVMod

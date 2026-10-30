@@ -91,7 +91,10 @@ Settings (environment, /srv/wrath/portal.env):
   AC_SOAP_URL            default http://ov-ac-worldserver:7878/
   PORTAL_URL             default http://ovlive-realm:8090 (the Open Vanilla realm service)
   PUBLIC_HOST            default play.openvanilla.app
-  REALM_NAME             default WrathUnleashed
+  REALM_NAME             default WrathUnleashed (ignored while LEYLINE_BRAND=1)
+  LEYLINE_BRAND          1 = the Leyline names everywhere people read them: the site is "Leyline", the main realm
+                         "Dalaran Hangout" (LEYLINE_REALM_NAME overrides). Default 0: exactly as before.
+                         realm/brand.sh on|off flips it with the realm's name and the in-game wording.
   PACKAGE_URL            optional link to the player package (shown on the page when set)
   BRIDGE_USERS           console logins the realm service may use (default WRSOAP,ADMINISTRATOR)
   WU_STREAM              1 = browser streaming on, 0 = off (default 0)
@@ -253,7 +256,50 @@ SOAP_PASS = os.environ.get("SOAP_PASS", "")
 AC_SOAP_URL = os.environ.get("AC_SOAP_URL", "http://ov-ac-worldserver:7878/")
 PORTAL_URL = os.environ.get("PORTAL_URL", "http://ovlive-realm:8090").rstrip("/")
 PUBLIC_HOST = os.environ.get("PUBLIC_HOST", "play.openvanilla.app")
-REALM_NAME = os.environ.get("REALM_NAME", "WrathUnleashed")
+# The Leyline brand switch (owner 2026-10-30): LEYLINE_BRAND=1 in portal.env (realm/brand.sh on|off sets it) shows
+# every player- and visitor-facing name as Leyline and the main realm as "Dalaran Hangout". Unset or 0 (the default):
+# every page reads exactly as before. Only names people read change: no route, cookie, file or id does.
+BRAND = os.environ.get("LEYLINE_BRAND", "0").strip() == "1"
+if BRAND:
+    REALM_NAME = os.environ.get("LEYLINE_REALM_NAME", "").strip() or "Dalaran Hangout"
+    SITE_NAME = "Leyline"
+else:
+    REALM_NAME = os.environ.get("REALM_NAME", "WrathUnleashed")
+    SITE_NAME = REALM_NAME
+# "Back to ..." on the hop bar and the in-game Leyline window: the main realm by its name.
+BACK_LABEL = f"Back to {REALM_NAME}" if BRAND else "Back to Wrath"
+# The brand switch's safety net (send() runs every text/html and JSON answer through it while BRAND is on): an old
+# name a module or a mod still carries, in text people read, becomes Leyline. Scripts, styles, URLs and the attributes
+# that hold ids or addresses are left alone, and so are identifiers (WrathUnleashedUI) and domains (openvanilla.app).
+_BRAND_SKIP = (r'<script\b.*?</script>|<style\b.*?</style>'
+               r'|\b(?:href|src|action|id|class|name|for|data-[\w-]+)="[^"]*"|https?://[^\s"\'<>]+')
+_BRAND_OLD = r'(?<![\w/.-])(?:Wrath ?Unleashed|Open ?Vanilla)(?!\w|\.\w)'
+_BRAND_HTML = re.compile(f"({_BRAND_SKIP})|({_BRAND_OLD})", re.S)
+_BRAND_JSON = re.compile(r'(?<=")(?:WrathUnleashed|Wrath Unleashed|Open Vanilla|OpenVanilla)(?=")|(?<=by )WrathUnleashed\b')
+
+
+def brand_body(body: bytes, ctype: str) -> bytes:
+    """The page as people read it with the Leyline brand on; unchanged when it is off (or not text)."""
+    if not BRAND or not body:
+        return body
+    kind = ctype.split(";", 1)[0].strip().lower()
+    if kind not in ("text/html", "application/json"):
+        return body
+    try:
+        text = body.decode("utf-8")
+    except UnicodeDecodeError:
+        return body
+    if kind == "text/html":
+        out = _BRAND_HTML.sub(lambda m: m.group(1) or "Leyline", text)
+    else:
+        out = _BRAND_JSON.sub("Leyline", text)
+    return body if out == text else out.encode("utf-8")
+
+
+# The official realm's lead line on the realm cards, and the player package's start file as the account page names it
+# (the file keeps its name in the package; with the brand on the page names it plainly).
+OFFICIAL_LEAD = f"{REALM_NAME}, the official realm" if BRAND else "The WrathUnleashed realm"
+PLAY_STEP = "Run the <b>Play</b> file from the player package" if BRAND else "Run <b>Play WrathUnleashed.bat</b>"
 PACKAGE_URL = os.environ.get("PACKAGE_URL", "")
 BRIDGE_USERS = {u.strip().upper() for u in os.environ.get("BRIDGE_USERS", "WRSOAP,ADMINISTRATOR").split(",") if u.strip()}
 PAGE_PORT = int(os.environ.get("PAGE_PORT", "8091"))
@@ -270,7 +316,7 @@ PLAY_SLICE = os.environ.get("WU_PLAY_SLICE", "").strip() or "mini"
 # The Leyline Sample Hangout (realm/sampler.sh sets WU_SAMPLER=1 in portal.env): the official realm's cards on the
 # play page, /wrath/realms and /wrath/leyline name it and say it is temporary. REALM_NAME (the site) stays.
 SAMPLER = os.environ.get("WU_SAMPLER") == "1"
-SAMPLER_NAME = "Leyline Sample Hangout"
+SAMPLER_NAME = REALM_NAME if BRAND else "Leyline Sample Hangout"
 SAMPLER_NOTE = ("Temporary: a place to try the game. Dalaran, the starting areas and every dungeon and raid stream "
                 "to your browser; add your own 3.3.5a game folder to explore the whole world. Community realms on "
                 "Leyline are where the world opens up.")  # TODO(owner): the Sample Hangout's own pitch line
@@ -730,6 +776,9 @@ def env_js(sess: dict) -> bytes:
             env["layer"] = "1"   # ownfiles.js may offer the game-folder layer (POST /__gate?layer=...)
     env["moderncombos"] = "1"   # character create offers the realm's 83 retail race/class pairs
     env["foreverui"] = FOREVERUI  # Forever UI on (the client reads this before its query string)
+    if BRAND:   # the page layer's wording (wrath-page.js: the hop bar's "Back to ...", the tab note); off: not sent
+        env["brand"] = "leyline"
+        env["home_name"] = REALM_NAME
     if guest and sess.get("mode") == "demo":
         env.update(guest.env_extra(sess))  # the guest pass's character: no character select
     body = json.dumps(env, separators=(",", ":")).replace("<", "\\u003c")
@@ -855,7 +904,7 @@ def card_meta(path: str, title: str = "") -> str:
     title = title or REALM_NAME
     url = f"https://{PUBLIC_HOST}{path}"
     img = f"https://{PUBLIC_HOST}{art_url('wu-card.webp')}"
-    tags = [("property", "og:type", "website"), ("property", "og:site_name", REALM_NAME),
+    tags = [("property", "og:type", "website"), ("property", "og:site_name", SITE_NAME),
             ("property", "og:title", title), ("property", "og:description", CARD_DESCRIPTION),
             ("property", "og:url", url), ("property", "og:image", img),
             ("property", "og:image:type", "image/webp"), ("property", "og:image:width", "1200"),
@@ -873,7 +922,7 @@ def render(body: str, nonce: str = "", script: str = "", wide: bool = False, met
     s = f'<script nonce="{nonce}">{script}</script>' if script else ""
     v = theme_version()
     theme = f'<link rel="stylesheet" href="{art_url("wu-theme.css")}?v={v}">' if v else ""
-    full = f"{title} · {REALM_NAME}" if title else REALM_NAME
+    full = f"{title} · {SITE_NAME}" if title else SITE_NAME
     top = (SKIP_LINK + site_nav(current, signed_in)) if chrome else ""
     end = ((next_block(next_step) if next_step else "") + site_footer()) if chrome else ""
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
@@ -1068,7 +1117,7 @@ def account_page(display: str, user: str, password: str, nonce: str) -> bytes:
         f'<div class="field" id="pw" data-v="{html.escape(password)}">{dots}</div>'
         '<button class="ghost" id="show" type="button">Show</button>'
         '<button class="ghost" data-copy="pw" type="button">Copy</button></div>'
-        f'<ol>{pkg}<li>Run <b>Play WrathUnleashed.bat</b> and pick your own 3.3.5a game folder. '
+        f'<ol>{pkg}<li>{PLAY_STEP} and pick your own 3.3.5a game folder. '
         'Or, in your own client: open <code>Data\\enUS\\realmlist.wtf</code> in your game folder '
         '(<code>enGB</code>, <code>deDE</code>… for other languages) and make its only line '
         f'<code>set realmlist {html.escape(PUBLIC_HOST)}</code></li>'
@@ -1277,7 +1326,7 @@ def sample_info() -> dict:
         return {"name": SAMPLER_NAME, "temporary": True,
                 "blurb_html": f'<p>{html.escape(SAMPLER_NOTE)} (<a href="{GAME_FOLDER_HELP}">How to add your game folder</a>.)</p>'}
     return {"name": REALM_NAME, "temporary": False,
-            "blurb_html": '<p>The WrathUnleashed realm: Dalaran in your browser, or the whole world with your own game files '
+            "blurb_html": f'<p>{OFFICIAL_LEAD}: Dalaran in your browser, or the whole world with your own game files '
                           f'(drop your 3.3.5a game folder on the game page: <a href="{GAME_FOLDER_HELP}">how</a>).</p>'}
 
 
@@ -1310,7 +1359,7 @@ def realms_page(query: dict | None = None) -> bytes:
         f'{_players_text(_nonneg(st.get("players")), _nonneg(st.get("bots")), bool(st.get("online")))}</div>'
         + (f'<p>{html.escape(SAMPLER_NOTE)} '
            f'(<a href="{GAME_FOLDER_HELP}">How to add your game folder</a>.)</p>' if SAMPLER else
-           '<p>The WrathUnleashed realm: Dalaran in your browser, or the whole world with your own game files '
+           f'<p>{OFFICIAL_LEAD}: Dalaran in your browser, or the whole world with your own game files '
            f'(drop your 3.3.5a game folder on the game page: <a href="{GAME_FOLDER_HELP}">how</a>).</p>') +
         '<p><a class="btn primary" href="/wrath">Play</a></p>'
         + share_box("/wrath/r/wrath") + '</div>')
@@ -1878,7 +1927,7 @@ def leyline_page() -> bytes:
         + shot("durotar", "Every bar, ready", "A clean modern interface: every action bar on with common keys, sized to your screen.")
         + '</div><p class="ly-fine">Screenshots from the live browser client.</p></section>'
         '<section class="ly-panel" aria-labelledby="ly-what"><h2 id="ly-what">What Leyline does</h2><div class="ly-grid">'
-        + feat("Play in the browser", "No install: sign in with a Hero Key and play the flagship realm, WrathUnleashed. "
+        + feat("Play in the browser", f"No install: sign in with a Hero Key and play the flagship realm, {REALM_NAME}. "
                "Dalaran hangout, level 1 or a boost to 80, and a Dungeon Finder where labelled bots fill the group.")
         + feat("Host your own realm", "Run a realm on your own PC with the host kit: your own GM login, house rules and "
                "world preset. Private by invite link, or public on the realm list.")
@@ -2128,6 +2177,7 @@ class PageHandler(BaseHTTPRequestHandler):
     def send(self, status: int, body: bytes, ctype: str = "text/html; charset=utf-8", nonce: str = "",
              public: bool = False, same_origin: bool = False, connect: bool = False,
              headers: dict | None = None) -> None:
+        body = brand_body(body, ctype)   # the Leyline brand switch (off: unchanged)
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))

@@ -16,6 +16,21 @@ end
 WrathUnleashedUI = WrathUnleashedUI or {}
 local W = WrathUnleashedUI
 
+-- The Leyline brand switch (owner 2026-10-30): while the realm has it on (ov_modapi.lua OVMod.Brand, realm/brand.sh)
+-- it tells this addon at login over OVMOD (mod "wubrand", name "brand", data "leyline\t<realm name>"), and the
+-- windows say "Leyline" and call the main realm "Dalaran Hangout". No word from the realm = off: every text is the
+-- old one. Only what players read changes: the addon's folder, saved variables, frame names and prefixes stay.
+-- Kept in memory only (never saved), so a realm that turns it off is off at the next login.
+W.Brand = { on = false, name = "WrathUnleashed", home = "Wrath", back = "Back to Wrath" }
+local brandWatchers = {}
+function W.OnBrand(fn) brandWatchers[#brandWatchers + 1] = fn end
+function W.SetBrand(realm)
+    realm = type(realm) == "string" and realm:gsub("|", ""):gsub("[%c]", ""):sub(1, 32) or ""
+    if realm == "" then realm = "Dalaran Hangout" end
+    W.Brand = { on = true, name = "Leyline", home = realm, back = "Back to " .. realm }
+    for _, fn in ipairs(brandWatchers) do pcall(fn, W.Brand) end
+end
+
 -- UI size. Retail's "pixel perfect" makes the UI 768 units tall whatever the window, so a 253-unit minimap
 -- ring is about a quarter of the screen height. The browser client gives UIParent the window's own
 -- height, so everything draws about 1.3x too big; this scale puts it back. The slider in Esc > Mods &
@@ -40,9 +55,49 @@ function W.ApplyScale(k)
     return true
 end
 
+-- Chat lines wait a few seconds after login for the realm's brand word (W.SettleBrand), so the tag is the right one.
+local held, settled = {}, false
 local function say(msg)
-    if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage("|cff4fc3f7[WrathUnleashed]|r " .. msg) end
+    if not settled then held[#held + 1] = msg; return end
+    if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage("|cff4fc3f7[" .. W.Brand.name .. "]|r " .. msg) end
 end
+function W.SettleBrand()
+    if settled then return end
+    settled = true
+    local list = held
+    held = {}
+    for _, m in ipairs(list) do say(m) end
+end
+W.Say = say
+
+local BRAND_WAIT = 3   -- seconds after entering the world: no word from the realm by then = off (the ask is answered at once)
+local brandFrame = CreateFrame("Frame")
+brandFrame:RegisterEvent("CHAT_MSG_ADDON")
+brandFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+brandFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel)
+    if event == "PLAYER_ENTERING_WORLD" then
+        self:UnregisterEvent("PLAYER_ENTERING_WORLD")
+        if SendAddonMessage and UnitName then
+            pcall(SendAddonMessage, "OVMOD", "wubrand\task\t1/1\t", "WHISPER", UnitName("player"))
+        end
+        local wait = 0
+        self:SetScript("OnUpdate", function(f, elapsed)
+            wait = wait + elapsed
+            if wait < BRAND_WAIT then return end
+            f:SetScript("OnUpdate", nil)
+            W.SettleBrand()
+        end)
+        return
+    end
+    if prefix ~= "OVMOD" or channel ~= "WHISPER" or type(msg) ~= "string" then return end
+    local data = msg:match("^wubrand\tbrand\t1/1\t(.*)$")
+    if not data then return end
+    local kind, realm = data:match("^(%a+)\t?(.*)$")
+    if kind == "leyline" then
+        W.SetBrand(realm)
+        W.SettleBrand()
+    end
+end)
 
 local function barsOn()
     -- (also W.BarsOn for the Mods panel)

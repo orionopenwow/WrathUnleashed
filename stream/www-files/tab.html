@@ -20,12 +20,17 @@ background:linear-gradient(#f0d389,#d8b25a);color:#1b1406}button:disabled{opacit
   var r = q.get('r') || '/';
   if (r.charAt(0) !== '/' || r.charAt(1) === '/' || r.charAt(1) === '\\') r = '/';   // same site only
   var T = document.getElementById('t'), B = document.getElementById('b'), go = document.getElementById('go');
+  // The Leyline brand switch: wrath-page.js keeps the main realm's name here while it is on (else nothing is kept).
+  var brand = null;
+  try { brand = localStorage.getItem('wu-brand'); } catch (e) {}
+  var site = brand ? 'Leyline' : 'WrathUnleashed';
+  if (brand) document.title = site;
   if (m === 'moved') {
     T.textContent = 'You’re playing in another tab';
     B.textContent = 'This tab stepped aside so the other one could play.';
     go.textContent = 'Play in this tab instead';
   } else {
-    T.textContent = 'WrathUnleashed is already open in another tab';
+    T.textContent = site + ' is already open in another tab';
     B.textContent = 'Playing in two tabs at once signs you out of both. Play here and the other tab steps aside.';
     go.textContent = 'Play here';
   }
