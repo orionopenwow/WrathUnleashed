@@ -1498,7 +1498,7 @@ index 9e1a34c2..d48e929b 100644
 +        -- (OptionsFrame_AddCategory, as the stock panels register), or of Interface Options where
 +        -- that window is absent. Each control stages its CVar like the stock panels do: Okay
 +        -- writes it, Cancel puts the control back, Defaults takes the registered default. Every
-+        -- default is the reference look: 90 FOV, no sharpening, a neutral grade, no Darker Nights.
++        -- default is the stock look: 90 FOV, no sharpening, a neutral grade, no Darker Nights.
 +        local BENILLA_GRAPHICS_SLIDERS = {
 +            { cvar = "cameraFov", label = "Field of View", min = 90, max = 150, step = 1, fmt = "%d" },
 +            { cvar = "casSharpness", label = "Sharpening", min = 0, max = 1, step = 0.05, fmt = "%.2f" },
@@ -2226,7 +2226,7 @@ index a40584bb..e8dcda99 100644
 +    filter: Res<benilla_assets::TexFilterSetting>,
 +    device: Option<Res<benilla_world::view::AnisotropySupport>>,
 +) {
-+    // The device's cap last, as the reference's callback clamps (`0x689110`); headless, no opinion.
++    // The device's cap last, as the stock game's callback clamps; headless, no opinion.
 +    let filter = &filter.on_device(device.is_none_or(|d| d.0));
      benilla_assets::publish_tex_filter(*filter);
      let mode = filter.mode();
@@ -2348,7 +2348,7 @@ index 22d97c17..c181e214 100644
  }
  
 +/// WrathUnleashed's graphics additions (`crate::graphics_plus`), each shipping off or neutral so a
-+/// fresh install draws the reference look. `maxFPS` and `maxFPSBk` carry 3.3.5a's spellings.
++/// fresh install draws the stock look. `maxFPS` and `maxFPSBk` carry 3.3.5a's spellings.
 +pub(crate) const REGISTERED_GRAPHICS: &[Registered] = &[
 +    ours(
 +        "maxFPS",
@@ -2402,12 +2402,12 @@ index 22d97c17..c181e214 100644
 +    ours(
 +        "nameplateDistance",
 +        "41",
-+        "awesome_wotlk's plate range in yards; the reference hardcodes 20",
++        "awesome_wotlk's plate range in yards; the stock game hardcodes 20",
 +    ),
 +    ours(
 +        "nameplateNonTargetAlpha",
 +        "0.8",
-+        "awesome_wotlk's non-target plate alpha (the Forever look's 0.8); the reference dims to \
++        "awesome_wotlk's non-target plate alpha (the Forever look's 0.8); the stock game dims to \
 +         0x7F",
 +    ),
 +    // The later clients' plate switches, which Forever UI and retail-style addons read and write:
@@ -2436,9 +2436,9 @@ index 22d97c17..c181e214 100644
 +    ours(
 +        "cameraFov",
 +        "90",
-+        "awesome_wotlk's camera field of view in the reference camera's degrees, 90 to 150 \
++        "awesome_wotlk's camera field of view in the stock camera's degrees, 90 to 150 \
 +         (`benilla_world::graphics_plus::CameraFov`); 90, not the fork's documented 100, is the \
-+         reference's own `[camera+0x40]` (pi/2), so the default projection is the stock one",
++         stock game's own (pi/2), so the default projection is the stock one",
 +    ),
 +    ours("cameraIndirectVisibility", "0", "awesome_wotlk camera collision, stored only"),
 +    ours("cameraIndirectOffset", "10", "awesome_wotlk camera collision, stored only"),
@@ -2516,7 +2516,7 @@ index 22d97c17..c181e214 100644
 +        "1",
 +        "WrathUnleashed's clarity default: 16x wherever the device filters anisotropically \
 +         (`AnisotropySupport`), a sampler state and no change to the art; `anisotropic 1` is \
-+         the reference's",
++         the stock game's",
 +    ),
      // The four video CVars the stock window's verbs read and write (`benilla_ui` `video_pairs`);
      // benilla has no mechanism behind any of them. `shadowLevel` (`0x6885bc`, "1", flags 1,
@@ -5213,7 +5213,7 @@ index 00000000..5166bfaa
 +//! WrathUnleashed's graphics CVars (`cvars::table::REGISTERED_GRAPHICS`, plus `cameraFov` and the
 +//! map-capped `farclip`) and the knobs they write: the field of view, the combine's sharpen and
 +//! grade, Darker Nights, and the `maxFPS`/`maxFPSBk` frame caps. Every default is off or neutral,
-+//! so a fresh install runs the reference look; the Video Options window's Graphics+ page
++//! so a fresh install runs the stock look; the Video Options window's Graphics+ page
 +//! (`assets/ui/FrameXMLFixes.xml`) sets them.
 +
 +use std::time::Duration;
@@ -5893,7 +5893,7 @@ index 9193bf34..c7b50be8 100644
  
 +/// In the browser the page draws every loading screen, the first entry and every in-world port
 +/// alike (the Orion background and our bar): the client keeps only its black cover and tells the
-+/// page the cover's state and progress. Deviation: the reference draws the map's art and bar.
++/// page the cover's state and progress. Deviation: the stock game draws the map's art and bar.
 +fn page_draws_cover() -> bool {
 +    cfg!(target_arch = "wasm32")
 +}
@@ -6837,7 +6837,7 @@ index ed3692de..9aed65a7 100644
 +            io::WriterSwap::Install { writer, fresh_link } => {
 +                web.writer = Some(writer);
 +                web.warned = 0;
-+                // The first keepalive is a full interval after the entry (`0x537bcf`).
++                // The first keepalive is a full interval after the entry.
 +                web.last_ping = time.elapsed_secs_f64();
 +                // With no send stamp an old socket's pong cannot match; the sequence goes on, and
 +                // a later entry on the same link keeps the connection's block.
@@ -6880,7 +6880,7 @@ index ed3692de..9aed65a7 100644
 +        web.last_ping = now;
 +        let (sequence, last_rtt) = {
 +            let mut clock = ping.0.lock().expect("ping clock");
-+            // Incremented before the send, so a failed one counts too (`0x537e69`); a dword
++            // Incremented before the send, so a failed one counts too; a dword
 +            // that wraps.
 +            clock.sequence = clock.sequence.wrapping_add(1);
 +            clock.sent_at = Some(bevy::platform::time::Instant::now());
@@ -10599,9 +10599,9 @@ index c9da7d84..302162ed 100644
  //!
  //! The ratio is applied, not the degrees: `[camera+0x40]` defaults to 90°, while our [`CAM_FOVY`]
 -//! is the effective vertical field of view, 45° against the reference's measured 44.1°.
-+//! is the effective vertical field of view, 45° against the reference's measured 44.1°. Unscoped,
++//! is the effective vertical field of view, 45° against the stock game's measured 44.1°. Unscoped,
 +//! the projection is the `cameraFov` CVar's ([`CameraFov`], 90 by default, so [`CAM_FOVY`]); the
-+//! scope sets its own angle, as the reference's `[camera+0x40] = n°` does, whatever that CVar says.
++//! scope sets its own angle, as the stock game's scope does, whatever that CVar says.
  
  use bevy::camera::{PerspectiveProjection, Projection};
  use bevy::prelude::*;
@@ -10991,7 +10991,7 @@ index 00000000..441a19c8
 +//! The minimal character-select and character-create backdrop: a clean "room" in the faction's
 +//! colour in place of the `UI_<Race>` scene.
 +//!
-+//! Deviation (the owner's ask): the reference draws the race's background model, its doodads,
++//! Deviation (the owner's ask): the stock game draws the race's background model, its doodads,
 +//! particles and ambience. Here the scene model is read stage-only
 +//! ([`benilla_assets::M2LoadSettings`]: no texture, no emitter), for the camera, the character's
 +//! stage spot and the light rig, so the character stands and is lit exactly as before; none of it
@@ -11454,7 +11454,7 @@ index 00000000..441a19c8
 +    }
 +}
 +
-+/// Put the glue camera's clears back to the reference's (transparent scene, black outside the
++/// Put the glue camera's clears back to the stock game's (transparent scene, black outside the
 +/// box) once the minimal backdrop is down (the login screen, the world).
 +pub(super) fn restore_glue_clears(
 +    mut commands: Commands,
@@ -11771,7 +11771,7 @@ index 72c37d70..3c02e1ae 100644
 +        // Character select stands its model further out, framed like the later clients (about
 +        // 55% of the screen height, feet clear of Enter World), so the whole body, a tauren's
 +        // horns included, clears the name plate and the buttons at 16:9 and 16:10. Deviation:
-+        // the reference's diagonal law fills the pane with the character.
++        // the stock game's diagonal law fills the pane with the character.
 +        let vert_fov = if matches!(preview.look, Some(super::GlueLook::Select(_))) {
 +            2.0 * ((vert_fov * 0.5).tan() * SELECT_FRAMING_OUT).atan()
 +        } else {
@@ -12086,7 +12086,7 @@ index bb130104..95fed700 100644
 +    // (`super::web_load`) and lands in the same tail from `CinematicVoice::land`.
 +    #[cfg(not(target_arch = "wasm32"))]
 +    {
-+        // Every file FMOD opens is a loose-flagged open (`0x7a8860`).
++        // Every file FMOD opens is a loose-flagged open.
 +        let bytes = assets
 +            .read_file_or_loose(&path)
 +            .ok_or_else(|| anyhow::anyhow!("not in the loose files or the patch chain"));
@@ -12350,7 +12350,7 @@ index 00000000..7950b62d
 +//! **A shot that lands late is dropped, not played late.** [`LATE_WINDOW`] bounds how far behind
 +//! its event a one-shot may sound; past it the file goes into the cache silently and the *next*
 +//! play of it is instant. A hit sound a whole second after the hit is worse than no hit sound,
-+//! and this is the reference's own answer for a file its async loader had not delivered.
++//! and this is the stock game's own answer for a file its async loader had not delivered.
 +//!
 +//! ## Pre-warming
 +//!
@@ -14050,7 +14050,7 @@ index 44775f46..6a4922e7 100644
 +    // forced the split, and for why a deferred start is safe on both slots.
 +    #[cfg(not(target_arch = "wasm32"))]
 +    {
-+        // Every file FMOD opens is a loose-flagged open (`0x7a8860`).
++        // Every file FMOD opens is a loose-flagged open.
 +        let bytes = assets
 +            .read_file_or_loose(&path)
 +            .ok_or_else(|| anyhow::anyhow!("not in the loose files or the patch chain"));
@@ -16670,7 +16670,7 @@ index 6a92c84f..3638642e 100644
      pub(crate) quests: Vec<QuestOption>,
      records: HashMap<u32, Vec<NpcTextBlock>>,
 +    /// Frames since a select went out with no new menu or close after it. A select clears the
-+    /// VM's copy of the options (the reference's `0x58af10` waits for the server's answer), so a
++    /// VM's copy of the options (the stock game waits for the server's answer), so a
 +    /// server that never answers left a painted menu whose clicks did nothing at all.
 +    awaiting_reply: Option<u32>,
  }
@@ -17154,7 +17154,7 @@ index e3ad8318..c97e7f4e 100644
 -/// loads it; this walk does not read the chain, so it is not a row yet.
 +/// The Blizzard addons the chain carries, as registry rows: the LoadOnDemand ones for
 +/// `UIParentLoadAddOn`, and `Blizzard_TokenUI`, which carries no `## LoadOnDemand`, so the startup
-+/// walk loads it before the player's addons as the reference's does (`CharacterFrame.lua`'s
++/// walk loads it before the player's addons as the stock game's does (`CharacterFrame.lua`'s
 +/// `CHARACTERFRAME_SUBFRAMES` names its `TokenFrame`).
  fn chain_addons() -> Vec<Addon> {
      BLIZZARD_ADDONS
@@ -17819,7 +17819,7 @@ index e0d9f91b..149b0b8e 100644
 +/// The realm a connect with no `realmName` match dials on its own: the only one published, in the
 +/// browser (where nobody has picked a realm before: the stock flow would stand a new account on
 +/// the "Choosing a Realm" wizard, whose Suggest button waits for a category no WrathUnleashed realm
-+/// has) or when the environment logs in. Deviation: the reference fails the connect
++/// has) or when the environment logs in. Deviation: the stock game fails the connect
 +/// `REALM_LIST_REALM_NOT_FOUND` and raises the wizard or the list.
 +fn only_realm(holder: &[RealmInfo]) -> Option<RealmInfo> {
 +    let [only] = holder else { return None };
@@ -17939,7 +17939,7 @@ index e0d9f91b..149b0b8e 100644
 +        let quiet = crate::startup_pace::quiet_on_login_screen(asks.quiet.as_deref(), &mgr.screen);
 +        // The page signed the player in: no glue music or ambience on any glue screen. It starved
 +        // behind the loads (~2 s of injected silence) and its stream is memory the session never
-+        // needed. Deviation: the reference plays the glue track on every glue screen.
++        // needed. Deviation: the stock game plays the glue track on every glue screen.
 +        let quiet_audio = quiet || crate::startup_pace::page_signed_in();
          for request in s.take_glue_requests() {
              match request {
@@ -18508,7 +18508,7 @@ index 8c13cb8e..cdb4c867 100644
 -    // No sound during the load edge, as in the reference's `UI_Init` (`0x48fbfa` → `0x49016d`).
 -    silenced_ui_load(&mut script, |script| {
 -        let _ = load_ingame_ui(script, identity.as_ref(), &roster, version_check);
-+    // No sound during the load edge, as in the reference's `UI_Init` (`0x48fbfa` → `0x49016d`):
++    // No sound during the load edge, as in the stock game's UI start-up:
 +    // pushed here, popped in [`complete_entry_load`], so a load spread over frames is silent too
 +    // (`manifest::silenced_ui_load`'s pair).
 +    script.push_sound_suppression();
@@ -18730,8 +18730,8 @@ index 5dc172ee..38a9c1ad 100644
 +            failures.extend(load_layer(script));
 +        }
 +        failures.extend(bootstrap_positions(script));
-+        // Each addon's `ADDON_LOADED` fires as that addon finishes, as the reference does
-+        // (`0x51f5ad`).
++        // Each addon's `ADDON_LOADED` fires as that addon finishes, as the stock game does
++        // (one event per addon).
 +        failures.extend(super::addons::load_third_party(
 +            script,
 +            identity,
@@ -19031,7 +19031,7 @@ index d1156053..35f20d0d 100644
 +const DISPLAY_SETTLE_SECS: f32 = 0.25;
 +
 +/// `DISPLAY_SIZE_CHANGED` when the window's size moves and `UI_SCALE_CHANGED` when the effective
-+/// uiScale does (the reference fires them on a mode set and a `uiScale` write), so a layout addon
++/// uiScale does (the stock game fires them on a mode set and a `uiScale` write), so a layout addon
 +/// (Forever UI's glue `onScale`, the bar layout) re-seats after a browser resize, a rotation or the
 +/// pixel-perfect scale following the canvas. The first values a VM sees are not a change.
 +pub(crate) fn feed_display_events(
@@ -19089,7 +19089,7 @@ index d1156053..35f20d0d 100644
      #[test]
 -    fn the_glue_screens_ignore_the_ui_scale_dial() {
 +    fn the_glue_screens_stay_768_units_tall() {
-+        // The reference's: a glue that wants pixels scales GlueParent from gxResolution.
++        // The stock game's: a glue that wants pixels scales GlueParent from gxResolution.
          let dial = super::UiScaleCvar(0.9);
          assert_eq!(dial.for_vm(benilla_ui::script::VmKind::Glue), 1.0);
          assert_eq!(dial.for_vm(benilla_ui::script::VmKind::InGame), 0.9);
@@ -19860,7 +19860,7 @@ index 4fb4c523..0b7b002e 100644
 -/// far to read.
 -const DIM_ALPHA: f32 = 178.0 / 255.0;
 +/// The backport's two plate CVars this driver reads (`cvars::table::REGISTERED_BACKPORT`):
-+/// `nameplateDistance`, the plate range in yards (the reference hardcodes 20; awesome_wotlk's
++/// `nameplateDistance`, the plate range in yards (the stock game hardcodes 20; awesome_wotlk's
 +/// default is 41), and `nameplateNonTargetAlpha`, the dim of every plate but the target's (the
 +/// reference's `0x7F`).
 +#[derive(Resource, Clone, Copy, Debug, PartialEq)]
@@ -20050,7 +20050,7 @@ index 4fb4c523..0b7b002e 100644
      }
 -    cands.sort_by(|a, b| a.0.total_cmp(&b.0));
 -    for (_, screen, anchor, rank, is_player, entity, guid, store) in cands {
-+    // The nearest [`MAX_PLATES`] to the player, then seated in the reference's screen order.
++    // The nearest [`MAX_PLATES`] to the player, then seated in the stock game's screen order.
 +    if cands.len() > MAX_PLATES {
 +        cands.select_nth_unstable_by(MAX_PLATES - 1, |a, b| a.0.total_cmp(&b.0));
 +        cands.truncate(MAX_PLATES);
@@ -22906,7 +22906,7 @@ index d6e85728..f9b27f75 100644
 +            // Skins fill at the spawn site, so no skin directory or list is passed.
 +            let subs = parse_m2_render_submeshes(&m2, "", &[]).map_err(to_io)?;
 +            let bounds = Some(parse_m2_bounds(&m2));
-+            // One owner bound for every effect: the reference draws them all after the batches.
++            // One owner bound for every effect: the stock game draws them all after the batches.
 +            let owner_reach = benilla_formats::m2_owner_reach(&subs);
 +            // The water-plane sphere: the header box's midpoint and the header sphere's radius.
 +            let water_bound = bounds.as_ref().map_or((Vec3::ZERO, 0.0), |b| {
@@ -23262,7 +23262,7 @@ index d6e85728..f9b27f75 100644
 +                    }
 +                }
 +                // Groups 3 and 4 hold every joint outside the right and the left fingers, for the
-+                // weapon grip (`CloseHand`, `0x479660`).
++                // weapon grip (the closed-hand pose).
 +                let finger_roots = finger_subtree_roots(&skeleton_raw);
                  for i in 0..skeleton_raw.bones.len() {
                      let target = bone_target_id(i as u16);
@@ -23731,7 +23731,7 @@ index 1f55e8fa..25e018d4 100644
  /// (`0x689110`).
  pub const ANISO_RANGE: std::ops::RangeInclusive<u32> = 1..=16;
  
-+/// WrathUnleashed's shipped `anisotropic`: 16x, where the reference's registered "1" is off (a
++/// WrathUnleashed's shipped `anisotropic`: 16x, where the stock game's registered "1" is off (a
 +/// `Deviates` row in the CVar table). A device without anisotropic filtering takes 1
 +/// ([`TexFilterSetting::on_device`]); `anisotropic 1` turns it off.
 +pub const ANISO_DEFAULT: u32 = 16;
@@ -23763,7 +23763,7 @@ index 1f55e8fa..25e018d4 100644
  
  impl TexFilterSetting {
 +    /// The setting a device can honour: anisotropy off where the adapter lacks the capability
-+    /// (wgpu's `DownlevelFlags::ANISOTROPIC_FILTERING`), as the reference clamps to the device cap.
++    /// (wgpu's `DownlevelFlags::ANISOTROPIC_FILTERING`), as the stock game clamps to the device cap.
 +    pub fn on_device(self, anisotropic_filtering: bool) -> Self {
 +        if anisotropic_filtering {
 +            self
@@ -23798,7 +23798,7 @@ index 1f55e8fa..25e018d4 100644
          assert_eq!(shipped.mipmap_filter(), ImageFilterMode::Linear);
 -        assert_eq!(shipped.anisotropy_clamp(), 1);
 +        assert_eq!(shipped.anisotropy_clamp(), 16);
-+        // Where the device has no anisotropic filtering it is the reference's mode 4.
++        // Where the device has no anisotropic filtering it is the stock game's mode 4.
 +        let bare = shipped.on_device(false);
 +        assert_eq!(bare.mode(), 4);
 +        assert_eq!(bare.anisotropy_clamp(), 1);
@@ -24258,7 +24258,7 @@ index c3976845..f95cfdff 100644
                      }
                  }
 +                let subs = wmo_group_submeshes(&gbytes, &root).map_err(to_io)?;
-+                // The reference walks MODR at `0x695aa0` and MOLR at `0x695c00`.
++                // The stock game walks the MODR and MOLR chunks in this order.
 +                if let Some(slot) = group_doodad_refs.get_mut(gi as usize) {
 +                    *slot = wmo_group_doodad_refs(&gbytes);
 +                }
@@ -28889,7 +28889,7 @@ index 09666a07..ad70db43 100644
 -    pub fn send_addon_message(&mut self, chat_type: u32, text: &str) -> Result<()> {
 +    /// `message`, raw bytes, on the party, raid, guild or battleground lane, or a whisper to
 +    /// `target`. Its language, [`messages::LANGUAGE_ADDON`], is the only mark of addon data
-+    /// (`0x49f920`); vmangos gates it on `AddonChannel` and skips the language gate, flood control
++    /// (as the stock game does); vmangos gates it on `AddonChannel` and skips the language gate, flood control
 +    /// and sanitizing.
 +    pub fn send_addon_message(
 +        &mut self,
@@ -29292,7 +29292,7 @@ index e5817f9e..4e239909 100644
 -//! `|`, so `|TInterface\Icons\Foo:16:16|t` draws literally.
 +//! 3.3.5a adds the `|T<path>[:h[:w[:x:y…]]]|t` inline-texture escape, one zero-width token here
 +//! ([`TokenKind::Texture`]): the renderer draws no glyph for it (the icon itself is not drawn yet),
-+//! so the text around it reads as the reference's does. An unterminated `|T` stays literal.
++//! so the text around it reads as the stock game's does. An unterminated `|T` stays literal.
  //!
  //! The decoder's flags word can disable classes, but no code in the 1.12 client sets the bits for
  //! `|c`, `|r`, `|H`, `|h` or `||` (`0x44d670` builds it from a font string's flags). Only `|n` can
@@ -29507,7 +29507,7 @@ index cfe87f13..f1f48a52 100644
 +                text.extend_from_slice(&prefix);
 +                text.push(b'\t');
 +                text.extend_from_slice(&message);
-+                // A NUL ends the C string the reference composes into.
++                // A NUL ends the C string the stock game composes into.
 +                if let Some(nul) = text.iter().position(|&b| b == 0) {
 +                    text.truncate(nul);
                  }
@@ -29548,7 +29548,7 @@ index cfe87f13..f1f48a52 100644
      Ok(())
  }
  
-+/// An inbound addon line's text split as the receiver does (`0x49a8d0`): at the first TAB only,
++/// An inbound addon line's text split as the receiver does: at the first TAB only,
 +/// so the message keeps any later TAB; with none, it is all prefix and the message is empty.
 +pub fn split_addon_text(text: &[u8]) -> (&[u8], &[u8]) {
 +    match text.iter().position(|&b| b == b'\t') {
@@ -30401,7 +30401,7 @@ index 0e77e409..3ab08626 100644
 -            // reference applies that mode, or a third argument's, on every call and to a handed-in
 -            // Texture too (`0x7703f0` from `0x779050` and `0x779110`); here only a new region
 -            // takes it.
-+            // A new highlight blends ADD, `SetHighlightTexture`'s default (`0x781d92`); every
++            // A new highlight blends ADD, `SetHighlightTexture`'s default; every
 +            // call then re-applies it, or a third argument's ([`highlight_blend`]).
              model.region_data.insert(
                  rh,
@@ -30427,8 +30427,8 @@ index 0e77e409..3ab08626 100644
  }
  
 +/// The blend `SetHighlightTexture` leaves on its texture: the argument after the texture, else
-+/// ADD (`0x781d92`), applied on every call and to a handed-in Texture alike (`0x7703f0` from
-+/// `0x779050` and `0x779110`), so a highlight an addon builds as a plain BLEND texture glows once
++/// ADD, applied on every call and to a handed-in Texture alike (whether the addon
++/// sets it or hands it in), so a highlight an addon builds as a plain BLEND texture glows once
 +/// installed. A name off the `alphaMode` table falls back to ADD (assumed; the enum lookup's miss
 +/// is untraced).
 +fn highlight_blend(args: &MultiValue) -> crate::script::BlendMode {
@@ -30449,7 +30449,7 @@ index 0e77e409..3ab08626 100644
          )?,
      )?;
  
-+    // SetPushedTextOffset(x, y) (`0x977f60`) and GetPushedTextOffset (`0x978040`): the pushed
++    // SetPushedTextOffset(x, y) and GetPushedTextOffset: the pushed
 +    // label's draw offset; a non-number argument raises the usage error.
 +    m.set(
 +        "SetPushedTextOffset",
@@ -30479,7 +30479,7 @@ index 0e77e409..3ab08626 100644
 +        })?,
 +    )?;
 +
-+    // SetMotionScriptsWhileDisabled(flag) (`0x9783b0`) and its getter (`0x978360`, a boolean).
++    // SetMotionScriptsWhileDisabled(flag) and its getter (a boolean).
 +    m.set(
 +        "SetMotionScriptsWhileDisabled",
 +        lua.create_function(|lua, (this, on): (Table, Value)| {
@@ -30640,7 +30640,7 @@ index 6fefdcc2..7fdd8122 100644
  
 +/// A tiled Texture's UVs: each tiled axis spans the region's layout size in texels from the
 +/// mapping's start edge, `rect / scale / texels` repeats, one texel per layout unit, as the art
-+/// draws untiled at its texel size. The reference tiles only the whole image (Forever UI's
++/// draws untiled at its texel size. The stock game tiles only the whole image (Forever UI's
 +/// `Templates.lua:121`, "3.3.5 can only tile a whole image"), so a crop's start edge is kept and
 +/// its far edge moved; an eight-corner mapping is left alone. The rule that one texel is one
 +/// layout unit is inferred from how sized art draws, not traced.
@@ -30999,7 +30999,7 @@ index 5dc6c783..812a91c5 100644
 -        "DAMAGER"
      } else {
 -        "UNKNOWN"
-+        // No role bit (a server's bot members carry none): DAMAGER. Deviation: the reference
++        // No role bit (a server's bot members carry none): DAMAGER. Deviation: the stock game
 +        // answers "UNKNOWN", which stock `GetTexCoordsForRole` (`LFGFrame.lua:337`) raises on.
 +        "DAMAGER"
      }
@@ -31013,14 +31013,14 @@ index 96018846..8d0801e7 100644
          })?,
      )?;
  
-+    // GetCurrentScroll() (`0x9736f0`): the lines scrolled back from the newest, 0 at the bottom.
++    // GetCurrentScroll(): the lines scrolled back from the newest, 0 at the bottom.
 +    m.set(
 +        "GetCurrentScroll",
 +        lua.create_function(|lua, this: Table| {
 +            with_smf(lua, &this, |smf| smf.scroll_offset as i64)
 +        })?,
 +    )?;
-+    // SetScrollOffset(offset) (`0x973470`): scroll to `offset` lines back, held to the ring, and
++    // SetScrollOffset(offset): scroll to `offset` lines back, held to the ring, and
 +    // re-arm the fades as every scroll entry does.
 +    m.set(
 +        "SetScrollOffset",
@@ -31034,7 +31034,7 @@ index 96018846..8d0801e7 100644
 +            scroll(lua, &this, |smf, rows| smf.set_scroll_offset(offset, rows))
 +        })?,
 +    )?;
-+    // GetNumLinesDisplayed() (`0x9736a0`): how many messages the view shows from the scroll
++    // GetNumLinesDisplayed(): how many messages the view shows from the scroll
 +    // position, each costing its wrapped rows.
 +    m.set(
 +        "GetNumLinesDisplayed",
@@ -31060,8 +31060,8 @@ index 00000000..2a13b87e
 --- /dev/null
 +++ b/crates/benilla-ui/src/script/mirror_timer.rs
 @@ -0,0 +1,133 @@
-+//! The mirror timers' read verbs, `GetMirrorTimerInfo` (`0x51cc10`) and `GetMirrorTimerProgress`
-+//! (`0x517aa0`), over the three slots the app restates from `SMSG_START_MIRROR_TIMER`,
++//! The mirror timers' read verbs, `GetMirrorTimerInfo` and `GetMirrorTimerProgress`
++//! (both read-only), over the three slots the app restates from `SMSG_START_MIRROR_TIMER`,
 +//! `_PAUSE` and `_STOP` ([`UiScript::set_mirror_timer`]). Stock `MirrorTimer.lua:81-89` reads
 +//! every slot at `PLAYER_ENTERING_WORLD` and shows the bar of each one not `"UNKNOWN"`, so a
 +//! breath bar survives a `/reload` under water.
@@ -31264,7 +31264,7 @@ index 78422c6e..200b6994 100644
 -/// has no Texture `SetSize` or `SetRotation` (PlayerModel's, `0x84f1fc`/`0x505f00`).
 -pub(crate) const TEXTURE_ONLY_METHODS: [&str; 12] = [
 +/// `SetVertexColor` is shared, and `SetGradientAlpha`, not FontString's `SetAlphaGradient`. The
-+/// tile pairs and `SetRotation` are 3.3.5a's (map `0xac1028`).
++/// tile pairs and `SetRotation` are 3.3.5a's.
 +pub(crate) const TEXTURE_ONLY_METHODS: [&str; 17] = [
      "SetGradient",
      "SetGradientAlpha",
@@ -32063,7 +32063,7 @@ index 369fdfac..248c18d9 100644
      pub shadow_offset: f32,
 +    /// The modern look: a flat bar in a one-pixel border (`border` thick), the name above, the
 +    /// level after the bar, a cast bar below it with its icon to the left, an elite dragon.
-+    /// Off, the reference's 1.12 plate.
++    /// Off, the stock game's 1.12 plate.
 +    pub modern: bool,
 +    pub border: f32,
 +    pub cast_height: f32,
@@ -32096,7 +32096,7 @@ index 369fdfac..248c18d9 100644
      raid: RegionHandle,
      bar: FrameHandle,
      fill: RegionHandle,
-+    /// The modern look's extras, built only under it and after the reference's regions and
++    /// The modern look's extras, built only under it and after the stock game's regions and
 +    /// child, so the 1.12 order addons walk is untouched (region 1 keeps the border path addons
 +    /// identify a plate by, hidden): the flat border, the elite dragon, the cast bar.
 +    modern: Option<ModernParts>,
@@ -32285,7 +32285,7 @@ index 369fdfac..248c18d9 100644
          model.nameplates.plates[i].laid_out = Some(g);
      }
  
-+    /// The modern look over the reference's anchors: the plate is the bar plus its border, the
++    /// The modern look over the stock game's anchors: the plate is the bar plus its border, the
 +    /// border region a flat frame, the name above, the level after the bar, the raid mark over
 +    /// the name, the elite dragon on the plate's right end, the cast bar below with its icon left.
 +    fn lay_out_modern(model: &mut Model, i: usize, g: PlateGeometry, m: ModernParts) {
@@ -32740,7 +32740,7 @@ index 4972bee7..312e7bc6 100644
      )?;
 +    // `HookScript(name, hook)`: with no handler set, the hook becomes it; else the handler is
 +    // replaced by one that runs the original, then the hook, with the same arguments (the
-+    // animation objects' `FrameScript_HookWrapper`, in `anim/lua.rs`). An unknown kind raises as
++    // animation objects' hook wrapper, in `anim/lua.rs`). An unknown kind raises as
 +    // `SetScript` does.
 +    m.set(
 +        "HookScript",
@@ -32766,7 +32766,7 @@ index 1f5c703d..7b85f49a 100644
              Ok(model.arena.frame(h).map(|f| f.alpha).unwrap_or(1.0))
          })?,
      )?;
-+    // GetEffectiveAlpha (`0x49f900`): the product of the frame's own alpha and its ancestors'.
++    // GetEffectiveAlpha: the product of the frame's own alpha and its ancestors'.
 +    m.set(
 +        "GetEffectiveAlpha",
 +        lua.create_function(|lua, this: Table| {
@@ -32790,7 +32790,7 @@ index 00000000..27b7a4d3
 --- /dev/null
 +++ b/crates/benilla-ui/src/script/object/protected.rs
 @@ -0,0 +1,51 @@
-+//! `IsProtected` (`0x49cad0`, the Region map `0xac1480`): `isProtected, isExplicit`, each 1 or nil.
++//! `IsProtected`: `isProtected, isExplicit`, each 1 or nil.
 +//!
 +//! A frame is explicitly protected by XML alone (`protected="true"`, on the element or an
 +//! inherited template such as `SecureFrameTemplate`); Lua has no setter. It is protected when it
@@ -33000,7 +33000,7 @@ index 912a8013..88fbe22a 100644
      count
  }
  
-+/// `QuestPOIUpdateIcons` (`0x5e5740`): seat each POI quest's icon at the first region that counts
++/// `QuestPOIUpdateIcons`: seat each POI quest's icon at the first region that counts
 +/// for it ([`serves`]) and shows on the displayed map; a quest with none shown gets no icon.
 +fn update_icons(model: &mut Model) {
 +    let mut icons = HashMap::new();
@@ -33032,7 +33032,7 @@ index 912a8013..88fbe22a 100644
          })?,
      )?;
  
-+    // QuestPOIUpdateIcons() (`0x5e5740`): place the icons of the quests the POI store holds on
++    // QuestPOIUpdateIcons(): place the icons of the quests the POI store holds on
 +    // the displayed map; `WorldMapFrame_UpdateQuests` calls it before reading them.
 +    g.set(
 +        "QuestPOIUpdateIcons",
@@ -33042,7 +33042,7 @@ index 912a8013..88fbe22a 100644
 +        })?,
 +    )?;
 +
-+    // QuestPOIGetIconInfo(questID) (`0x5e0590`) → onMap, left, top, objective: nothing for a quest
++    // QuestPOIGetIconInfo(questID) → onMap, left, top, objective: nothing for a quest
 +    // the store holds no POI for, `false, 0, 0, 0` for one whose regions miss the displayed map.
 +    g.set(
 +        "QuestPOIGetIconInfo",
@@ -33152,8 +33152,8 @@ index 2fa0861c..8f2a655e 100644
  
 -    // No Texture `SetRotation`: 1.12 registers it only on PlayerModel (`0x505f00`, table
 -    // `0x84f1fc`), in neither region map (`0x87c128`, `0xcf5400`).
-+    // SetHorizTile/SetVertTile (`0x48cb60`/`0x48cc30`) and their getters (`0x48cbc0`/`0x48cc90`),
-+    // 3.3.5a's Texture map (`0xac1028`): the art repeats along the axis instead of stretching, one
++    // SetHorizTile/SetVertTile and their getters,
++    // 3.3.5a's Texture map: the art repeats along the axis instead of stretching, one
 +    // texel per layout unit ([`super::super::extract`] widens the UVs). The flag reads as Lua
 +    // truth, so nil and false are off; the getters answer 1 or nil.
 +    for (setter, getter, horiz) in [
@@ -33204,7 +33204,7 @@ index 2fa0861c..8f2a655e 100644
 +        )?;
 +    }
 +
-+    // SetRotation(radians [, cx, cy]) (`0x48c860`, 3.3.5a's Texture map; 1.12 had it on
++    // SetRotation(radians [, cx, cy]) (3.3.5a's Texture verbs; 1.12 had it on
 +    // PlayerModel alone): the full texture's coordinates turned about `(cx, cy)`, default the
 +    // centre, so the art turns counterclockwise inside the unrotated quad and any earlier
 +    // `SetTexCoord` crop is replaced, as Forever UI's `SpellBook.lua:644` notes. `GetTexCoord`
@@ -33268,7 +33268,7 @@ index 8d747d60..b9337b5d 100644
      // measured. Never the declared width, which `PanelTemplates_TabResize` sets from this; on an
 -    // axis sized 0, `GetWidth` reads the same cell (`[fs+0xfc]`, `0x772890`). 1.12 has no
 -    // `GetStringHeight`; `GetHeight` (`0x7a2030`) serves.
-+    // axis sized 0, `GetWidth` reads the same cell (`[fs+0xfc]`, `0x772890`).
++    // axis sized 0, `GetWidth` reads the same measured width.
      fn natural_w(lua: &Lua, this: &Table) -> mlua::Result<f32> {
          let rh = region_handle_of(lua, this)?;
          // Measure now when a host font engine is installed, as the reference measures inline, so
@@ -33276,7 +33276,7 @@ index 8d747d60..b9337b5d 100644
          "GetStringWidth",
          lua.create_function(|lua, this: Table| natural_w(lua, &this))?,
      )?;
-+    // GetStringHeight (`0x48df00`): the laid-out height of the current text, its wrapped lines in
++    // GetStringHeight: the laid-out height of the current text, its wrapped lines in
 +    // the declared width; 0 for empty text or before the first measure.
 +    m.set(
 +        "GetStringHeight",
@@ -33310,12 +33310,12 @@ index 00000000..53b6a6b5
 --- /dev/null
 +++ b/crates/benilla-ui/src/script/region/wrap.rs
 @@ -0,0 +1,53 @@
-+//! 3.3.5a's FontString wrap switches, which 1.12 lacks: `SetWordWrap`/`CanWordWrap` (`0x48e580`/
-+//! `0x48e080`) and `SetIndentedWordWrap`/`GetIndentedWordWrap` (`0x48e0e0`/`0x48e600`), all in the
-+//! FontString map (`0xac1118`). Stored, not applied: the layout wraps any FontString with a bounded
-+//! width, which is the reference's default, and an indented wrap is not built. Present so an addon
++//! 3.3.5a's FontString wrap switches, which 1.12 lacks: `SetWordWrap`/`CanWordWrap` (a pair
++//! of verbs) and `SetIndentedWordWrap`/`GetIndentedWordWrap`, all in the
++//! FontString map. Stored, not applied: the layout wraps any FontString with a bounded
++//! width, which is the stock game's default, and an indented wrap is not built. Present so an addon
 +//! that feature-tests them (`if fs.SetWordWrap then`, Forever UI's `ReputationTab.lua:901`) takes
-+//! the reference's path.
++//! the stock game's path.
 +
 +use mlua::{Lua, Table, Value};
 +
@@ -33371,8 +33371,8 @@ index ac4add24..58c8ce2e 100644
          "GetNumVoiceSessions",
          lua.create_function(|_, _: mlua::MultiValue| Ok(0))?,
      )?;
-+    // `GetNumVoiceSessionMembersBySessionID` (`0x7db370`) and
-+    // `GetVoiceSessionMemberInfoBySessionID` (`0x7deef0`) find no session by any id, so they return
++    // `GetNumVoiceSessionMembersBySessionID` and
++    // `GetVoiceSessionMemberInfoBySessionID` find no session by any id, so they return
 +    // nothing; stock `ChannelPulloutRoster_GetSessionInfo` reads `or 0` (`ChannelFrame.lua:1020`).
 +    for name in [
 +        "GetNumVoiceSessionMembersBySessionID",
@@ -34978,7 +34978,7 @@ index acf80d76..f1d66a71 100644
 -            !has(&s, leaf, "SetRotation"),
 -            "SetRotation is not a region method"
 -        );
-+    // `SetRotation` and the tile pairs are 3.3.5a's Texture verbs (`0x48c860`, map `0xac1028`),
++    // `SetRotation` and the tile pairs are 3.3.5a's Texture verbs,
 +    // which a FontString lacks.
 +    for m in ["SetRotation", "SetHorizTile", "GetVertTile"] {
 +        assert!(has(&s, "Tex", m), "a Texture answers {m}");
@@ -34991,7 +34991,7 @@ index acf80d76..f1d66a71 100644
          );
      }
 -    // 1.12 has no `GetStringHeight` on any table; `GetHeight` reads the same measurement.
-+    // 3.3.5a's FontString map (`0xac1118`) has `GetStringHeight` (`0x48df00`) beside the width.
++    // 3.3.5a's FontString map has `GetStringHeight` beside the width.
      assert!(
 -        !has(&s, "Str", "GetStringHeight"),
 -        "1.12 has no GetStringHeight"
@@ -35014,7 +35014,7 @@ index 06d40d8f..803e7d13 100644
      .unwrap();
  }
 +
-+/// `UIParent:SetScale` scales the whole UI about the screen's TOPLEFT as the reference does: the
++/// `UIParent:SetScale` scales the whole UI about the screen's TOPLEFT as the stock game does: the
 +/// parent still fills the screen (its own-space size is the screen over the scale), so a frame
 +/// anchored to its left or right edge stays on screen at any scale.
 +#[test]
@@ -35178,7 +35178,7 @@ index 8edfce2f..1376f81d 100644
              set_spell_by_id(lua, &this, spell_id, name, opts, None)
          })?,
      )?;
-+    // GameTooltip:SetTotem(slot) (`0x6205c0`): the live totem's summoning spell tooltip; an
++    // GameTooltip:SetTotem(slot): the live totem's summoning spell tooltip; an
 +    // empty slot, or one outside 1-4, sets nothing.
 +    m.set(
 +        "SetTotem",
@@ -35211,7 +35211,7 @@ index e4ef755e..9fe47dd0 100644
          })?,
      )?;
 +    // GameTooltip:GetUnit() → name, unit: the shown unit's name and a token naming it now
-+    // (`player`, `target`, `mouseover`, ...); nothing when the tooltip shows no unit. The reference
++    // (`player`, `target`, `mouseover`, ...); nothing when the tooltip shows no unit. The stock game
 +    // answers the token `SetUnit` was given; this answers one that still names the unit, nil for a
 +    // unit no token reaches any more.
 +    m.set(
@@ -35287,19 +35287,19 @@ index fc704d89..03e31ae6 100644
      pub(crate) tex_coord_modifies_rect: bool,
 -    /// Rotation about the centre, radians counterclockwise; always 0: 1.12 has no Texture setter.
 +    /// Rotation of the drawn quad about its centre, radians counterclockwise. 3.3.5a's
-+    /// `Texture:SetRotation` (`0x48c860`) rotates the texture coordinates instead (into
++    /// `Texture:SetRotation` rotates the texture coordinates instead (into
 +    /// [`Self::tex_coords`]), so only a host-side writer sets this.
      pub(crate) rotation: f32,
-+    /// `SetHorizTile`/`GetHorizTile` (`0x48cb60`/`0x48cbc0`) and XML `horizTile=`: the art
++    /// `SetHorizTile`/`GetHorizTile` and XML `horizTile=`: the art
 +    /// repeats across the region at one texel per layout unit instead of stretching.
 +    pub(crate) horiz_tile: bool,
-+    /// `SetVertTile`/`GetVertTile` (`0x48cc30`/`0x48cc90`) and XML `vertTile=`: as
++    /// `SetVertTile`/`GetVertTile` and XML `vertTile=`: as
 +    /// [`Self::horiz_tile`], down the region.
 +    pub(crate) vert_tile: bool,
-+    /// `SetWordWrap`/`CanWordWrap` (`0x48e580`/`0x48e080`), `None` on. Stored, not applied: the
++    /// `SetWordWrap`/`CanWordWrap`, `None` on. Stored, not applied: the
 +    /// layout wraps any FontString with a bounded width.
 +    pub(crate) word_wrap: Option<bool>,
-+    /// `SetIndentedWordWrap`/`GetIndentedWordWrap` (`0x48e0e0`/`0x48e600`), `None` off. Stored,
++    /// `SetIndentedWordWrap`/`GetIndentedWordWrap`, `None` off. Stored,
 +    /// not applied.
 +    pub(crate) indented_word_wrap: Option<bool>,
      /// The font object this FontString inherits (`FONTINSTANCE+0x028`, a FontString's `+0xd0`), a
@@ -35313,7 +35313,7 @@ index 3b632589..6fc59543 100644
              Ok(flag(model.resting))
          })?,
      )?;
-+    // IsMounted(): the player's `UNIT_FIELD_MOUNTDISPLAYID` is non-zero, the reference's one
++    // IsMounted(): the player's `UNIT_FIELD_MOUNTDISPLAYID` is non-zero, the stock game's one
 +    // mounted predicate (`Unit::IsMounted`); 1 or nil like the other flags.
 +    g.set(
 +        "IsMounted",
@@ -35582,7 +35582,7 @@ index 890df230..f63db602 100644
          })?,
      )?;
  
-+    // GetPlayerFacing() (`0x60a490`): the player's facing in radians, 0 north and
++    // GetPlayerFacing(): the player's facing in radians, 0 north and
 +    // counterclockwise-positive, from the same feed the map arrow turns by; nothing with no
 +    // player in the world.
 +    g.set(
@@ -36320,7 +36320,7 @@ index fbc07a4f..3fb0d500 100644
          self.reset_all_fade_times(viewport_rows);
      }
  
-+    /// `SetScrollOffset` (`0x973470`): `offset` lines back, at most to the oldest, then re-arm.
++    /// `SetScrollOffset`: `offset` lines back, at most to the oldest, then re-arm.
 +    pub fn set_scroll_offset(&mut self, offset: usize, viewport_rows: usize) {
 +        self.scroll_offset = offset.min(self.max_scroll());
 +        self.reset_all_fade_times(viewport_rows);
@@ -36337,12 +36337,12 @@ index a428d54a..53460702 100644
      pub disabled_color: Option<[f32; 4]>,
      /// `LockHighlight()`: highlighted regardless of hover, both the texture and the label font.
      pub locked_highlight: bool,
-+    /// `<PushedTextOffset>`/`SetPushedTextOffset` (`0x977f60`): how far the label draws from its
++    /// `<PushedTextOffset>`/`SetPushedTextOffset`: how far the label draws from its
 +    /// rect while the button is pushed, in the frame's units, y up. Default (0, 0): the client's
 +    /// own default is not measured (stock `MoneyFrame.xml` writes an explicit 0, 0, which hints a
 +    /// non-zero one).
 +    pub pushed_text_offset: (f32, f32),
-+    /// `SetMotionScriptsWhileDisabled` (`0x9783b0`): a disabled button still runs `OnEnter` and
++    /// `SetMotionScriptsWhileDisabled`: a disabled button still runs `OnEnter` and
 +    /// `OnLeave`. Off at construction.
 +    pub motion_while_disabled: bool,
      /// The shown state texture (`+0x4c4`), written only by `set_state` and `set_state_slot`.
@@ -36366,7 +36366,7 @@ index bb486a2f..fa9f0fdb 100644
      /// (`0x7650f0`) raises the nearest toplevel self-or-ancestor of a clicked or shown frame.
      pub toplevel: bool,
 +    /// XML `protected="true"`, on the element or a template it inherits: the frame is explicitly
-+    /// protected, the second answer of `IsProtected` (`0x49cad0`). Lua cannot set it.
++    /// protected, the second answer of `IsProtected`. Lua cannot set it.
 +    pub protected: bool,
      /// This frame's own scale (`ownScale +0xb8`, default 1.0).
      pub scale: f32,
@@ -36401,8 +36401,8 @@ index d36bfb17..5a604e2c 100644
  
 -    /// `SetAlpha` (`0x76a690`): write the raw value to `h` and every descendant frame (`+0xc8`),
 -    /// with no draw-time product, so a child's own later `SetAlpha` holds until an ancestor's next.
-+    /// `SetAlpha` (Frame map `0xac1550`, `0x49f9e0`): the frame's own alpha; what draws is the
-+    /// product down the parent chain, which `GetEffectiveAlpha` (`0x49f900`) answers. 1.12 wrote
++    /// `SetAlpha`: the frame's own alpha; what draws is the
++    /// product down the parent chain, which `GetEffectiveAlpha` answers. 1.12 wrote
 +    /// the raw value into every descendant instead; 3.3.5a keeps each frame's own, so a child an
 +    /// addon hid with `SetAlpha(0)` stays hidden through its parent's fade.
      /// Every draw target `set_alpha` on `h` reaches: `h`, its descendants, and their regions.
@@ -36760,7 +36760,7 @@ index 7c60367f..cf380fc6 100644
      (uniform, wave_armed(glow.state, wave, player))
  }
  
-+/// The combine uniform's size: the reference lanes (32 bytes), then the [`PostGrade`] pair.
++/// The combine uniform's size: the stock lanes (32 bytes), then the [`PostGrade`] pair.
 +const COMBINE_UNIFORM_BYTES: u64 = 64;
 +
 +/// The [`PostGrade`] lanes a view's combine reads: the live grade on the player's world view, the
@@ -36776,7 +36776,7 @@ index 7c60367f..cf380fc6 100644
 +    grade.lanes()
 +}
 +
-+/// The reference lanes then the grade lanes, as the 64-byte uniform.
++/// The stock lanes then the grade lanes, as the 64-byte uniform.
 +fn combine_bytes(uniform: &[f32; 8], post: [f32; 8]) -> [f32; 16] {
 +    let mut out = [0.0; 16];
 +    out[..8].copy_from_slice(uniform);
@@ -36921,7 +36921,7 @@ index 7c60367f..cf380fc6 100644
 +        assert_eq!(
 +            &bytes[..8],
 +            &[1.0; 8],
-+            "the reference lanes keep their offsets"
++            "the stock lanes keep their offsets"
 +        );
 +        assert_eq!(
 +            std::mem::size_of_val(&bytes) as u64,
@@ -36992,7 +36992,7 @@ index 00000000..04274fbd
 --- /dev/null
 +++ b/crates/benilla-world/src/graphics_plus.rs
 @@ -0,0 +1,363 @@
-+//! WrathUnleashed's graphics additions, each off or neutral by default so the reference look is
++//! WrathUnleashed's graphics additions, each off or neutral by default so the stock look is
 +//! what a fresh install draws: the world camera's field of view ([`CameraFov`]), the sharpen and
 +//! colour grade in the FFXGlow combine ([`PostGrade`], `shaders/ffx_glow.wgsl`), and Darker Nights
 +//! ([`DarkerNights`]), a deeper night on the `Light.dbc` curves, held off in battlegrounds and
@@ -37005,14 +37005,14 @@ index 00000000..04274fbd
 +
 +use crate::lighting::WowLighting;
 +
-+/// The reference camera's own field of view in degrees, `[camera+0x40]` (π/2 = 90 at its
-+/// constructor, `0x50a706`); our vertical [`crate::view::CAM_FOVY`] stands for that 90.
++/// The stock game camera's own field of view in degrees (π/2 = 90 at its
++/// start); our vertical [`crate::view::CAM_FOVY`] stands for that 90.
 +pub const CAMERA_FOV_REFERENCE: f32 = 90.0;
 +
 +/// The `cameraFov` range, awesome_wotlk's documented 90 to 150, the same on every map.
 +pub const CAMERA_FOV_RANGE: RangeInclusive<f32> = 90.0..=150.0;
 +
-+/// The world camera's field of view, the `cameraFov` CVar in the reference camera's degrees. The
++/// The world camera's field of view, the `cameraFov` CVar in the stock camera's degrees. The
 +/// ratio to 90 scales [`crate::view::CAM_FOVY`], the vertical angle, so a wider window (ultrawide)
 +/// still widens only horizontally, as it does at the default.
 +#[derive(Resource, Clone, Copy, PartialEq, Debug)]
@@ -37021,7 +37021,7 @@ index 00000000..04274fbd
 +}
 +
 +impl Default for CameraFov {
-+    /// 90, the reference's own: the projection is exactly [`crate::view::CAM_FOVY`].
++    /// 90, the stock game's own: the projection is exactly [`crate::view::CAM_FOVY`].
 +    fn default() -> Self {
 +        Self {
 +            degrees: CAMERA_FOV_REFERENCE,
@@ -37172,7 +37172,7 @@ index 00000000..04274fbd
 +pub const DARKER_NIGHTS_FLOOR: f32 = 0.06;
 +
 +/// Darker Nights, the `darkerNights` CVar: the night segment of the `Light.dbc` curves scaled by
-+/// [`DARKER_NIGHTS_SCALE`] over the client's own night track (the SIDN fraction, `0xce9a34`, 1 from
++/// [`DARKER_NIGHTS_SCALE`] over the client's own night track (the SIDN fraction, 1 from
 +/// 21:30 to 06:00 with hour-long ramps), floored at [`DARKER_NIGHTS_FLOOR`] luma. Held off in a
 +/// battleground or arena, where it would favour whoever left it off.
 +#[derive(Resource, Clone, Copy, Default, PartialEq, Debug)]
@@ -37207,7 +37207,7 @@ index 00000000..04274fbd
 +}
 +
 +/// Darker Nights on a resolved light: the ambient, the sun's diffuse, the fog and the sky dome,
-+/// at the light's own SIDN night fraction. Specular, water and clouds keep the reference's bands.
++/// at the light's own SIDN night fraction. Specular, water and clouds keep the stock game's bands.
 +pub(crate) fn darken_lighting(l: &mut WowLighting) {
 +    let night = l.sidn_night;
 +    l.ambient = darken_rgb(l.ambient, night);
@@ -39152,7 +39152,7 @@ index b27810fd..04d1c756 100644
 +++ b/crates/benilla-world/src/terrain_stream/window.rs
 @@ -1,4 +1,4 @@
 -//! The residency window, derived from `farclip` (177..777) as the reference derives it:
-+//! The residency window, derived from `farclip` (177..1277) as the reference derives it:
++//! The residency window, derived from `farclip` (177..1277) as the stock game derives it:
  //! `SetFarClip` (`0x6725d0`) sets `r = 1 + trunc(farclip / 33.333)` chunks, and the world tick
  //! (`0x672730`) centres two windows on the viewer's chunk, the inner `idx ± r` (must be resident)
  //! and the outer `idx ± max(r + 2, 8)` (requested ahead, built under 5 ms a frame). Eviction is
@@ -39169,7 +39169,7 @@ index a3ebf682..057413ec 100644
 -/// CVar apply, the options row and `$WOW_FARCLIP`.
 -pub const FARCLIP_RANGE: std::ops::RangeInclusive<f32> = 177.0..=777.0;
 +/// The settable range of the `farclip` CVar: 3.3.5a's own, the pair its `GetCVarMin`/`GetCVarMax`
-+/// answer for `farclip` (`0x514d40`/`0x514e30`, 177 and 1277), which the stock View Distance slider
++/// answer for `farclip` (177 and 1277), which the stock View Distance slider
 +/// spans; shared by the CVar apply, the VM's range verbs and `$WOW_FARCLIP`. The world then holds
 +/// it under the map's own ceiling ([`farclip_cap`]).
 +pub const FARCLIP_RANGE: std::ops::RangeInclusive<f32> = 177.0..=1277.0;
@@ -39356,7 +39356,7 @@ index 3f71e900..5df90a0a 100644
  /// (2112 yd, about 4 tiles) still rise above the horizon as silhouettes.
  const WDL_RADIUS: u32 = 5;
  
-+/// The reference's horizon reach for a far wall: `horizonfarclip`, default 2112 yd and floored at
++/// The stock game's horizon reach for a far wall: `horizonfarclip`, default 2112 yd and floored at
 +/// `farclip + 528`.
 +fn horizon_reach(farclip: f32) -> f32 {
 +    (farclip + 528.0).max(2112.0)
@@ -52100,7 +52100,7 @@ index 00000000..2404d029
 +display rules applied), and every FrameXML event goes through one `UiScript::fire_event` — 856
 +call sites. The bridge reuses the first for `self`/`target`/`units[]` and taps the second for
 +the event stream, so a page and an addon can never disagree. Chat lines are copied off the same
-+router that feeds the windows and the `CHAT_MSG_*` fire, with the one thing the reference's
++router that feeds the windows and the `CHAT_MSG_*` fire, with the one thing the stock game's
 +event never carried — the sender's **guid** — so a proximity feature can find the speaker in
 +`units[]`. Zone texts are the resolve that writes `GetZoneText()`'s globals, published once more
 +as a resource.
@@ -52126,7 +52126,7 @@ index 00000000..2404d029
 +(`webbridge/act.rs`) are the client's own: `target` is `SetSelection` by guid (which 1.12's Lua
 +cannot name), `interact` the right-click's object dispatch (`target::Interact`; `autoLoot` opens
 +with 1.12's auto-loot, the only way a script loots, since the client refuses a scripted
-+loot-button click as the reference does), `moveto` Click to Move's ground walk, and `path` an A*
++loot-button click as the stock game does), `moveto` Click to Move's ground walk, and `path` an A*
 +over a one-yard grid through the loaded collision (`webbridge/path.rs`: floors by a downward ray,
 +edges by a body sweep, then pulled tight).
 +

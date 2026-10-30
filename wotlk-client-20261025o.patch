@@ -1551,7 +1551,7 @@ index 2506aee7..f9b27f75 100644
 +            // Skins fill at the spawn site, so no skin directory or list is passed.
 +            let subs = parse_m2_render_submeshes(&m2, "", &[]).map_err(to_io)?;
 +            let bounds = Some(parse_m2_bounds(&m2));
-+            // One owner bound for every effect: the reference draws them all after the batches.
++            // One owner bound for every effect: the stock game draws them all after the batches.
 +            let owner_reach = benilla_formats::m2_owner_reach(&subs);
 +            // The water-plane sphere: the header box's midpoint and the header sphere's radius.
 +            let water_bound = bounds.as_ref().map_or((Vec3::ZERO, 0.0), |b| {
@@ -1881,7 +1881,7 @@ index 2506aee7..f9b27f75 100644
 +                    }
 +                }
 +                // Groups 3 and 4 hold every joint outside the right and the left fingers, for the
-+                // weapon grip (`CloseHand`, `0x479660`).
++                // weapon grip (the closed-hand pose).
 +                let finger_roots = finger_subtree_roots(&skeleton_raw);
                  for i in 0..skeleton_raw.bones.len() {
                      let target = bone_target_id(i as u16);
@@ -2601,7 +2601,7 @@ index d8c2cf9d..f95cfdff 100644
                      }
                  }
 +                let subs = wmo_group_submeshes(&gbytes, &root).map_err(to_io)?;
-+                // The reference walks MODR at `0x695aa0` and MOLR at `0x695c00`.
++                // The stock game walks the MODR and MOLR chunks in this order.
 +                if let Some(slot) = group_doodad_refs.get_mut(gi as usize) {
 +                    *slot = wmo_group_doodad_refs(&gbytes);
 +                }
@@ -3365,7 +3365,7 @@ index 3b632589..6fc59543 100644
              Ok(flag(model.resting))
          })?,
      )?;
-+    // IsMounted(): the player's `UNIT_FIELD_MOUNTDISPLAYID` is non-zero, the reference's one
++    // IsMounted(): the player's `UNIT_FIELD_MOUNTDISPLAYID` is non-zero, the stock game's one
 +    // mounted predicate (`Unit::IsMounted`); 1 or nil like the other flags.
 +    g.set(
 +        "IsMounted",

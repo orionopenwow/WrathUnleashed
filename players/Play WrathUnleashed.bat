@@ -9,7 +9,7 @@ set "REALM=play.openvanilla.app"
 
 if exist wow-folder.txt set /p WOW=<wow-folder.txt
 if not exist "!WOW!\Data\common.MPQ" (
-  echo Where is your World of Warcraft 3.3.5a folder? ^(the one with Wow.exe and Data^)
+  echo Where is your 3.3.5a game folder? ^(the one with Wow.exe and Data^)
   set /p WOW=Folder: 
   set "WOW=!WOW:"=!"
   if not exist "!WOW!\Data\common.MPQ" (echo That folder has no Data\common.MPQ. & pause & exit /b 1)

@@ -35,7 +35,7 @@ end
 
 local function relogNote(player, what)
     player:SaveToDB()
-    player:SendBroadcastMessage("|cff66ccff[Open Vanilla]|r " .. what .. " is ready: log out to the character list to use it.")
+    player:SendBroadcastMessage("|cff66ccff[Leyline]|r " .. what .. " is ready: log out to the character list to use it.")
 end
 
 local function onSelect(event, player, object, sender, intid, code, menuId)
@@ -63,7 +63,7 @@ local function onSelect(event, player, object, sender, intid, code, menuId)
             player:ModifyMoney(BOOST_GOLD)
         end
         player:SaveToDB()
-        player:SendBroadcastMessage("|cff66ccff[Open Vanilla]|r Boosted to " .. BOOST_LEVEL .. ". Visit your class trainer for your spells." ..
+        player:SendBroadcastMessage("|cff66ccff[Leyline]|r Boosted to " .. BOOST_LEVEL .. ". Visit your class trainer for your spells." ..
             (withKit and "" or " (This account has had its " .. BOOST_KITS_PER_ACCOUNT .. " boost gold and bag kits.)"))
     end
     player:GossipComplete()

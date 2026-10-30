@@ -283,7 +283,7 @@
 
   const HELP = 'Choose the folder your 3.3.5a game is installed in (it holds the "Data" folder), or that "Data" folder itself.';
   const WRONG = {
-    '112': 'This is a 1.12 game folder. This page needs a 3.3.5a game folder (build 12340). (The 1.12 game plays on Open Vanilla.)',
+    '112': 'This is a 1.12 game folder. This page needs a 3.3.5a game folder (build 12340).',
     '243': 'This looks like a 2.4.3 game folder (it has no lichking.MPQ). This page needs a 3.3.5a game folder (build 12340).',
     newer: 'This is a newer game version. This page needs a 3.3.5a game folder (build 12340).',
   };

@@ -1092,7 +1092,7 @@ index f9b27f75..3951ed19 100644
 +            #[cfg(target_arch = "wasm32")]
 +            slicer.tick().await;
              let bounds = Some(parse_m2_bounds(&m2));
-             // One owner bound for every effect: the reference draws them all after the batches.
+             // One owner bound for every effect: the stock game draws them all after the batches.
              let owner_reach = benilla_formats::m2_owner_reach(&subs);
 @@ -358,6 +367,8 @@ impl AssetLoader for M2ModelLoader {
              // The spawn site keeps the casting point lights (`M2Light::casts`).

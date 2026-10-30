@@ -2057,7 +2057,7 @@ index c9d2b7c7..008a8201 100644
  }
  
 +/// `GetSelectBackgroundModel`'s answer when neither the record nor the roster default names one:
-+/// race 2's file string, the reference's off-roster stage.
++/// race 2's file string, the stock game's off-roster stage.
 +const FALLBACK_SELECT_STAGE: &str = "Orc";
 +
 +/// Whether `file` is a glue stage path with an empty name, `...\UI_\UI_.m2` or `UI_.mdx`.

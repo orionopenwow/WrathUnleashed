@@ -223,3 +223,6 @@
 1068d ship  Save to GitHub (orionopenwow/WrathUnleashed): friends and messages, admin console, Leyline hub and mod index, mod-sandbox-core
 1069a client  Browser client 20261029a: quick key taps move, no black screen when the window is not painted, Lua fixes (secure frames, party opacity), a warning that names missing building files
 1069b ship  Save to GitHub (orionopenwow/WrathUnleashed): browser client 20261029a
+1071a scripts  Player messages say [Leyline] instead of [Open Vanilla]
+1071b client  Play page: no Open Vanilla mention for 1.12 folders (the browser build is unchanged)
+1071c ship  Save to GitHub (orionopenwow/WrathUnleashed): client patch comments describe behaviour only; the Leyline export refuses binary citations; old names out of player text
