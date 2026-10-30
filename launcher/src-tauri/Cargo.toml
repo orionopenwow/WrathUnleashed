@@ -34,6 +34,8 @@ ureq = { version = "2", default-features = false, features = ["tls"] }
 # Mods: reading zips (deflate only, no other codecs) and checking the catalog's sha256.
 zip = { version = "2", default-features = false, features = ["deflate"] }
 sha2 = "0.10"
+# The Leyline mesh (src/p2p/mesh.rs): Ed25519 checks of signed realm records. Already in the tree through rustls.
+ring = "0.17"
 
 [dev-dependencies]
 tempfile = "3"

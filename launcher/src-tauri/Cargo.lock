@@ -2026,6 +2026,7 @@ name = "leyline"
 version = "0.3.1"
 dependencies = [
  "dirs 5.0.1",
+ "ring",
  "serde",
  "serde_json",
  "sha2",

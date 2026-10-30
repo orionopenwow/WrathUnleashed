@@ -48,7 +48,7 @@ import time
 from wunet import domains, keys, mux, ws
 from wunet.mux import CLOSE, DATA, OPEN
 
-from . import httpd, listing
+from . import httpd, listing, meshnode
 
 log = logging.getLogger("wu-relay")
 SID_RE = re.compile(r"^[a-z2-7]{16}$")
@@ -63,6 +63,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 def _env_int(name, default):
     v = os.environ.get(name)
     return int(v) if v not in (None, "") else default
+
+
+# (attribute, env var, value) for RELAY_VOLUNTEER=1: about 25 realms, 512 streams, 5 GB a day per realm.
+VOLUNTEER_DEFAULTS = (("max_realms", "RELAY_MAX_REALMS", 25), ("max_streams_total", "RELAY_MAX_STREAMS_TOTAL", 512),
+                      ("max_ws_total", "RELAY_MAX_WS_TOTAL", 128), ("kbps", "RELAY_KBPS", 256),
+                      ("daily_gb", "RELAY_DAILY_GB", 5), ("max_streams", "RELAY_MAX_STREAMS", 64),
+                      ("shared_auth_port", "RELAY_SHARED_AUTH_PORT", 0), ("mesh", "RELAY_MESH", True))
 
 
 class Config:
@@ -97,6 +104,15 @@ class Config:
         self.region = e("RELAY_REGION", "")
         # Ready but off: list "direct connect available" for hosts who allow it (the launcher's p2p_hosting flag).
         self.advertise_direct = e("RELAY_ADVERTISE_DIRECT", "0") == "1"
+        # The Leyline mesh (docs/LEYLINE-MESH.md), off by default: this relay becomes one node of the realm list
+        # gossip (wurelay/meshnode.py). RELAY_VOLUNTEER=1 is the community relay profile: smaller default caps.
+        self.mesh = e("RELAY_MESH", "0") == "1"
+        self.mesh_bootstrap = e("RELAY_MESH_BOOTSTRAP", f"https://{domains.RELAY}")
+        self.mesh_node_key = e("RELAY_NODE_KEY", "")            # empty: node.key next to RELAY_STATE
+        self.mesh_public_http = e("RELAY_MESH_HTTP", "")        # empty: https://<name>
+        self.mesh_every = _env_int("RELAY_MESH_EVERY", 10)
+        self.mesh_fanout = _env_int("RELAY_MESH_FANOUT", 3)
+        self.volunteer = e("RELAY_VOLUNTEER", "0") == "1"
         # --- limits per realm
         self.max_streams = _env_int("RELAY_MAX_STREAMS", 128)          # a player uses 2 (auth, world)
         self.kbps = _env_int("RELAY_KBPS", 512)                          # both directions together
@@ -130,6 +146,11 @@ class Config:
         self.pair_lookups_per_ip_min = _env_int("RELAY_PAIR_PER_MIN_PER_IP", 60)   # the website asks for its realms
         self.max_pairs = _env_int("RELAY_MAX_PAIRS", 20000)
         self.status_ttl = _env_int("RELAY_STATUS_TTL_SECS", 30)
+        if self.volunteer or over.get("volunteer"):
+            # a community relay on someone's own connection: modest caps unless the operator set them
+            for k, env, v in VOLUNTEER_DEFAULTS:
+                if os.environ.get(env) in (None, "") and k not in over:
+                    setattr(self, k, v)
         for k, v in over.items():
             if not hasattr(self, k):
                 raise AttributeError(k)
@@ -359,6 +380,7 @@ class Relay:
         self.blocked = set()
         self.block_mtime = None
         self.listing = listing.Listing(self.cfg, self) if self.cfg.listing else None
+        self.mesh = meshnode.MeshNode(self.cfg, self) if self.cfg.mesh else None
         self._load()
 
     # ---------------------------------------------------------------- state
@@ -914,6 +936,8 @@ class Relay:
             return self.api_pair(req, parts[2])
         if parts[:2] == ["api", "listing"] and self.listing:
             return await self.listing.route(req, parts[2:])
+        if parts[:2] == ["api", "mesh"] and self.mesh:
+            return await self.mesh.route(req, parts[2:])
         return httpd.response(404, {"error": "not found"})
 
     async def player_ws(self, req, reader, writer, rid, port_s, invite):
@@ -1105,6 +1129,8 @@ class Relay:
             for k in [k for k, q in self.auth_fails.items() if not q or now - q[-1] > self.cfg.auth_fail_window]:
                 del self.auth_fails[k]
             n += 1
+            if self.mesh and n % max(1, self.cfg.mesh_every // max(1, every)) == 0:
+                self._spawn(self.mesh.gossip_round())
             if n % 12 == 0:
                 self.load_blocklist()
                 for w in (self.conn_rate, self.ws_rate, self.reg_rate, self.acct_ip, self.acct_realm, self.knock_rate,
@@ -1122,6 +1148,8 @@ class Relay:
             await self.ensure_listener(self.cfg.shared_auth_port)
         self.load_blocklist()
         self._spawn(self.sweeper())
+        if self.mesh:
+            self._spawn(self.mesh.bootstrap_once())
         return self
 
     def http_port(self):

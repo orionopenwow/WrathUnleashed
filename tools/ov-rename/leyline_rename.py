@@ -22,6 +22,7 @@ Standard library only; Python 3.8+.
 import argparse
 import json
 import os
+import time
 import re
 import subprocess
 import sys
@@ -236,6 +237,92 @@ class Renamer:
         return 0
 
 
+def adopt_scrubbed(git, say, dry_run=False):
+    """After a history rewrite on GitHub (the 2026-10-29 scrub), a PC clone can still hold the old history: same
+    files, different commits. Then main (and stable) can't fast-forward, and pushing them would bring the old
+    history back. When a local branch has exactly the same files as GitHub's, point it at GitHub's commit
+    (files untouched: same tree) and keep the old commit under refs/backup/ (never pushed). Anything else (real
+    local work) is left alone and the landing stops as before."""
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    for name in ("main", "stable"):
+        rc, local = git("rev-parse", "-q", "--verify", f"refs/heads/{name}")
+        rc2, remote = git("rev-parse", "-q", "--verify", f"refs/remotes/origin/{name}")
+        if rc != 0 or rc2 != 0:
+            continue
+        local, remote = local.strip(), remote.strip()
+        if local == remote:
+            continue
+        rc, _ = git("merge-base", "--is-ancestor", local, remote)
+        if rc == 0:
+            continue                      # simply behind GitHub: nothing old to hide, fast-forward later works
+        rc, lt = git("rev-parse", f"{local}^{{tree}}")
+        rc2, rt = git("rev-parse", f"{remote}^{{tree}}")
+        if rc != 0 or rc2 != 0 or lt.strip() != rt.strip():
+            continue                      # different files: real local work, not ours to move
+        say(f"  {name}: this PC still has the history from before the scrub (same files as GitHub)")
+        if dry_run:
+            say(f"  would point {name} at GitHub's {remote[:7]} and keep {local[:7]} as refs/backup/{name}-{stamp}")
+            continue
+        rc, txt = git("update-ref", f"refs/backup/{name}-{stamp}", local)
+        if rc != 0:
+            raise RenameError("could not keep a backup of the old " + name + ": " + txt)
+        rc, cur = git("rev-parse", "--abbrev-ref", "HEAD")
+        if cur.strip() == name:
+            rc, txt = git("reset", "-q", "--soft", remote)       # same tree: index and files stay as they are
+        else:
+            rc, txt = git("update-ref", f"refs/heads/{name}", remote, local)
+        if rc != 0:
+            raise RenameError(f"could not point {name} at GitHub's history: " + txt)
+        say(f"  {name} now follows GitHub ({remote[:7]}); the old commit is kept as refs/backup/{name}-{stamp}")
+    adopt_tags(git, say, stamp, dry_run)
+
+
+def adopt_tags(git, say, stamp, dry_run=False):
+    """Tags from the old history would bring it back with a `git push --tags`. A local tag that GitHub has with a
+    different target is pointed at GitHub's; a local-only tag whose commit GitHub's history doesn't contain is
+    moved under refs/backup/tags/ (kept, never pushed). Tags GitHub has as they are, and new tags made on
+    GitHub's history, are left alone."""
+    rc, out = git("ls-remote", "--tags", "origin")
+    if rc != 0:
+        return
+    remote = {}
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[1].startswith("refs/tags/") and not parts[1].endswith("^{}"):
+            remote[parts[1][len("refs/tags/"):]] = parts[0]
+    rc, out = git("for-each-ref", "--format=%(refname:short) %(objectname)", "refs/tags/")
+    if rc != 0:
+        return
+    moved = 0
+    for line in out.splitlines():
+        try:
+            tag, obj = line.split()
+        except ValueError:
+            continue
+        if remote.get(tag) == obj:
+            continue
+        if tag not in remote:
+            on_github = False
+            for base in ("refs/remotes/origin/main", "refs/remotes/origin/stable"):
+                rc, _ = git("merge-base", "--is-ancestor", f"{obj}^{{commit}}", base)
+                if rc == 0:
+                    on_github = True
+                    break
+            if on_github:
+                continue
+        moved += 1
+        if dry_run:
+            continue
+        git("update-ref", f"refs/backup/tags-{stamp}/{tag}", obj)
+        if tag in remote:
+            git("fetch", "-q", "origin", f"+refs/tags/{tag}:refs/tags/{tag}")
+        else:
+            git("tag", "-d", tag)
+    if moved:
+        say(f"  {moved} tag(s) from the old history {'would be' if dry_run else 'were'} set aside "
+            f"(kept under refs/backup/tags-{stamp}/, never pushed)")
+
+
 def land(clone, bundle, branch, runner=run, out=print, account=OWNER, dry_run=False):
     """Bring a branch from a git bundle (made where GitHub can't be pushed to) onto the clone's main and push
     main: fast-forward only, a clean checkout of main only, gh signed in as the owner. Makes no commits and
@@ -253,9 +340,12 @@ def land(clone, bundle, branch, runner=run, out=print, account=OWNER, dry_run=Fa
     rc, dirty = git("status", "--porcelain", "--untracked-files=no")
     if rc != 0 or dirty.strip():
         raise RenameError(f"{clone} has changes that aren't committed: commit or stash them first")
-    rc, txt = git("fetch", "-q", "origin", "main")
+    rc, txt = git("fetch", "-q", "origin", "main", "stable")
+    if rc != 0:
+        rc, txt = git("fetch", "-q", "origin", "main")
     if rc != 0:
         raise RenameError("git fetch origin failed: " + txt)
+    adopt_scrubbed(git, say, dry_run)
     ref = f"refs/remotes/bundle/{branch}"
     rc, txt = git("fetch", "-q", os.path.abspath(bundle), f"+{branch}:{ref}")
     if rc != 0:

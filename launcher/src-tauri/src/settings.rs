@@ -46,6 +46,9 @@ pub struct Settings {
     pub native_ok: Vec<String>,
     /// Which Leyline releases to update to: stable (releases) or beta (pre-releases too).
     pub update_channel: crate::update::Channel,
+    /// After a catalog install, tell the hub "one more install" (anonymous: the mod id, the build and a fresh
+    /// random id; rankings.rs). On unless the player turns it off.
+    pub count_installs: bool,
 }
 
 impl Default for Settings {
@@ -59,6 +62,7 @@ impl Default for Settings {
             host_kit: String::new(),
             native_ok: Vec::new(),
             update_channel: crate::update::Channel::Stable,
+            count_installs: true,
         }
     }
 }

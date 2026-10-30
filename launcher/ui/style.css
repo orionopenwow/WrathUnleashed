@@ -417,6 +417,15 @@ label.inline select { width: auto; min-width: 220px; }
 }
 .chip-btn:hover { border-color: var(--bronze-hi); color: #fff3d0; }
 .chip-btn.on { border-color: var(--gold); color: var(--gold-hi); background: rgba(226, 184, 92, 0.12); }
+/* Discover's sort tabs, the kind filter and a card's numbers (rankings) */
+.cat-sorts { align-items: center; }
+.cat-sorts .cat-kind { margin-left: auto; }
+.mod-card .stats { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 11.5px; color: var(--muted); }
+.mod-card .stars { display: inline-flex; gap: 0; }
+.mod-card .stars button { background: none; border: 0; padding: 0 1px; font-size: 14px; line-height: 1; color: #5d5a50; cursor: pointer; }
+.mod-card .stars button.on { color: var(--gold-hi); }
+.mod-card .stars button:hover, .mod-card .stars button:focus-visible { color: #fff3d0; }
+.mod-card.linked { outline: 2px solid var(--gold); outline-offset: 2px; }
 .mod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; margin: 6px 0 4px; }
 .mod-card, .realm-card {
   display: grid; gap: 6px; align-content: start; padding: 12px 14px; border-radius: 6px;
@@ -488,3 +497,7 @@ label.inline select { width: auto; min-width: 220px; }
 .realm-card.official { border-style: dashed; }
 .tag.good { color: #9fe0ae; border-color: #2f5a3a; }
 .host-cta { margin-top: 14px; }
+
+/* Support / tip buttons are hidden on the owner's request (2026-10-29) until he brings them back:
+   delete this rule and the `hidden` attributes on [data-link="support"] in index.html. */
+[data-link="support"] { display: none !important; }

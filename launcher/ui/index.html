@@ -52,7 +52,7 @@
   <button type="button" class="realm-add" data-page-go="realms"><span class="plus">+</span>Add or find a server</button>
 
   <div class="side-foot">
-    <button class="nav plain" data-link="support"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>Support the realm</button>
+    <button class="nav plain" data-link="support" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>Support the realm</button>
     <button class="nav plain" data-page="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Settings</button>
     <button class="nav plain" data-page="help"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg>Help</button>
   </div>
@@ -97,7 +97,7 @@
         <div class="mod-tiles" id="mod-tiles"></div>
         <div class="community-btns">
           <button type="button" class="btn" data-link="discord">JOIN THE DISCORD</button>
-          <button type="button" class="btn" data-link="support">SUPPORT THE REALM</button>
+          <button type="button" class="btn" data-link="support" hidden>SUPPORT THE REALM</button>
         </div>
       </div>
     </div>
@@ -159,6 +159,18 @@
         <label class="inline">Install into <select class="client-pick" data-for="discover"></select></label>
         <input id="cat-q" type="search" placeholder="Search the Workshop" autocomplete="off" spellcheck="false">
         <label class="check"><input type="checkbox" id="cat-fit" checked> Only mods for this client</label>
+      </div>
+      <div class="chips cat-sorts" id="cat-sorts" role="tablist" aria-label="Sort">
+        <button type="button" class="chip-btn" role="tab" data-sort="hot">Hot</button>
+        <button type="button" class="chip-btn" role="tab" data-sort="rising">Rising</button>
+        <button type="button" class="chip-btn" role="tab" data-sort="top">Top rated</button>
+        <button type="button" class="chip-btn" role="tab" data-sort="installs">Most installed</button>
+        <button type="button" class="chip-btn" role="tab" data-sort="installs30">This month</button>
+        <button type="button" class="chip-btn" role="tab" data-sort="new">New</button>
+        <button type="button" class="chip-btn" role="tab" data-sort="updated">Updated</button>
+        <label class="inline cat-kind">Kind <select id="cat-kind">
+          <option value="">everything</option><option value="addon">Addons</option><option value="mod">Realm mods and tools</option>
+          <option value="mode">Game modes</option><option value="theme">Themes</option></select></label>
       </div>
       <div class="chips" id="cat-chips" role="group" aria-label="Categories"></div>
       <p class="status" id="cat-status" role="status"></p>
@@ -257,7 +269,7 @@
         <button type="button" class="btn" data-link="news">THE LEYLINE PAGE</button>
         <button type="button" class="btn" data-link="mods">THE WORKSHOP</button>
         <button type="button" class="btn" data-link="github">SOURCE ON GITHUB</button>
-        <button type="button" class="btn" data-link="support">SUPPORT THE REALM</button>
+        <button type="button" class="btn" data-link="support" hidden>SUPPORT THE REALM</button>
       </div>
     </div>
   </section>
@@ -325,8 +337,12 @@
       <p class="status" id="upd-status" role="status"></p>
       <h3>Privacy</h3>
       <p class="lede">No telemetry and no accounts in the launcher. It fetches the Workshop catalog and the mods you install,
-        the realm list and realm status, and GitHub's release list and Leyline's own updates; it keeps copies of the lists so it works offline, and opens
+        the mod rankings, the realm list and realm status, and GitHub's release list and Leyline's own updates; it keeps copies of the lists so it works offline, and opens
         only pages it listed itself in your browser. Each request gives up after 8 seconds.</p>
+      <label class="check"><input type="checkbox" id="set-count"> Count my installs: after a Workshop install, tell the hub
+        "one more install" (the mod, your client's build and a random one-time number; no account, nothing about you or your PC).
+        It helps good mods rise in Hot and Most installed.</label>
+      <p class="status" id="count-status" role="status"></p>
       <h3>Your data</h3>
       <p class="lede">Settings and caches live in <code id="data-dir"></code>.</p>
     </div>

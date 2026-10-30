@@ -397,6 +397,42 @@ pub fn new_invite(kit: &Path) -> Result<String, String> {
     invite(kit).ok_or_else(|| "The new invite link was not written: try \"Realm tools\" in the kit.".into())
 }
 
+/// "Help the network: relay for others" (docs/LEYLINE-MESH.md): the kit's community relay compose file, with the
+/// settings `setup.py volunteer-relay` writes. Runs only when both the site offers it and this PC turned it on
+/// (`p2p::flags::volunteer_allowed`). `public_host` is this PC's public DNS name (the relay needs TLS).
+pub const VOLUNTEER_COMPOSE: &str = "docker-compose.volunteer-relay.yml";
+
+pub fn volunteer_args(kit: &Path, on: bool) -> Vec<String> {
+    let mut a = vec!["compose".to_string(), "-f".into(), kit.join(VOLUNTEER_COMPOSE).display().to_string(),
+        "--project-directory".into(), kit.display().to_string()];
+    a.extend(if on { vec!["up".to_string(), "-d".into(), "--build".into()] } else { vec!["down".to_string()] });
+    a
+}
+
+pub fn volunteer_relay(kit: &Path, flags: &crate::p2p::flags::Flags, local: &crate::p2p::flags::Local, on: bool,
+                       public_host: Option<&str>, region: Option<&str>) -> Result<String, String> {
+    if !kit.join(VOLUNTEER_COMPOSE).is_file() {
+        return Err("This host kit has no community relay yet: update the Host pack.".into());
+    }
+    if !on {
+        docker_in(kit, volunteer_args(kit, false), DOCKER_LONG)?;
+        let _ = docker_in(kit, docker::tools_args(kit, &["volunteer-relay", "--off"]), DOCKER_SHORT);
+        return Ok("Stopped relaying for others.".into());
+    }
+    if !crate::p2p::flags::volunteer_allowed(flags, local) {
+        return Err("Turn on \"Help the network: relay for others\" for this PC first (Settings > Advanced).".into());
+    }
+    let host = public_host.map(str::trim).filter(|h| crate::realms::relay_ok(h))
+        .ok_or("Give this PC's public DNS name (like relay.example.org): relaying for others needs one.")?;
+    let mut cmd = vec!["volunteer-relay", "--host", host];
+    if let Some(r) = region.filter(|r| crate::realms::REGIONS.contains(r)) {
+        cmd.extend(["--region", r]);
+    }
+    docker_in(kit, docker::tools_args(kit, &cmd), DOCKER_SHORT)?;
+    docker_in(kit, volunteer_args(kit, true), DOCKER_LONG)?;
+    Ok(format!("Relaying for others as {host}. It needs ports 80, 443 and 41000-41051 open to the internet."))
+}
+
 /// The realm list details a host sets: the network's filters (rules tags, region, language, the player limit) and
 /// whether direct connections are allowed (off by default; the network only lists it when its operator turns
 /// direct connections on). Kept in the kit's `state/beacon.json`, which `setup.py` reads on every start and on
@@ -592,6 +628,18 @@ mod tests {
         touch(k.path(), "state/invite.txt", format!("https://evil.example.com:22/join/{RID}").as_bytes());
         assert_eq!(invite(k.path()), None);
         assert!(stop(k.path()).unwrap_err().contains("docker-compose.host.yml"));
+        let f = crate::p2p::flags::Flags::default();
+        let l = crate::p2p::flags::Local::default();
+        assert!(volunteer_relay(k.path(), &f, &l, true, Some("relay.example.org"), None).unwrap_err().contains("update the Host pack"));
+        touch(k.path(), VOLUNTEER_COMPOSE, b"services: {}");
+        assert!(volunteer_relay(k.path(), &f, &l, true, Some("relay.example.org"), None).unwrap_err().contains("Settings > Advanced"), "off by default");
+        let on = crate::p2p::flags::Flags { relay_volunteer: true, ..Default::default() };
+        let mut lo = crate::p2p::flags::Local::default();
+        lo.overrides.insert("relay_volunteer".into(), true);
+        assert!(volunteer_relay(k.path(), &on, &lo, true, Some("not a host"), None).unwrap_err().contains("DNS name"));
+        let a = volunteer_args(k.path(), true);
+        assert!(a[2].ends_with(VOLUNTEER_COMPOSE) && a[5..] == ["up", "-d", "--build"]);
+        assert_eq!(volunteer_args(k.path(), false).last().unwrap(), "down");
         touch(k.path(), "docker-compose.host.yml", b"services: {}");
         assert!(new_invite(k.path()).unwrap_err().contains("Start your realm once"));
     }

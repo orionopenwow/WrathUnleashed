@@ -364,6 +364,11 @@ pub fn cache_path(app_dir: &Path) -> PathBuf {
 
 /// Every realm on the network in its order: the website's network listing, else the relay's own.
 pub fn fetch_all(app_dir: &Path) -> RealmList {
+    // The Leyline mesh (p2p/mesh.rs), only with the mesh_realms flag on; when it finds nothing, today's listings.
+    if let Some(doc) = crate::p2p::mesh::fetch_doc(app_dir, &crate::p2p::flags::current(app_dir)) {
+        let _ = crate::settings::write_atomic(&cache_path(app_dir), doc.to_string().as_bytes());
+        return list_of(&doc, false, Some(crate::p2p::mesh::now_secs()), None);
+    }
     fetch_network(&[NETWORK_URL, URL], app_dir)
 }
 

@@ -219,6 +219,8 @@ class Listing:
                  claim=claim, relay=_text(beat.get("relay"), 253) or (self.cfg.name if self.cfg else None))
         self.entries[rid] = e
         self.dirty = True
+        if self.relay is not None and getattr(self.relay, "mesh", None):
+            self.relay.mesh.local_beat(beat, sig, now)   # the Leyline mesh (off unless RELAY_MESH=1)
         return 200, {"ok": True, "listed": True, "next_in": 60, "claimed": bool(e.get("claimed_by"))}
 
     # ------------------------------------------------------------------ uptime
@@ -255,6 +257,8 @@ class Listing:
     def delist(self, rid):
         if self.entries.pop(rid, None) is not None:
             self.dirty = True
+        if self.relay is not None and getattr(self.relay, "mesh", None):
+            self.relay.mesh.forget_realm(rid)
 
     def hidden(self, e, now):
         return now - e["last_seen"] > HIDE_AFTER
