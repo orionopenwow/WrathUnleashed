@@ -260,12 +260,8 @@ UNTIL_FLIP = (
      "\"preview.png - WrathUnleashed - MIT - drawn for this mod\""),
     ("mods", "  \"author\": \"Leyline\",",
      "  \"author\": \"WrathUnleashed\","),
-    ("play", "The 1.12 game plays on the sibling 1.12 realm.",
-     "The 1.12 game plays on Open Vanilla."),
     ("play", "The player package has a `Play` .bat file that asks",
      "The player package has a `Play WrathUnleashed.bat` that asks"),
-    ("play", "The 1.12 client plays on the sibling 1.12 realm, not on Dalaran Hangout.",
-     "The 1.12 client plays on the sibling Open Vanilla realm, not on Wrath."),
     ("publishing", "2. Send the link to the Leyline team.",
      "2. Send the link to the WrathUnleashed team."),
 )
