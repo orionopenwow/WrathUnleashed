@@ -86,7 +86,8 @@ try:
     check("allow-list: every docs/leyline page", docs and all(f"docs/leyline/{n}" in got for n in docs), docs)
     check("brand check covers the docs pages", ex.user_facing("docs/leyline/index.md")
           and ex.brand_hits("docs/leyline/index.md", b"Play WoW") and not ex.user_facing("docs/other.txt"))
-    check("allow-list: every leyline-* art file", all(f"stream/www-files/art/{n}" in got for n in art), len(art))
+    check("allow-list: every leyline-* art file", all(f"stream/www-files/art/{n}" in got for n in art if n not in ex.PRIVATE_ART)
+          and not any(f"stream/www-files/art/{n}" in got for n in ex.PRIVATE_ART), len(art))
     outside = [g for g in got if g not in ex.GENERATED and g.split("/")[0] not in ex.MANAGED]
     check("allow-list: nothing outside the managed folders but the top files", not outside, outside)
     check("allow-list: no ModsPanel.lua, control.py or other addon files",
