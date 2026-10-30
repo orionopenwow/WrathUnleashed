@@ -248,3 +248,6 @@
 1078c signin  Games section on /wrath/modes, /wrath/modes.json, go=mode: sign-in links
 1078d ship  Save to GitHub (orionopenwow/WrathUnleashed): launcher Modes page and one-click modes
 1079a ship  Save to GitHub (orionopenwow/WrathUnleashed): the ovrename and ovland steps (OpenVanilla repo becomes Leyline-Launcher)
+1079b ovrename  Rename GitHub repo OpenVanilla to Leyline-Launcher (description, homepage, PC clone origin)
+1079c ovland  Leyline Launcher 1.57.0 changes to GitHub (main, fast-forward only; support and tips hidden)
+1079d ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline launcher support buttons hidden

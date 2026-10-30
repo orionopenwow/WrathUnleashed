@@ -488,3 +488,7 @@ label.inline select { width: auto; min-width: 220px; }
 .realm-card.official { border-style: dashed; }
 .tag.good { color: #9fe0ae; border-color: #2f5a3a; }
 .host-cta { margin-top: 14px; }
+
+/* Support / tip buttons are hidden on the owner's request (2026-10-29) until he brings them back:
+   delete this rule and the `hidden` attributes on [data-link="support"] in index.html. */
+[data-link="support"] { display: none !important; }

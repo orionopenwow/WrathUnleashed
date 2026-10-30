@@ -1,13 +1,9 @@
 {
- "at": "2026-10-29 23:16:47",
+ "at": "2026-10-29 23:23:40",
  "ids": [
-  "1078a",
-  "1078b",
-  "1078c",
-  "1078d",
-  "1078d-leyline"
+  "1079c"
  ],
- "ok": true,
- "failed_step": null,
+ "ok": false,
+ "failed_step": "ovland",
  "autopilot": true
 }
