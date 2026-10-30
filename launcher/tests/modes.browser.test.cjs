@@ -126,3 +126,46 @@ test('PLAY in the browser, offline list, remembered page, text not markup', asyn
   assert.deepEqual(errors, []);
   await page.close();
 });
+
+test('Key art: on the Azeroth Survivors card and as the featured banner on Home, one click to its card', async () => {
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.addInitScript(FAKE, { modes: CATALOG.modes });
+  await page.goto(INDEX);
+  const ban = page.locator('#page-play .news #feat-mode');
+  await page.waitForFunction(() => { const i = document.querySelector('#feat-mode img'); return i && i.complete && i.naturalWidth > 0; });
+  assert.equal(await ban.getAttribute('data-mode'), 'azeroth-survivors');
+  assert.match(await ban.getAttribute('aria-label'), /Featured mode: Azeroth Survivors/);
+  assert.equal(await page.evaluate(() => document.querySelector('#feat-mode').nextElementSibling.id), 'news-title', 'above the hero heading');
+  assert.match(await ban.textContent(), /FEATURED MODE.*Azeroth Survivors.*See it in Modes/);
+  assert.equal(await page.$eval('#feat-mode img', (i) => i.getAttribute('src')), 'art/modes/azeroth-survivors.webp');
+  await ban.click();
+  assert.ok(await page.isVisible('#page-modes'));
+  await page.waitForFunction(() => { const c = document.querySelector('#md-list .md-card[data-mode="azeroth-survivors"]'); return c && c.classList.contains('md-flash'); });
+  const art = card(page, 'azeroth-survivors').locator('img.md-art');
+  assert.equal(await art.count(), 1);
+  assert.match(await art.getAttribute('alt'), /Azeroth Survivors key art/);
+  assert.ok(await art.evaluate((i) => i.complete && i.naturalWidth === 483 && i.naturalHeight === 298), 'the cropped art (no banner) loads');
+  assert.ok(await card(page, 'azeroth-survivors').evaluate((c) => c.classList.contains('has-art')));
+  assert.equal(await card(page, 'minigolf').locator('img').count(), 0, 'modes without art have no picture');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('Key art missing: no banner on Home, the card as before', async () => {
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.route('**/art/modes/**', (r) => r.abort());
+  await page.addInitScript(FAKE, { modes: CATALOG.modes });
+  await page.goto(INDEX);
+  await page.waitForFunction(() => !document.getElementById('feat-mode'));
+  await page.click('.nav[data-page="modes"]');
+  await page.waitForFunction(() => document.querySelectorAll('#md-list .md-card').length > 0);
+  await page.waitForFunction(() => !document.querySelector('#md-list .md-card[data-mode="azeroth-survivors"] img'));
+  assert.equal(await card(page, 'azeroth-survivors').evaluate((c) => c.classList.contains('has-art')), false);
+  assert.match(await card(page, 'azeroth-survivors').textContent(), /Coming soon/);
+  assert.deepEqual(errors, []);
+  await page.close();
+});
