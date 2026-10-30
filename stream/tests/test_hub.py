@@ -209,11 +209,13 @@ check("feature sections: the game modes line from playmodes.json, Hero Key as co
 check("feature sections: every one has its icon", front.count('<span class="hb-ico"><svg viewBox="0 0 24 24" aria-hidden="true">') == 7)
 feats = re.search(r'<div class="hb-feats" id="features">.*?(?=<section class="hb-sec hb-gal-s|<section class="hb-sec hb-rv" id="hosted"|<div class="hb-pair">)', front, re.S).group(0)
 shots = re.findall(r'<img src="/wrath/art/(leyline-ui-[a-z]+\.webp)" alt="([^"]+)" width="1240" height="760" loading="lazy"', feats)
-check("feature sections: the launcher's own pages as pictures (served, lazy, with alt text), CSS drawings for the rest",
-      [n for n, _ in shots] == ["leyline-ui-home.webp", "leyline-ui-realms.webp", "leyline-ui-modes.webp", "leyline-ui-workshop.webp"]
+check("feature sections: the launcher's own pages as pictures (served, lazy, with alt text), our own panels for the rest "
+      "(server software, the realm list; the Minigolf loop falls back to the Modes page without the game shots)",
+      [n for n, _ in shots] == ["leyline-ui-home.webp", "leyline-ui-modes.webp", "leyline-ui-workshop.webp"]
+      and 'class="hb-sw"' in fs[1][7] and 'class="hb-rlx"' in fs[2][7]
       and all(a for _, a in shots) and all(n in wp.ART_TYPES and not n.startswith("leyline-shot-") for n, _ in shots)
       and all(os.path.isfile(os.path.join(HERE, "www-files", "art", n)) for n, _ in shots)
-      and 'class="hb-draw hb-console"' in fs[1][7] and 'class="hb-draw hb-people"' in fs[5][7] and 'class="hb-draw hb-code"' in fs[6][7]
+      and 'class="hb-draw hb-people"' in fs[5][7] and 'class="hb-draw hb-code"' in fs[6][7]
       and not re.search(r"leyline-shot-|wu-load-orion|painted", feats, re.I) and not re.search(r"wu-load-orion|painted", front, re.I))
 how = re.search(r'<ol class="hb-how[^"]*" aria-label="How it works">(.*?)</ol>', front, re.S)
 check("how it works: three steps, launcher, game folder or browser, realm", how and re.findall(r"<b>([^<]+)</b>", how.group(1)) == [
@@ -656,6 +658,10 @@ def portal_gal(name):
 HB.hub.portal = portal_gal
 check("gallery: a game shot missing from the art folder is never a broken image (the flat tile instead)",
       'id="g-leyline"' in req("/wrath/leyline-preview")[2].decode() and not os.path.isdir(wp.ART_DIR))
+check("modes page: a mode's key art missing from the art folder is no picture at all (never a broken image)",
+      'id="mode-azeroth-survivors"' in req("/wrath/leyline-preview/modes")[2].decode()
+      and 'class="hb-mode-art"' not in req("/wrath/leyline-preview/modes")[2].decode())
+check("featured modpack: missing from the art folder, no section and no tile", 'id="featured-mod"' not in req("/wrath/leyline-preview")[2].decode())
 ART_WAS = wp.ART_DIR
 wp.ART_DIR = os.path.join(HERE, "www-files", "art")
 fp = req("/wrath/leyline-preview")[2].decode()
@@ -667,8 +673,12 @@ tiles = GALS.findall(gsec)
 kinds = [t[1] for t in tiles]
 check("gallery: 8 to 12 tiles, in game, mods and launcher taken in turn", 8 <= len(tiles) <= 12
       and kinds[:6] == ["game", "mods", "launcher"] * 2 and {"game", "mods", "launcher"} <= set(kinds), kinds)
-check("gallery: the first tile is the big in-game shot", tiles and "big" in tiles[0][0] and tiles[0][2] == "g-dalaran"
-      and 'src="/wrath/art/leyline-shot-dalaran.webp"' in tiles[0][3], tiles[0][:3] if tiles else "")
+check("gallery: the first tile is the big featured modpack shot, with its authors' credit and a link out (no Install)",
+      tiles and "big" in tiles[0][0] and tiles[0][2] == "g-coa-ultrahd"
+      and 'src="/wrath/art/leyline-shot-coa-ultrahd.webp"' in tiles[0][3] and "<i>Screenshot: the modpack&#x27;s authors</i>" in tiles[0][3]
+      and f'<a class="hb-gt-i" href="{html.escape(HB.FEATURED_MOD["url"])}" rel="noopener nofollow ugc" target="_blank">See the modpack</a>' in tiles[0][3]
+      and "Install" not in tiles[0][3] and "<small>Featured mod</small>" in tiles[0][3], tiles[0][:3] if tiles else "")
+check("gallery: then the in-game shots, the hangout first", [t[2] for t in tiles if t[1] == "game"][:2] == ["g-coa-ultrahd", "g-dalaran"])
 mt = [t for t in tiles if t[1] == "mods"]
 check("gallery: the first mod is the Mod of the week (top Hot), then the rest of Hot",
       mt and mt[0][2] == "m-" + HOT["id"].replace(":", "-") and "Mod of the week" in mt[0][3], [t[2] for t in mt])
@@ -691,11 +701,11 @@ check("gallery: every picture has alt text, a width and a height, and loads lazi
       re.search(r'alt="[^"]{12,}"', i) and re.search(r'width="\d+" height="\d+"', i) and 'loading="lazy"' in i
       for i in re.findall(r'<img\b[^>]*>', "".join(t[3] for t in GALS.findall(gal + gsec)))), imgs[:3])
 tiles_all = GALS.findall(gal)
-check("gallery page: every eligible picture (4 in game, 4 launcher, the mods) and no game shot missing",
-      sum(1 for t in tiles_all if t[1] == "game") == 4 and sum(1 for t in tiles_all if t[1] == "launcher") == 4
+check("gallery page: every eligible picture (the featured modpack and 4 in game, 4 launcher, the mods) and no game shot missing",
+      sum(1 for t in tiles_all if t[1] == "game") == 5 and sum(1 for t in tiles_all if t[1] == "launcher") == 4
       and sum(1 for t in tiles_all if t[1] == "mods") >= 4 and 'data-gal="all"' in gal, [t[1] for t in tiles_all])
 check("gallery: without script each tile is a link: the image itself, or the mod's page", all(
-      re.search(r'<a class="hb-gt-a" href="(/wrath/art/leyline-(?:shot|ui)-[a-z]+\.webp|/wrath/leyline-preview/p/[a-z0-9-]+|/wrath)" data-lb', t[3])
+      re.search(r'<a class="hb-gt-a" href="(/wrath/art/leyline-(?:shot|ui)-[a-z-]+\.webp|/wrath/leyline-preview/p/[a-z0-9-]+|/wrath)" data-lb', t[3])
       for t in tiles_all))
 chips = re.findall(r'<a class="hb-chip( on)?" href="([^"]+)" data-f="([a-z]*)"(?: aria-current="true")?>([^<]+)</a>', gsec)
 check("gallery filters: All, In game, Mods, Launcher, links to the gallery page (?f=) that work without script",
@@ -751,9 +761,164 @@ check("killswitch on: one flat Leyline tile with the mark instead, still In game
       and re.search(r'<figure class="hb-gt big flat" data-k="game" id="g-leyline"><a class="hb-gt-a" href="/wrath" data-lb aria-label="[^"]+">'
                     r'<span class="hb-gt-art flat" aria-hidden="true"><span class="ly-spin slow"', fk)
       and fk_tiles[1][1] == "mods" and fk_tiles[2][1] == "launcher", [t[:3] for t in fk_tiles][:4])
+check("killswitch on: no featured modpack section and no modpack tile; its picture answers 410",
+      'id="featured-mod"' not in fk and "g-coa-ultrahd" not in fk and req("/wrath/art/leyline-shot-coa-ultrahd.webp")[0] == 410)
+check("killswitch on: Game modes shows the launcher's Modes page instead of the Minigolf loop (and the loop answers 410)",
+      "<video" not in fk and re.search(r'id="f-modes".*?<img src="/wrath/art/leyline-ui-modes\.webp"', fk, re.S)
+      and req("/wrath/art/leyline-shot-minigolf.mp4")[0] == 410 and req("/wrath/art/leyline-shot-minigolf.webm")[0] == 410)
 os.remove(FLAG)
 os.environ.pop("WU_GAMEDATA_FLAG")
 check("killswitch off again: the shots are back", "leyline-shot-dalaran.webp" in req("/wrath/leyline-preview")[2].decode())
+
+# ---------------------------------------------------------------- the featured modpack (owner 2026-10-30: "under this show a
+# screenshot ... the CoA ultra hd modpack feature")
+coa = re.search(r'<section class="hb-coa hb-rv" id="featured-mod".*?</section>', fp, re.S)
+check("featured mod: on the front page right under the numbers, before the feature sections",
+      coa and fp.find('class="hb-nums') < fp.find('id="featured-mod"') < fp.find('id="features"')
+      and re.search(r'</section><section class="hb-coa hb-rv" id="featured-mod"', fp)
+      and fp[fp.find('class="hb-nums'):fp.find('id="featured-mod"')].count("<section") == 1)
+coa = coa.group(0) if coa else ""
+check("featured mod: label, title, the screenshot (served, sized, alt), a TODO for the owner's copy",
+      '<p class="hb-coa-k"><span aria-hidden="true"></span>Featured mod</p>' in coa and "Conquest of Azeroth: UltraHD</h2>" in coa
+      and re.search(r'<img src="/wrath/art/leyline-shot-coa-ultrahd\.webp" alt="[^"]{30,}" width="845" height="577" loading="lazy"', coa)
+      and "leyline-shot-coa-ultrahd.webp" in wp.ART_TYPES and "leyline-shot-coa-ultrahd.webp" in wp.GAMEDATA_ART
+      and os.path.isfile(os.path.join(HERE, "www-files", "art", "leyline-shot-coa-ultrahd.webp")) and "TODO(owner)" in coa)
+check("featured mod: the external note and the credit, word for word",
+      '<p class="hb-coa-n">External download, made and hosted by its authors; not checked or hosted by Leyline</p>' in coa
+      and '<p class="hb-coa-cr">Screenshot: the modpack&#x27;s authors</p>' in coa)
+links = re.findall(r'<a ([^>]*)>(.*?)</a>', coa, re.S)
+check("featured mod: one link out, See the modpack (noopener nofollow ugc, a new tab), no Install, nothing hosted here",
+      len(links) == 1 and f'href="{html.escape(HB.FEATURED_MOD["url"])}"' in links[0][0] and 'rel="noopener nofollow ugc"' in links[0][0]
+      and 'target="_blank"' in links[0][0] and links[0][1].startswith("See the modpack")
+      and not re.search(r"(?i)install|leyline://|download\"", coa.replace("External download", "")) and "/wrath/mods/" not in coa)
+check("featured mod: no game name in what shows (the address is only a link)", not BANNED.findall(visible(coa))
+      and not BANNED.findall(re.sub(r'href="[^"]*"', "", coa)))
+check("featured mod: a slow zoom and drift on scroll from the page's script, still with reduced motion",
+      "var coa=d.querySelector(\".hb-coa\");" in HB.HUB_JS and "if(coa&&!still)" in HB.HUB_JS and "--coa" in fp
+      and re.search(r"prefers-reduced-motion:reduce\)\{.*?\.hb-coa-pic img\{transform:scale\(1\.03\)!important\}", fp, re.S))
+
+# ---------------------------------------------------------------- the server software (owner: "we should have server software in
+# this area and themed"): the cores the host pack really runs, checked against hosting/kit/tools/wuhost/cores.py
+cspec = importlib.util.spec_from_file_location("kitcores", os.path.join(REPO, "hosting", "kit", "tools", "wuhost", "cores.py"))
+kc = importlib.util.module_from_spec(cspec)
+cspec.loader.exec_module(kc)
+kit_live = {"azerothcore"} | {p["core"] for p in kc.offered_profiles({}).values()}
+kit_any = kit_live | {p["core"] for p in kc.PROFILES.values()}
+sw = re.search(r'<div class="hb-sw" role="group".*?</ul></div>', fp, re.S)
+sw = sw.group(0) if sw else ""
+cores = re.findall(r'<li class="hb-sw-c[^"]*" data-core="([a-z]+)" data-status="([a-z]+)"><p class="hb-sw-h"><b>([^<]+)</b>(.*?)</li>', sw, re.S)
+check("server software: AzerothCore, TrinityCore, CMaNGOS, vMaNGOS and Your own, in the Host a server section",
+      'id="f-host"' in fp and sw and fp.find('id="f-host"') < fp.find('class="hb-sw"') < fp.find('id="f-realms"')
+      and sorted(c[0] for c in cores) == ["azerothcore", "cmangos", "own", "trinitycore", "vmangos"], [c[:3] for c in cores])
+check("server software: One click to host only for what the host pack runs today (cores.py), the rest Coming",
+      {c[0] for c in cores if c[1] == "live"} == kit_live and all(c[1] == "coming" for c in cores if c[0] not in kit_live | {"own"})
+      and all("One click to host" in c[3] for c in cores if c[1] == "live") and all("Coming" in c[3] and "One click" not in c[3]
+                                                                                    for c in cores if c[1] == "coming"), (kit_live, [c[:2] for c in cores]))
+ERA = {5875: "Classic era", 8606: "Second era", 12340: "Third era", 15595: "Fourth era"}
+kit_eras = {"azerothcore": {"Third era"}}
+for p in kc.PROFILES.values():
+    kit_eras.setdefault(p["core"], set()).add(ERA[p["build"]])
+row_eras = {c[0]: set(re.findall(r"<span>([^<]+)</span>", re.search(r'<p class="hb-sw-eras">(.*?)</p>', c[3]).group(1)))
+            for c in cores if c[0] != "own"}
+check("server software: the eras each live core covers match its host kit profiles (words, never client numbers)",
+      all(row_eras[k] == kit_eras[k] for k in kit_live) and all(re.fullmatch(r"[A-Z][a-z]+ era", x) for v in row_eras.values() for x in v),
+      (row_eras, kit_eras))
+check("server software: each core says what it is for, its scripting and its bots",
+      all(re.search(r'<p class="hb-sw-l">[^<]{20,}</p>', c[3]) and "<dt>Scripting</dt><dd>" in c[3] and "<dt>Bots</dt><dd>" in c[3]
+          for c in cores if c[0] != "own") and "Player bots built in" in sw and "No bots in the kit&#x27;s build" in sw)
+check("server software: the realm console strip (database, login server, world server, relay agent)",
+      re.findall(r"<li><i></i>([^<]+)<span>", sw) == ["Database", "Login server", "World server", "Relay agent"])
+check("server software: our own crest (the Leyline crystal) and a rune rule drawn in SVG, no pictures, no game words, no numbers",
+      '<svg class="hb-crest"' in sw and sw.count('class="hb-rune"') == 2 and "<img" not in sw and "url(" not in sw
+      and not BANNED.findall(visible(sw)) and not NOPE.findall(shown(sw)), NOPE.findall(shown(sw)))
+check("server software: torch gold used sparingly next to our blue and violet",
+      "#d9a441" in fp and fp.count("#d9a441") <= 12 and ".hb-sw-chip.go{color:#f1cf86" in fp)
+
+# ---------------------------------------------------------------- the realm list picture (owner: "the actual looking realm list
+# thing but ... our featured server names")
+check("realm types from tags: Normal, PvP, RP, RP-PvP", [HB.realm_type(t)[0] for t in ([], ["hangout"], ["pvp"], ["rp"], ["rp", "pvp"],
+      ["blizzlike", "pvp", "bots"])] == ["Normal", "Normal", "PvP", "RP", "RP-PvP", "PvP"])
+check("population words from players: Offline, Low, Medium, High, Full", [HB.population(*x)[0] for x in (
+      (False, 50), (True, None), (True, 0), (True, 19), (True, 20), (True, 79), (True, 80), (True, 199), (True, 200), (True, 900))]
+      == ["Offline", "Low", "Low", "Low", "Medium", "Medium", "High", "High", "Full", "Full"])
+RROWS = [{"home": True, "name": "Dalaran Hangout", "live": True, "players": 4, "tags": ["hangout"], "build": 12340},
+         {"id": "featuredfeatured", "name": "Old Days", "live": True, "players": 90, "tags": ["rp", "pvp"], "featured": True, "build": 12340},
+         {"id": "busybusybusybusy", "name": "Busy Den", "live": True, "players": 230, "tags": ["pvp"], "build": 12340},
+         {"id": "quietquietquietq", "name": "Quiet <Meadow>", "live": True, "players": 30, "tags": ["rp"], "build": 5875},
+         {"id": "sleepysleepysle2", "name": "Sleepy", "live": False, "players": None, "tags": [], "build": 12340}]
+rl = HB.hub.realm_list_art((RROWS, {}, True, {}, {}))
+rrows = re.findall(r'<li><a class="hb-rlx-r([^"]*)" href="([^"]+)"[^>]*data-type="([a-z]+)" data-pop="([a-z]+)">'
+                   r'<span class="hb-rlx-n">([^<]+)</span><span class="hb-rlx-t[^"]*">([^<]+)</span>.*?<span class="hb-rlx-p[^"]*">([^<]+)</span></a></li>', rl)
+check("realm list: the rows from the live list in its order, then a dimmed Your realm here (Host one) row",
+      [r[4] for r in rrows] == ["Dalaran Hangout", "Old Days", "Busy Den", "Quiet &lt;Meadow&gt;", "Sleepy", "Your realm here"]
+      and rrows[-1][0] == " you" and rrows[-1][1] == "/wrath/host" and rrows[-1][5] == "Host one", [r[4] for r in rrows])
+check("realm list: types coloured from tags, population in words", [(r[5], r[2]) for r in rrows[:5]] == [
+      ("Normal", "pve"), ("RP-PvP", "rppvp"), ("PvP", "pvp"), ("RP", "rp"), ("Normal", "pve")]
+      and [r[6] for r in rrows[:5]] == ["Recommended", "High", "Full", "Medium", "Offline"]
+      and all(f".hb-rlx-t.{c}{{color:" in HB.HUB_CSS for c in ("pvp", "rp", "rppvp"))
+      and all(f".hb-rlx-p.{c}{{color:" in HB.HUB_CSS for c in ("low", "med", "high", "full", "rec")), [(r[5], r[6]) for r in rrows])
+check("realm list: ours selected and Recommended; each row one click to play, as on the realm list",
+      rrows[0][0] == " sel" and 'aria-current="true"' in rl and [r[1] for r in rrows[:5]] == [
+      "/wrath", "/wrath?go=r:featuredfeatured", "/wrath?go=r:busybusybusybusy", "leyline://realm/quietquietquietq", "leyline://realm/sleepysleepysle2"]
+      and rrows[4][0] == " off")
+check("realm list: columns Realm, Type, Characters, Population; rows are links (keyboard focusable) with a spoken summary",
+      re.findall(r"<span>([A-Za-z]+)</span>", re.search(r'<p class="hb-rlx-cols".*?</p>', rl).group(0)) == ["Realm", "Type", "Characters", "Population"]
+      and rl.count('aria-label="') == 5 and "Realm list</p>" in rl and ".hb-rlx-r:hover,.hb-rlx-r:focus-visible{" in HB.HUB_CSS)
+full = HB.hub.realm_list_art((RROWS + [dict(RROWS[2], id="b" * 16, name="More")] * 3, {}, True, {}, {}))
+check("realm list: at most six realms, no Your realm here row when the list is full", full.count('class="hb-rlx-r') == HB.REALM_LIST_MAX
+      and "Your realm here" not in full)
+check("realm list: on the front page in Realms & hopping, our own drawing (no picture, no game words or numbers)",
+      re.search(r'id="f-realms".*?<div class="hb-rlx" role="group"', fp, re.S) and "<img" not in rl and "url(" not in rl
+      and not BANNED.findall(visible(rl)) and not NOPE.findall(shown(rl)))
+check("realm list: stacks on a phone", "@media (max-width:560px){" in HB.HUB_CSS and ".hb-rlx-cols{display:none}" in HB.HUB_CSS)
+
+# ---------------------------------------------------------------- the Minigolf loop in Game modes (owner: "in here show the minigolf gif")
+vid = re.search(r'<figure class="hb-shot hb-vid">.*?</figure>', fp, re.S)
+vid = vid.group(0) if vid else ""
+check("game modes: the Minigolf recording, muted, looped, inline, nothing loaded until it plays, the poster first",
+      re.search(r'id="f-modes".*?<figure class="hb-shot hb-vid">', fp, re.S)
+      and '<video muted loop playsinline preload="none" poster="/wrath/art/leyline-shot-minigolf.webp" width="820" height="596" data-hb-vid' in vid
+      and vid.find('<source src="/wrath/art/leyline-shot-minigolf.webm" type="video/webm">')
+      < vid.find('<source src="/wrath/art/leyline-shot-minigolf.mp4" type="video/mp4">') and "autoplay" not in vid)
+check("game modes: caption and a Play link to the mode (works without script)", "<span>Minigolf, on our own realm</span>" in vid
+      and 'href="/wrath?go=mode:minigolf">Play</a>' in vid
+      and any(m["id"] == "minigolf" and m["start"] == {"go": "mode:minigolf"} for m in json.load(open(os.path.join(HERE, "playmodes.json")))["modes"]))
+check("game modes: played only on screen, never with reduced motion or Save-Data",
+      'd.querySelectorAll("video[data-hb-vid]")' in HB.HUB_JS and "navigator.connection.saveData" in HB.HUB_JS
+      and "!still&&!save" in HB.HUB_JS and "v.pause()" in HB.HUB_JS)
+check("game modes: the loop's files served and behind the killswitch",
+      all(n in wp.ART_TYPES and n in wp.GAMEDATA_ART and os.path.isfile(os.path.join(HERE, "www-files", "art", n))
+          for n in ("leyline-shot-minigolf.mp4", "leyline-shot-minigolf.webm", "leyline-shot-minigolf.webp"))
+      and wp.ART_TYPES["leyline-shot-minigolf.mp4"] == "video/mp4" and wp.ART_TYPES["leyline-shot-minigolf.webm"] == "video/webm")
+st, hd, b = req("/wrath/art/leyline-shot-minigolf.mp4")
+whole = len(b)
+check("game modes: the video answers a plain GET whole, with Accept-Ranges", st == 200 and hd.get("accept-ranges") == "bytes"
+      and hd.get("content-type") == "video/mp4" and whole > 100000)
+
+
+def ranged(path, rng):
+    c = http.client.HTTPConnection("127.0.0.1", PAGE_PORT, timeout=30)
+    c.request("GET", path, headers={"Range": rng})
+    r = c.getresponse()
+    return r.status, {k.lower(): v for k, v in r.getheaders()}, r.read()
+
+
+st, hd, b = ranged("/wrath/art/leyline-shot-minigolf.webm", "bytes=0-99")
+check("game modes: a byte range answers 206 with Content-Range (seeking works)", st == 206 and len(b) == 100
+      and re.fullmatch(r"bytes 0-99/\d+", hd.get("content-range", "")))
+st, hd, b = ranged("/wrath/art/leyline-shot-minigolf.mp4", "bytes=-10")
+check("game modes: a suffix range is the last bytes", st == 206 and len(b) == 10 and hd["content-range"] == f"bytes {whole - 10}-{whole - 1}/{whole}")
+check("game modes: a range past the end is 416; a picture ignores ranges", ranged("/wrath/art/leyline-shot-minigolf.mp4", f"bytes={whole + 5}-")[0] == 416
+      and ranged("/wrath/art/leyline-shot-dalaran.webp", "bytes=0-9")[0] == 200)
+check("game modes: the page's CSP lets our own media play", "media-src 'self'" in req("/wrath/leyline-preview")[1].get("content-security-policy", ""))
+
+# ---------------------------------------------------------------- the modes' key art (Azeroth Survivors)
+mp = req("/wrath/leyline-preview/modes")[2].decode()
+sv = re.search(r'<article class="hb-mode art" id="mode-azeroth-survivors">.*?</article>', mp, re.S)
+check("modes page: Azeroth Survivors shows its key art (served, sized, alt), the others none",
+      sv and re.search(r'<img class="hb-mode-art" src="/wrath/art/leyline-mode-azeroth-survivors\.webp" alt="[^"]{20,}" width="483" height="298"', sv.group(0))
+      and mp.count('class="hb-mode-art"') == 1 and "leyline-mode-azeroth-survivors.webp" in wp.ART_TYPES
+      and os.path.isfile(os.path.join(HERE, "www-files", "art", "leyline-mode-azeroth-survivors.webp")))
 wp.ART_DIR = ART_WAS
 HB.hub.portal = portal_with
 HB.hub.portal = lambda name: None if name == "hub_rank" else portal_with(name)
