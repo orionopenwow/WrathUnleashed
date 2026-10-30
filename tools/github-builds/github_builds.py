@@ -330,6 +330,13 @@ def why_failed(gh: GitHub, repo: str, workflow: str, keep: int = 80) -> list[str
             out.append(f"  failed job '{j.get('name')}', step: {', '.join(steps) or '(none named)'}")
     rc, log = gh.run(["gh", "run", "view", rid, "-R", repo, "--log-failed"])
     lines = [SECRETISH.sub("[redacted]", ln.rstrip()) for ln in log.splitlines() if ln.strip()] if rc == 0 else []
+    # Compiler and linker errors sit far above the tail (the Dockerfile echo fills it): pick them out first.
+    errs = [ln for ln in lines if re.search(r"(\berror\b[:\]]|fatal error|undefined reference|No space left"
+                                            r"|Killed signal|out of memory|cannot allocate)", ln, re.I)
+            and "##[error]buildx failed" not in ln]
+    if errs:
+        out.append(f"  -- {len(errs)} error line(s) in the failing step (first 40) --")
+        out.extend("  " + ln[:400] for ln in errs[:40])
     if lines:
         out.append(f"  -- the last {min(keep, len(lines))} lines of the failing step --")
         out.extend("  " + ln for ln in lines[-keep:])

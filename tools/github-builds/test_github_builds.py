@@ -300,7 +300,8 @@ class TurnOn(unittest.TestCase):
                          "steps": [{"name": "Checkout", "conclusion": "success"},
                                    {"name": "Build and push", "conclusion": "failure"}]},
                         {"name": "authserver", "conclusion": "success", "steps": []}]
-        self.gh.failed_log = "\n".join(f"worldserver\tBuild and push\tline {i}" for i in range(200)) + \
+        self.gh.failed_log = "w\tb\tsrc/x.cpp:12:5: error: no member named 'Foo'\n" + \
+            "\n".join(f"worldserver\tBuild and push\tline {i}" for i in range(200)) + \
             "\nworldserver\tBuild and push\ttoken ghp_" + "A" * 36 + " leaked"
         with redirect_stdout(io.StringIO()):
             out = gb.why_failed(gb.GitHub(self.gh), gb.WU_REPO, "wu-images.yml")
@@ -309,6 +310,7 @@ class TurnOn(unittest.TestCase):
         self.assertIn("failed job 'worldserver', step: Build and push", text)
         self.assertNotIn("authserver", text)
         self.assertIn("line 199", text)
+        self.assertIn("no member named 'Foo'", text)    # the compiler error, from far above the tail
         self.assertNotIn("line 100", text)              # only the tail is kept
         self.assertNotIn("ghp_AAAA", text)
         self.assertIn("[redacted]", text)
