@@ -897,7 +897,7 @@ class Hub:
             ok = False
         if not ok:
             return ""
-        return ('html{background:linear-gradient(180deg,rgba(11,13,20,.32),rgba(11,13,20,.62) 80%) fixed,'
+        return ('html{background:linear-gradient(180deg,rgba(11,13,20,.46),rgba(11,13,20,.74) 80%) fixed,'
                 f'url(/wrath/art/{BACKDROP}) center top/cover no-repeat fixed,#0b0d14}}body.hb{{background:transparent}}'
                 '@media print{html{background:#fff}}')
 
@@ -2398,8 +2398,8 @@ body.hb{margin:0;min-height:100vh;display:flex;flex-direction:column;background:
 .hb-skip:focus{top:8px}
 /* the header: the launcher's pages on the web. A sticky bar with a blur; a hairline and a shadow once the page scrolls
    (a scroll timeline where the browser has one, else .hb-scrolled from HUB_JS on the front page) */
-.hb-top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px 24px;padding:14px clamp(20px,2.6vw,48px);min-height:76px;
-background:rgba(24,27,35,.86);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid transparent}
+.hb-top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px 24px;padding:8px clamp(20px,2.6vw,48px);min-height:62px;
+background:rgba(20,23,31,.58);-webkit-backdrop-filter:blur(14px) saturate(1.2);backdrop-filter:blur(14px) saturate(1.2);border-bottom:1px solid transparent}
 .hb-top.hb-scrolled{border-bottom-color:var(--lk-border);box-shadow:0 6px 22px rgba(0,0,0,.35)}
 @supports (animation-timeline:scroll()){.hb-top{animation:hb-edge linear both;animation-timeline:scroll(root);animation-range:0 56px}}
 @keyframes hb-edge{from{border-bottom-color:transparent;box-shadow:none}to{border-bottom-color:var(--lk-border);box-shadow:0 6px 22px rgba(0,0,0,.35)}}
@@ -2473,7 +2473,9 @@ transform:translate(-50%,-50%);border-radius:50%;
 background:radial-gradient(closest-side,rgba(91,141,239,.34),rgba(139,108,240,.15) 55%,transparent 100%)}
 .hb-hero-mark{--ly-spin-size:clamp(220px,min(34vw,42vh),400px)!important;--ly-spin-turn:48s!important}
 .hb-hero-mark::before{background-image:url(/wrath/art/leyline-swirl-512.png)}
-.hb-hero-mark::after{background-image:url(/wrath/art/leyline-crystal-512.png);filter:drop-shadow(0 0 16px rgba(91,141,239,.6))}
+.hb-hero-mark::after{background-image:url(/wrath/art/leyline-crystal-512.png);filter:drop-shadow(0 0 18px rgba(140,180,255,.85)) drop-shadow(0 0 42px rgba(91,141,239,.6)) brightness(1.12)}
+.hb-hero-mark::before{filter:drop-shadow(0 0 14px rgba(139,108,240,.75)) drop-shadow(0 0 36px rgba(91,141,239,.45)) brightness(1.18) saturate(1.15)}
+.hb-art{position:relative}.hb-art::before{content:"";position:absolute;left:50%;top:50%;width:min(560px,90vw);aspect-ratio:1;translate:-50% -50%;border-radius:50%;background:radial-gradient(closest-side,rgba(11,13,20,.78),rgba(11,13,20,.45) 55%,transparent);pointer-events:none;z-index:-1}
 .hb-hero h1{margin:0 0 8px;font-size:clamp(22px,3vw,32px);line-height:1.1;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--lk-text-2)}
 .hb-sub-h{max-width:560px;margin:0 auto 18px;color:var(--lk-text-2);font-size:clamp(15px,1.8vw,17px);line-height:1.5}
 .hb-hero-a{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:10px 12px;margin:0}

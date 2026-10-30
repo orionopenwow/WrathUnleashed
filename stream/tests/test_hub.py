@@ -165,7 +165,7 @@ check("header: Download (primary) and Sign In (the crystal) on the right, no ite
                 r'<a class="hb-signin" href="/login\?next=%2Fwrath"><img src="/wrath/art/leyline-crystal-128.png"', hd, re.S)
       and on == [] and 'aria-current="page"' not in hd)
 check("header: sticky with a blur, a hairline once scrolled, none of it moving with reduced motion",
-      "backdrop-filter:blur(10px)" in front and "animation-timeline:scroll(root)" in front and ".hb-top.hb-scrolled{" in front
+      "backdrop-filter:blur(14px)" in front and "animation-timeline:scroll(root)" in front and ".hb-top.hb-scrolled{" in front
       and "hb-scrolled" in HB.HUB_JS and re.search(r"prefers-reduced-motion:reduce\)\{[^}]*animation:none!important\}.*?\.hb-top\{border-bottom-color", front, re.S))
 check("hero: the whole mark leads, crisp (the 512px layers), big (~400px, 220px on a phone), turning slowly; the heading a step down",
       'class="ly-spin slow hb-hero-mark"' in front and "leyline-swirl-512.png" in front and "leyline-crystal-512.png" in front
