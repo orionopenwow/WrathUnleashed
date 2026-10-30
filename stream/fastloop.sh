@@ -48,6 +48,8 @@ if [ -f "$WU/portal/admin.py" ]; then cp -p "$WU/portal/admin.py" "$BK/"; [ ! -f
 had_hub=""
 rm -rf "$BK/hub"
 if [ -f "$WU/portal/hub.py" ]; then cp -p "$WU/portal/hub.py" "$BK/hub.py"; [ ! -d "$WU/portal/hub" ] || cp -a "$WU/portal/hub" "$BK/hub"; had_hub=1; fi
+had_rank=""
+if [ -f "$WU/portal/hub_rank.py" ]; then cp -p "$WU/portal/hub_rank.py" "$BK/hub_rank.py"; had_rank=1; fi
 had_art=""
 rm -rf "$BK/art"
 if [ -d "$WU/portal/art" ]; then cp -a "$WU/portal/art" "$BK/art"; had_art=1; fi
@@ -75,6 +77,7 @@ put_back() {
   rm -rf "$WU/portal/hub"
   if [ -n "$had_hub" ]; then cp -p "$BK/hub.py" "$WU/portal/hub.py"; [ ! -d "$BK/hub" ] || cp -a "$BK/hub" "$WU/portal/hub"
   else rm -f "$WU/portal/hub.py"; fi
+  if [ -n "$had_rank" ]; then cp -p "$BK/hub_rank.py" "$WU/portal/hub_rank.py"; else rm -f "$WU/portal/hub_rank.py"; fi
   rm -rf "$WU/portal/art"
   if [ -n "$had_art" ]; then cp -a "$BK/art" "$WU/portal/art"; fi
 }
@@ -145,6 +148,9 @@ if [ -f hub.py ] && [ -f hub/community-index.json ]; then
     echo "  hub: $(ls hub/*.json | wc -l) data files -> $WU/portal/hub"
   }
 fi
+# the hub rankings (/wrath/leyline/mods.json, /wrath/api/hub/*: stream/hub_rank.py): optional; its store is
+# $WU/portal-data/hub_rank.sqlite3 (the writable /data mount)
+if [ -f hub_rank.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' hub_rank.py && install -m 644 hub_rank.py "$WU/portal/hub_rank.py"; fi
 if [ -d www-files/art ] && [ -f www-files/art/wu-theme.css ]; then
   install -d -m 755 "$WU/portal/art"
   install -m 644 www-files/art/* "$WU/portal/art/"
