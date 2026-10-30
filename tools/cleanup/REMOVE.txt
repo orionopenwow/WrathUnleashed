@@ -18,3 +18,33 @@ launcher/ui/art/kit/tab-normal.png
 launcher/ui/art/kit/tab-selected.png
 launcher/ui/art/kit/wordmark-leyline-launcher.png
 launcher/ui/themes/rounded.css
+
+# 2026-10-30 repo tidy (docs/REPO-MAP.md): old places of files that moved (client/patches, client/dev, docs/history,
+# labs/) or were dropped (gitignore-template; stream/wu-mod.py is a copy the signin step makes, now ignored).
+rebuild.sh
+smoke-serve.py
+smoke.js
+SMOOTH-FRAMES.md
+wotlk-client-20261025f.patch
+wotlk-client-20261025g.patch
+wotlk-client-20261025h.patch
+wotlk-client-20261025i.patch
+wotlk-client-20261025j.patch
+wotlk-client-20261025k.patch
+wotlk-client-20261025l.patch
+wotlk-client-20261025m.patch
+wotlk-client-20261025n.patch
+wotlk-client-20261025o.patch
+wotlk-client-20261026a.patch
+wotlk-client-20261026b.patch
+wotlk-client-20261029a.patch
+wotlk-smooth-frames.patch
+wotlk-web-port-wip.patch
+LAUNCH-TONIGHT.md
+NEXT-PATCH.md
+gitignore-template
+tools/leyline-client-112/Make the Leyline 1.12 client repo.bat
+server/Carry over 1.12 logins.bat
+server/carry-112-logins.sh
+docs/sandbox-roadmap.md
+stream/wu-mod.py
