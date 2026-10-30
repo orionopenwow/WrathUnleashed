@@ -350,8 +350,10 @@ class TurnOn(unittest.TestCase):
         self.assertEqual(gb.has_scopes(set()), list(gb.NEED_SCOPES))
 
     def test_bat(self):
-        bat = (gb.ROOT / "Turn on GitHub builds.bat").read_text()
-        self.assertIn(r"tools\github-builds\github_builds.py", bat)
+        bat = (gb.ROOT / "setup" / "Turn on GitHub builds.bat").read_text()
+        self.assertIn(r"%ROOT%\tools\github-builds\github_builds.py", bat)
+        self.assertIn('cd /d "%~dp0.."', bat)  # in setup\ since 2026-10-30: runs from the workspace
+        self.assertFalse((gb.ROOT / "Turn on GitHub builds.bat").exists())
         self.assertIn("pause", bat)
         said = "\n".join(ln for ln in bat.splitlines() if ln.lower().startswith("echo") or "echo " in ln.lower())
         for w in ("warcraft", "blizzard", "lich king"):

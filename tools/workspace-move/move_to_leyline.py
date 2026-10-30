@@ -4,8 +4,9 @@
     py -3 move_to_leyline.py --root "C:\\Users\\you\\Desktop\\WrathUnleashed"          dry run: the plan, changes nothing
     py -3 move_to_leyline.py --root "C:\\Users\\you\\Desktop\\WrathUnleashed" --go     do it
 
-"Move to Leyline.bat" at the top of the workspace runs this from a copy in %TEMP% (a folder can't be renamed while
-a window is standing in it): dry run first, then YES, then --go. What --go does, in this order:
+"Move to Leyline.bat" (beside this file; at the top of the workspace until the 2026-10-30 tidy) runs this from
+a copy in %TEMP% (a folder can't be renamed while a window is standing in it): dry run first, then YES,
+then --go. What --go does, in this order:
 
   1. checks again: the GitHub CLI is signed in as orionopenwow (never Chumpton or anyone else), no step is waiting
      in UPDATES-PENDING.txt, the control window is not running a step, no git command is half-way in the workspace;

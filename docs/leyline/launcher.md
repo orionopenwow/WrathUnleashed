@@ -65,7 +65,7 @@ Installers are on the [Leyline releases page](https://github.com/orionopenwow/Le
 
 Builds are not code-signed yet. On Windows choose "More info, Run anyway". On macOS right-click the app and choose Open (if it says the app is damaged: `xattr -dr com.apple.quarantine /Applications/Leyline.app`). On Linux make the .AppImage executable.
 
-The build workflow is `.github/workflows/leyline-launcher.yml` in the Leyline repo. It runs the tests on every change and, for a tag such as `launcher-v0.3.0`, builds the installers and attaches them to a release. The owner turns it on once with `Turn on GitHub builds.bat`, which also pushes the first tag; a new version is a new tag.
+The build workflow is `.github/workflows/leyline-launcher.yml` in the Leyline repo. It runs the tests on every change and, for a tag such as `launcher-v0.3.0`, builds the installers and attaches them to a release. The owner turns it on once with `setup\Turn on GitHub builds.bat`, which also pushes the first tag; a new version is a new tag.
 
 To build it yourself, see `launcher/README.md` in the repo.
 

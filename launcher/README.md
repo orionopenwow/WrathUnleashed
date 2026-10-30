@@ -46,7 +46,7 @@ against the public key in `tauri.conf.json`. The title bar then says **Update re
 until the player presses it, and it refuses while a game Leyline started is still open (Windows: the installer
 runs in passive mode and starts the new Leyline; macOS and Linux: Leyline restarts itself).
 
-Until the owner has run **Turn on launcher updates.bat** once (see Releases), builds carry no public key and
+Until the owner has run **setup\Turn on launcher updates.bat** once (see Releases), builds carry no public key and
 Leyline only links to the release page.
 
 ### Mods: where files go and what is checked
@@ -99,7 +99,7 @@ up to 30 seconds between reads.
 | `src-tauri/src/themes.rs` | theme packs: the format, the CSS allowlist, install (catalog with sha256, zip, folder), list, apply, remove |
 | `src-tauri/src/app.rs` | the Tauri commands the UI calls (only built with the `app` feature) |
 | `../tools/github-workflows/leyline-launcher.yml` | CI: tests, and release builds on a `launcher-v*` tag (Windows, macOS universal, Linux; signed for the updater when the key is set) |
-| `../tools/launcher-updates/` | the script behind `Turn on launcher updates.bat`: the updater's key pair into GitHub secrets, the public key into `tauri.conf.json` |
+| `../tools/launcher-updates/` | the script behind `setup\Turn on launcher updates.bat`: the updater's key pair into GitHub secrets, the public key into `tauri.conf.json` |
 | `CHANGELOG.md` | what changed; each `## <version>` section becomes that release's text |
 
 ## Build and run
@@ -148,7 +148,7 @@ cargo test --no-default-features
 
 One tag push makes a release: `launcher-v<version>`, with `<version>` exactly the one in
 `src-tauri/tauri.conf.json` (and `Cargo.toml`, `package.json`). The workflow (copied to the public Leyline repo's
-`.github/workflows/` by "Turn on GitHub builds.bat", which also pushes the tag for the current version) then:
+`.github/workflows/` by "setup\Turn on GitHub builds.bat", which also pushes the tag for the current version) then:
 
 1. tests the core on Windows, Linux and macOS (the macOS job may fail without failing the run);
 2. makes the GitHub release, its text from this version's section of `CHANGELOG.md`; a version with a `-` is a
@@ -159,12 +159,12 @@ One tag push makes a release: `launcher-v<version>`, with `<version>` exactly th
 
 The owner's order for a release:
 
-1. Once ever: **Turn on launcher updates.bat** (makes the updater key pair on the PC, stores the private key and
+1. Once ever: **setup\Turn on launcher updates.bat** (makes the updater key pair on the PC, stores the private key and
    its password as the Leyline repo's Actions secrets with `gh secret set`, never shown, and writes only the
    public key into `src-tauri/tauri.conf.json`; running it again keeps the key).
 2. Bump the version in `tauri.conf.json`, `Cargo.toml` and `package.json` and add a CHANGELOG section (Claude does
    this), then **Ship**, then the **Leyline** step (copies `launcher/` to the public repo).
-3. **Turn on GitHub builds.bat**: pushes the `launcher-v<version>` tag; the release appears in about 20 minutes.
+3. **setup\Turn on GitHub builds.bat**: pushes the `launcher-v<version>` tag; the release appears in about 20 minutes.
 
 Builds are not code-signed yet: on Windows choose *More info, Run anyway*. On **macOS** Gatekeeper blocks an
 unsigned app the first time: right-click (or Control-click) Leyline in Applications and choose *Open*, then

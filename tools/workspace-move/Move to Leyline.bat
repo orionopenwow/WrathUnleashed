@@ -13,8 +13,9 @@ rem How: tools\workspace-move\move_to_leyline.py, run from a copy in %TEMP% (a f
 rem window stands in it).
 if /i "%~1"=="--staged" goto :staged
 
-set "WS=%~dp0"
-set "WS=%WS:~0,-1%"
+rem Kept here for reference since 2026-10-30 (the move is done); it still runs from here: the workspace is two
+rem folders up (tools\workspace-move\ -> the workspace).
+for %%I in ("%~dp0..\..") do set "WS=%%~fI"
 set "STAGE=%TEMP%\leyline-move"
 if not exist "%WS%\tools\workspace-move\move_to_leyline.py" (echo tools\workspace-move\move_to_leyline.py is missing. Ask Claude. & pause & exit /b 1)
 if exist "%STAGE%" rmdir /s /q "%STAGE%"

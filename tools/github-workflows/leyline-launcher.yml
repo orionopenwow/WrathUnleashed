@@ -1,12 +1,12 @@
 # Leyline launcher (launcher/): test the Rust core on every change; on a `launcher-v<version>` tag build the desktop
 # app and attach it to the GitHub release for that tag:
 #   Windows: setup .exe (NSIS) and .msi;   Linux: .AppImage and .deb;   macOS: one universal .dmg (unsigned).
-# With the updater signing key in the repo's secrets ("Turn on launcher updates.bat"), every build is also signed
+# With the updater signing key in the repo's secrets ("setup\Turn on launcher updates.bat"), every build is also signed
 # for Leyline's own updater and the release gets latest.json, the manifest the installed launchers read.
 #
 # Runs in the PUBLIC repo orionopenwow/Leyline (players can't download release files from the private
 # WrathUnleashed repo, and a public repo's Actions minutes are free). Source copy: tools/github-workflows/ in
-# WrathUnleashed; "Turn on GitHub builds.bat" puts it in Leyline's .github/workflows/ and pushes the tag.
+# WrathUnleashed; "setup\Turn on GitHub builds.bat" puts it in Leyline's .github/workflows/ and pushes the tag.
 # No code signing yet (owner decision): Windows SmartScreen and macOS Gatekeeper warn on first run; the README
 # says how to open it anyway.
 #
@@ -91,7 +91,7 @@ jobs:
             echo "signed=true" >> "$GITHUB_OUTPUT"
           else
             echo "signed=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::No updater signing (secret TAURI_SIGNING_PRIVATE_KEY and the public key in tauri.conf.json are both needed: run 'Turn on launcher updates.bat'). Installed launchers will only link to this release."
+            echo "::warning::No updater signing (secret TAURI_SIGNING_PRIVATE_KEY and the public key in tauri.conf.json are both needed: run 'setup\Turn on launcher updates.bat'). Installed launchers will only link to this release."
           fi
 
   release:

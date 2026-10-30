@@ -160,7 +160,7 @@ class Workflows(unittest.TestCase):
         jobs = doc["jobs"]
         for j in ("create-release", "release", "release-macos"):
             self.assertEqual(jobs[j]["permissions"], {"contents": "write"}, j)
-        # only the built-in token and the updater's signing key ("Turn on launcher updates.bat")
+        # only the built-in token and the updater's signing key ("setup\Turn on launcher updates.bat")
         self.assertEqual(set(re.findall(r"secrets\.([A-Za-z_]+)", text)),
                          {"GITHUB_TOKEN", "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"})
         # macOS never makes a routine run red: its jobs are allowed to fail, and it is not in the main release job

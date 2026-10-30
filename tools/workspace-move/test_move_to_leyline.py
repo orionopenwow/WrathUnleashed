@@ -365,7 +365,7 @@ class Go(unittest.TestCase):
 
 class Files(unittest.TestCase):
     def test_bat_runs_from_a_copy_dry_first_then_yes(self):
-        bat = open(os.path.join(HERE, "..", "..", "Move to Leyline.bat"), encoding="utf-8").read()
+        bat = open(os.path.join(HERE, "Move to Leyline.bat"), encoding="utf-8").read()
         self.assertIn("move_to_leyline.py", bat)
         self.assertIn("%TEMP%", bat)
         self.assertIn('cd /d "%USERPROFILE%"', bat)
@@ -374,6 +374,9 @@ class Files(unittest.TestCase):
         self.assertLess(yes, go)
         self.assertIn("new-root.txt", bat)
         self.assertIn("Leyline Control.bat", bat)
+        # kept beside its helper since the 2026-10-30 tidy: the workspace is two folders up
+        self.assertIn('for %%I in ("%~dp0..\\..") do set "WS=%%~fI"', bat)
+        self.assertFalse(os.path.exists(os.path.join(HERE, "..", "..", "Move to Leyline.bat")))
 
     def test_standard_library_only_and_standalone(self):
         src = open(os.path.join(HERE, "move_to_leyline.py"), encoding="utf-8").read()

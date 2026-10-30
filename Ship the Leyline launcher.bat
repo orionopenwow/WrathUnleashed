@@ -3,11 +3,11 @@ setlocal
 title Ship the Leyline launcher
 rem The owner's one double-click to release the Leyline launcher (installers for Windows, macOS, Linux, and
 rem the self-update feed). It runs, in order, and stops at the first failure:
-rem   1. Turn on launcher updates.bat  - the update signing key (made once, kept in GitHub secrets, never shown;
+rem   1. setup\Turn on launcher updates.bat - the update signing key (made once, kept in GitHub secrets, never shown;
 rem                                     later runs keep the same key)
-rem   2. Ship WrathUnleashed.bat       - saves the launcher (with the public key) to GitHub, hands-free
+rem   2. Ship to GitHub.bat            - saves the launcher (with the public key) to GitHub, hands-free
 rem   3. Update Leyline repo.bat       - copies the launcher into the public orionopenwow/Leyline repo
-rem   4. Turn on GitHub builds.bat     - installs the workflows and pushes the launcher-v<version> tag, which
+rem   4. setup\Turn on GitHub builds.bat - installs the workflows and pushes the launcher-v<version> tag, which
 rem                                     builds the installers and the release on GitHub (about 20-40 minutes)
 rem Each step's window text stays visible; press a key when a step says "Press any key".
 cd /d "%~dp0"
@@ -16,23 +16,24 @@ set "LOG=%~dp0logs\ship-launcher.log"
 >>"%LOG%" echo %date% %time% started
 
 echo [1/4] Launcher update key
-call "%~dp0Turn on launcher updates.bat"
+call "%~dp0setup\Turn on launcher updates.bat"
 if errorlevel 1 goto fail
 
 echo [2/4] Saving to GitHub
-set "WU_SHIP_AUTO=1"
-set "WU_SHIP_MSG=Leyline launcher release: update key and the latest launcher"
-call "%~dp0Ship WrathUnleashed.bat"
+set "LEYLINE_SHIP_AUTO=1"
+set "LEYLINE_SHIP_MSG=Leyline launcher release: update key and the latest launcher"
+call "%~dp0Ship to GitHub.bat"
 set "R=%ERRORLEVEL%"
-set "WU_SHIP_AUTO="
-if "%R%"=="1" goto fail
+set "LEYLINE_SHIP_AUTO="
+set "LEYLINE_SHIP_MSG="
+if not "%R%"=="0" goto fail
 
 echo [3/4] Public Leyline repo
 call "%~dp0tools\leyline-repo\Update Leyline repo.bat"
 if errorlevel 1 goto fail
 
 echo [4/4] GitHub builds and the launcher release tag
-call "%~dp0Turn on GitHub builds.bat"
+call "%~dp0setup\Turn on GitHub builds.bat"
 if errorlevel 1 goto fail
 
 >>"%LOG%" echo %date% %time% done

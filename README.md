@@ -10,10 +10,15 @@ gets our client additions first. The public repo, github.com/orionopenwow/Leylin
 
 Every folder, and what is core, ops or labs: **`docs/REPO-MAP.md`**.
 
-**One folder on the PC: `Desktop\Leyline`.** `Move to Leyline.bat` (once, from the old `Desktop\WrathUnleashed`)
-makes this workspace `Desktop\Leyline`, puts the public repo's copy at `.repos\leyline-public` (the `leyline`
-step) and the Leyline-Launcher clone at `.repos\leyline-launcher` (`ovrename`, `ovland`), and renames this GitHub
-repo to `orionopenwow/leyline-workspace`. `.repos/` is not part of this repo (gitignored).
+**One folder on the PC: `Desktop\Leyline`.** The move to Leyline (2026-10-30, `tools/workspace-move/`) made this
+workspace `Desktop\Leyline`, put the public repo's copy at `.repos\leyline-public` (the `leyline` step) and the
+Leyline-Launcher clone at `.repos\leyline-launcher`, and renamed this GitHub repo to
+`orionopenwow/leyline-workspace`. `.repos/` is not part of this repo (gitignored).
+
+**The top of the workspace is only what gets clicked regularly:** `Leyline Control.bat`, `UPDATE.bat` (with
+`UPDATES-PENDING.txt` and `UPDATES-DONE.txt`), `Ship to GitHub.bat`, `Ship the Leyline launcher.bat`, this README
+and `.gitignore`. One-time setup is in `setup\` (Autopilot at sign-in, GitHub builds, launcher updates, automatic
+deploys); local play is in `play\`.
 
 ## The parts
 
@@ -25,20 +30,23 @@ repo to `orionopenwow/leyline-workspace`. `.repos/` is not part of this repo (gi
 | Browser game layer and our client patches for the Hangout | `stream/www-files/`, `stream/fui-web/`, `client/`, `play/` |
 | The Dalaran Hangout realm (AzerothCore 3.3.5a, custom modules and Lua) | `realm/` |
 | Mods and addons | `mods/`, `addons/` |
-| Autopilot, deploys and ops tools | root `.bat` files, `tools/`, `server/`, `gmconsole/`, `control/` |
+| Autopilot, deploys and ops tools | root `.bat` files, `setup/`, `tools/`, `server/`, `gmconsole/` |
 | Paused tools and plans, kept for later | `labs/` |
 
 ## Day to day
 
 - **Updates:** `Leyline Control.bat` (the control window, with Autopilot) or `UPDATE.bat` runs what Claude
   queued in `UPDATES-PENDING.txt`. The steps are listed in `tools/control/control.py` (`STEPS`).
-- **Save to GitHub:** `Ship WrathUnleashed.bat` (the `ship` step); every ship also refreshes the public Leyline
-  copy (`tools/leyline-repo/Update Leyline repo.bat`).
+- **Save to GitHub:** double-click `Ship to GitHub.bat` (the `ship` step). No questions: it brings in GitHub's
+  main, checks for secrets and game data, commits as "Leyline update <date> <time>" and pushes to main; it
+  closes by itself when done and stays open on a problem. In Autopilot every ship also refreshes the public
+  Leyline copy (`tools/leyline-repo/Update Leyline repo.bat`).
 - **Release the launcher:** `Ship the Leyline launcher.bat`.
 - **Host a realm:** `hosting/kit/Host a Leyline realm.bat`, or `/wrath/host` on the site. Guide:
   `hosting/INSTALL-OPERATE.md`.
-- **Play locally:** `Play WotLK (one click).bat` starts Docker, the local realm (`realm/`) and the page host
-  (`play/`). It reads game files from your own 3.3.5a install.
+- **Play locally:** `play\Play locally (one click).bat` starts Docker, the local realm (`realm/`) and the page
+  host (`play/`). It reads game files from your own 3.3.5a install. `play\Install Forever UI.bat` adds Forever UI.
+- **Once per PC:** the files in `setup\` (each is safe to run again).
 
 ## The browser client
 

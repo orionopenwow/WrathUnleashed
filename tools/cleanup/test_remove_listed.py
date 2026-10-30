@@ -21,5 +21,14 @@ class T(unittest.TestCase):
         self.assertIn("REMOVE OK: 1 removed", lines[-1])
 
 
+    def test_the_list_never_names_a_file_the_repo_still_has(self):
+        # Every path in the real REMOVE.txt is an old place: removing it must never take a live file.
+        here = os.path.dirname(os.path.abspath(__file__))
+        root = os.path.dirname(os.path.dirname(here))
+        live = [l.strip() for l in open(os.path.join(here, "REMOVE.txt"), encoding="utf-8")
+                if l.strip() and not l.startswith("#") and os.path.exists(os.path.join(root, l.strip()))]
+        self.assertEqual(live, [])
+
+
 if __name__ == "__main__":
     unittest.main()

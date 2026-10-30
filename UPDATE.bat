@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
-title WrathUnleashed - UPDATE (everything Claude has ready)
+title Leyline - UPDATE (everything Claude has ready)
 rem The one thing to run. Claude writes what's ready into UPDATES-PENDING.txt (one step per line);
 rem this runs them in order, skips the ones already done (UPDATES-DONE.txt), and stops at the first
 rem failure with the step's own message. Safe to run again any time: nothing pending = nothing happens.
@@ -13,7 +13,7 @@ rem           realm    realm\Server pass - finder 10 and bug reports.bat   (same
 rem           foreverui stream\Add Forever UI to the stream.bat (menus, character select look)
 rem           slice    stream\Make mini slice.bat              (streamed game files: 30-60 min)
 rem           mods     mods\Put mods on Wrath.bat           (the mods catalog: realm, streamed addons, /wrath/mods)
-rem           ship     Ship WrathUnleashed.bat                 (save everything to GitHub: asks you to type yes)
+rem           ship     Ship to GitHub.bat                      (save everything to GitHub: no questions)
 rem           leyline  tools\leyline-repo\Update Leyline repo.bat   (public Leyline copy; also runs after every ship)
 rem           gamedata-off  stream\Game data killswitch ON.bat   (our server serves no game data; only when you ask)
 rem           gamedata-on   stream\Game data killswitch OFF.bat  (stream the slim sampler again)
@@ -73,7 +73,7 @@ if /i "%STEP%"=="gamedata-off" set "BAT=stream\Game data killswitch ON.bat"
 if /i "%STEP%"=="gamedata-on"  set "BAT=stream\Game data killswitch OFF.bat"
 if /i "%STEP%"=="leyline" set "BAT=tools\leyline-repo\Update Leyline repo.bat"
 if /i "%STEP%"=="slice"   (set "BAT=stream\Make mini slice.bat" & set "INTERACTIVE=1")
-if /i "%STEP%"=="ship"    (set "BAT=Ship WrathUnleashed.bat" & set "INTERACTIVE=1")
+if /i "%STEP%"=="ship"    (set "BAT=Ship to GitHub.bat" & set "INTERACTIVE=1" & set "LEYLINE_SHIP_AUTO=1")
 if not defined BAT (echo Unknown step "%STEP%" in %PEND%. Ask Claude. & exit /b 1)
 if not exist "%BAT%" (echo %BAT% is missing. Ask Claude. & exit /b 1)
 set "LOG=logs\%ID%-%STEP%.log"

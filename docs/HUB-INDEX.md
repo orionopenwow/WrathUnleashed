@@ -254,7 +254,7 @@ and fails the job. The details and the gate's exact rules: `docs/HUB-RANKINGS.md
 
 It uses only the built-in `GITHUB_TOKEN` (repo search 30 a minute, code search where the token allows it, one
 repo and one latest-release call per GitHub entry, issues read from the public Leyline repo). The repo setting
-"Allow GitHub Actions to create and approve pull requests" must be on: "Turn on GitHub builds.bat" sets it, or
+"Allow GitHub Actions to create and approve pull requests" must be on: "setup\Turn on GitHub builds.bat" sets it, or
 puts it on its checklist.
 
 Once merged, the "signin" step ships the new `stream/hub/` (and `stream/www-files/art/hub-thumbs/`) to the portal.
