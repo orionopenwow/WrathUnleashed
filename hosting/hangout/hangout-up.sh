@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The Dalaran Hangout: the WrathUnleashed realm itself, reachable as a Leyline Beacon through the relay (the
+# The Dalaran Hangout: the main realm itself, reachable as a Leyline Beacon through the relay (the
 # owner hosts it; nothing runs anywhere but on the realm's own box). Run as root by "Deploy Dalaran hangout.bat"
 # (one SSH login: this folder and kit/tools arrive as a tarball over stdin):
 #
@@ -46,8 +46,15 @@ WORLD="${WU_HANGOUT_WORLD:-ov-ac-worldserver:8085}"
 STATUS_URL="${WU_HANGOUT_STATUS_URL:-http://wu-portal:8091/wrath/status.json}"
 NAME="${WU_HANGOUT_NAME:-Dalaran Hangout}"
 DEFAULT_TAGLINE="WrathUnleashed's own Dalaran: your Wrath characters, and everyone meets here."
+DEFAULT_SUMMARY="The WrathUnleashed realm itself, reached through the Leyline relay and run by the WrathUnleashed team. Sign in with your Wrath login (no new account), hop here from any Leyline realm, and arrive in Dalaran."
+# The Leyline brand switch (realm/brand.sh, LEYLINE_BRAND=1 in portal.env): the listing text says Leyline (the same
+# words brand.sh writes to state/beacon.json).
+if grep -qx 'LEYLINE_BRAND=1' "${WU_WRATH_DIR:-/srv/wrath}/portal.env" 2>/dev/null; then
+  DEFAULT_TAGLINE="Leyline's own Dalaran: your characters, and everyone meets here."
+  DEFAULT_SUMMARY="The Dalaran Hangout itself, reached through the Leyline relay and run by the Leyline team. Sign in with your website login (no new account), hop here from any Leyline realm, and arrive in Dalaran."
+fi
 TAGLINE="${WU_HANGOUT_TAGLINE:-$DEFAULT_TAGLINE}"
-SUMMARY="${WU_HANGOUT_SUMMARY:-The WrathUnleashed realm itself, reached through the Leyline relay and run by the WrathUnleashed team. Sign in with your Wrath login (no new account), hop here from any Leyline realm, and arrive in Dalaran.}"
+SUMMARY="${WU_HANGOUT_SUMMARY:-$DEFAULT_SUMMARY}"
 TRIES="${WU_HEALTH_TRIES:-30}"
 PAUSE="${WU_HEALTH_PAUSE:-2}"
 C=wu-hangout-agent

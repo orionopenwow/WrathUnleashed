@@ -127,7 +127,10 @@ for f in $WORLD_SQL; do
 done
 
 log "8/10 Realm address and restart"
-bash set-realm-address.sh "$REALM_HOST" "$REALM_NAME"
+# The Leyline brand switch (realm/brand.sh): while it is on, the realm list keeps "Dalaran Hangout".
+LIST_NAME="$REALM_NAME"
+grep -qx 'LEYLINE_BRAND=1' portal.env 2>/dev/null && LIST_NAME="${LEYLINE_REALM_NAME:-Dalaran Hangout}"
+bash set-realm-address.sh "$REALM_HOST" "$LIST_NAME"
 docker compose restart ac-worldserver
 sleep 2
 wait_ready "$(started)" || die "the world server did not come back after the restart"

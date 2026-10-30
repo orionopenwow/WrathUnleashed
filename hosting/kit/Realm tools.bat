@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title WrathUnleashed - realm tools
+title Leyline - realm tools
 rem Small jobs for a hosted realm. "Realm tools.bat friend NAME [PASSWORD]" etc. also work without the menu.
 cd /d "%~dp0"
 docker version >nul 2>&1 || (echo Docker Desktop is not running. & pause & exit /b 1)

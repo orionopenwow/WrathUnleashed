@@ -570,7 +570,7 @@ class Agent:
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="WrathUnleashed host agent (relay tunnel)")
+    ap = argparse.ArgumentParser(description="Leyline host agent (relay tunnel)")
     ap.add_argument("--state", default=os.environ.get("WU_STATE", "/state"))
     a = ap.parse_args(argv)
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(message)s")

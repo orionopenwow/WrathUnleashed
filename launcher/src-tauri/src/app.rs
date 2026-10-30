@@ -266,7 +266,7 @@ async fn join_invite(core: State<'_, Core>, client: String, link: String) -> Res
     Ok(Joined { address, name })
 }
 
-/// "Back to Wrath": point the client at the official realm again.
+/// "Back to the official realm": point the client at it again.
 #[tauri::command]
 fn back_to_official(core: State<Core>, client: String) -> Result<String, String> {
     point_and_play(&core, &client, OFFICIAL_REALM, false)

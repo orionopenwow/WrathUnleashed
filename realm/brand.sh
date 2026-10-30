@@ -148,10 +148,9 @@ try:
     edits = edits if isinstance(edits, dict) else {}
 except (OSError, ValueError):
     edits = {}
-rec = (json.load(open(os.path.join(st, "host.json"), encoding="utf-8-sig")).get("record") or {})
 if mode == "on":
-    if not os.path.exists(before):   # what the listing said before the first "on"
-        json.dump({"tagline": rec.get("tagline", ""), "summary": rec.get("summary", "")}, open(before, "w"), indent=1)
+    if not os.path.exists(before):   # beacon.json's own text before the first "on" (null: it had none)
+        json.dump({k: edits.get(k) for k in ("tagline", "summary")}, open(before, "w"), indent=1)
     edits.update(tagline=tag_on, summary=sum_on)
 else:
     try:
@@ -159,10 +158,14 @@ else:
     except (OSError, ValueError):
         old = {}
     for k in ("tagline", "summary"):
-        if old.get(k):
+        if isinstance(old.get(k), str):
             edits[k] = old[k]
-        else:
+        else:   # it had none: the setup's own text (host.json) shows again
             edits.pop(k, None)
+    try:
+        os.remove(before)
+    except OSError:
+        pass
 with open(bj + ".tmp", "w", encoding="utf-8") as f:
     json.dump(edits, f, indent=1)
 os.replace(bj + ".tmp", bj)

@@ -1,6 +1,6 @@
-# WU mod package, format 0.1
+# Leyline mod package, format 0.1
 
-A WrathUnleashed (WU) mod is a folder, or a zip of one, with a `mod.json` at the top. It can change the UI (a standard 3.3.5a addon), the realm (mod-ale Lua on the AzerothCore 3.3.5a server), or both. `wu-mod.py check` enforces every rule on this page.
+A Leyline mod is a folder, or a zip of one, with a `mod.json` at the top. It can change the UI (a standard 3.3.5a addon), the realm (mod-ale Lua on the AzerothCore 3.3.5a server), or both. `wu-mod.py check` enforces every rule on this page.
 
 ```
 dalaran-dice/
@@ -22,7 +22,7 @@ dalaran-dice/
 | `author` | yes | text |
 | `licence` | yes | SPDX id or expression: `MIT`, `GPL-3.0-or-later`, `MIT OR CC-BY-4.0`, `LicenseRef-…` |
 | `kind` | yes | `ui`, `realm` or `both`; must match the folders present |
-| `wu` | yes | lowest WU version the mod works with: `"1.0"` |
+| `wu` | yes | lowest Leyline version the mod works with: `"1.0"` |
 | `description` | yes | up to 300 chars |
 | `category` | no | the Workshop shelf, one id from `categories.json` (below). Default from `kind`: `ui` and `both` give `addons`, `realm` gives `realm-scripts`. Anything else is an error |
 | `permissions` | no | list from the fixed vocabulary below |
@@ -107,6 +107,6 @@ where players browse them at `/wrath/mods`.
 
 ## How this fits the larger plans
 
-- This is the MVP from the community release plan ("WU mod package"). Later steps there: `wu-mod test` against a local test realm, human review for anything realm-side, and signed packages once approved.
+- This is the MVP from the community release plan ("Leyline mod package"). Later steps there: `wu-mod test` against a local test realm, human review for anything realm-side, and signed packages once approved.
 - The client Open Mod API (`claude/open-mod-api-plan.md`) describes `mod.toml` and signed `.ovpack` packages with client permissions (`ui`, `packets`, `data`, `render`, `wasm`, `compat`). Those cover the client; the permissions here cover the realm. When the M1 loader lands, `mod.json` should map onto `mod.toml` field by field rather than become a second format.
 - Realm-to-addon messages use the existing OVMOD channel (`ov_modapi.lua`), the server half of `Mod.Packet`.

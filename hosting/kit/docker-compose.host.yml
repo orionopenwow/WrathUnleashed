@@ -1,4 +1,4 @@
-# WrathUnleashed: host a realm from your own PC. Started by "Host a Wrath realm.bat" /
+# Leyline: host a realm from your own PC. Started by "Host a Wrath realm.bat" /
 # host-wrath-realm.sh, which write .env next to this file. Don't run it by hand the first time.
 #
 # Nothing is published on your PC's network: no port forwarding, no open ports. The realm

@@ -3,7 +3,7 @@
 
     py -3 tools\\leyline-repo\\hostkit.py [--upload] [--kit hosting\\kit] [--realm realm] [--out FILE.zip] [--list]
 
-Builds WrathUnleashed-host-kit.zip the way "Make host kit.bat" does (the kit folder plus realm-files/: the
+Builds the host kit zip (WrathUnleashed-host-kit.zip: the release asset keeps its name) the way "Make host kit.bat" does (the kit folder plus realm-files/: the
 presets, modules.env, the realm Lua, the profile SQL and the realm's build recipe), but straight from the repo,
 without touching the kit folder and without questions (the Autopilot step "hostkit"):
 
@@ -44,7 +44,7 @@ SLUG = "orionopenwow/Leyline"
 TAG = "host-kit"
 NAME = "WrathUnleashed-host-kit.zip"
 URL = f"https://github.com/{SLUG}/releases/download/{TAG}/{NAME}"
-TOP = "WrathUnleashed host"                       # the folder players get when they unzip
+TOP = "Leyline host"                              # the folder players get when they unzip
 PRESETS = ("main", "brawl", "progression", "casual", "dalaran")
 SQL = ("brawl_world.sql", "brawl_world_2.sql", "main_unbrawl.sql", "main_world.sql", "modern_combos.sql")
 OWNER_ONLY = {"Make host kit.bat", "Publish host kit.bat", "make-kit.sh"}
@@ -53,7 +53,7 @@ ENV_KEY = re.compile(r"^(AC|OV|WU)_[A-Z0-9_]+$")
 ENV_BAD = re.compile(r"PASS|SECRET|TOKEN|PRIVATE|DATABASE_INFO|API_?KEY", re.I)
 NOT_OWNER = ("chumpton",)
 NOTES = ("The host kit: host a 3.3.5a realm from your own PC with Docker, no port forwarding. Unzip it, then run "
-         "'Host a Wrath realm.bat' (Windows) or 'bash leyline host' (Mac, Linux). Guide: "
+         "'Host a Leyline realm.bat' (Windows) or 'bash leyline host' (Mac, Linux). Guide: "
          "https://play.openvanilla.app/wrath/docs/hosting")
 
 

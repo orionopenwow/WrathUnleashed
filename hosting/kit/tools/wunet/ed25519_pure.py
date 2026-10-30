@@ -1,5 +1,5 @@
 """Ed25519 (RFC 8032), standard library only: the fallback when the `cryptography` package is
-missing. Copied from Open Vanilla launcher/ed25519.py (same project). Slow and not constant time:
+missing. Copied from the Leyline Launcher repo (launcher/ed25519.py, same project). Slow and not constant time:
 fine for verifying heartbeats and for tests; the host tools image and the relay image install
 `cryptography`, which keys.py prefers."""
 import hashlib

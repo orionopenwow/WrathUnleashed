@@ -65,7 +65,7 @@ pub fn gamedata_streaming(v: &Value) -> Option<bool> {
     v.get("gamedata_streaming").and_then(Value::as_bool)
 }
 
-/// Put the ping and the status file together the way the Open Vanilla launcher did.
+/// Put the ping and the status file together the way the older Python launcher (Leyline Launcher) did.
 pub fn combine(ping_ms: Option<u32>, file: Option<(bool, Option<u64>, Option<u64>)>) -> RealmStatus {
     match file {
         Some((true, players, bots)) => RealmStatus { state: "online", ping_ms, players, bots, gamedata_streaming: None },

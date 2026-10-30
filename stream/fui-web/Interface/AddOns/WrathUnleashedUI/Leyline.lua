@@ -1,7 +1,7 @@
 -- Leyline (3.3.5a API): the in-game window of the Leyline network, in the Mods & Workshop panel's look.
 --   Realms:  every Leyline realm (name, ruleset, players, online/offline), this one first. "Copy link" puts the
 --            realm's link (PUBLIC_BASE/r/<id>) in the box to copy; "Join" hops there: the browser game reloads
---            on that realm. "Back to Wrath" (always at the bottom) hops home.
+--            on that realm. The home button (always at the bottom: "Back to Wrath", or "Back to Dalaran Hangout" with the Leyline brand on) hops home.
 --   Friends across realms: the place for the global friends list (coming).
 --   Your game folder: "Streamed: Dalaran, capitals, starting areas" or "Whole world: your game folder", and
 --            "Use my game folder", which asks the page for the folder picker (GameFolder.lua).

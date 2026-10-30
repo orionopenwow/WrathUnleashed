@@ -329,7 +329,8 @@ check("brand.sh off: the realm's old name is back", read(os.path.join(st, "realm
 check("brand.sh off: portal.env LEYLINE_BRAND=0", "LEYLINE_BRAND=0" in read(penv))
 check("brand.sh off: the streamed addon names back", read(os.path.join(st, "stream")).split()[-6:] == ["fui-install.sh", "brand", "off", "mods-install.sh", "brand", "off"])
 bj = json.load(open(os.path.join(w, "hangout-beacon", "state", "beacon.json")))
-check("brand.sh off: the hangout's old listing text is back", bj.get("tagline") == "Old tagline." and bj.get("summary") == "Old summary.", bj)
+check("brand.sh off: the hangout's own listing text again (beacon.json as before: no text of its own)",
+      "tagline" not in bj and "summary" not in bj, bj)
 shutil.rmtree(d, ignore_errors=True)
 
 # older stream scripts: said, not run

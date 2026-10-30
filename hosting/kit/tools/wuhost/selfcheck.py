@@ -85,7 +85,7 @@ async def run(state, login=True, db=None, local_auth=("ac-authserver", 3724), lo
               relay_http=None, relay_host=None):
     """relay_http / relay_host: where to reach the relay (default https://<relay>, <relay>)."""
     rep = Report()
-    print("Checking your WrathUnleashed realm...\n")
+    print("Checking your Leyline realm...\n")
     try:
         with open(os.path.join(state, "host.json"), encoding="utf-8") as f:
             cfg = json.load(f)

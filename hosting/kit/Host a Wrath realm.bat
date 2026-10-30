@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
-title WrathUnleashed - host a realm
-rem Host a WrathUnleashed (3.3.5a) realm from this PC. Needs Docker Desktop, nothing else.
+title Leyline - host a realm
+rem Host a Leyline (3.3.5a) realm from this PC. Needs Docker Desktop, nothing else.
 rem No port forwarding: the realm talks out to the relay, players connect to the relay, and nobody
 rem sees your home IP address. Safe to run again: it keeps your realm, characters and invite link.
 rem
@@ -11,7 +11,7 @@ rem profile for another client in profiles\: cmangos-1.12.1, cmangos-2.4.3, tcpp
 rem WU_VISIBILITY, WU_WOW_DIR, WU_BUILD (1: build the realm images here if they are not published, 0: stock).
 cd /d "%~dp0"
 
-rem ---- images (the prebuilt ones are published by WrathUnleashed's CI; the local build is the fallback)
+rem ---- images (the prebuilt ones are published by Leyline's CI; the local build is the fallback)
 if not defined WU_IMAGE set "WU_IMAGE=ghcr.io/orionopenwow/wu-ac-wotlk"
 if not defined WU_TAG set "WU_TAG=stable"
 if not defined WU_LOCAL_IMAGE set "WU_LOCAL_IMAGE=ov/ac-wotlk"
@@ -141,7 +141,7 @@ if not defined HOW (set "HOW=build" & set /p "HOW=Build or stock [build]: ")
 if /i not "%HOW%"=="build" if /i not "%HOW%"=="stock" (echo   Please type build or stock. & set "HOW=" & goto askhow)
 if /i "%HOW%"=="stock" (
   set "IMG=acore/ac-wotlk" & set "TAG=master"
-  echo   Using AzerothCore's stock images: the realm runs without WrathUnleashed's modules.
+  echo   Using AzerothCore's stock images: the realm runs without Leyline's modules.
   exit /b 0
 )
 if not exist "realm-files\build\sources.lock" (echo This kit has no realm-files\build folder. Download the full kit again. & exit /b 1)

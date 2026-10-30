@@ -1,5 +1,5 @@
 @echo off
-title WrathUnleashed - check my realm
+title Leyline - check my realm
 rem Tests your realm the way a player would: the servers on this PC, the tunnel to the relay, a login
 rem through the relay, your invite link and (public realms) the Beacons listing. Plain-language results.
 cd /d "%~dp0"

@@ -22,7 +22,7 @@
 --                      N:<realms>:<players>:<bots>                   the network line (online now), before E
 --                      E:<count>                                     the list is complete
 --                      U:Realm list unavailable                      the file is missing or unreadable
---   client -> server   H:<id|wrath>                                  hop there (the window's Join / Back to Wrath)
+--   client -> server   H:<id|wrath>                                  hop there (the window's Join / its home button)
 --   server -> client   H:<id|wrath>                                  the same, echoed: the browser page sees this
 --                                                                    CHAT_MSG_ADDON and reloads the game on that
 --                                                                    realm (stream/www-files/wrath-page.js)
