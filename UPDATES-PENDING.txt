@@ -251,3 +251,4 @@
 1079b ovrename  Rename GitHub repo OpenVanilla to Leyline-Launcher (description, homepage, PC clone origin)
 1079c ovland  Leyline Launcher 1.57.0 changes to GitHub (main, fast-forward only; support and tips hidden)
 1079d ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline launcher support buttons hidden
+1080a ship  Save to GitHub (orionopenwow/WrathUnleashed): Clean deployments tool (the owner runs it himself)
