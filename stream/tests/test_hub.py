@@ -145,6 +145,13 @@ def header_of(page):
 
 
 hd, nav, labels, on = header_of(front)
+check("side menu (owner 2026-10-30: \"make all the tools come from the side by default and can collapse\"): a fold switch before the "
+      "header, a sidebar on wide screens, folded to icons, remembered by HUB_JS, the top bar kept on a phone",
+      front.count('<input type="checkbox" id="hb-side" class="hb-side-t" aria-label="Fold the side menu"><header class="hb-top">') == 1
+      and '<label for="hb-side" class="hb-side-b"' in hd and "@media (min-width:1081px){" in front
+      and "body.hb .hb-top{position:fixed;inset:0 auto 0 0;width:var(--hb-side)" in front
+      and "body.hb:has(#hb-side:checked){--hb-side:72px}" in front and 'localStorage.setItem("leyline.side"' in HB.HUB_JS
+      and "@media (max-width:1080px){.hb-side-t,.hb-side-b{display:none}}" in front)
 check("header: Play, Realms, Mods, Addons, Modes, Host, Community, More", labels == NAV_ORDER, labels)
 hrefs = dict(re.findall(r'<a class="hb-ni[^"]*" href="([^"]+)"[^>]*><svg.*?</svg><span>([^<]+)</span>', nav, re.S)[i][::-1] for i in range(7))
 check("header: each item goes to the launcher page's web twin", hrefs == {
@@ -239,7 +246,7 @@ for path, want in (("/realms", ["Realms"]), ("/catalog", ["Mods"]), ("/catalog?c
     pg = req("/wrath/leyline-preview" + path)[2].decode()
     hd, nav, labels, on = header_of(pg)
     more_on = 'class="hb-ni on"><svg' in re.search(r"<summary.*?</summary>", nav, re.S).group(0)
-    sub_on = re.findall(r'class="hb-mi on" href="[^"]+" aria-current="page"><svg.*?</svg><span>([^<]+)</span>', nav, re.S)
+    sub_on = re.findall(r'class="hb-mi on" href="[^"]+" aria-current="page" title="[^"]+"><svg.*?</svg><span>([^<]+)</span>', nav, re.S)
     check(f"header on {path or '/'}: the same items, {want or sub_on or 'nothing'} active", labels == NAV_ORDER and on == want
           and (more_on == bool(sub_on)) and (sub_on == {"/news": ["News"], "/creators": ["Creators"]}.get(path, []))
           and hd.count('aria-current="page"') == len([w for w in want if w != "More"]) + 2 * len(sub_on), (labels, on, sub_on))   # (the dropdown's and the phone sheet's copy: one shows)
@@ -740,7 +747,7 @@ for f in ("game", "mods", "launcher"):
 check("gallery ?f=<junk>: everything", [t[1] for t in GALS.findall(req("/wrath/leyline-preview/gallery?f=nope")[2].decode())] == [t[1] for t in tiles_all])
 hd, nav, labels, on = header_of(gal)
 check("gallery page: the hub header, More highlighted, Gallery in More and the phone sheet, the sub-nav",
-      labels == NAV_ORDER and on == ["More"] and '<a class="hb-mi on" href="/wrath/leyline-preview/gallery" aria-current="page">' in nav
+      labels == NAV_ORDER and on == ["More"] and '<a class="hb-mi on" href="/wrath/leyline-preview/gallery" aria-current="page" title="Gallery">' in nav
       and '<a href="/wrath/leyline-preview/gallery" aria-current="page" class="on">Gallery</a>' in gal)
 check("gallery: script filters in place and opens the lightbox (Esc, arrows, Tab kept inside, focus back to the tile), no innerHTML",
       all(x in HB.HUB_JS for x in ('d.querySelectorAll("[data-gal]")', 'ev.key==="Escape"', 'ev.key==="ArrowLeft"', 'ev.key==="ArrowRight"',
