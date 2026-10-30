@@ -433,7 +433,11 @@ mod tests {
         std::fs::create_dir_all(e.path().join("interface/addons/leylineplay")).unwrap();
         let got = prepare_desktop(&profile(e.path(), Build::V335a), &golf(), 1).unwrap();
         assert!(got.ends_with("interface/addons/leylineplay"));
-        assert!(!e.path().join("Interface").exists(), "no second Interface folder");
+        // one interface folder, still spelled as it was (a case-insensitive disk shows "Interface" as existing too)
+        let names: Vec<String> = std::fs::read_dir(e.path()).unwrap().flatten()
+            .map(|x| x.file_name().to_string_lossy().to_string())
+            .filter(|n| n.eq_ignore_ascii_case("interface")).collect();
+        assert_eq!(names, vec!["interface".to_string()], "no second Interface folder");
     }
 
     #[test]

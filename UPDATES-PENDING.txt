@@ -344,3 +344,4 @@
 1115a ship Save to GitHub: the launcher tests pass on Windows and macOS (the public copy then builds Leyline.exe)
 1116a signin Site: the sidebar like the launcher (folds to icons)
 1116b ship Save to GitHub: the site sidebar
+1117a ship Save to GitHub: the last launcher test fix (GitHub then builds Leyline.exe)
