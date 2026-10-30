@@ -979,6 +979,8 @@ check("switch on: a Workshop item page stays", req("/wrath/mods/pings")[0] != 30
 st, h, _ = req("/wrath/leyline/submit", "POST", "repo=https%3A%2F%2Fgithub.com%2Fa%2Fb&build=3.3.5a&category=tools", ip="10.4.4.9")
 check("switch on: Submit a mod posts at the front door and lands there", st in (303, 400)
       and (st == 400 or h.get("location") == "/wrath/leyline/submit?done=1"), (st, h.get("location")))
+check("Referrer-Policy same-origin: Chrome sends a real Origin on the site's own forms (no-referrer made it null, and "
+      "every Origin check refused them), and other sites still get nothing", req("/wrath/leyline")[1].get("referrer-policy") == "same-origin")
 os.environ.pop("WU_HUB_FRONT")
 check("switch off: the older pages stay themselves", req("/wrath/realms")[0] == 200 and req("/wrath/mods")[0] == 200)
 os.environ["WU_HUB"] = "0"

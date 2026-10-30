@@ -329,3 +329,5 @@
 1107a signin The Leyline front door is the main site: every hub page at /wrath/leyline, old addresses redirect, the backdrop
 1107b ovsite openvanilla.app: the remaining old pages forward to their Leyline pages
 1107c ship Save to GitHub: the main site, the backdrop, the export keeps the backdrop private
+1108a signin Forms work in Chrome again (Referrer-Policy same-origin): Start server on the host page
+1108b ship Save to GitHub: the forms fix
