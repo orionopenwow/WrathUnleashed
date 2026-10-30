@@ -5,7 +5,7 @@ keeps the all.json shape, the front-door switch, and no current page links to th
 
     python3 -I stream/tests/test_hub.py stream/wrath_portal.py
 """
-import http.client, importlib.util, json, os, re, shutil, sys, tempfile, threading, time
+import html, http.client, importlib.util, json, os, re, shutil, sys, tempfile, threading, time, urllib.parse
 from http.server import ThreadingHTTPServer
 
 PAGE_PORT = 18231
@@ -127,10 +127,46 @@ check("front page: the 12 categories and themes", all(f"catalog?cat={c}" in fron
 check("front page: creators and Host a Beacon", "/wrath/leyline-preview/creators" in front and "/wrath/leyline-preview/beacon" in front)
 check("front page: a TODO(owner) for the tagline, no words in the owner's voice", "TODO(owner)" in front)
 # the owner's mockup (2026-10-30): header nav, the hero, Platform Status, Community Spotlight, the footer
-nav = re.search(r'<nav class="hb-nav"[^>]*>(.*?)</nav>', front, re.S).group(1)
-check("header: Features, Download, Community, Status, Docs", re.findall(r">([^<]+)</a>", nav) == ["Features", "Download", "Community", "Status", "Docs"], nav)
-check("hero: the whole mark, crisp (2x layers), turning slowly; the heading, the all-clients line, Download Now",
-      'class="ly-spin slow hb-hero-mark"' in front and "leyline-swirl-512.png) 2x" in front and "hb-crystal" not in front
+# the header mirrors the launcher's pages (owner 2026-10-30: "servers, mods, addons, etc ... it should all work in browser too")
+NAV_ORDER = ["Play", "Realms", "Mods", "Addons", "Modes", "Host", "Community", "More"]
+
+
+def header_of(page):
+    hd = re.search(r'<header class="hb-top">.*?</header>', page, re.S).group(0)
+    nav = re.search(r'<nav class="hb-nav"[^>]*>(.*?)</nav>', hd, re.S).group(1)
+    top = re.sub(r'<div class="hb-more-m">.*?</div>|<div class="hb-nav-x">.*?</div>', "", nav, flags=re.S)
+    labels = re.findall(r'class="hb-ni[^"]*"[^>]*>(?:<svg.*?</svg>)<span>([^<]+)</span>', top, re.S)
+    on = re.findall(r'class="hb-ni on"[^>]*>(?:<svg.*?</svg>)<span>([^<]+)</span>', top, re.S)
+    return hd, nav, labels, on
+
+
+hd, nav, labels, on = header_of(front)
+check("header: Play, Realms, Mods, Addons, Modes, Host, Community, More", labels == NAV_ORDER, labels)
+hrefs = dict(re.findall(r'<a class="hb-ni[^"]*" href="([^"]+)"[^>]*><svg.*?</svg><span>([^<]+)</span>', nav, re.S)[i][::-1] for i in range(7))
+check("header: each item goes to the launcher page's web twin", hrefs == {
+      "Play": "/wrath", "Realms": "/wrath/leyline-preview/realms", "Mods": "/wrath/leyline-preview/catalog",
+      "Addons": "/wrath/leyline-preview/catalog?cat=addons", "Modes": "/wrath/leyline-preview/modes", "Host": "/wrath/host",
+      "Community": "/wrath/workshop"} and "addons" in HB.CATEGORY_IDS, hrefs)
+more = re.search(r'<details class="hb-more-d"><summary class="hb-ni[^"]*">.*?<span>More</span></summary><div class="hb-more-m">(.*?)</div></details>', nav, re.S)
+check("header: More is a details dropdown (no script needed) with Docs, News, Creators, Status",
+      more and re.findall(r"<span>([^<]+)</span>", more.group(1)) == ["Docs", "News", "Creators", "Status"]
+      and 'href="/wrath/leyline-preview#status"' in more.group(1))
+check("header: the phone sheet has the same items as tiles, and the download", re.findall(
+      r"<span>([^<]+)</span>", re.search(r'<div class="hb-nav-x">(.*?)</div>', nav, re.S).group(1)) == ["Docs", "News", "Creators", "Status"]
+      and 'class="hb-dl-x"' in nav and 'id="hb-menu" class="hb-menu-t"' in hd and '<label for="hb-menu" class="hb-menu-b"' in hd)
+check("header: a line icon by every item (inline SVG, currentColor)", nav.count('<svg viewBox="0 0 24 24" aria-hidden="true">') == 7 + 1 + 4 + 4
+      and "stroke:currentColor" in front)
+check("header: Download (primary) and Sign In (the crystal) on the right, no item active on the front page",
+      re.search(r'<div class="hb-end"><a class="hb-dl" href="https://github\.com/orionopenwow/Leyline/releases"[^>]*>.*?Download</a>'
+                r'<a class="hb-signin" href="/login\?next=%2Fwrath"><img src="/wrath/art/leyline-crystal-128.png"', hd, re.S)
+      and on == [] and 'aria-current="page"' not in hd)
+check("header: sticky with a blur, a hairline once scrolled, none of it moving with reduced motion",
+      "backdrop-filter:blur(10px)" in front and "animation-timeline:scroll(root)" in front and ".hb-top.hb-scrolled{" in front
+      and "hb-scrolled" in HB.HUB_JS and re.search(r"prefers-reduced-motion:reduce\)\{[^}]*animation:none!important\}.*?\.hb-top\{border-bottom-color", front, re.S))
+check("hero: the whole mark leads, crisp (the 512px layers), big (~400px, 220px on a phone), turning slowly; the heading a step down",
+      'class="ly-spin slow hb-hero-mark"' in front and "leyline-swirl-512.png" in front and "leyline-crystal-512.png" in front
+      and "--ly-spin-size:clamp(220px,min(34vw,42vh),400px)" in front and ".hb-hero h1{margin:0 0 8px;font-size:clamp(22px,3vw,32px)" in front
+      and "hb-crystal" not in front
       and "Every client, every server" in front and "One launcher for every classic client and every server" in front
       and "hb-bullets" not in front and "TODO(owner): the hero heading" in front
       and re.search(r'class="hb-cta" href="https://github\.com/orionopenwow/Leyline/releases"[^>]*>Download Now<', front))
@@ -190,6 +226,16 @@ check("polish: the script reads only this site's public JSON", re.findall(r'json
       and "innerHTML" not in HB.HUB_JS and "eval" not in HB.HUB_JS)
 check("sub-nav: Realms, Modes and News", all(f'href="/wrath/leyline-preview/{x}"' in req("/wrath/leyline-preview/catalog")[2].decode()
                                                for x in ("realms", "modes", "news")))
+for path, want in (("/realms", ["Realms"]), ("/catalog", ["Mods"]), ("/catalog?cat=addons", ["Addons"]), ("/catalog?cat=tools", ["Mods"]),
+                   ("/modes", ["Modes"]), ("/beacon", ["Host"]), ("/submit", ["Mods"]), ("/p/" + first["id"].replace(":", "-"), ["Mods"]),
+                   ("/news", ["More"]), ("/creators", ["More"]), ("", [])):
+    pg = req("/wrath/leyline-preview" + path)[2].decode()
+    hd, nav, labels, on = header_of(pg)
+    more_on = 'class="hb-ni on"><svg' in re.search(r"<summary.*?</summary>", nav, re.S).group(0)
+    sub_on = re.findall(r'class="hb-mi on" href="[^"]+" aria-current="page"><svg.*?</svg><span>([^<]+)</span>', nav, re.S)
+    check(f"header on {path or '/'}: the same items, {want or sub_on or 'nothing'} active", labels == NAV_ORDER and on == want
+          and (more_on == bool(sub_on)) and (sub_on == {"/news": ["News"], "/creators": ["Creators"]}.get(path, []))
+          and hd.count('aria-current="page"') == len([w for w in want if w != "More"]) + 2 * len(sub_on), (labels, on, sub_on))   # (the dropdown's and the phone sheet's copy: one shows)
 modes = req("/wrath/leyline-preview/modes")[2].decode()
 mode_ids = [m["id"] for m in wp.playmodes.entries()]
 check("modes page: every mode in playmodes.json, live realm modes one click", all(f'id="mode-{i}"' in modes for i in mode_ids)
@@ -412,6 +458,186 @@ check("neutral(): the helper", HB.neutral("Vanilla WoW 1.12.1 addon (3.3.5a)") =
       and HB.neutral("A WoW 1.12.1 addon for World of Warcraft") == "An addon for the game")
 HB.hub.portal = real
 open(os.path.join(HUBDIR, "community-index.json"), "w").write(kept)
+with wp._listing_lock:
+    wp._listing.update(realms=[], ok=False, fetched=False, at=-1e9)
+
+# ---------------------------------------------------------------- the front page's new parts (owner 2026-10-30)
+def realm_rec(rid, name, build=12340, players=0, tags=(), tagline="", new=False, port=40200, live=True):
+    return wp.clean_listing_record({"schema": 1, "name": name, "tagline": tagline, "state": "live" if live else "offline",
+        "tags": list(tags), "profile": {"build": build, "core": "azerothcore", "port": port, "address": "relay.example"},
+        "community": {"realmId": rid, "relay": "relay.example", "claimed": True, "score": 5, "new": new,
+                      "lastHeartbeat": {"online": live, "players": players, "bots": 0}}})
+
+
+RIDS = ["oldoldoldoldoldo", "busybusybusybusy", "plainplainplainp", "quietquietquieta"]
+listing = [realm_rec(RIDS[0], "Old Days", 5875, 12, ["blizzlike", "pvp"], "The old rules, the old days.", port=40201),
+           realm_rec(RIDS[1], "Busy Den", 12340, 30, ["pvp"], "Fast levels, world PvP every evening.", port=40202),
+           realm_rec(RIDS[2], "Plain Field", 12340, 0, ["rp"], "Slow roleplay on quiet fields.", new=True, port=40203),
+           realm_rec(RIDS[3], "Quiet Shore", 12340, 2, [], "", port=40204),
+           realm_rec("offofoffofoffofo", "Sleepy Hollow", 12340, 0, live=False, port=40205)]
+with wp._listing_lock:
+    wp._listing.update(realms=[r for r in listing if r], ok=True, fetched=True, at=time.monotonic() + 1e6, when=time.time())
+json.dump({"format": 1, "posts": [
+    {"id": "n1", "date": "2026-10-30", "tag": "Realms", "title": "Realm hopping in one click", "items": ["Hop without signing in again"]},
+    {"id": "n2", "date": "2026-10-30", "tag": "Oops", "title": "WoW night", "items": ["dropped"]},
+    {"id": "n3", "date": "2026-10-29", "tag": "Launcher", "title": "Launcher 0.6 for 3.3.5a", "items": ["Finds your own 1.12.1 client"]},
+    {"id": "n4", "date": "2026-10-28", "tag": "Workshop", "title": "Hot, rising and top", "items": ["Rate what you play"]},
+    {"id": "n5", "date": "2026-10-20", "tag": "Old", "title": "The fourth one", "items": []}]},
+    open(os.path.join(os.environ["WU_LEYLINE_DIR"], "news.json"), "w"))
+pool = [i for i in HB.hub.items() if i["source"] != "theme"]
+HOT = sorted(pool, key=lambda i: i["name"].lower())[3]          # some item that isn't the best score
+AUTH = {i["author"] for i in pool}
+
+
+class FakeStore:
+    def ranked(self, items, sort="hot"):
+        rest = [i for i in items if i["id"] != HOT["id"]]
+        order = [i for i in items if i["id"] == HOT["id"]] + sorted(rest, key=lambda i: (-float(i.get("score") or 0), i["name"].lower()))
+        return [(i, {"installs": {"all": 9, "d30": 500 if i["id"] == HOT["id"] else 1, "d7": 0, "prev7": 0}}) for i in order]
+
+    def metrics(self, items):
+        return {i["id"]: {"installs": {"all": 0, "d30": 0}, "rating": {"avg": None, "n": 0}} for i in items}
+
+
+class FakeRank:
+    store = FakeStore()
+    KINDS = ()
+    SORT_LABELS = []
+    KIND_LABELS = []
+    RANK_CSS = ""
+
+    @staticmethod
+    def installable(i):
+        return i["id"] == HOT["id"]
+
+
+HK = {"on": False}
+WHO = {"v": None}
+
+
+class FakeSocial:
+    @staticmethod
+    def cookie_user(h):
+        return WHO["v"]
+
+
+def portal_with(name):
+    if name == "hub_rank":
+        return FakeRank
+    if name == "herokey_on":
+        return lambda: HK["on"]
+    if name == "social":
+        return FakeSocial
+    return real(name)
+
+
+HB.hub.portal = portal_with
+fp = req("/wrath/leyline-preview")[2].decode()
+order = [fp.find(x) for x in ('class="hb-hero"', 'class="hb-tick"', 'id="realms"', 'class="hb-how', 'class="hb-nums', 'id="features"',
+                              'id="f-agents"', 'id="hosted"', 'id="mod-week"', 'id="herokey"', 'id="creators-top"', 'id="news"',
+                              'id="status"', 'id="community"', 'Browse by category')]
+check("front page order: hero, ticker, realms, how it works, numbers, features, hosted, mod of the week, Hero Key, creators, "
+      "news, status, spotlight, categories", -1 not in order and order == sorted(order), order)
+tick = re.search(r'<section class="hb-tick".*?</section>', fp, re.S).group(0)
+plain = re.search(r'<ul class="hb-tick-l">(.*?)</ul>', tick, re.S).group(1)
+lis = re.findall(r"<li[^>]*>(.*?)</li>", plain)
+home_li = [x for x in lis if "Busy Den" not in x and "Old Days" not in x and "Quiet Shore" not in x and "New realm" not in x]
+check("ticker: who is playing where, from the realm list's rows, most players first, then new realms",
+      [x for x in lis if x not in home_li] == ['<b class="hb-tn">30</b> playing on Busy Den', '<b class="hb-tn">12</b> playing on Old Days',
+                                              '<b class="hb-tn">2</b> playing on Quiet Shore', "New realm: Plain Field"]
+      and len(home_li) <= 1 and all(re.fullmatch(r'<b class="hb-tn">3</b> (?:playing on|in the) [^<]+', x) for x in home_li)
+      and "Sleepy Hollow" not in tick and f'data-tick="{RIDS[1]}"' in plain and 'data-tick="home"' in plain, lis)
+check("ticker: one plain list for screen readers, the looping copy aria-hidden, a heading",
+      tick.count('<ul class="hb-tick-l">') == 1 and tick.count('<ul class="hb-tick-l dup" aria-hidden="true">') == 1
+      and '<h2 id="hb-tick-h" class="hb-vh">Live on the network</h2>' in tick)
+check("ticker: a slow loop, paused on hover and focus, still and wrapped with reduced motion",
+      ".hb-tick-run{display:flex;width:max-content;animation:hb-tick 48s linear infinite}" in fp
+      and ".hb-tick:is(:hover,:focus-within) .hb-tick-run{animation-play-state:paused}" in fp
+      and re.search(r"prefers-reduced-motion:reduce\)\{.*?\.hb-tick-l\{flex-wrap:wrap.*?\.hb-tick-l\.dup\{display:none\}", fp, re.S))
+check("ticker: the 30 s live update refreshes its counts (same JSON, text only)", "[data-tick=" in HB.HUB_JS and "tk(c.realmId,h.players)" in HB.HUB_JS
+      and 'tk("home",s.players)' in HB.HUB_JS)
+nums = re.findall(r'<b class="hb-num" data-count="(\d+)">(\d+)</b><span>([^<]+)</span>', fp)
+check("numbers: realms, players, mods, the final values in the page (no script, reduced motion)", [n[2] for n in nums] == [
+      "realms online", "players right now", "mods, addons and tools"] and all(a == b for a, b, _ in nums)
+      and int(nums[2][0]) == len(pool) and int(nums[1][0]) >= 44, nums)
+check("numbers: counted up once by the script, only below the fold, never with reduced motion",
+      re.search(r"if\(!still&&\"IntersectionObserver\" in window\)\{\s*var cio=", HB.HUB_JS) and 'n.textContent="0";cio.observe(n)' in HB.HUB_JS
+      and "getBoundingClientRect().top>innerHeight){n.textContent" in HB.HUB_JS)
+check("ley line: a faint thread down the feature sections, drawn on scroll by script, drawn whole without it or with reduced motion,"
+      " never takes a click, hidden on narrow screens",
+      '<svg class="hb-thread" viewBox="0 0 40 1000" preserveAspectRatio="none" aria-hidden="true" focusable="false">' in fp
+      and "pointer-events:none;z-index:2}" in fp and ".hb-js .hb-thread.draw path{stroke-dasharray:1" in fp
+      and ".hb-thread path{stroke-dasharray:none!important}" in fp and "@media (max-width:1150px){.hb-thread,.hb-fs::before{display:none}}" in fp
+      and 'if(th&&feats&&!still){th.classList.add("draw")' in HB.HUB_JS)
+check("screenshots: tilt toward the cursor with a glow, fine pointers and motion only",
+      'if(!still&&window.matchMedia&&matchMedia("(pointer:fine)").matches){d.querySelectorAll(".hb-shot")' in HB.HUB_JS
+      and ".hb-shot.tilt::after{opacity:1}" in fp and ".hb-shot{transform:none!important}" in fp)
+pv = re.search(rf'<li class="hb-rl pv" data-rid="{RIDS[1]}".*?</li>', fp, re.S)
+check("realm rows: a preview with the tagline and tags on hover and focus, laid over (no layout shift)",
+      pv and '<div class="hb-rl-pv" role="note"><p>Fast levels, world PvP every evening.</p><p class="hb-rl-pt"><span>PvP</span></p></div>' in pv.group(0)
+      and ".hb-rl-pv{position:absolute;" in fp and ".hb-rl.pv:is(:hover,:focus-within) .hb-rl-pv{visibility:visible" in fp
+      and re.search(rf'<li class="hb-rl" data-rid="{RIDS[3]}"', fp), pv.group(0)[-400:] if pv else "")
+motw = re.search(r'<section class="hb-motw hb-rv" id="mod-week".*?</section>', fp, re.S).group(0)
+check("mod of the week: the top Hot item, its author, one line, Install with Leyline and View",
+      f'href="leyline://install/{HOT["id"]}">Install with Leyline</a>' in motw and f'href="/wrath/leyline-preview/p/{HOT["id"].replace(":", "-")}">View</a>' in motw
+      and f">{html.escape(HB.neutral(HOT['name']))}</h2>" in motw and f"by {html.escape(HB.neutral(HOT['author']))}" in motw and "Mod of the week" in motw, motw)
+posters = re.findall(r'<article class="hb-poster" style="--h1:(\d+);--h2:(\d+);--a:(\d+)deg;--x:(\d+)%;--y:(\d+)%;--r:(\d+)deg">(.*?)</article>', fp, re.S)
+names = [re.search(r"<h3>([^<]+)</h3>", p[6]).group(1) for p in posters]
+check("hosted by the community: up to three live community realms as posters (not ours, not offline)",
+      names == ["Busy Den", "Old Days", "Quiet Shore"] or (len(names) == 3 and "Sleepy Hollow" not in names and "Leyline Sample Hangout" not in names), names)
+again = re.findall(r'<article class="hb-poster" style="([^"]+)"', req("/wrath/leyline-preview")[2].decode())
+check("posters: a backdrop made from each realm's id (the same every time, different per realm), the mark only",
+      again == re.findall(r'<article class="hb-poster" style="([^"]+)"', fp) and len(set(again)) == len(again)
+      and "url(/wrath/art/leyline-crystal-256.webp)" in fp and "TODO(owner): hosts uploading their own poster image" in fp)
+bd = next(p[6] for p in posters if "Busy Den" in p[6])
+od = next((p[6] for p in posters if "Old Days" in p[6]), "")
+check("posters: name, tagline, tags, players, Play in the browser or Open in launcher",
+      "<b>30</b> playing" in bd and "Fast levels, world PvP every evening." in bd and "<span>PvP</span>" in bd
+      and f'href="/wrath?go=r:{RIDS[1]}"' in bd and f'href="leyline://realm/{RIDS[1]}">Open in launcher' in bd
+      and (not od or ("go=r:" not in od and "Open in launcher" in od)))
+newsb = re.search(r'<section class="hb-sec hb-rv" id="news".*?</section>', fp, re.S).group(0) if 'id="news"' in fp else ""
+if wp.admin is not None:
+    check("news: the latest three posts, brand-word posts dropped, numbers taken out, read-only links to the news page",
+          re.findall(r"<b>([^<]+)</b>", newsb) == ["Realm hopping in one click", "Launcher 0.6", "Hot, rising and top"]
+          and "WoW" not in newsb and "Finds your own client" in newsb and newsb.count('href="/wrath/leyline-preview/news"') == 4
+          and "<form" not in newsb, newsb)
+hk = re.search(r'<section class="hb-hk hb-rv" id="herokey".*?</section>', fp, re.S).group(0)
+check("Hero Key (flag off): one key, every realm, Coming soon, a key moving between three realm cards",
+      "One key, every realm" in hk and "Coming soon" in hk and "Available now" not in hk and hk.count('<span class="hb-hk-c">') == 3
+      and 'class="hb-hk-key"' in hk and "@keyframes hb-key" in fp)
+HK["on"] = True
+hk_on = re.search(r'<section class="hb-hk hb-rv" id="herokey".*?</section>', req("/wrath/leyline-preview")[2].decode(), re.S).group(0)
+check("Hero Key (flag on): available now, no Coming soon", "Available now" in hk_on and "Coming soon" not in hk_on
+      and 'href="/wrath/leyline-preview/realms">Pick a realm' in hk_on)
+HK["on"] = False
+crs = re.findall(r'<a class="hb-cr" href="/wrath/leyline-preview/catalog\?q=([^"]+)">.*?<b>([^<]+)</b><small>([^<]+)</small><i>Top: ([^<]+)</i>',
+                 re.search(r'id="creators-top".*?</section>', fp, re.S).group(0), re.S)
+check("creator spotlight: up to four authors of the top mods, with counts, linking to their work in the catalog",
+      1 <= len(crs) <= 4 and HB.neutral(HOT["author"]) == html.unescape(crs[0][1]) and all(re.match(r"\d+ mods? in the top list", c[2]) for c in crs)
+      and re.search(r"· [5-9]\d\d installs this month$", crs[0][2]) and len({c[1] for c in crs}) == len(crs)
+      and all(urllib.parse.unquote_plus(html.unescape(c[0])) in AUTH for c in crs), crs)
+foot = re.search(r'<footer class="hb-foot">.*?</footer>', fp, re.S).group(0)
+st_words = re.findall(r'<em class="(ok|bad)">', re.search(r'id="status".*?</section>', fp, re.S).group(0))
+want = "ok" if all(w == "ok" for w in st_words) else "warn" if "ok" in st_words else "bad"
+check(f"footer: the status dot ({want}), linking to Platform Status, pulsing only when all is OK",
+      re.search(rf'<a class="hb-health {want}" href="/wrath/leyline-preview#status"><span class="hb-hdot" aria-hidden="true"></span>', foot)
+      and ".hb-health.ok .hb-hdot{animation:hb-pulse" in fp and ".hb-health.warn .hb-hdot{background:#f0b54a}" in fp, (want, foot[:300]))
+check("the front page with all of this: no client numbers or game names", not NOPE.findall(shown(fp)), NOPE.findall(shown(fp))[:6])
+check("still one script, under the nonce, reading only this site's JSON", fp.count("<script") == 1
+      and re.findall(r'json\("([^"]+)"\)', HB.HUB_JS) == ["/wrath/realms.json", "/wrath/status.json"] and "innerHTML" not in HB.HUB_JS)
+# signed in: the account chip instead of Sign In (the site's session, through the portal's social module)
+WHO["v"] = ("BRAN", "Bran")
+c = http.client.HTTPConnection("127.0.0.1", PAGE_PORT, timeout=30)
+c.request("GET", "/wrath/leyline-preview/creators", headers={"Cookie": "wr_session=abc", "X-Forwarded-For": "10.9.0.7"})
+signed = c.getresponse().read().decode()
+check("header signed in: the account chip, no Sign In", '<a class="hb-acct" href="/wrath/account" aria-label="Your account: Bran">' in signed
+      and 'class="hb-signin"' not in signed)
+check("header signed out (no cookie): Sign In, the social module never asked", 'class="hb-signin"' in req("/wrath/leyline-preview/creators")[2].decode())
+WHO["v"] = None
+HB.hub.portal = lambda name: None if name == "hub_rank" else portal_with(name)
+best = sorted(pool, key=lambda i: (-float(i.get("score") or 0), i["name"].lower(), i["id"]))[0]
+check("mod of the week without rankings: the best score", f'leyline://install/{best["id"]}"' in req("/wrath/leyline-preview")[2].decode())
+HB.hub.portal = real
 with wp._listing_lock:
     wp._listing.update(realms=[], ok=False, fetched=False, at=-1e9)
 

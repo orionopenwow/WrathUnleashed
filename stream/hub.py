@@ -5,11 +5,16 @@ Built for the 2026-10-26 brief ("hide the full leyline front page thing but buil
 for people to submit their mods). Served by stream/wrath_portal.py, which loads this file from beside itself
 and runs without it.
 
-    GET  /wrath/leyline-preview               the front page: the hero, every realm on the network (one-click Play in
-                                              browser, the desktop address), how it works, one feature section per
-                                              part of Leyline (launcher, hosting, realms, modes, mods, community,
-                                              agents), Platform Status, Community Spotlight, categories, creators,
-                                              Host a Beacon. No client build number or game name on any hub page
+    GET  /wrath/leyline-preview               the front page: the hero (the big mark leads), the live ticker, every realm
+                                              on the network (one-click Play in browser, the desktop address, a hover
+                                              preview), how it works, the numbers, one feature section per part of
+                                              Leyline (launcher, hosting, realms, modes, mods, community, agents) on a
+                                              ley line, Hosted by the community (posters), Mod of the week, Hero Key,
+                                              Creator spotlight, News, Platform Status, Community Spotlight,
+                                              categories, creators, Host a Beacon. Every hub page has the same header:
+                                              the launcher's pages (Play, Realms, Mods, Addons, Modes, Host, Community,
+                                              More) with Download and Sign In (or the account chip).
+                                              No client build number or game name on any hub page
                                               (neutral(), CLIENT_LABEL, COMPAT; stream/tests/test_hub.py checks)
     GET  /wrath/leyline-preview/catalog       everything, filtered by plain links and a GET form (no script):
                                               ?build=1.12|2.4.3|3.3.5a &cat=<category>|themes (4.3.4, 5.4.8 hidden: HIDDEN_BUILDS)
@@ -464,7 +469,14 @@ class Hub:
         self.portal = lambda name: None
         self._cache: dict[str, tuple[float, float, object]] = {}
         self._limit: dict[str, list[float]] = {}
+        self._health: tuple[float, str] = (-1e9, "")
         self.lock = threading.Lock()
+
+    def health_state(self) -> str:
+        """The footer's status dot: "ok" (every Platform Status source answered OK), "warn" (some didn't), "bad" (none
+        did), or "" when Platform Status hasn't been read in the last 2 minutes (the front page reads it; no dot then)."""
+        at, st = self._health
+        return st if time.monotonic() - at < 120 else ""
 
     # ---------------------------------------------------------------- reading
     def _json(self, name: str):
@@ -625,21 +637,58 @@ class Hub:
     def _wordmark(self) -> str:
         return f'{self._spin(44, "slow hb-mark")}<span class="hb-word"><b>Leyline</b><i>Launcher</i></span>'
 
-    def _shell(self, title: str, body: str, path: str, nonce: str = "") -> bytes:
-        """The page around body. nonce: the CSP nonce for HUB_JS (the front page and the realm list); "" for no script."""
+    def nav_items(self) -> tuple[list, list]:
+        """The header's items, the launcher's pages on the web (owner 2026-10-30: "it should have servers, mods, addons,
+        etc ... cause it should all work in browser too"): (main, more). Each (key, label, href, icon)."""
+        home = FRONT if front_on() else BASE
+        main = [("play", "Play", "/wrath", "play"), ("realms", "Realms", BASE + "/realms", "realms"),
+                ("mods", "Mods", BASE + "/catalog", "mods"), ("addons", "Addons", BASE + "/catalog?cat=addons", "addons"),
+                ("modes", "Modes", BASE + "/modes", "modes"), ("host", "Host", "/wrath/host", "host"),
+                ("community", "Community", "/wrath/workshop", "community")]
+        more = [("docs", "Docs", "/wrath/docs", "docs"), ("news", "News", BASE + "/news", "news"),
+                ("creators", "Creators", BASE + "/creators", "creators"), ("status", "Status", home + "#status", "status")]
+        return main, more
+
+    def _header(self, active: str) -> str:
+        e = html.escape
+        home = FRONT if front_on() else BASE
+        main, more = self.nav_items()
+
+        def item(key, label, href, icon, cls="hb-ni"):
+            on = key == active
+            return (f'<a class="{cls}{" on" if on else ""}" href="{e(href)}"' + (' aria-current="page"' if on else "")
+                    + f'><svg viewBox="0 0 24 24" aria-hidden="true">{NAV_ICONS[icon]}</svg><span>{e(label)}</span></a>')
+        more_on = any(k == active for k, *_ in more)
+        drop = (f'<details class="hb-more-d"><summary class="hb-ni{" on" if more_on else ""}">'
+                f'<svg viewBox="0 0 24 24" aria-hidden="true">{NAV_ICONS["more"]}</svg><span>More</span></summary>'
+                '<div class="hb-more-m">' + "".join(item(*m, cls="hb-mi") for m in more) + "</div></details>")
+        extra = '<div class="hb-nav-x">' + "".join(item(*m) for m in more) + "</div>"
+        who = getattr(_REQ, "who", None)
+        if who:
+            name = clean_name(who[1] or who[0]) or "Account"
+            acct = (f'<a class="hb-acct" href="/wrath/account" aria-label="Your account: {e(name)}">'
+                    f'<span class="hb-av" aria-hidden="true">{e(name[:1].upper())}</span><span class="hb-acct-n">{e(name)}</span></a>')
+        else:
+            acct = ('<a class="hb-signin" href="/login?next=%2Fwrath"><img src="/wrath/art/leyline-crystal-128.png" alt="" width="26" height="26">'
+                    'Sign In</a>')
+        dl = self._download()
+        dl_a = (f'<a class="hb-dl" href="{e(dl)}" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true">'
+                f'{NAV_ICONS["download"]}</svg>Download</a>')
+        return (f'<header class="hb-top"><a class="hb-brand" href="{home}" aria-label="Leyline Launcher">{self._wordmark()}</a>'
+                '<input type="checkbox" id="hb-menu" class="hb-menu-t" aria-label="Menu">'
+                '<label for="hb-menu" class="hb-menu-b" aria-hidden="true">Menu</label>'
+                f'<nav class="hb-nav" aria-label="Leyline">{"".join(item(*m) for m in main)}{drop}{extra}'
+                f'<a class="hb-dl-x" href="{e(dl)}" rel="noopener noreferrer">Download the launcher</a></nav>'
+                f'<div class="hb-end">{dl_a}{acct}</div></header>')
+
+    def _shell(self, title: str, body: str, path: str, nonce: str = "", active: str | None = None) -> bytes:
+        """The page around body. nonce: the CSP nonce for HUB_JS (the front page and the realm list); "" for no script.
+        active: the header item to highlight (default: from path)."""
         e = html.escape
         front = path in (BASE, FRONT)
         home = FRONT if front_on() else BASE
         dl = self._download()
-        here = "" if front else home
-        nav = [("Features", f"{here}#features", False), ("Download", dl, True), ("Community", f"{here}#community", False),
-               ("Status", f"{here}#status", False), ("Docs", "/wrath/docs", False)]
-        links = "".join(f'<a href="{e(h)}"' + (' rel="noopener noreferrer"' if ext else "") + f">{e(t)}</a>" for t, h, ext in nav)
-        top = (f'<header class="hb-top"><a class="hb-brand" href="{home}" aria-label="Leyline Launcher">{self._wordmark()}</a>'
-               '<input type="checkbox" id="hb-menu" class="hb-menu-t"><label for="hb-menu" class="hb-menu-b">Menu</label>'
-               f'<nav class="hb-nav" aria-label="Leyline">{links}</nav>'
-               '<a class="hb-signin" href="/login?next=%2Fwrath"><img src="/wrath/art/leyline-crystal-128.png" alt="" width="26" height="26">'
-               'Sign In</a></header>')
+        top = self._header(ACTIVE.get(path.split("?")[0], "mods" if path.startswith(BASE + "/p/") else "") if active is None else active)
         sub = "" if front else (f'<nav class="hb-sub" aria-label="Hub">'
                + "".join(f'<a href="{BASE}{h}"' + (' aria-current="page" class="on"' if path == BASE + h else "") + f">{t}</a>"
                          for h, t in (("", "Hub"), ("/realms", "Realms"), ("/modes", "Modes"), ("/catalog", "Catalog"),
@@ -652,7 +701,10 @@ class Hub:
         foot_links = [("Docs", "/wrath/docs"), ("Download", dl), ("Community", f"{home}#community"), ("Status", f"{home}#status"),
                       ("Catalog", f"{BASE}/catalog"), ("Creators", f"{BASE}/creators"), ("Submit a mod", f"{BASE}/submit")]
         social = ([("Discord", discord)] if discord else []) + [("GitHub", repo)]
-        foot = ('<footer class="hb-foot"><div class="hb-foot-in">'
+        hs = self.health_state()
+        health = (f'<a class="hb-health {hs}" href="{home}#status"><span class="hb-hdot" aria-hidden="true"></span>'
+                  f'{HEALTH_WORDS[hs]}</a>') if hs else ""
+        foot = ('<footer class="hb-foot"><div class="hb-foot-in">' + health +
                 '<nav class="hb-foot-links" aria-label="More">'
                 + "".join(f'<a href="{e(h)}"' + (' rel="noopener noreferrer"' if h.startswith("http") else "") + f">{e(t)}</a>"
                           for t, h in foot_links) + '</nav>'
@@ -676,9 +728,11 @@ class Hub:
         """Platform Status: live values only, read when the page is made (no script). A source this portal doesn't
         have is left out; one that fails says so in red."""
         e = html.escape
-        cards = []
+        cards, oks = [], []
 
         def card(name, line, ok, href="", tail=""):
+            if ok is not None:
+                oks.append(bool(ok))
             word = "OK" if ok is True else ("Offline" if ok is False else "")
             cls = "ok" if ok is True else "bad" if ok is False else ""
             tag = f'a href="{e(href)}"' if href else "div"
@@ -716,6 +770,8 @@ class Hub:
         items = self.items()
         n_ws = sum(1 for i in items if i["source"] == "workshop")
         card("Mod catalog", f"{len(items)} items · {n_ws} in the Workshop", None, BASE + "/catalog")
+        state = ("ok" if all(oks) else "bad" if not any(oks) else "warn") if oks else ""
+        self._health = (time.monotonic(), state)
         return ('<section class="hb-sec" id="status" aria-labelledby="hb-st"><h2 id="hb-st">Platform Status</h2>'
                 f'<div class="hb-stats">{"".join(cards)}</div></section>')
 
@@ -842,15 +898,22 @@ class Hub:
             acts.append(f'<code class="hb-addr" title="The realm address for a desktop client">{e(r["address"])}</code>')
         rid = r.get("id") or ""
         data = ' data-home="1"' if r.get("home") else (f' data-rid="{e(rid)}"' if rid else "")
-        return (f'<li class="hb-rl{" home" if r.get("home") else ""}"{data} data-client="{client}" data-live="{1 if live else 0}" '
-                f'data-players="{players or 0}"><div class="hb-rl-n"><b>{e(name)}</b>{"".join(bdg)}'
+        # the hover / focus preview: the realm's own tagline and its tags, laid over the rows below (no layout shift)
+        line = neutral(r.get("tagline"), 120) or ("The official realm: one click and you are in, in this browser."
+                                                  if r.get("home") else "")
+        tags = [TAG_WORDS.get(t, net.TAG_LABEL[t]) for t in r.get("tags") or [] if t in net.TAG_LABEL]
+        pv = (f'<div class="hb-rl-pv" role="note">' + (f"<p>{e(line)}</p>" if line else "")
+              + (f'<p class="hb-rl-pt">{"".join(f"<span>{e(t)}</span>" for t in tags)}</p>' if tags else "")
+              + "</div>") if line or tags else ""
+        return (f'<li class="hb-rl{" home" if r.get("home") else ""}{" pv" if pv else ""}"{data} data-client="{client}" '
+                f'data-live="{1 if live else 0}" data-players="{players or 0}"><div class="hb-rl-n"><b>{e(name)}</b>{"".join(bdg)}'
                 f'<span class="hb-rl-m">{e(" · ".join(meta))}</span></div>{count}'
-                f'<div class="hb-rl-a">{"".join(acts)}</div></li>')
+                f'<div class="hb-rl-a">{"".join(acts)}</div>{pv}</li>')
 
-    def realm_section(self) -> str:
+    def realm_section(self, got=None) -> str:
         """The sub hero: every server on the network, the home realm first, one click to play. "" without a list."""
-        got = self.realm_rows()
-        if got is None:
+        got = self.realm_rows() if got is None else got
+        if not got:
             return ""
         e = html.escape
         rows, t, ok, _f, fc = got
@@ -970,26 +1033,217 @@ class Hub:
                        f'{ICONS[icon]}</svg></span>{e(eyebrow)}</p><h2 id="hb-f-{icon}">{e(title)}</h2><p class="hb-lede">{e(lede)}</p>'
                        f'<ul class="hb-points">{"".join(f"<li>{e(x)}</li>" for x in points)}</ul>'
                        f'<p class="hb-fs-a">{btns}</p></div><div class="hb-fs-v">{art}</div></section>')
-        return ('<div class="hb-feats" id="features"><h2 class="hb-vh">Everything in Leyline</h2>'
+        # the ley line: a faint thread down the left of the sections, drawn as you scroll (HUB_JS); fully drawn without
+        # script or with reduced motion; never takes a click; hidden where the page is too narrow for a margin
+        thread = ('<svg class="hb-thread" viewBox="0 0 40 1000" preserveAspectRatio="none" aria-hidden="true" focusable="false">'
+                  '<defs><linearGradient id="hb-tg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5b8def"/>'
+                  '<stop offset="1" stop-color="#8b6cf0"/></linearGradient></defs>'
+                  '<path pathLength="1" d="M20 0 C34 70 6 110 20 180 S34 290 20 360 S6 470 20 540 S34 650 20 720 S6 830 20 900 S30 970 20 1000"/></svg>')
+        return ('<div class="hb-feats" id="features"><h2 class="hb-vh">Everything in Leyline</h2>' + thread
                 + "".join(out) + "</div>")
+
+    # ---------------------------------------------------------------- the front page's live and community parts
+    def ticker(self, got) -> str:
+        """The live band under the hero, from the realm list's own rows: who is playing where, and new realms. The moving
+        copy is aria-hidden; screen readers get the first copy as a plain list. HUB_JS updates the counts (data-tick)."""
+        if not got:
+            return ""
+        e = html.escape
+        rows = got[0]
+        live = sorted((r for r in rows if r.get("live") and isinstance(r.get("players"), int) and r["players"] > 0),
+                      key=lambda r: -r["players"])[:8]
+        out = []
+        for r in live:
+            name = neutral(r.get("name")) or "a realm"
+            key = 'data-tick="home"' if r.get("home") else f'data-tick="{e(r.get("id") or "")}"'
+            hang = r.get("hangout") or "hangout" in (r.get("tags") or []) or "hangout" in name.lower()
+            where = (f'in {"" if name.lower().startswith("the ") else "the "}{e(name)}' if hang else f"playing on {e(name)}")
+            out.append(f'<li {key}><b class="hb-tn">{int(r["players"])}</b> {where}</li>')
+        for r in [r for r in rows if r.get("new") and not r.get("home")][:2]:
+            out.append(f'<li class="new">New realm: {e(neutral(r.get("name")) or "a realm")}</li>')
+        if not out:
+            return ""
+        items = "".join(out)
+        return ('<section class="hb-tick" aria-labelledby="hb-tick-h"><h2 id="hb-tick-h" class="hb-vh">Live on the network</h2>'
+                f'<div class="hb-tick-run"><ul class="hb-tick-l">{items}</ul>'
+                f'<ul class="hb-tick-l dup" aria-hidden="true">{items}</ul></div></section>')
+
+    def counters(self, got, items: list) -> str:
+        """Realms, players and mods: the final numbers in the page (no script, reduced motion: just these); HUB_JS counts
+        up to them once when they scroll into view."""
+        e = html.escape
+        nums = []
+        if got:
+            t = got[1]
+            nums += [(t["realms"], "realms online"), (t["players"], "players right now")]
+        nums.append((sum(1 for i in items if i["source"] != "theme"), "mods, addons and tools"))
+        return ('<section class="hb-nums hb-rv" aria-label="Leyline in numbers">'
+                + "".join(f'<p><b class="hb-num" data-count="{int(n)}">{int(n)}</b><span>{e(t)}</span></p>' for n, t in nums)
+                + "</section>")
+
+    def _ranked(self, items: list):
+        """(items in Hot order, metrics) from the hub rankings, or (best score first, {}) without them."""
+        rk = self.portal("hub_rank")
+        store = getattr(rk, "store", None) if rk is not None else None
+        if store is not None:
+            try:
+                ranked = store.ranked(items, "hot")
+                return [i for i, _m in ranked], {i["id"]: m for i, m in ranked}
+            except Exception:   # noqa: BLE001
+                pass
+        return sorted(items, key=lambda i: (-float(i.get("score") or 0), i["name"].lower(), i["id"])), {}
+
+    def mod_of_week(self, items: list) -> str:
+        """The top Hot item (best score without rankings): its Workshop screenshot if any, author, one line, Install with
+        Leyline (the launcher's leyline://install/<id>) and View."""
+        e = html.escape
+        pool = [i for i in items if i["source"] != "theme"]
+        if not pool:
+            return ""
+        order, _m = self._ranked(pool)
+        i = order[0]
+        rk = self.portal("hub_rank")
+        inst = rk.installable(i) if rk is not None and hasattr(rk, "installable") else bool(i.get("packaged"))
+        ws = i.get("ws") or {}
+        name = neutral(i["name"]) or "Untitled"
+        if i["source"] == "workshop" and isinstance(ws.get("screenshots"), list) and ws["screenshots"] and i["id"].startswith("mod:"):
+            pic = f'<img src="/wrath/mods/{e(i["id"][4:])}/shot/0" alt="A screenshot of {e(name)}" loading="lazy" width="320" height="200">'
+        else:
+            pic = f'<span class="hb-initial" aria-hidden="true">{e(name[:1].upper())}</span>'
+        line = neutral(i.get("summary") or i.get("description") or "", 160)
+        return ('<section class="hb-motw hb-rv" id="mod-week" aria-labelledby="hb-motw-h">'
+                f'<div class="hb-motw-pic">{pic}</div><div class="hb-motw-t"><p class="hb-kick">Mod of the week</p>'
+                f'<h2 id="hb-motw-h">{e(name)}</h2><p class="hb-by">by {e(neutral(i["author"]) or "unknown")}</p>'
+                f'<p class="hb-motw-l">{e(line)}</p><p class="hb-fs-a">'
+                f'<a class="hb-cta sm" href="leyline://install/{e(i["id"])}">{"Install with Leyline" if inst else "Open in Leyline"}</a>'
+                f'<a class="hb-ghost" href="{BASE}/p/{_slug(i["id"])}">View</a></p></div></section>')
+
+    def posters(self, got) -> str:
+        """Hosted by the community: up to three live community realms as posters, each with its own backdrop made from
+        its realm id (the same id, the same poster). TODO(owner): hosts uploading their own poster image comes later."""
+        if not got:
+            return ""
+        e = html.escape
+        net = self.portal("network")
+        picks = [r for r in got[0] if not r.get("home") and not r.get("official") and r.get("live") and r.get("id")][:3]
+        if not picks:
+            return ""
+        cards = []
+        for r in picks:
+            h = hashlib.sha256(r["id"].encode()).digest()
+            h1 = 200 + h[0] % 90                 # blue to violet, like the mark
+            h2 = (h1 + 40 + h[1] % 80) % 360
+            ang, x, y, rot = h[2] % 180, 20 + h[3] % 60, 15 + h[4] % 50, h[5] % 360
+            name = neutral(r.get("name")) or "A realm"
+            tags = [TAG_WORDS.get(t, net.TAG_LABEL[t]) for t in r.get("tags") or [] if t in net.TAG_LABEL][:3]
+            players = r.get("players") if isinstance(r.get("players"), int) else None
+            acts = []
+            if client_of(r) == "browser":
+                acts.append(f'<a class="hb-play" href="/wrath?go=r:{e(r["id"])}" aria-label="Play {e(name)} in your browser">Play</a>')
+            if REALM_DEEPLINK:
+                acts.append(f'<a class="hb-ghost" href="{e(REALM_DEEPLINK.format(id=r["id"]))}">Open in launcher</a>')
+            cards.append(
+                f'<article class="hb-poster" style="--h1:{h1};--h2:{h2};--a:{ang}deg;--x:{x}%;--y:{y}%;--r:{rot}deg">'
+                '<span class="hb-poster-bg" aria-hidden="true"></span>'
+                f'<p class="hb-poster-p">{"New realm" if r.get("new") and not players else "" if players is None else f"<b>{players}</b> playing"}</p>'
+                f'<h3>{e(name)}</h3><p class="hb-poster-l">{e(neutral(r.get("tagline"), 90) or COMPAT[client_of(r)])}</p>'
+                + (f'<p class="hb-poster-tags">{"".join(f"<span>{e(t)}</span>" for t in tags)}</p>' if tags else "")
+                + f'<p class="hb-poster-a">{"".join(acts)}</p></article>')
+        return ('<!-- TODO(owner): hosts uploading their own poster image comes later -->'
+                '<section class="hb-sec hb-rv" id="hosted" aria-labelledby="hb-hosted-h"><h2 id="hb-hosted-h">Hosted by the community</h2>'
+                f'<div class="hb-posters">{"".join(cards)}</div>'
+                f'<p class="hb-more"><a href="{BASE}/realms">Every realm</a> · <a href="/wrath/host">Host your own</a></p></section>')
+
+    def herokey_teaser(self, got) -> str:
+        """One key, every realm: the Hero Key sign-on (flag herokey_sso). Off: "Coming soon"; on: available now."""
+        e = html.escape
+        hk = self.portal("herokey_on")
+        try:
+            on = bool(hk()) if hk is not None else False
+        except Exception:   # noqa: BLE001
+            on = False
+        names = [neutral(r.get("name")) for r in (got[0] if got else []) if r.get("live")]
+        names = [n for n in names if n][:3]
+        names += ["Your realm", "A friend's realm", "Tonight's realm"][len(names):]
+        cards = "".join(f'<span class="hb-hk-c"><i aria-hidden="true"></i>{e(n)}</span>' for n in names[:3])
+        badge = '<span class="hb-bdg v">Available now</span>' if on else '<span class="hb-bdg f">Coming soon</span>'
+        line = ("Sign in once with your Hero Key and play on any realm on the network: no new account for each server."
+                if on else "Soon you'll sign in once with your Hero Key and play on any realm on the network: no new "
+                           "account for each server.")
+        act = (f'<p class="hb-fs-a"><a class="hb-cta sm" href="{BASE}/realms">Pick a realm</a></p>' if on else "")
+        return ('<section class="hb-hk hb-rv" id="herokey" aria-labelledby="hb-hk-h">'
+                f'<div class="hb-hk-t"><p class="hb-kick">Hero Key {badge}</p><h2 id="hb-hk-h">One key, every realm</h2>'
+                f'<p>{e(line)}</p>{act}</div>'
+                f'<div class="hb-hk-art" aria-hidden="true">{cards}<span class="hb-hk-key"><svg viewBox="0 0 24 24">'
+                f'{NAV_ICONS["key"]}</svg></span></div></section>')
+
+    def creator_spotlight(self, items: list) -> str:
+        """Who made the top mods this month: the authors of the Hot list (installs in the last 30 days with rankings,
+        the index's scores without), up to 4, with counts; each links to the catalog searched by their name."""
+        e = html.escape
+        pool = [i for i in items if i["source"] != "theme" and clean_line(i.get("author"), 60)]
+        if not pool:
+            return ""
+        order, metrics = self._ranked(pool)
+        by: dict[str, dict] = {}
+        for rank, i in enumerate(order[:40]):
+            a = clean_line(i["author"], 60)
+            shown = neutral(a, 60)
+            if not shown or shown.lower() in ("unknown", "leyline"):
+                continue
+            d = by.setdefault(a.lower(), {"q": a, "name": shown, "n": 0, "inst": 0, "best": rank, "top": i})
+            d["n"] += 1
+            d["inst"] += ((metrics.get(i["id"]) or {}).get("installs") or {}).get("d30", 0)
+        people = sorted(by.values(), key=lambda d: (-d["inst"], -d["n"], d["best"]))[:4]
+        if not people:
+            return ""
+        cards = []
+        for d in people:
+            q = urllib.parse.urlencode({"q": d["q"][:60]})
+            bits = [f'{d["n"]} mod{"" if d["n"] == 1 else "s"} in the top list']
+            if d["inst"] > 0:
+                bits.append(f'{d["inst"]} install{"" if d["inst"] == 1 else "s"} this month')
+            cards.append(f'<a class="hb-cr" href="{BASE}/catalog?{e(q)}"><span class="hb-av" aria-hidden="true">{e(d["name"][:1].upper())}</span>'
+                         f'<span><b>{e(d["name"])}</b><small>{e(" · ".join(bits))}</small>'
+                         f'<i>Top: {e(neutral(d["top"]["name"]) or "Untitled")}</i></span></a>')
+        return ('<section class="hb-sec hb-rv" id="creators-top" aria-labelledby="hb-cr-h"><h2 id="hb-cr-h">Creator spotlight</h2>'
+                f'<div class="hb-crs">{"".join(cards)}</div></section>')
+
+    def news_strip(self) -> str:
+        """The latest three posts from the admin console's news (read-only), linking to the news page."""
+        e = html.escape
+        posts = self.news_posts(3)
+        if not posts:
+            return ""
+        cards = "".join(f'<a class="hb-nw" href="{BASE}/news"><small>{e(p["tag"])}{" · " if p["tag"] and p["date"] else ""}'
+                        f'{e(p["date"])}</small><b>{e(p["title"])}</b>'
+                        + (f"<span>{e(next(x for x in p['items'] if x))}</span>" if any(p["items"]) else "") + "</a>"
+                        for p in posts)
+        return ('<section class="hb-sec hb-rv" id="news" aria-labelledby="hb-nw-h"><h2 id="hb-nw-h">News</h2>'
+                f'<div class="hb-nws">{cards}</div><p class="hb-more"><a href="{BASE}/news">All the news</a></p></section>')
 
     def front_page(self, path: str = BASE, nonce: str = "") -> bytes:
         e = html.escape
         items = self.items()
+        got = self.realm_rows() or False
+        status = self.status_cards()
         by_cat = {c: sum(1 for i in items if i["category"] == c) for c in CATEGORY_IDS + ["themes"]}
         cats = "".join(
             f'<a class="hb-chip" href="{BASE}/catalog?cat={c}">{e(n)} <small>{by_cat[c]}</small></a>' for c, n in CATEGORIES + [THEMES])
         body = (
             '<section class="hb-hero" id="top" aria-labelledby="hb-h">'
-            f'<div class="hb-art" aria-hidden="true">{self._spin(208, "slow hb-hero-mark")}</div>'
+            f'<div class="hb-art" aria-hidden="true">{self._spin(400, "slow hb-hero-mark")}</div>'
             '<!-- TODO(owner): the hero heading and the line under it; his final wording -->'
             '<h1 id="hb-h">Every client, every server</h1>'
             '<p class="hb-sub-h">One launcher for every classic client and every server: your game, your realm, one click.</p>'
             f'<p class="hb-hero-a"><a class="hb-cta" href="{e(self._download())}" rel="noopener noreferrer">Download Now</a>'
             '<a class="hb-ghost lg" href="/wrath">Play in your browser</a></p>'
             '<p class="hb-note">Free and open source, for Windows, macOS and Linux. Nothing to buy.</p></section>'
-            + self.realm_section() + self.how_strip() + self.features()
-            + f'<div class="hb-rv">{self.status_cards()}</div><div class="hb-rv">{self.spotlight()}</div>' +
+            + self.ticker(got) + self.realm_section(got) + self.how_strip() + self.counters(got, items) + self.features()
+            + self.posters(got)
+            + f'<div class="hb-pair">{self.mod_of_week(items)}{self.herokey_teaser(got)}</div>'
+            + self.creator_spotlight(items) + self.news_strip()
+            + f'<div class="hb-rv">{status}</div><div class="hb-rv">{self.spotlight()}</div>' +
             '<section class="hb-sec hb-rv" aria-labelledby="hb-b"><h2 id="hb-b">Browse by category</h2>'
             f'<p class="hb-chips">{cats}</p></section>'
             '<section class="hb-two hb-rv">'
@@ -1109,16 +1363,19 @@ class Hub:
                 + '<p class="hb-fine">Duels, boss fights, dungeons and hangouts are on <a href="/wrath/modes">the full modes page</a>.</p>')
         return self._shell("Modes · Leyline", body, BASE + "/modes")
 
-    def news_page(self) -> bytes:
-        """The launcher's News page on the web: the posts the admin console publishes (/wrath/leyline/news.json)."""
-        e = html.escape
+    def news_posts(self, n: int = 30) -> list[dict]:
+        """The admin console's news.json posts fit to show ({title, tag, date, items}), newest first as published: a
+        post with a brand word anywhere is dropped whole, client numbers are taken out (neutral). The news page and the
+        front page's News both read this."""
         adm = self.portal("admin")
         try:
             posts = adm.news_doc()["posts"] if adm is not None else []
         except Exception:   # noqa: BLE001
             posts = []
         out = []
-        for p in posts[:30]:
+        for p in posts[:200]:
+            if len(out) >= n:
+                break
             raw = [clean_line(x, 200) for x in (p.get("items") if isinstance(p.get("items"), list) else [])[:12]]
             title, tag, date = clean_line(p.get("title"), 120), clean_line(p.get("tag"), 60), clean_line(p.get("date"), 10)
             if not title or banned(" ".join([title, tag] + raw)):
@@ -1126,6 +1383,16 @@ class Hub:
             title, tag, items = neutral(title, 120), neutral(tag, 60), [neutral(x, 200) for x in raw]
             if not title:
                 continue
+            out.append({"title": title, "tag": tag, "date": date if re.fullmatch(r"\d{4}-\d{2}-\d{2}", date) else "",
+                        "items": items})
+        return out
+
+    def news_page(self) -> bytes:
+        """The launcher's News page on the web: the posts the admin console publishes (/wrath/leyline/news.json)."""
+        e = html.escape
+        out = []
+        for p in self.news_posts(30):
+            tag, date, title, items = p["tag"], p["date"], p["title"], p["items"]
             out.append(f'<article><small>{e(tag)}{" · " if tag and date else ""}{e(date)}</small><h2>{e(title)}</h2>'
                        + (f'<ul>{"".join(f"<li>{e(x)}</li>" for x in items if x)}</ul>' if any(items) else "") + "</article>")
         body = ('<section class="hb-head"><h1>News</h1><p>What changed in the launcher, the realms and the browser game.</p></section>'
@@ -1225,7 +1492,7 @@ class Hub:
                 f'<div class="hb-filters"><p>{f_build}</p><p>{f_cat}</p><p>{f_src}</p>{f_kind}'
                 f'<p role="tablist" aria-label="Sort">{f_sort}</p></div>'
                 f'<div class="hb-grid">{grid}</div>{nav}' + (f"<style>{rk.RANK_CSS}</style>" if rk else ""))
-        return self._shell("Catalog · Leyline", body, BASE + "/catalog")
+        return self._shell("Catalog · Leyline", body, BASE + "/catalog", active="addons" if cat == "addons" else "mods")
 
     def item_page(self, slug: str, handler=None, query: dict | None = None) -> tuple[int, bytes]:
         e = html.escape
@@ -1419,45 +1686,84 @@ body.hb{margin:0;min-height:100vh;display:flex;flex-direction:column;background:
 .hb :where(a,button,summary,input,select,textarea,label):focus-visible{outline:2px solid var(--lk-accent-strong);outline-offset:2px}
 .hb-skip{position:absolute;left:8px;top:-60px;z-index:30;padding:8px 12px;border-radius:8px;background:var(--lk-accent);color:#fff!important}
 .hb-skip:focus{top:8px}
-/* the header */
-.hb-top{position:sticky;top:0;z-index:20;display:flex;align-items:center;flex-wrap:wrap;gap:8px 18px;padding:10px 24px;
-background:rgba(24,27,35,.94);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-bottom:1px solid var(--lk-border)}
-.hb-brand{display:inline-flex;align-items:center;gap:11px;text-decoration:none;color:var(--lk-text)!important}
+/* the header: the launcher's pages on the web. A sticky bar with a blur; a hairline and a shadow once the page scrolls
+   (a scroll timeline where the browser has one, else .hb-scrolled from HUB_JS on the front page) */
+.hb-top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:8px 14px;padding:9px 20px;
+background:rgba(24,27,35,.86);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid transparent}
+.hb-top.hb-scrolled{border-bottom-color:var(--lk-border);box-shadow:0 6px 22px rgba(0,0,0,.35)}
+@supports (animation-timeline:scroll()){.hb-top{animation:hb-edge linear both;animation-timeline:scroll(root);animation-range:0 56px}}
+@keyframes hb-edge{from{border-bottom-color:transparent;box-shadow:none}to{border-bottom-color:var(--lk-border);box-shadow:0 6px 22px rgba(0,0,0,.35)}}
+.hb-brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none;color:var(--lk-text)!important;flex:none}
 .hb-mark{border-radius:50%;background:radial-gradient(circle at 50% 45%,rgba(91,141,239,.18),rgba(139,108,240,.06) 70%);box-shadow:0 0 0 1px var(--lk-border-strong)}
 .hb-mark::before,.hb-mark::after{inset:3px}
-.hb-word{display:grid;line-height:1.05}.hb-word b{font-size:20px;font-weight:700;letter-spacing:-.01em}
-.hb-word i{font-style:normal;font-weight:600;font-size:15px;color:var(--lk-accent)}
-.hb-nav{display:flex;gap:4px;margin-left:auto}
-.hb-nav a{padding:8px 12px;border-radius:var(--lk-r-sm);color:var(--lk-text-2);text-decoration:none;font-weight:600;font-size:14px}
-.hb-nav a:hover{background:var(--lk-accent-soft);color:var(--lk-text)}
-.hb-signin{display:inline-flex;align-items:center;gap:4px;padding:5px 16px 5px 8px;border-radius:var(--lk-r-sm);border:1px solid var(--lk-border-strong);
-background:var(--lk-surface);color:var(--lk-text)!important;text-decoration:none;font-weight:600;font-size:14px}
-.hb-signin:hover{border-color:var(--lk-accent)}
+.hb-word{display:grid;line-height:1.05}.hb-word b{font-size:19px;font-weight:700;letter-spacing:-.01em}
+.hb-word i{font-style:normal;font-weight:600;font-size:14px;color:var(--lk-accent)}
+.hb-nav{display:flex;align-items:center;gap:2px;margin:0 auto}
+.hb-ni,.hb-mi{position:relative;display:inline-flex;align-items:center;gap:7px;padding:8px 10px;border-radius:var(--lk-r-sm);color:var(--lk-text-2)!important;
+text-decoration:none;font-weight:600;font-size:14px;white-space:nowrap;cursor:pointer}
+.hb-ni svg,.hb-mi svg,.hb-dl svg{width:17px;height:17px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.hb-ni svg{opacity:.8}
+.hb-ni:hover,.hb-mi:hover{background:var(--lk-accent-soft);color:var(--lk-text)!important}
+.hb-ni.on{color:var(--lk-text)!important;background:var(--lk-accent-soft)}
+.hb-ni.on svg{opacity:1;color:var(--lk-accent-strong)}
+.hb-ni.on::after{content:"";position:absolute;left:10px;right:10px;bottom:-10px;height:2px;border-radius:2px;background:var(--lk-accent)}
+.hb-more-d{position:relative}
+.hb-more-d summary{list-style:none}.hb-more-d summary::-webkit-details-marker{display:none}
+.hb-more-d summary::after{content:"";width:6px;height:6px;margin-left:2px;border:solid currentColor;border-width:0 1.6px 1.6px 0;transform:translateY(-2px) rotate(45deg)}
+.hb-more-d summary.on::after{position:static;height:6px;background:none;border-radius:0}
+.hb-more-d[open] summary{background:var(--lk-accent-soft);color:var(--lk-text)!important}
+.hb-more-m{position:absolute;right:0;top:calc(100% + 8px);z-index:25;display:grid;min-width:190px;padding:6px;border-radius:var(--lk-r);
+background:var(--lk-surface);border:1px solid var(--lk-border-strong);box-shadow:0 14px 40px rgba(0,0,0,.45)}
+.hb-mi{padding:9px 10px}.hb-mi.on{color:var(--lk-text)!important;background:var(--lk-accent-soft)}
+.hb-nav-x,.hb-dl-x{display:none}
+.hb-end{display:flex;align-items:center;gap:8px;flex:none}
+.hb-dl{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 14px;border-radius:var(--lk-r-sm);background:var(--lk-accent);
+color:#fff!important;text-decoration:none;font-weight:700;font-size:14px;box-shadow:0 4px 14px rgba(91,141,239,.3)}
+.hb-dl:hover{background:var(--lk-accent-strong)}
+.hb-signin,.hb-acct{display:inline-flex;align-items:center;gap:4px;min-height:36px;padding:0 14px 0 6px;border-radius:var(--lk-r-sm);
+border:1px solid var(--lk-border-strong);background:transparent;color:var(--lk-text)!important;text-decoration:none;font-weight:600;font-size:14px}
+.hb-signin:hover,.hb-acct:hover{border-color:var(--lk-accent);background:var(--lk-accent-soft)}
+.hb-signin img{transform:scale(1.5)}
+.hb-acct{gap:8px;padding:0 12px 0 4px}.hb-acct-n{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hb-av{display:grid;place-items:center;flex:none;width:28px;height:28px;border-radius:50%;font-weight:800;font-size:13px;color:#fff;
+background:linear-gradient(135deg,var(--lk-accent),var(--lk-accent-2))}
 .hb-menu-t{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
 .hb-menu-b{display:none;cursor:pointer;padding:7px 12px;border:1px solid var(--lk-border-strong);border-radius:var(--lk-r-sm);font-weight:600;font-size:14px}
-.hb-menu-t:focus-visible+.hb-menu-b{outline:2px solid var(--lk-accent-strong)}
-@media (max-width:820px){.hb-top{padding:10px 16px}.hb-menu-b{display:inline-block;margin-left:auto;order:2}.hb-signin{order:1;margin-left:auto}
-.hb-signin+*{margin-left:0}.hb-nav{display:none;order:3;flex:1 0 100%;flex-direction:column;margin:0}
-.hb-menu-t:checked~.hb-nav{display:flex}.hb-word b{font-size:18px}.hb-word i{font-size:13px}}
+.hb-menu-t:focus-visible+.hb-menu-b{outline:2px solid var(--lk-accent-strong);outline-offset:2px}
+.hb-menu-t:checked+.hb-menu-b{background:var(--lk-accent-soft);border-color:var(--lk-accent)}
+@media (max-width:1180px){.hb-ni svg{display:none}.hb-ni{padding:8px 8px}}
+/* tablets and phones: Menu opens a full-width sheet, the same items as a two-column grid of icon tiles */
+@media (max-width:1000px){.hb-top{flex-wrap:wrap;padding:9px 16px}
+.hb-menu-b{display:inline-block;order:3}.hb-end{margin-left:auto;order:2}
+.hb-nav{display:none;order:4;flex:1 0 100%;margin:4px 0 6px;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.hb-menu-t:checked~.hb-nav{display:grid}
+.hb-nav .hb-ni{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:12px;border:1px solid var(--lk-border);
+background:var(--lk-surface);white-space:normal}
+.hb-nav .hb-ni svg{display:block;width:22px;height:22px;color:var(--lk-accent-strong)}
+.hb-ni.on::after{display:none}.hb-nav .hb-ni.on{border-color:var(--lk-accent)}
+.hb-more-d{display:none}.hb-nav-x{display:contents}
+.hb-dl-x{display:block;grid-column:1/-1;padding:12px;border-radius:var(--lk-r-sm);background:var(--lk-accent);color:#fff!important;
+text-align:center;text-decoration:none;font-weight:700}}
+@media (max-width:560px){.hb-dl{display:none}.hb-word b{font-size:17px}.hb-word i{font-size:12.5px}.hb-brand .ly-spin{--ly-spin-size:36px!important}
+.hb-signin,.hb-acct{padding-right:10px;font-size:13.5px}.hb-acct-n{max-width:70px}.hb-top{gap:8px}}
 .hb-main{flex:1;width:100%;max-width:1040px;margin:0 auto;padding:20px 16px 40px}
 .hb-flag{margin:0 0 12px;text-align:center;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--lk-accent-2)}
 .hb-sub{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:0 0 18px}
 .hb-sub a{padding:7px 12px;border:1px solid var(--lk-border);border-radius:999px;text-decoration:none;color:var(--lk-muted);font-weight:600;font-size:13px}
 .hb-sub a.on,.hb-sub a:hover{color:var(--lk-text);border-color:var(--lk-accent);background:var(--lk-accent-soft)}
-/* the hero: the whole Leyline mark, crisp and centred; the swirl turns slowly (SPIN_CSS .slow), a soft glow behind it */
-.hb-hero{position:relative;text-align:center;padding:30px 16px 40px;margin:0 -16px;overflow:hidden;isolation:isolate}
-.hb-signin img{transform:scale(1.7)}
-.hb-art{position:relative;display:grid;place-items:center;margin:0 auto 18px;width:280px;max-width:100%;height:240px}
-.hb-art::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:50%;
-background:radial-gradient(closest-side,rgba(91,141,239,.30),rgba(139,108,240,.13) 55%,transparent 100%)}
-.hb-hero-mark{--ly-spin-turn:40s!important}
-.hb-hero-mark::before{background-image:url(/wrath/art/leyline-swirl-256.webp);
-background-image:image-set(url(/wrath/art/leyline-swirl-256.webp) 1x,url(/wrath/art/leyline-swirl-512.png) 2x)}
-.hb-hero-mark::after{background-image:url(/wrath/art/leyline-crystal-256.webp);
-background-image:image-set(url(/wrath/art/leyline-crystal-256.webp) 1x,url(/wrath/art/leyline-crystal-512.png) 2x);
-filter:drop-shadow(0 0 10px rgba(91,141,239,.55))}
-.hb-hero h1{margin:0 0 12px;font-size:clamp(30px,5.4vw,50px);line-height:1.05;font-weight:800;letter-spacing:-.01em;text-transform:uppercase}
-.hb-sub-h{max-width:560px;margin:0 auto 24px;color:var(--lk-text-2);font-size:clamp(16px,2.2vw,19px);line-height:1.5}
+/* the hero: the whole Leyline mark leads (owner 2026-10-30: "make the hero image bigger its dwarfed by typography"):
+   ~380-400px on a desktop, 220px on a phone, the 512px layers so it stays crisp, a soft glow; the swirl turns slowly */
+.hb-hero{position:relative;text-align:center;padding:4px 16px 26px;margin:0 -16px;overflow:hidden;isolation:isolate}
+.hb-art{position:relative;display:grid;place-items:center;margin:-6px auto 6px;width:100%;
+height:calc(clamp(220px,min(34vw,42vh),400px) + 16px)}
+.hb-art::before{content:"";position:absolute;left:50%;top:50%;z-index:-1;width:calc(clamp(220px,min(34vw,42vh),400px) * 1.35);aspect-ratio:1;
+transform:translate(-50%,-50%);border-radius:50%;
+background:radial-gradient(closest-side,rgba(91,141,239,.34),rgba(139,108,240,.15) 55%,transparent 100%)}
+.hb-hero-mark{--ly-spin-size:clamp(220px,min(34vw,42vh),400px)!important;--ly-spin-turn:48s!important}
+.hb-hero-mark::before{background-image:url(/wrath/art/leyline-swirl-512.png)}
+.hb-hero-mark::after{background-image:url(/wrath/art/leyline-crystal-512.png);filter:drop-shadow(0 0 16px rgba(91,141,239,.6))}
+.hb-hero h1{margin:0 0 8px;font-size:clamp(22px,3vw,32px);line-height:1.1;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--lk-text-2)}
+.hb-sub-h{max-width:560px;margin:0 auto 18px;color:var(--lk-text-2);font-size:clamp(15px,1.8vw,17px);line-height:1.5}
 .hb-hero-a{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:10px 12px;margin:0}
 .hb-cta{display:inline-block;padding:13px 30px;border-radius:var(--lk-r-sm);background:var(--lk-accent);color:#fff!important;
 text-decoration:none;font-weight:700;font-size:17px;box-shadow:0 0 0 1px rgba(255,255,255,.08),0 8px 26px rgba(91,141,239,.35)}
@@ -1485,8 +1791,7 @@ background:linear-gradient(135deg,rgba(91,141,239,.35),rgba(139,108,240,.3))}
 .hb-spot-t b{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hb-spot-t i{font-style:normal;font-size:12.5px;color:var(--lk-muted)}
 .hb-spot-t span{font-size:13.5px;color:var(--lk-text-2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-@media (max-width:420px){.hb-pic{width:84px;height:72px}.hb-art{width:220px;height:184px;margin-bottom:12px}
-.hb-hero-mark{--ly-spin-size:160px!important}}
+@media (max-width:420px){.hb-pic{width:84px;height:72px}}
 .hb-more{margin:10px 0 0;font-size:14px}
 .hb-chips{display:flex;flex-wrap:wrap;gap:6px;margin:0}
 .hb-chip{padding:7px 12px;border-radius:999px;border:1px solid var(--lk-border);background:var(--lk-surface);text-decoration:none;
@@ -1665,8 +1970,115 @@ box-shadow:0 8px 24px rgba(0,0,0,.28),0 0 0 1px rgba(91,141,239,.35),0 0 26px rg
 color:var(--lk-text)!important;text-decoration:none;font-weight:600}
 .hb .host-cta .btn.primary{background:var(--lk-accent);border-color:var(--lk-accent);color:#fff!important}
 .hb .fine{color:var(--lk-muted);font-size:13.5px}
+/* the realm list: a hover / focus preview of the realm (its tagline and tags), laid over the rows below */
+.hb-rlist{overflow:visible}.hb-rl:first-child{border-radius:var(--lk-r) var(--lk-r) 0 0}.hb-rl:last-child,.hb-rlist.cap>.hb-rl:nth-child(8){border-radius:0 0 var(--lk-r) var(--lk-r)}
+.hb-rl{position:relative}
+.hb-rl-pv{position:absolute;left:14px;top:calc(100% - 4px);z-index:6;width:min(420px,calc(100% - 28px));padding:10px 12px;border-radius:var(--lk-r-sm);
+background:var(--lk-raised);border:1px solid var(--lk-border-strong);box-shadow:0 12px 32px rgba(0,0,0,.5);pointer-events:none;
+visibility:hidden;opacity:0;transform:translateY(-4px);transition:opacity .15s,transform .15s,visibility 0s .15s}
+.hb-rl-pv p{margin:0;color:var(--lk-text-2);font-size:13.5px}
+.hb-rl-pt{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px!important}
+.hb-rl-pt span{padding:1px 8px;border-radius:999px;border:1px solid var(--lk-border-strong);font-size:12px;color:var(--lk-muted)}
+.hb-rl.pv:is(:hover,:focus-within){z-index:7}
+.hb-rl.pv:is(:hover,:focus-within) .hb-rl-pv{visibility:visible;opacity:1;transform:none;transition:opacity .15s,transform .15s}
+@media (hover:none){.hb-rl.pv:hover:not(:focus-within) .hb-rl-pv{visibility:hidden}}
+/* the live ticker under the hero: one slow loop, paused on hover or focus, still with reduced motion */
+.hb-tick{position:relative;margin:0 -16px 6px;overflow:hidden;border-block:1px solid var(--lk-border);background:var(--lk-chrome);
+-webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
+.hb-tick-run{display:flex;width:max-content;animation:hb-tick 48s linear infinite}
+.hb-tick:is(:hover,:focus-within) .hb-tick-run{animation-play-state:paused}
+@keyframes hb-tick{to{transform:translateX(-50%)}}
+.hb-tick-l{display:flex;flex:none;justify-content:space-around;gap:0;min-width:1040px;margin:0;padding:0;list-style:none}
+.hb-tick-l li{flex:none;padding:8px 26px;color:var(--lk-text-2);font-size:13.5px;white-space:nowrap}
+.hb-tick-l li::before{content:"";display:inline-block;width:7px;height:7px;margin-right:9px;border-radius:50%;background:var(--lk-ok);vertical-align:1px}
+.hb-tick-l li.new::before{background:var(--lk-accent-2)}
+.hb-tick-l b{color:var(--lk-text);font-variant-numeric:tabular-nums}
+/* the numbers */
+.hb-nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:8px 0 6px;text-align:center}
+.hb-nums p{display:grid;gap:2px;margin:0;padding:14px 10px}
+.hb-num{font-size:clamp(30px,4.4vw,42px);font-weight:800;line-height:1;font-variant-numeric:tabular-nums;
+background:linear-gradient(180deg,#fff,var(--lk-accent-strong));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hb-nums span{color:var(--lk-muted);font-size:13.5px}
+/* the ley line down the feature sections */
+.hb-feats{position:relative}
+.hb-thread{position:absolute;left:-58px;top:40px;width:40px;height:calc(100% - 80px);overflow:visible;pointer-events:none;z-index:2}
+.hb-thread path{fill:none;stroke:url(#hb-tg);stroke-width:2;stroke-linecap:round;opacity:.45;vector-effect:non-scaling-stroke;
+filter:drop-shadow(0 0 4px rgba(120,120,255,.6))}
+.hb-js .hb-thread.draw path{stroke-dasharray:1;stroke-dashoffset:var(--hb-draw,1)}
+.hb-fs::before{content:"";position:absolute;z-index:2;left:-43px;top:66px;width:9px;height:9px;border-radius:50%;background:var(--lk-accent-2);
+box-shadow:0 0 0 4px rgba(139,108,240,.18),0 0 14px rgba(139,108,240,.6);opacity:.7;pointer-events:none}
+@media (max-width:1150px){.hb-thread,.hb-fs::before{display:none}}
+/* the screenshots lean toward the cursor (HUB_JS: fine pointers, motion allowed) */
+.hb-shot{position:relative;transform:perspective(1100px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transition:transform .25s ease,box-shadow .25s}
+.hb-shot::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .25s;
+background:radial-gradient(circle at var(--gx,50%) var(--gy,50%),rgba(122,163,245,.18),transparent 55%)}
+.hb-shot.tilt::after{opacity:1}
+.hb-shot.tilt{box-shadow:0 22px 60px rgba(0,0,0,.5),0 0 0 1px rgba(91,141,239,.25),0 0 80px rgba(91,141,239,.2)}
+/* hosted by the community: posters */
+.hb-posters{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:14px}
+.hb-poster{position:relative;isolation:isolate;display:flex;flex-direction:column;justify-content:flex-end;min-height:300px;padding:18px;
+border-radius:var(--lk-r);overflow:hidden;border:1px solid var(--lk-border-strong);
+background:linear-gradient(var(--a),hsl(var(--h1) 55% 26%),hsl(var(--h2) 50% 16%) 70%,#11131a)}
+.hb-poster-bg{position:absolute;inset:0;z-index:-1;
+background:url(/wrath/art/leyline-crystal-256.webp) var(--x) var(--y)/58% no-repeat,
+repeating-radial-gradient(circle at var(--x) var(--y),transparent 0 22px,hsl(var(--h2) 80% 70% / .08) 22px 23px);opacity:.55;
+transform:rotate(var(--r));transform-origin:var(--x) var(--y);scale:1.2}
+.hb-poster::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,transparent 30%,rgba(10,12,18,.88))}
+.hb-poster h3{margin:0 0 4px;font-size:22px;font-weight:800;letter-spacing:-.01em;color:#fff}
+.hb-poster-p{position:absolute;top:14px;left:16px;margin:0;font-size:12.5px;color:#dfe6ff}
+.hb-poster-p b{font-size:15px}
+.hb-poster-l{margin:0 0 8px;color:#d6dbea;font-size:14px}
+.hb-poster-tags{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 12px}
+.hb-poster-tags span{padding:1px 8px;border-radius:999px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);font-size:12px;color:#eef}
+.hb-poster-a{display:flex;flex-wrap:wrap;gap:8px;margin:0}
+.hb-poster .hb-ghost{background:rgba(10,12,18,.4)}
+/* mod of the week and Hero Key, side by side */
+.hb-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:14px;margin:26px 0}
+.hb-motw,.hb-hk{display:grid;gap:16px;padding:18px;border-radius:var(--lk-r);border:1px solid var(--lk-border);background:var(--lk-surface)}
+.hb-motw{grid-template-columns:minmax(0,2fr) minmax(0,3fr);align-items:center}
+.hb-motw-pic{aspect-ratio:16/10;border-radius:var(--lk-r-sm);overflow:hidden;display:grid;place-items:center;
+background:linear-gradient(135deg,rgba(91,141,239,.4),rgba(139,108,240,.35))}
+.hb-motw-pic img{width:100%;height:100%;object-fit:cover}
+.hb-kick{display:flex;align-items:center;gap:8px;margin:0 0 4px;font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--lk-accent-2)}
+.hb-motw h2,.hb-hk h2{margin:0 0 2px;font-size:22px;font-weight:800}
+.hb-motw .hb-by{margin:0 0 8px;font-size:13px}.hb-motw-l,.hb-hk p{margin:0 0 12px;color:var(--lk-text-2);font-size:14.5px}
+.hb-hk{grid-template-columns:minmax(0,1fr)}
+.hb-hk-art{position:relative;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding-top:30px}
+.hb-hk-c{display:grid;justify-items:center;gap:6px;padding:12px 6px;border-radius:var(--lk-r-sm);background:var(--lk-surface-2);
+border:1px solid var(--lk-border);font-size:12.5px;font-weight:600;color:var(--lk-text-2);text-align:center;overflow-wrap:anywhere}
+.hb-hk-c i{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--lk-accent),var(--lk-accent-2));opacity:.8}
+.hb-hk-key{position:absolute;top:0;left:calc(100% / 6 - 13px);width:26px;height:26px;color:#ffd77a;animation:hb-key 7.5s ease-in-out infinite}
+.hb-hk-key svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;filter:drop-shadow(0 0 6px rgba(255,215,122,.6))}
+@keyframes hb-key{0%,22%{left:calc(100% / 6 - 13px)}33%,55%{left:calc(50% - 13px)}66%,88%{left:calc(500% / 6 - 13px)}100%{left:calc(100% / 6 - 13px)}}
+@media (max-width:520px){.hb-motw{grid-template-columns:minmax(0,1fr)}}
+/* creator spotlight and news */
+.hb-crs{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));gap:10px}
+.hb-cr{display:flex;align-items:center;gap:12px;padding:12px;border-radius:var(--lk-r);border:1px solid var(--lk-border);background:var(--lk-surface);
+text-decoration:none;color:var(--lk-text)!important}
+.hb-cr .hb-av{width:42px;height:42px;font-size:18px}
+.hb-cr>span:last-child{display:grid;min-width:0}.hb-cr b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hb-cr small{color:var(--lk-muted);font-size:12.5px}.hb-cr i{font-style:normal;font-size:12.5px;color:var(--lk-text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hb-nws{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:10px}
+.hb-nw{display:grid;gap:3px;align-content:start;padding:14px;border-radius:var(--lk-r);border:1px solid var(--lk-border);background:var(--lk-surface);
+text-decoration:none;color:var(--lk-text)!important}
+.hb-nw small{color:var(--lk-accent-2);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:11px}
+.hb-nw b{font-size:16px}.hb-nw span{color:var(--lk-text-2);font-size:13.5px}
+:is(.hb-cr,.hb-nw){transition:transform .15s ease,border-color .15s,box-shadow .15s}
+:is(.hb-cr,.hb-nw):hover{transform:translateY(-2px);border-color:var(--lk-accent);box-shadow:0 8px 24px rgba(0,0,0,.28),0 0 26px rgba(91,141,239,.12)}
+/* the footer's status dot */
+.hb-health{display:inline-flex;align-items:center;gap:8px;margin:0 0 12px;color:var(--lk-text-2)!important;text-decoration:none;font-size:13px;font-weight:600}
+.hb-health:hover{color:var(--lk-text)!important}
+.hb-hdot{width:9px;height:9px;border-radius:50%;background:var(--lk-ok)}
+.hb-health.ok .hb-hdot{animation:hb-pulse 2.4s ease-out infinite}
+.hb-health.warn .hb-hdot{background:#f0b54a}.hb-health.bad .hb-hdot{background:var(--lk-bad)}
+@keyframes hb-pulse{0%{box-shadow:0 0 0 0 rgba(79,209,139,.55)}80%,100%{box-shadow:0 0 0 9px rgba(79,209,139,0)}}
+/* reduced motion: nothing moves (the ticker stands still and wraps, the key stays put, the thread is drawn, no tilt) */
 @media (prefers-reduced-motion:reduce){.hb *{transition:none!important;animation:none!important}
-:is(a.hb-stat,.hb-spot,.hb-box,.hb-mode):hover{transform:none}}
+:is(a.hb-stat,.hb-spot,.hb-box,.hb-mode,.hb-cr,.hb-nw):hover{transform:none}
+.hb-top{border-bottom-color:var(--lk-border)}
+.hb-tick{-webkit-mask-image:none;mask-image:none}.hb-tick-run{width:auto}.hb-tick-l{flex-wrap:wrap;justify-content:center;min-width:0;width:100%}
+.hb-tick-l li{padding:6px 14px}.hb-tick-l.dup{display:none}
+.hb-shot{transform:none!important}.hb-thread path{stroke-dasharray:none!important}}
 """
 
 # The hub's only script (front page and realm list; every other hub page has none). Plain and small: it adds
@@ -1681,6 +2093,33 @@ if(!still&&"IntersectionObserver" in window){
   var io=new IntersectionObserver(function(es){es.forEach(function(x){if(x.isIntersecting){x.target.classList.add("in");io.unobserve(x.target);}});},{rootMargin:"0px 0px -6% 0px"});
   d.querySelectorAll(".hb-rv").forEach(function(s){if(s.getBoundingClientRect().top>innerHeight){s.classList.add("hb-wait");io.observe(s);}});
 }
+// the header: a hairline once scrolled (browsers without scroll timelines), More closes on Escape or a click outside
+var top=d.querySelector(".hb-top");
+if(top&&!(window.CSS&&CSS.supports&&CSS.supports("animation-timeline: scroll()"))){
+  var edge=function(){top.classList.toggle("hb-scrolled",scrollY>8);};edge();addEventListener("scroll",edge,{passive:true});}
+d.addEventListener("click",function(ev){d.querySelectorAll("details.hb-more-d[open]").forEach(function(x){if(!x.contains(ev.target))x.open=false;});});
+d.addEventListener("keydown",function(ev){if(ev.key!=="Escape")return;d.querySelectorAll("details.hb-more-d[open]").forEach(function(x){
+  x.open=false;var s=x.querySelector("summary");if(s)s.focus();});});
+// the numbers count up once when they come into view (the page already has the final numbers)
+if(!still&&"IntersectionObserver" in window){
+  var cio=new IntersectionObserver(function(es){es.forEach(function(x){if(!x.isIntersecting)return;cio.unobserve(x.target);
+    var el=x.target,to=+el.getAttribute("data-count"),t0=0;
+    function step(t){if(!t0)t0=t;var k=Math.min(1,(t-t0)/1200);el.textContent=String(Math.round(to*(1-Math.pow(1-k,3))));if(k<1)requestAnimationFrame(step);}
+    requestAnimationFrame(step);});},{threshold:.4});
+  d.querySelectorAll(".hb-num[data-count]").forEach(function(n){if(n.getBoundingClientRect().top>innerHeight){n.textContent="0";cio.observe(n);}});
+}
+// the ley line draws itself down the feature sections as you scroll
+var th=d.querySelector(".hb-thread"),feats=d.querySelector(".hb-feats");
+if(th&&feats&&!still){th.classList.add("draw");var pend=0;
+  var draw=function(){pend=0;var r=feats.getBoundingClientRect(),k=(innerHeight*.75-r.top)/Math.max(1,r.height);
+    th.style.setProperty("--hb-draw",String(1-Math.max(0,Math.min(1,k))));};
+  draw();addEventListener("scroll",function(){if(!pend){pend=1;requestAnimationFrame(draw);}},{passive:true});addEventListener("resize",draw);}
+// the screenshots lean toward the cursor, with a soft glow (fine pointers only)
+if(!still&&window.matchMedia&&matchMedia("(pointer:fine)").matches){d.querySelectorAll(".hb-shot").forEach(function(f){
+  f.addEventListener("pointermove",function(ev){var r=f.getBoundingClientRect(),x=(ev.clientX-r.left)/r.width,y=(ev.clientY-r.top)/r.height;
+    f.classList.add("tilt");f.style.setProperty("--ry",((x-.5)*6).toFixed(2)+"deg");f.style.setProperty("--rx",((.5-y)*5).toFixed(2)+"deg");
+    f.style.setProperty("--gx",(x*100).toFixed(1)+"%");f.style.setProperty("--gy",(y*100).toFixed(1)+"%");});
+  f.addEventListener("pointerleave",function(){f.classList.remove("tilt");f.style.setProperty("--rx","0deg");f.style.setProperty("--ry","0deg");});});}
 if(navigator.clipboard){d.querySelectorAll("code.hb-addr").forEach(function(c){
   var b=d.createElement("button");b.type="button";b.className="hb-copy";b.textContent="Copy";
   b.setAttribute("aria-label","Copy the address "+c.textContent);
@@ -1696,7 +2135,8 @@ d.querySelectorAll("form[data-rf]").forEach(function(f){
       li.hidden=!ok;if(ok)shown++;});
     list.classList.toggle("cap",!b&&!n);if(none)none.hidden=shown>0;}
   f.addEventListener("change",run);f.addEventListener("submit",function(e){e.preventDefault();run();});});
-var rows=d.querySelectorAll(".hb-rl[data-rid],.hb-rl[data-home]");if(!rows.length||!window.fetch)return;
+var rows=d.querySelectorAll(".hb-rl[data-rid],.hb-rl[data-home],[data-tick]");if(!rows.length||!window.fetch)return;
+function tk(key,p){if(typeof p!=="number"||p<0)return;d.querySelectorAll('[data-tick="'+key+'"] .hb-tn').forEach(function(b){b.textContent=String(p);});}
 function set(li,on,p,bots){var el=li.querySelector(".hb-n");if(!el||li.getAttribute("data-live")!=="1")return;
   if(on===false){el.parentNode.classList.add("off");el.parentNode.textContent="Offline";li.setAttribute("data-live","0");return;}
   if(typeof p!=="number"||p<0)return;
@@ -1709,10 +2149,12 @@ function tick(){if(d.hidden)return;
   json("/wrath/realms.json").then(function(j){if(!j||!Array.isArray(j.realms))return;
     j.realms.forEach(function(r){var c=r.community||{},h=c.lastHeartbeat||{};
       if(!/^[a-z2-7]{16}$/.test(c.realmId||""))return;
-      var li=d.querySelector('.hb-rl[data-rid="'+c.realmId+'"]');if(li)set(li,h.online,h.players,h.bots);});
+      var li=d.querySelector('.hb-rl[data-rid="'+c.realmId+'"]');if(li)set(li,h.online,h.players,h.bots);
+      if(h.online!==false)tk(c.realmId,h.players);});
     var nl=d.querySelector("[data-net]");if(nl&&j.network&&typeof j.network.players==="number")nl.textContent=line(j.network);});
   var home=d.querySelector(".hb-rl[data-home]");
-  if(home)json("/wrath/status.json").then(function(s){if(s)set(home,s.online===true?true:s.online===false?false:undefined,s.players,s.bots);});}
+  if(home||d.querySelector('[data-tick="home"]'))json("/wrath/status.json").then(function(s){if(!s)return;
+    if(home)set(home,s.online===true?true:s.online===false?false:undefined,s.players,s.bots);if(s.online!==false)tk("home",s.players);});}
 setInterval(tick,30000);d.addEventListener("visibilitychange",function(){if(!d.hidden)tick();});
 })();"""
 
@@ -1741,6 +2183,40 @@ ICONS = {
     "community": '<circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6M15 14.5c3 0 6 2 6 5"/>',
     "agents": '<rect x="5" y="7" width="14" height="12" rx="3"/><path d="M12 3v4M9 12h.01M15 12h.01M9.5 16h5M2 12v3M22 12v3"/>',
 }
+
+
+# The header's line icons (the launcher's sidebar style: 24x24 strokes, currentColor).
+NAV_ICONS = {
+    "play": '<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z"/>',
+    "realms": ICONS["realms"], "mods": ICONS["mods"], "modes": ICONS["modes"], "host": ICONS["host"],
+    "community": ICONS["community"],
+    "addons": '<path d="M9 4h4v2.5a1.5 1.5 0 0 0 3 0V4h4v6h-2.5a1.5 1.5 0 0 0 0 3H20v7H4v-7h2.5a1.5 1.5 0 0 0 0-3H4V4z"/>',
+    "more": '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
+    "docs": '<path d="M5 4h9l5 5v11H5z"/><path d="M14 4v5h5M8 13h8M8 17h6"/>',
+    "news": '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9h6M7 12h10M7 15h10"/>',
+    "creators": '<path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 7l3 3"/>',
+    "status": '<path d="M3 12h4l2-5 4 10 2-5h6"/>',
+    "download": '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+    "key": '<circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v3M21 12v2"/>',
+}
+# The header item each hub page highlights (the catalog: Addons when filtered to them, else Mods; an item page: Mods).
+ACTIVE = {BASE + "/realms": "realms", BASE + "/catalog": "mods", BASE + "/submit": "mods", BASE + "/modes": "modes",
+          BASE + "/beacon": "host", BASE + "/news": "news", BASE + "/creators": "creators"}
+HEALTH_WORDS = {"ok": "All systems OK", "warn": "Some systems are down", "bad": "Systems offline"}
+# Who is signed in, for the header's account chip: set per request in get()/post() (the portal's threads).
+_REQ = threading.local()
+
+
+def _viewer(handler):
+    """(acct, display) from the site's session cookie via the portal's social module, None when signed out or unknown.
+    Only asks when the request carries the session cookie."""
+    try:
+        if "wr_session=" not in (handler.headers.get("Cookie", "") or ""):
+            return None
+        soc = hub.portal("social")
+        return soc.cookie_user(handler) if soc is not None and hasattr(soc, "cookie_user") else None
+    except Exception:   # noqa: BLE001: the sign-in being down never breaks a page
+        return None
 
 
 def _slug(cid: str) -> str:
@@ -1780,6 +2256,7 @@ def _robots(public: bool = False) -> dict:
 
 def get(handler, path: str, query: dict) -> None:
     """GET (and HEAD) for every path match() owns. handler: the portal's request handler (send, ip)."""
+    _REQ.who = None
     limit = hub.portal("browse_limit")
     if limit is not None and not limit.hit(handler.ip(), 600):
         handler.send(429, b"too many requests\n", "text/plain")
@@ -1791,6 +2268,8 @@ def get(handler, path: str, query: dict) -> None:
         body = (json.dumps(hub.store.approved_doc(), indent=1, sort_keys=True) + "\n").encode()
         handler.send(200, body, "application/json; charset=utf-8", headers=_robots())
         return
+    if path != FEED and path != BASE + "/approved.json":
+        _REQ.who = _viewer(handler)
     if path in (BASE, FRONT):
         nonce = secrets.token_urlsafe(16)
         handler.send(200, hub.front_page(path, nonce), nonce=nonce, connect=True, headers=_robots())
@@ -1827,6 +2306,7 @@ def get(handler, path: str, query: dict) -> None:
 
 
 def post(handler, path: str) -> None:
+    _REQ.who = None
     if path != BASE + "/submit":
         handler.send(405, b"method not allowed\n", "text/plain")
         return
