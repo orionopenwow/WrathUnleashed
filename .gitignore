@@ -54,6 +54,7 @@ __pycache__/
 # the Leyline Launcher branch bundle (delivered beside the old ovland step, never committed)
 tools/ov-rename/*.bundle
 labs/done/ov-rename/*.bundle
+tools/launcher-site/*.bundle
 
 # fresh-history: written by Claude when the step is queued, never committed
 tools/fresh-history/CONFIRM

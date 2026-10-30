@@ -806,7 +806,8 @@ class Hub:
                 ("mods", "Mods", BASE + "/catalog", "mods"), ("addons", "Addons", BASE + "/catalog?cat=addons", "addons"),
                 ("modes", "Modes", BASE + "/modes", "modes"), ("host", "Host", "/wrath/host", "host"),
                 ("community", "Community", "/wrath/workshop", "community")]
-        more = [("gallery", "Gallery", home + "/gallery", "gallery"), ("docs", "Docs", "/wrath/docs", "docs"), ("news", "News", BASE + "/news", "news"),
+        more = [("forge", "Forge", BASE + "/forge", "forge"), ("agents", "Agents", BASE + "/agents", "agents"),
+                ("gallery", "Gallery", home + "/gallery", "gallery"), ("docs", "Docs", "/wrath/docs", "docs"), ("news", "News", BASE + "/news", "news"),
                 ("creators", "Creators", BASE + "/creators", "creators"), ("status", "Status", home + "#status", "status")]
         return main, more
 
@@ -1211,6 +1212,20 @@ class Hub:
                 f'<figcaption><span>Minigolf, on our own realm</span><a class="hb-vid-play" href="{e("/wrath?go=mode:minigolf")}">'
                 'Play</a></figcaption></figure>')
 
+    def _app_shot(self, key, alt, fallback) -> str:
+        """A screenshot of one of our own apps (Forge, Agents): leyline-shot-<key>.webp, a game picture, so off with
+        the game data killswitch; then the small drawing instead."""
+        have = self.portal("art_present")
+        name = f"leyline-shot-{key}.webp"
+        try:
+            ok = self.game_shots_on() and (have is None or bool(have(name)))
+        except Exception:   # noqa: BLE001
+            ok = False
+        if not ok:
+            return fallback
+        return (f'<figure class="hb-shot"><img src="/wrath/art/{name}" alt="{html.escape(alt)}" width="960" '
+                f'height="{APP_SHOTS[key]}" loading="lazy" decoding="async"></figure>')
+
     def features(self, got=None) -> str:
         """The feature sections, one per part of Leyline, in the recommended order (after the original site's big
         alternating showcases: #server-software, #desktop-launcher, #forge, #agents): words on one side, a picture on
@@ -1250,7 +1265,7 @@ class Hub:
               "Windows, macOS and Linux"],
              [(dl, "Download the launcher", True), ("/wrath", "Play in your browser", False)],
              shot("home", "The Leyline launcher's home page: the server, your account, your game client and the PLAY button.")),
-            ("host", "Host a server", "Host your own realm in one click",
+            ("host", "Server hosting software", "Host your own realm in one click",
              "Run a realm from your own PC, on any core. The host pack is everything a host needs in one download: the "
              "scripts, the realm tools and the relay agent. Our code only, never game files.",
              ["Any core, your rules, your GM login", "No port forwarding: the relay lists it",
@@ -1263,10 +1278,12 @@ class Hub:
               "Hero Key sign-in across realms (coming)"],
              [(BASE + "/realms", "See the realms", False)], (self.realm_list_art(got) if got else
                                                             shot("realms", "The launcher's Realms page: every realm on the network with its players, uptime and badges."))),
-            ("modes", "Game modes", "Minigames and modes, one click",
-             modes_line + ". PLAY signs you in and starts the game once your character is in the world.",
-             ["Made by players, checked by a GM", "Host a mode as a whole realm type", "The same list in the launcher"],
-             [(BASE + "/modes", "Play a mode", False)], self.modes_art(shot)),
+            ("modes", "Minigolf & game modes", "Minigolf, and more modes in one click",
+             "Tee off on a course players built, right on our realm. " + modes_line
+             + ". PLAY signs you in and starts the game once your character is in the world.",
+             ["Minigolf: courses built by players", "Made by players, checked by a GM", "Host a mode as a whole realm type",
+              "The same list in the launcher"],
+             [("/wrath?go=mode:minigolf", "Play Minigolf", False), (BASE + "/modes", "Every mode", False)], self.modes_art(shot)),
             ("mods", "Mods & the Workshop", "Hot, rising and top picks",
              "Addons, realm scripts, tools and themes, sorted by what players install and rate. Install in one click with "
              "the launcher; open projects from anywhere are linked with credit to their authors.",
@@ -1274,17 +1291,29 @@ class Hub:
              [(BASE + "/catalog" + ("?sort=hot" if rk is not None else ""), "Browse mods", False),
               (BASE + "/submit", "Submit a mod", False)],
              shot("workshop", "The launcher's Discover page: Workshop mods sorted by Hot, with ratings, installs and Install.")),
+            ("forge", "Forge", "Make worlds, quests and creatures",
+             "The Leyline creator app. Shape the land, bring your own models, write creatures, quests and items, walk "
+             "them in the game in one click and publish them as a pack any realm can install. Early access.",
+             ["A world editor in 2D or 3D, or a whole new map", "Your own models from Blender or any 3D tool",
+              "Creatures, quests and items as short forms", "Tests in a copy, so your game is never changed"],
+             [(BASE + "/forge", "About Forge", False), (BASE + "/creators", "Creator docs", False)],
+             self._app_shot("forge", "Forge's world editor: a small island of the creator's own, with its spawns, "
+                            "portals and paths, and the Place panel.", agents_art)),
+            ("agents", "Agents", "Your AI helpers, as heroes in an inn",
+             "Bring your own AI coding helpers into the game: each one sits at a laptop in an inn and works through "
+             "quests you approve, while you roam as your own character. A checker runs the real tests before anything "
+             "counts as done. Coming soon.",
+             ["Quests you approve, nothing goes ahead without you", "A checker the helpers can't edit",
+              "Who needs you, at a glance", "Your own AI and your own account; Leyline never sees a key"],
+             [(BASE + "/agents", "About Agents", False), (BASE + "/agents#own-ai", "Use your own AI", False)],
+             self._app_shot("agents", "Agents: your helpers at their laptops in an inn, with the quest log, raid "
+                            "frames and the party's chat.", agents_art)),
             ("community", "Community hub", "What players make, together",
              "The people behind the realms and mods, what they made this week and where they meet. Every project "
              "belongs to its authors, under the licence they chose.",
              ["Community Spotlight, from real rankings", "News from the launcher and the realms"]
              + (["The Discord, linked from everywhere"] if discord else []),
              [("/wrath/workshop", "Explore", False), (BASE + "/news", "News", False)], community_art),
-            ("agents", "Agents & tooling", "Build on Leyline",
-             "The creator docs, the package format and an open catalog feed any tool can read. Make an addon, a realm "
-             "script or a whole mode, and bring your own helpers to build it.",
-             ["Open source, open data", "A public JSON feed, no key needed", "The docs for modes, realms and hosting"],
-             [(BASE + "/creators", "Start building", False), ("/wrath/docs", "Read the docs", False)], agents_art),
         ]
         out = []
         for n, (icon, eyebrow, title, lede, points, acts, art) in enumerate(secs):
@@ -2179,6 +2208,61 @@ class Hub:
                 'is gone with the next update.</p></section>')
         return self._shell("Creators · Leyline", body, BASE + "/creators")
 
+    def _app_page(self, key, title, kicker, intro, items, extra, path) -> bytes:
+        """The Forge and Agents pages: what the app is, what it does (from the owner's own pages), its screenshot."""
+        e = html.escape
+        art = self._app_shot(key, f"{title}: a screenshot.", "")
+        body = (f'<section class="ly-panel"><p class="hb-eyebrow">{e(kicker)}</p><h1>{e(title)}</h1><p>{e(intro)}</p>{art}</section>'
+                '<section class="ly-panel"><h2>What it does</h2><ul class="hb-list">'
+                + "".join(f"<li><b>{e(a)}.</b> {e(b)}</li>" for a, b in items) + "</ul></section>" + extra)
+        return self._shell(f"{title} · Leyline", body, path)
+
+    def forge_page(self) -> bytes:
+        # TODO(owner): the Forge download comes back with its next release (the old release was cleared on 2026-10-30)
+        return self._app_page(
+            "forge", "Forge", "Early access · creator app",
+            "The Leyline creator app. One app instead of a shelf of modding tools: shape the world, bring your own "
+            "models, write creatures, quests, items and addons, walk them in the game in one click, and publish them as "
+            "a pack a realm can install. It works from the game client you already have and tests in a copy of it, so "
+            "your game is never changed.",
+            (("The world", "A world editor in 2D or 3D: raise hills, dig valleys, paint the ground, pour lakes and "
+              "rivers, set the sky at any hour, place props and buildings, or start a whole new map."),
+             ("Your own models", "A model from Blender or any 3D tool becomes a creature, a mount or a prop you can "
+              "stand on, shown in 3D and animated the way the game will show it."),
+             ("Creatures, quests and items", "Short forms instead of database tables: a creature's look, level and "
+              "loot; a quest's story and rewards; an item's stats; a vendor's list."),
+             ("Fights and dialogue", "A fight plan as cards (yell a line at half health, go to phase two) and dialogue "
+              "pages with choices."),
+             ("Test and publish", "Walk it in the game in one click, then publish a pack that any Leyline realm can "
+              "install from the Workshop.")),
+            '<section class="ly-panel"><h2>Get it</h2><p>Forge is in early access for Windows. The next build is on its '
+            'way; join the Discord to hear when it lands.</p>'
+            f'<p class="hb-actions"><a class="ly-btn" href="{BASE}/creators">Creator docs</a> '
+            f'<a class="ly-btn hb-alt" href="{BASE}/catalog">The Workshop</a></p></section>',
+            BASE + "/forge")
+
+    def agents_page(self) -> bytes:
+        return self._app_page(
+            "agents", "Agents", "Coming soon · your AI helpers",
+            "Your AI coding helpers as heroes in an inn. You walk the inn freely as your own character; your helpers "
+            "are the ones at the laptops, working through quests you approve. A checker runs the real tests before "
+            "anything counts as done.",
+            (("You roam, your helpers work", "Every helper session walks in, sits at a table and opens a laptop that "
+              "shows what it is doing; it gets up to read at the bookshelf, test at the anvil or think by the fire."),
+             ("Quests you approve", "Work shows up as quests in a quest log. Nothing goes ahead until you approve it."),
+             ("A checker that can't be fooled", "A quest only counts as done when your project's real tests pass, run "
+              "by a checker the helpers can't edit."),
+             ("Who needs you, at a glance", "A mark over a helper waiting for your OK, a pulsing raid frame, a sound "
+              "and a desktop notice."),
+             ("Talk and whisper", "Click a hero to ask what it is working on, or whisper it a change in plain words.")),
+            '<section class="ly-panel" id="own-ai"><h2>Use your own AI</h2><p>Leyline is open source and your copy is '
+            'yours to change. If you already use an AI coding agent, point it at your Leyline folder and it can make '
+            'addons, restyle your interface or change a realm you host. You use your own agent and your own account '
+            'with its maker: Leyline has no AI of its own and never asks for, stores or sends AI keys or logins.</p>'
+            f'<p class="hb-actions"><a class="ly-btn" href="/wrath/docs">Read the docs</a> '
+            f'<a class="ly-btn hb-alt" href="{BASE}/creators">For creators</a></p></section>',
+            BASE + "/agents")
+
     def beacon_page(self) -> bytes:
         host_url = self.portal("HOST_URL") or "https://github.com/orionopenwow/WrathUnleashed"
         e = html.escape
@@ -3030,6 +3114,7 @@ FRONT_REALMS = 60       # rows sent on the front page (8 show until a filter is 
 
 # Icons for the products (24x24 strokes, the launcher's nav style).
 ICONS = {
+    "forge": '<path d="M4 15h11l3-3H8a4 4 0 0 1-4-4"/><path d="M8 15v3M14 15v3M6 20h10"/><path d="M15 4l1 2 2 1-2 1-1 2-1-2-2-1 2-1z"/>',
     "launcher": '<rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3M9 9l3 3 3-3M12 6v6"/>',
     "host": '<rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/>',
     "realms": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
@@ -3040,11 +3125,15 @@ ICONS = {
 }
 
 
+# Heights of the Forge and Agents screenshots (960 wide), for the <img> size.
+APP_SHOTS = {"forge": 574, "agents": 540}
+
+
 # The header's line icons (the launcher's sidebar style: 24x24 strokes, currentColor).
 NAV_ICONS = {
     "play": '<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z"/>',
     "realms": ICONS["realms"], "mods": ICONS["mods"], "modes": ICONS["modes"], "host": ICONS["host"],
-    "community": ICONS["community"],
+    "community": ICONS["community"], "forge": ICONS["forge"], "agents": ICONS["agents"],
     "addons": '<path d="M9 4h4v2.5a1.5 1.5 0 0 0 3 0V4h4v6h-2.5a1.5 1.5 0 0 0 0 3H20v7H4v-7h2.5a1.5 1.5 0 0 0 0-3H4V4z"/>',
     "more": '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
     "docs": '<path d="M5 4h9l5 5v11H5z"/><path d="M14 4v5h5M8 13h8M8 17h6"/>',
@@ -3159,6 +3248,7 @@ def population(live: bool, players) -> tuple[str, str]:
 # The header item each hub page highlights (the catalog: Addons when filtered to them, else Mods; an item page: Mods).
 ACTIVE = {BASE + "/realms": "realms", BASE + "/catalog": "mods", BASE + "/submit": "mods", BASE + "/modes": "modes",
           BASE + "/beacon": "host", BASE + "/news": "news", BASE + "/creators": "creators", BASE + "/gallery": "gallery",
+          BASE + "/forge": "forge", BASE + "/agents": "agents",
           FRONT + "/gallery": "gallery"}
 HEALTH_WORDS = {"ok": "All systems OK", "warn": "Some systems are down", "bad": "Systems offline"}
 # Who is signed in, for the header's account chip: set per request in get()/post() (the portal's threads).
@@ -3255,6 +3345,12 @@ def get(handler, path: str, query: dict) -> None:
         return
     if path == BASE + "/beacon":
         handler.send(200, hub.beacon_page(), headers=_robots())
+        return
+    if path == BASE + "/forge":
+        handler.send(200, hub.forge_page(), headers=_robots())
+        return
+    if path == BASE + "/agents":
+        handler.send(200, hub.agents_page(), headers=_robots())
         return
     if path == BASE + "/submit":
         done = (query.get("done") or [""])[0] == "1"
