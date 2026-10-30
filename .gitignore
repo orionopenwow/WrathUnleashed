@@ -55,3 +55,6 @@ tools/ov-rename/*.bundle
 
 # fresh-history: written by Claude when the step is queued, never committed
 tools/fresh-history/CONFIRM
+
+# client source checkout made by client/get-source.sh (its own git repo)
+/client/benilla-wotlk/

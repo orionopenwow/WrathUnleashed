@@ -1,9 +1,10 @@
 # Smooth frames patch (browser client)
 
-`wotlk-smooth-frames.patch` applies on top of `wotlk-web-port-wip.patch` (benilla-wotlk b9a4942):
+`wotlk-smooth-frames.patch` applies on top of `wotlk-web-port-wip.patch` (benilla-wotlk b9a4942),
+both in this folder (`client/patches/`). From the `client/benilla-wotlk` checkout that `get-source.sh` makes:
 
-    git apply ../wotlk-web-port-wip.patch && git commit -am wip
-    git apply ../wotlk-smooth-frames.patch
+    git apply ../patches/wotlk-web-port-wip.patch && git commit -am wip
+    git apply ../patches/wotlk-smooth-frames.patch
 
 Plan and reasoning: the "WotLK browser client: smooth frames plan" doc.
 
@@ -34,8 +35,8 @@ Upscaling
   sharpening instead of a bilinear stretch (`shaders/ffx_glow.wgsl`). Try `/console renderScale 0.75`.
 
 ## Checked
-- The wasm build compiles with no errors or warnings (`rebuild.sh` settings).
-- The data-free boot check (`smoke.js`) boots to the login park as before.
+- The wasm build compiles with no errors or warnings (`client/dev/rebuild.sh` settings).
+- The data-free boot check (`client/dev/smoke.js`) boots to the login park as before.
 - The combine shader validates with naga (both gamma variants).
 - The file store's JavaScript passes a unit test (store hits, shared downloads, remembered 404s).
 - Not yet run against real 3.3.5a data: the frame-time and hover test pass from the plan is next.
