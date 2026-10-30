@@ -26,6 +26,12 @@ and runs without it.
                                               order; filters ?client=browser|own &tag= &region= &lang= &now=1
     GET  /wrath/leyline-preview/modes         the launcher's Modes page: every game mode, one click (/wrath?go=mode:<id>)
     GET  /wrath/leyline-preview/news          the launcher's News page: the admin console's news.json posts
+    GET  /wrath/leyline-preview/gallery       the gallery: our in-game screenshots (hidden while the game data killswitch is
+                                              on: one flat Leyline tile instead), the Workshop's mod screenshots and featured
+                                              mods (Install with Leyline, View), the launcher's pages; ?f=game|mods|launcher.
+                                              The front page shows ten of them (after the feature sections). Pictures are only
+                                              ever our own files: nothing pulled or hotlinked from another site or CDN (press
+                                              kits, wiki or database sites, other people's READMEs: copyright and hotlinking)
     GET  /wrath/leyline-preview/submit        the "Submit a mod" form;  POST it to queue a submission
     GET  /wrath/leyline-preview/approved.json the approved submissions and delisted repos (the index pipeline reads
                                               it: tools/hub-index/hub_index.py); repo URLs only, no notes
@@ -35,8 +41,8 @@ and runs without it.
 Hidden: every preview page carries <meta name="robots" content="noindex"> and an X-Robots-Tag header, and no
 other page links here. The front page and the realm list carry one small script (HUB_JS, under a CSP nonce):
 Copy buttons, the realm filter without a reload, live player counts and the section reveal; without it they work
-the same, only still. Every other hub page has no script. The one switch: WU_HUB_FRONT=1 serves the front page at /wrath/leyline too (the front
-door) and drops the noindex. Off by default. WU_HUB=0 turns the whole thing off (404s).
+the same, only still. The gallery page carries it too (filters in place, the lightbox). Every other hub page has no script. The one switch: WU_HUB_FRONT=1 serves the front page at /wrath/leyline too (the front
+door, and the gallery at /wrath/leyline/gallery) and drops the noindex. Off by default. WU_HUB=0 turns the whole thing off (404s).
 
 Data (read-only /app, beside this file in a checkout):
     hub/community-index.json   tools/hub-index/hub_index.py's output (the link-out index); WU_HUB_DIR overrides
@@ -52,6 +58,7 @@ from __future__ import annotations
 
 import hashlib
 import html
+import itertools
 import json
 import math
 import os
@@ -645,7 +652,7 @@ class Hub:
                 ("mods", "Mods", BASE + "/catalog", "mods"), ("addons", "Addons", BASE + "/catalog?cat=addons", "addons"),
                 ("modes", "Modes", BASE + "/modes", "modes"), ("host", "Host", "/wrath/host", "host"),
                 ("community", "Community", "/wrath/workshop", "community")]
-        more = [("docs", "Docs", "/wrath/docs", "docs"), ("news", "News", BASE + "/news", "news"),
+        more = [("gallery", "Gallery", home + "/gallery", "gallery"), ("docs", "Docs", "/wrath/docs", "docs"), ("news", "News", BASE + "/news", "news"),
                 ("creators", "Creators", BASE + "/creators", "creators"), ("status", "Status", home + "#status", "status")]
         return main, more
 
@@ -691,7 +698,7 @@ class Hub:
         top = self._header(ACTIVE.get(path.split("?")[0], "mods" if path.startswith(BASE + "/p/") else "") if active is None else active)
         sub = "" if front else (f'<nav class="hb-sub" aria-label="Hub">'
                + "".join(f'<a href="{BASE}{h}"' + (' aria-current="page" class="on"' if path == BASE + h else "") + f">{t}</a>"
-                         for h, t in (("", "Hub"), ("/realms", "Realms"), ("/modes", "Modes"), ("/catalog", "Catalog"),
+                         for h, t in (("", "Hub"), ("/realms", "Realms"), ("/modes", "Modes"), ("/catalog", "Catalog"), ("/gallery", "Gallery"),
                                       ("/news", "News"), ("/creators", "Creators"), ("/beacon", "Host a Beacon"),
                                       ("/submit", "Submit a mod")))
                + "</nav>")
@@ -802,8 +809,7 @@ class Hub:
         cards = []
         for i in picks[:4]:
             shot = ""
-            ws = i.get("ws") or {}
-            if i["source"] == "workshop" and isinstance(ws.get("screenshots"), list) and ws["screenshots"] and str(i["id"]).startswith("mod:"):
+            if self.shot_count(i):
                 shot = f'<img src="/wrath/mods/{e(i["id"][4:])}/shot/0" alt="" loading="lazy" width="160" height="100">'
             name = neutral(i["name"]) or "Untitled"
             pic = shot or f'<span class="hb-initial" aria-hidden="true">{e(name[:1].upper())}</span>'
@@ -1104,9 +1110,8 @@ class Hub:
         i = order[0]
         rk = self.portal("hub_rank")
         inst = rk.installable(i) if rk is not None and hasattr(rk, "installable") else bool(i.get("packaged"))
-        ws = i.get("ws") or {}
         name = neutral(i["name"]) or "Untitled"
-        if i["source"] == "workshop" and isinstance(ws.get("screenshots"), list) and ws["screenshots"] and i["id"].startswith("mod:"):
+        if self.shot_count(i):
             pic = f'<img src="/wrath/mods/{e(i["id"][4:])}/shot/0" alt="A screenshot of {e(name)}" loading="lazy" width="320" height="200">'
         else:
             pic = f'<span class="hb-initial" aria-hidden="true">{e(name[:1].upper())}</span>'
@@ -1222,6 +1227,206 @@ class Hub:
         return ('<section class="hb-sec hb-rv" id="news" aria-labelledby="hb-nw-h"><h2 id="hb-nw-h">News</h2>'
                 f'<div class="hb-nws">{cards}</div><p class="hb-more"><a href="{BASE}/news">All the news</a></p></section>')
 
+    # ---------------------------------------------------------------- the gallery (owner 2026-10-30: "in game screenshots
+    # or cdn pulls or at least something and featured mods on the site in a gallery for promo and appeal")
+    # Only pictures we serve ourselves: our in-game screenshots (GAME_SHOTS, off with the game data killswitch), the mod
+    # screenshots authors uploaded to our Workshop (/wrath/mods/<id>/shot/0), the launcher's own pages (LAUNCHER_SHOTS) and
+    # the Leyline mark. Never a picture pulled or hotlinked from another site or CDN (press kits, wiki or database sites,
+    # third-party READMEs): their copyright isn't ours to give, and the page's CSP (img-src 'self') blocks them anyway. A
+    # catalog item without our own screenshot gets a tile drawn from its id (gradient, initial, kind icon).
+    def game_shots_on(self) -> bool:
+        """The in-game screenshots may show: the portal's game data killswitch is off (wrath_portal.gamedata_off(), the
+        same flag that makes /wrath/art answer 410 for them). Without the portal's hook: off (never a broken image)."""
+        off = self.portal("gamedata_off")
+        try:
+            return off is not None and not off()
+        except Exception:   # noqa: BLE001
+            return False
+
+    def shot_count(self, i: dict) -> int:
+        """How many screenshots a Workshop item has on our site (0 for links, themes and the index)."""
+        if i.get("source") != "workshop" or not str(i.get("id", "")).startswith("mod:"):
+            return 0
+        ws = i.get("ws") or {}
+        if isinstance(ws.get("screenshots"), list):
+            return len(ws["screenshots"])
+        w = self.portal("workshop")
+        try:
+            m = w.mod(i["id"][4:]) if w is not None and hasattr(w, "mod") else None
+        except Exception:   # noqa: BLE001
+            m = None
+        return len(m.get("screenshots") or []) if isinstance(m, dict) else 0
+
+    def _kind(self, i: dict) -> str:
+        rk = self.portal("hub_rank")
+        try:
+            k = rk.kind_of(i) if rk is not None and hasattr(rk, "kind_of") else ""
+        except Exception:   # noqa: BLE001
+            k = ""
+        if k in KIND_WORDS:
+            return k
+        if i.get("source") == "theme":
+            return "theme"
+        if i.get("category") == "sandbox" or i.get("type") == "mode":
+            return "mode"
+        return "addon" if i.get("type") == "addon" or i.get("category") == "addons" else "mod"
+
+    def gallery_tiles(self, items: list | None = None, want: int = 0) -> list[dict]:
+        """Every picture the gallery can show, in the gallery's order: in-game shots, mods and launcher shots taken in
+        turn (one of each, then the next), so any prefix is a mix. want: stop after that many (0: all).
+        A tile: {k: game|mods|launcher, id, title, line, credit, label, img: (src, w, h, alt) or None, art (html, no img),
+        href (no script: the image or the item page), acts [(href, label, primary)]}."""
+        items = self.items() if items is None else items
+        dl = self._download()
+        game = []
+        have = self.portal("art_present")
+        if self.game_shots_on():
+            for key, (w, h, title, line, alt) in GAME_SHOTS.items():
+                name = f"leyline-shot-{key}.webp"
+                try:
+                    ok = have is None or bool(have(name))
+                except Exception:   # noqa: BLE001
+                    ok = False
+                if ok:
+                    src = "/wrath/art/" + name
+                    game.append({"k": "game", "id": "g-" + key, "title": title, "line": line, "credit": "In game, on our own realm",
+                                 "label": "In game", "img": (src, w, h, alt), "art": "", "href": src,
+                                 "acts": [("/wrath", "Play in your browser", True)]})
+        if not game:   # the killswitch (or no shots): one flat Leyline tile with the mark, no game picture at all
+            game.append({"k": "game", "id": "g-leyline", "title": "See it in game", "line": "Start the game in a browser tab and look around.",
+                         "credit": "Leyline", "label": "In game", "img": None, "flat": True,
+                         "art": f'<span class="hb-gt-art flat" aria-hidden="true">{self._spin(120, "slow")}</span>',
+                         "href": "/wrath", "acts": [("/wrath", "Play in your browser", True)]})
+        launcher = [{"k": "launcher", "id": "l-" + key, "title": title, "line": line, "credit": "The Leyline launcher, with sample data",
+                     "label": "Launcher", "img": ("/wrath/art/leyline-ui-" + key + ".webp", 1240, 760, alt), "art": "",
+                     "href": "/wrath/art/leyline-ui-" + key + ".webp", "acts": [(dl, "Download the launcher", True)]}
+                    for key, (title, line, alt) in LAUNCHER_SHOTS.items()]
+        mods = []
+        pool = [i for i in items if i["source"] != "theme"]
+        if pool:
+            order, _m = self._ranked(pool)
+            # the Mod of the week, then the best with our own screenshot and the top of Hot taken in turn, then every
+            # other item with our screenshot
+            shots = [i for i in order[1:] if self.shot_count(i)]
+            hot = [i for i in order[1:4] if i not in shots[:3]]
+            picks = [order[0]]
+            for a, b in itertools.zip_longest(shots[:3], hot):
+                picks += [x for x in (a, b) if x is not None and x not in picks]
+            picks += [i for i in shots if i not in picks]
+            rk = self.portal("hub_rank")
+            for n, i in enumerate(picks):
+                name = neutral(i["name"]) or "Untitled"
+                author = neutral(i["author"]) or "unknown"
+                kind = self._kind(i)
+                slug = _slug(i["id"])
+                inst = rk.installable(i) if rk is not None and hasattr(rk, "installable") else bool(i.get("packaged"))
+                view = f"{BASE}/p/{slug}"
+                img, art = None, ""
+                if self.shot_count(i):
+                    img = (f'/wrath/mods/{i["id"][4:]}/shot/0', 640, 360, f"A screenshot of {name}, {KIND_WORDS[kind][1]} by {author}")
+                else:
+                    h = hashlib.sha256(i["id"].encode()).digest()
+                    h1 = 200 + h[0] % 90
+                    h2 = (h1 + 40 + h[1] % 80) % 360
+                    art = (f'<span class="hb-gt-art gen" style="--h1:{h1};--h2:{h2};--a:{h[2] % 180}deg" aria-hidden="true">'
+                           f'<b>{html.escape(name[:1].upper())}</b><svg viewBox="0 0 24 24">{NAV_ICONS[KIND_WORDS[kind][2]]}</svg></span>')
+                mods.append({"k": "mods", "id": "m-" + slug, "title": name, "line": neutral(i.get("summary") or i.get("description") or "", 140),
+                             "credit": "by " + author, "label": ("Mod of the week · " if n == 0 else "") + KIND_WORDS[kind][0],
+                             "img": img, "art": art, "href": view,
+                             "acts": [(f"leyline://install/{i['id']}", "Install with Leyline" if inst else "Open in Leyline", True),
+                                      (view, "View", False)]})
+        out, lists = [], [game, mods, launcher]
+        while any(lists) and (not want or len(out) < want):
+            for lst in lists:
+                if lst and (not want or len(out) < want):
+                    out.append(lst.pop(0))
+        return out
+
+    @staticmethod
+    def _sizes(n: int) -> list[str]:
+        """The bento: a size per tile (big 2x2, wide 2x1, "" 1x1) so the grid comes out even on four columns and on two
+        (a phone), with no hole at the end: when it wouldn't, the last tiles grow wide."""
+        s = ["big" if k == 0 else "wide" if k % 3 == 0 else "" for k in range(n)]
+        cells = {"big": 4, "wide": 2, "": 1}
+        best = None
+        tail = [k for k in range(max(1, n - 3), n)]
+        for combo in itertools.product(["", "wide"], repeat=len(tail)):
+            t = list(s)
+            for k, v in zip(tail, combo):
+                t[k] = v
+            if sum(cells[x] for x in t) % 4 == 0:
+                cost = sum(1 for k, v in zip(tail, combo) if s[k] != v)
+                if best is None or cost < best[0]:
+                    best = (cost, t)
+        return best[1] if best else s
+
+    def gallery_tile(self, t: dict, size: str = "", lightbox: bool = True) -> str:
+        """One tile: a link (the image, or the item page; the lightbox takes the click when there is script), the
+        caption (shown on hover and focus, always on touch), and for mods Install with Leyline and View."""
+        e = html.escape
+        if t["img"]:
+            src, w, h, alt = t["img"]
+            pic = f'<img src="{e(src)}" alt="{e(alt)}" width="{int(w)}" height="{int(h)}" loading="lazy" decoding="async">'
+        else:
+            pic = t["art"]
+        acts = "".join(f'<a class="{"hb-gt-i" if primary else "hb-gt-v"}" href="{e(h)}"'
+                       + (' rel="noopener noreferrer"' if h.startswith("http") else "") + f">{e(label)}</a>" for h, label, primary in t["acts"])
+        cap = (f'<small>{e(t["label"])}</small><b>{e(t["title"])}</b>'
+               + (f'<span class="hb-gt-l">{e(t["line"])}</span>' if t["line"] else "") + f'<i>{e(t["credit"])}</i>')
+        aria = "" if t["img"] else f' aria-label="{e(t["title"])}: {e(t["label"])}"'
+        return (f'<figure class="hb-gt{" " + size if size else ""}{" flat" if t.get("flat") else ""}" data-k="{t["k"]}" id="{e(t["id"])}">'
+                f'<a class="hb-gt-a" href="{e(t["href"])}"' + (" data-lb" if lightbox else "") + f'{aria}>{pic}</a>'
+                f'<figcaption class="hb-gt-c">{cap}<span class="hb-gt-x"' + ("" if t["k"] == "mods" else " hidden") + f'>{acts}</span>'
+                '</figcaption></figure>')
+
+    def gallery_grid(self, tiles: list[dict], whole: bool = True) -> str:
+        """The grid. whole: every kind is in it (the script may filter in place); else it is one ?f= filter's tiles."""
+        sizes = self._sizes(len(tiles))
+        return (f'<div class="hb-gal" data-gal="{"all" if whole else "one"}">'
+                + "".join(self.gallery_tile(t, s) for t, s in zip(tiles, sizes))
+                + '<p class="hb-gal-none"' + (" hidden" if tiles else "") + '>Nothing here yet.</p></div>')
+
+    def gallery_url(self) -> str:
+        return (FRONT if front_on() else BASE) + "/gallery"
+
+    def gallery_chips(self, cur: str = "") -> str:
+        """All / In game / Mods / Launcher: links to the gallery page (?f=), which the script turns into filters in place."""
+        e = html.escape
+        g = self.gallery_url()
+        return ('<nav class="hb-gal-f" aria-label="Show">' + "".join(
+            f'<a class="hb-chip{" on" if f == cur else ""}" href="{e(g + ("?f=" + f if f else ""))}" data-f="{f}"'
+            + (' aria-current="true"' if f == cur else "") + f">{e(label)}</a>" for f, label in GALLERY_FILTERS) + "</nav>")
+
+    def gallery_section(self, items: list) -> str:
+        """The front page's gallery: ten tiles of the mix, the filters, and a link to everything."""
+        tiles = self.gallery_tiles(items, want=10)
+        if not tiles:
+            return ""
+        return ('<section class="hb-sec hb-gal-s hb-rv" id="gallery" aria-labelledby="hb-gal-h">'
+                '<div class="hb-gal-hd"><div><h2 id="hb-gal-h">Gallery</h2><p class="hb-gal-sub">In the game, in the launcher '
+                f'and in the Workshop.</p></div>{self.gallery_chips()}</div>{self.gallery_grid(tiles)}'
+                f'<p class="hb-more"><a href="{self.gallery_url()}">See the whole gallery</a></p></section>')
+
+    def gallery_page(self, query: dict, path: str, nonce: str = "") -> bytes:
+        f = (query.get("f") or [""])[0]
+        f = f if f in dict(GALLERY_FILTERS) else ""
+        tiles = [t for t in self.gallery_tiles() if not f or t["k"] == f]
+        n = len(tiles)
+        body = ('<header class="hb-head"><h1>Gallery</h1><p>Screenshots from the game, the Leyline launcher and the mods people '
+                f'made. {n} picture{"" if n == 1 else "s"}.</p></header>'
+                f'<div class="hb-gal-hd page">{self.gallery_chips(f)}</div>{self.gallery_grid(tiles, not f)}'
+                '<p class="hb-fine">Every picture here is our own: taken on our realm, in our launcher, or uploaded to our Workshop '
+                'by the mod\'s authors. Each mod belongs to its authors, under the licence they chose.</p>')
+        return self._shell("Gallery · Leyline", body, path, nonce, active="gallery")
+
+    def featured_strip(self, items: list) -> str:
+        """The catalog's featured row: the gallery's mod tiles (no script there, so each tile is a link)."""
+        tiles = [t for t in self.gallery_tiles(items) if t["k"] == "mods"][:4]
+        if not tiles:
+            return ""
+        return ('<section class="hb-feat-s" aria-labelledby="hb-feat-h"><h2 id="hb-feat-h">Featured</h2><div class="hb-gal strip">'
+                + "".join(self.gallery_tile(t, "", lightbox=False) for t in tiles) + "</div></section>")
+
     def front_page(self, path: str = BASE, nonce: str = "") -> bytes:
         e = html.escape
         items = self.items()
@@ -1240,7 +1445,7 @@ class Hub:
             '<a class="hb-ghost lg" href="/wrath">Play in your browser</a></p>'
             '<p class="hb-note">Free and open source, for Windows, macOS and Linux. Nothing to buy.</p></section>'
             + self.ticker(got) + self.realm_section(got) + self.how_strip() + self.counters(got, items) + self.features()
-            + self.posters(got)
+            + self.gallery_section(items) + self.posters(got)
             + f'<div class="hb-pair">{self.mod_of_week(items)}{self.herokey_teaser(got)}</div>'
             + self.creator_spotlight(items) + self.news_strip()
             + f'<div class="hb-rv">{status}</div><div class="hb-rv">{self.spotlight()}</div>' +
@@ -1491,7 +1696,8 @@ class Hub:
                 '<button type="submit">Search</button></form>'
                 f'<div class="hb-filters"><p>{f_build}</p><p>{f_cat}</p><p>{f_src}</p>{f_kind}'
                 f'<p role="tablist" aria-label="Sort">{f_sort}</p></div>'
-                f'<div class="hb-grid">{grid}</div>{nav}' + (f"<style>{rk.RANK_CSS}</style>" if rk else ""))
+                + (self.featured_strip(self.items()) if page == 1 and not (build or cat or source or kind or text) else "")
+                + f'<div class="hb-grid">{grid}</div>{nav}' + (f"<style>{rk.RANK_CSS}</style>" if rk else ""))
         return self._shell("Catalog · Leyline", body, BASE + "/catalog", active="addons" if cat == "addons" else "mods")
 
     def item_page(self, slug: str, handler=None, query: dict | None = None) -> tuple[int, bytes]:
@@ -2072,13 +2278,88 @@ text-decoration:none;color:var(--lk-text)!important}
 .hb-health.ok .hb-hdot{animation:hb-pulse 2.4s ease-out infinite}
 .hb-health.warn .hb-hdot{background:#f0b54a}.hb-health.bad .hb-hdot{background:var(--lk-bad)}
 @keyframes hb-pulse{0%{box-shadow:0 0 0 0 rgba(79,209,139,.55)}80%,100%{box-shadow:0 0 0 9px rgba(79,209,139,0)}}
+/* the gallery: a bento of our own pictures (in game, the launcher, the Workshop), the caption on hover and focus (always
+   on touch), a lightbox from HUB_JS; uniform tiles while a filter is on */
+.hb-gal-hd{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 16px;margin:0 0 14px}
+.hb-gal-hd h2{margin:0}.hb-gal-sub{margin:2px 0 0;color:var(--lk-muted);font-size:14px}
+.hb-gal-f{display:flex;flex-wrap:wrap;gap:6px}
+.hb-gal{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:clamp(120px,15vw,184px);grid-auto-flow:dense;gap:10px}
+.hb-gal.flt .hb-gt{grid-column:auto;grid-row:auto}
+.hb-gal-none{grid-column:1/-1;margin:0;padding:30px;text-align:center;color:var(--lk-muted)}
+.hb-gt{position:relative;isolation:isolate;margin:0;min-width:0;border-radius:var(--lk-r);overflow:hidden;background:var(--lk-surface-2);
+border:1px solid var(--lk-border);transition:border-color .2s,box-shadow .2s}
+.hb-gt[hidden]{display:none}
+.hb-gt.big{grid-column:span 2;grid-row:span 2}.hb-gt.wide{grid-column:span 2}
+.hb-gt:is(:hover,:focus-within){border-color:var(--lk-accent);box-shadow:0 12px 34px rgba(0,0,0,.4),0 0 30px rgba(91,141,239,.14)}
+.hb-gt-a{position:absolute;inset:0;display:block;border-radius:inherit;overflow:hidden;color:#fff!important;text-decoration:none}
+.hb-gt-a:focus-visible{outline-offset:-3px}
+.hb-gt-a img,.hb-gt-a .hb-gt-art{display:block;width:100%;height:100%;object-fit:cover;transition:transform .55s cubic-bezier(.2,.7,.2,1)}
+.hb-gt:is(:hover,:focus-within) :is(.hb-gt-a img,.hb-gt-a .hb-gt-art){transform:scale(1.05)}
+.hb-gt-art,.hb-gt-a .hb-gt-art{position:relative;display:grid;place-items:center}
+.hb-gt-art svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.hb-gt-art.gen{color:#fff;background:url(/wrath/art/leyline-crystal-256.webp) 94% 118%/34% no-repeat,
+linear-gradient(var(--a),hsl(var(--h1) 55% 30%),hsl(var(--h2) 50% 16%) 72%,#11131a)}
+.hb-gt-art.gen b{font-size:clamp(40px,6vw,76px);font-weight:800;line-height:1;opacity:.94;text-shadow:0 6px 30px rgba(0,0,0,.35)}
+.hb-gt-art.gen svg{position:absolute;top:12px;left:12px;width:22px;height:22px;opacity:.8}
+.hb-gt-art.flat{background:radial-gradient(circle at 50% 46%,rgba(91,141,239,.24),rgba(139,108,240,.08) 46%,transparent 70%),var(--lk-surface-2)}
+.hb-gt-art.flat .ly-spin{--ly-spin-size:clamp(64px,9vw,120px)!important}
+.hb-gt-c{position:absolute;left:0;right:0;bottom:0;z-index:1;display:grid;gap:1px;padding:34px 14px 12px;pointer-events:none;
+background:linear-gradient(180deg,transparent,rgba(10,12,18,.72) 38%,rgba(10,12,18,.94));opacity:0;transform:translateY(10px);
+transition:opacity .25s ease,transform .25s ease}
+.hb-gt:is(:hover,:focus-within) .hb-gt-c{opacity:1;transform:none}
+@media (hover:none){.hb-gt-c{opacity:1;transform:none}}
+.hb-gt.flat .hb-gt-c{opacity:1;transform:none}
+.hb-gt-c small{font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#a9c2ff}
+.hb-gt-c b{font-size:15px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hb-gt.big .hb-gt-c b{font-size:21px}
+.hb-gt-l{font-size:12.5px;color:#d6dbea;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.hb-gt-c i{font-style:normal;font-size:12px;color:#aab2c2}
+.hb-gt-x{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}.hb-gt-x[hidden]{display:none}
+.hb-gt-x a{pointer-events:auto;padding:5px 10px;border-radius:8px;font-size:12.5px;font-weight:650;text-decoration:none}
+.hb-gt-i{background:var(--lk-accent);color:#fff!important}.hb-gt-i:hover{background:var(--lk-accent-strong)}
+.hb-gt-v{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);color:#eef!important}
+.hb-gal.strip{grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));grid-auto-rows:160px}
+.hb-feat-s{margin:0 0 18px}.hb-feat-s h2{margin:0 0 10px;font-size:17px}
+@media (max-width:640px){.hb-gal{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:124px;gap:8px}
+.hb-gt:not(.big,.wide) :is(.hb-gt-l,.hb-gt-c i,.hb-gt-x){display:none}
+.hb-gt-c{padding:26px 10px 9px}.hb-gt-c b{font-size:13.5px}.hb-gal.strip{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* the lightbox (HUB_JS builds it; without script each tile is a plain link) */
+html.hb-lb-on{overflow:hidden}
+.hb-lb{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:clamp(8px,3vw,36px);background:rgba(8,10,14,.88);
+-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);opacity:0;transition:opacity .2s ease}
+.hb-lb[hidden]{display:none}.hb-lb.open{opacity:1}
+.hb-lb-in{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 300px;width:min(1240px,100%);max-height:100%;overflow:hidden;
+background:var(--lk-surface);border:1px solid var(--lk-border-strong);border-radius:var(--lk-r);box-shadow:0 30px 80px rgba(0,0,0,.6);
+transform:scale(.97);transition:transform .22s ease}
+.hb-lb.open .hb-lb-in{transform:none}
+.hb-lb-pic{position:relative;display:grid;place-items:center;min-height:0;min-width:0;background:#0b0d12}
+.hb-lb-pic img{display:block;max-width:100%;max-height:calc(100vh - 90px);width:auto;height:auto;object-fit:contain}
+.hb-lb-pic .hb-gt-art{width:100%;aspect-ratio:16/9;transform:none!important}
+.hb-lb-pic .hb-gt-art.gen{background-size:24%,auto;background-position:92% 108%,0 0}.hb-lb-pic .hb-gt-art.gen b{font-size:clamp(80px,14vw,160px)}
+.hb-lb-pic .hb-gt-art.gen svg{width:30px;height:30px;top:18px;left:18px}
+.hb-lb-cap{display:grid;align-content:start;gap:6px;padding:22px 20px;overflow:auto}
+.hb-lb-cap small{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--lk-accent-2)}
+.hb-lb-cap h2{margin:0;font-size:22px;line-height:1.2}.hb-lb-cap p{margin:0;color:var(--lk-text-2)}
+.hb-lb-cap .hb-lb-cr{color:var(--lk-muted);font-size:13.5px}
+.hb-lb-a{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.hb-lb-n{color:var(--lk-muted);font-size:12.5px;margin-top:8px!important}
+.hb-lb button{display:grid;place-items:center;width:40px;height:40px;padding:0;border-radius:50%;border:1px solid rgba(255,255,255,.2);
+background:rgba(16,18,24,.78);color:#fff;cursor:pointer;font:600 20px/1 var(--lk-font)}
+.hb-lb button:hover{background:var(--lk-accent);border-color:var(--lk-accent)}
+.hb-lb button svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.hb-lb-x{position:absolute;top:10px;right:10px;z-index:2}
+.hb-lb-p,.hb-lb-nx{position:absolute;top:50%;margin-top:-20px}.hb-lb-p{left:10px}.hb-lb-nx{right:10px}
+.hb-lb button[hidden]{display:none}
+@media (max-width:760px){.hb-lb{padding:0;place-items:stretch}.hb-lb-in{grid-template-columns:1fr;grid-template-rows:auto 1fr;border-radius:0;overflow:auto;width:100%}
+.hb-lb-pic img{max-height:62vh}.hb-lb-cap{padding:16px}.hb-lb-x{top:8px;right:8px}}
 /* reduced motion: nothing moves (the ticker stands still and wraps, the key stays put, the thread is drawn, no tilt) */
 @media (prefers-reduced-motion:reduce){.hb *{transition:none!important;animation:none!important}
 :is(a.hb-stat,.hb-spot,.hb-box,.hb-mode,.hb-cr,.hb-nw):hover{transform:none}
 .hb-top{border-bottom-color:var(--lk-border)}
 .hb-tick{-webkit-mask-image:none;mask-image:none}.hb-tick-run{width:auto}.hb-tick-l{flex-wrap:wrap;justify-content:center;min-width:0;width:100%}
 .hb-tick-l li{padding:6px 14px}.hb-tick-l.dup{display:none}
-.hb-shot{transform:none!important}.hb-thread path{stroke-dasharray:none!important}}
+.hb-shot{transform:none!important}.hb-thread path{stroke-dasharray:none!important}
+.hb-gt :is(img,.hb-gt-art),.hb-lb-in{transform:none!important}.hb-gt-c{transform:none}.hb-lb{-webkit-backdrop-filter:none;backdrop-filter:none}}
 """
 
 # The hub's only script (front page and realm list; every other hub page has none). Plain and small: it adds
@@ -2120,6 +2401,61 @@ if(!still&&window.matchMedia&&matchMedia("(pointer:fine)").matches){d.querySelec
     f.classList.add("tilt");f.style.setProperty("--ry",((x-.5)*6).toFixed(2)+"deg");f.style.setProperty("--rx",((.5-y)*5).toFixed(2)+"deg");
     f.style.setProperty("--gx",(x*100).toFixed(1)+"%");f.style.setProperty("--gy",(y*100).toFixed(1)+"%");});
   f.addEventListener("pointerleave",function(){f.classList.remove("tilt");f.style.setProperty("--rx","0deg");f.style.setProperty("--ry","0deg");});});}
+// the gallery: the chips filter in place (without script they are links to the gallery page, ?f=), and a tile opens the
+// lightbox: Esc or the backdrop closes it, the arrows move, Tab stays inside, focus goes back to the tile
+var lb=null,lbl=[],cur=-1,parts={};
+function mk(tag,cls,txt){var x=d.createElement(tag);if(cls)x.className=cls;if(txt!=null)x.textContent=txt;return x;}
+function btn(cls,label,path){var b=mk("button",cls);b.type="button";b.setAttribute("aria-label",label);
+  var s=d.createElementNS("http://www.w3.org/2000/svg","svg");s.setAttribute("viewBox","0 0 24 24");s.setAttribute("aria-hidden","true");
+  var p=d.createElementNS("http://www.w3.org/2000/svg","path");p.setAttribute("d",path);s.appendChild(p);b.appendChild(s);return b;}
+function clear(x){while(x.firstChild)x.removeChild(x.firstChild);}
+function lbBuild(){lb=mk("div","hb-lb");lb.hidden=true;lb.setAttribute("role","dialog");lb.setAttribute("aria-modal","true");
+  lb.setAttribute("aria-labelledby","hb-lb-t");
+  var box=mk("div","hb-lb-in"),cap=mk("div","hb-lb-cap");parts.pic=mk("div","hb-lb-pic");
+  parts.k=mk("small");parts.t=mk("h2");parts.t.id="hb-lb-t";parts.l=mk("p");parts.c=mk("p","hb-lb-cr");parts.a=mk("p","hb-lb-a");
+  parts.n=mk("p","hb-lb-n");parts.n.setAttribute("aria-live","polite");
+  parts.x=btn("hb-lb-x","Close","M6 6l12 12M18 6L6 18");parts.p=btn("hb-lb-p","Previous picture","M15 5l-7 7 7 7");
+  parts.nx=btn("hb-lb-nx","Next picture","M9 5l7 7-7 7");
+  [parts.k,parts.t,parts.l,parts.c,parts.a,parts.n].forEach(function(x){cap.appendChild(x);});
+  parts.pic.appendChild(parts.p);parts.pic.appendChild(parts.nx);
+  box.appendChild(parts.pic);box.appendChild(cap);box.appendChild(parts.x);lb.appendChild(box);d.body.appendChild(lb);
+  parts.x.addEventListener("click",lbClose);parts.p.addEventListener("click",function(){lbShow(cur-1);});
+  parts.nx.addEventListener("click",function(){lbShow(cur+1);});
+  lb.addEventListener("click",function(ev){if(ev.target===lb)lbClose();});
+  lb.addEventListener("keydown",function(ev){
+    if(ev.key==="Escape"){ev.preventDefault();ev.stopPropagation();lbClose();}
+    else if(ev.key==="ArrowLeft"){ev.preventDefault();lbShow(cur-1);}
+    else if(ev.key==="ArrowRight"){ev.preventDefault();lbShow(cur+1);}
+    else if(ev.key==="Tab"){var f=[].slice.call(lb.querySelectorAll("a[href],button")).filter(function(x){return !x.hidden&&x.offsetParent!==null;});
+      if(!f.length)return;var i=f.indexOf(d.activeElement);
+      if(ev.shiftKey&&i<=0){ev.preventDefault();f[f.length-1].focus();}else if(!ev.shiftKey&&i===f.length-1){ev.preventDefault();f[0].focus();}}});}
+function txt(t,sel){var x=t.querySelector(sel);return x?x.textContent:"";}
+function lbShow(i){var n=lbl.length;if(!n)return;cur=(i+n)%n;var t=lbl[cur];
+  [].slice.call(parts.pic.childNodes).forEach(function(x){if(x!==parts.p&&x!==parts.nx)parts.pic.removeChild(x);});
+  var im=t.querySelector(".hb-gt-a img"),art=t.querySelector(".hb-gt-a .hb-gt-art"),pic;
+  if(im){pic=mk("img");pic.src=im.getAttribute("src");pic.alt=im.alt;pic.width=+im.getAttribute("width");pic.height=+im.getAttribute("height");pic.decoding="async";}
+  else if(art){pic=art.cloneNode(true);}
+  if(pic)parts.pic.insertBefore(pic,parts.p);
+  parts.k.textContent=txt(t,".hb-gt-c small");parts.t.textContent=txt(t,".hb-gt-c b");parts.l.textContent=txt(t,".hb-gt-l");
+  parts.c.textContent=txt(t,".hb-gt-c i");clear(parts.a);
+  t.querySelectorAll(".hb-gt-x a").forEach(function(a){var c=a.cloneNode(true);c.className=a.className==="hb-gt-i"?"hb-cta sm":"hb-ghost";parts.a.appendChild(c);});
+  parts.n.textContent=(cur+1)+" of "+n;parts.p.hidden=parts.nx.hidden=n<2;}
+function lbOpen(t){if(!lb)lbBuild();var g=t.parentNode;
+  lbl=[].slice.call(g.querySelectorAll(".hb-gt")).filter(function(x){return !x.hidden;});
+  lbShow(Math.max(0,lbl.indexOf(t)));lb.hidden=false;root.classList.add("hb-lb-on");void lb.offsetWidth;lb.classList.add("open");parts.x.focus();}
+function lbClose(){if(!lb||lb.hidden)return;lb.classList.remove("open");lb.hidden=true;root.classList.remove("hb-lb-on");
+  var t=lbl[cur],a=t&&t.querySelector(".hb-gt-a");if(a)a.focus();}
+d.querySelectorAll("[data-gal]").forEach(function(g){
+  g.querySelectorAll(".hb-gt-a[data-lb]").forEach(function(a){a.addEventListener("click",function(ev){
+    if(ev.button!==0||ev.metaKey||ev.ctrlKey||ev.shiftKey||ev.altKey)return;ev.preventDefault();lbOpen(a.parentNode);});});
+  var box=g.closest("section")||g.parentNode,chips=box.querySelectorAll(".hb-gal-f a[data-f]"),none=g.querySelector(".hb-gal-none");
+  if(g.getAttribute("data-gal")!=="all")return;
+  chips.forEach(function(c){c.addEventListener("click",function(ev){if(ev.button!==0||ev.metaKey||ev.ctrlKey||ev.shiftKey)return;ev.preventDefault();
+    var f=c.getAttribute("data-f"),n=0;
+    g.querySelectorAll(".hb-gt").forEach(function(t){var ok=!f||t.getAttribute("data-k")===f;t.hidden=!ok;if(ok)n++;});
+    g.classList.toggle("flt",!!f);if(none)none.hidden=n>0;
+    chips.forEach(function(x){var on=x===c;x.classList.toggle("on",on);if(on)x.setAttribute("aria-current","true");else x.removeAttribute("aria-current");});
+    if(/\/gallery$/.test(location.pathname)&&history.replaceState)history.replaceState(null,"",c.getAttribute("href"));});});});
 if(navigator.clipboard){d.querySelectorAll("code.hb-addr").forEach(function(c){
   var b=d.createElement("button");b.type="button";b.className="hb-copy";b.textContent="Copy";
   b.setAttribute("aria-label","Copy the address "+c.textContent);
@@ -2198,10 +2534,38 @@ NAV_ICONS = {
     "status": '<path d="M3 12h4l2-5 4 10 2-5h6"/>',
     "download": '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
     "key": '<circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v3M21 12v2"/>',
+    "gallery": '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
 }
+# The gallery (Hub.gallery_tiles). Our in-game screenshots (stream/www-files/art, checked by eye: no logo, no game name;
+# behind the game data killswitch): name -> (width, height, title, line, alt). Words only; no client numbers, no game name.
+GAME_SHOTS = {
+    "dalaran": (1280, 654, "The hangout", "The meeting place on our flagship realm, streamed into a browser tab.",
+                "In-game screenshot: a robed hero on a cobbled path through a violet city, under a stone archway."),
+    "durotar": (1280, 662, "Red desert, first steps", "A new character by the campfire, every action bar ready with common keys.",
+                "In-game screenshot: two new characters by a campfire on red desert ground, the action bars along the bottom."),
+    "start": (1280, 798, "Your choice at the start", "Begin at level 1, or take a boost with gear, professions and a trip to the city.",
+              "In-game screenshot: a welcome window asks how to start the character, beside a chapel on green grass."),
+    "city": (1280, 699, "A city at night", "Group up, duel and run dungeons; labelled bots fill the empty places.",
+             "In-game screenshot: a character with an axe in a stone city at night, towers and trees against the stars."),
+}
+# The launcher's own pages (tools/art/leyline-ui-shots.cjs: sample data, no game art): name -> (title, line, alt).
+LAUNCHER_SHOTS = {
+    "home": ("The launcher", "The server, your account, your game client and one PLAY button.",
+             "The Leyline launcher's home page: the server, your account, your game client and the PLAY button."),
+    "workshop": ("Mods in one click", "Workshop mods sorted by Hot, with ratings, installs and Install.",
+                 "The launcher's Discover page: Workshop mods sorted by Hot, with ratings, installs and Install."),
+    "realms": ("Every realm, one list", "Players online, uptime and badges for every realm on the network.",
+               "The launcher's Realms page: every realm on the network with its players, uptime and badges."),
+    "modes": ("Game modes", "Minigames and modes, with one PLAY button each.",
+              "The launcher's Modes page: minigames and game modes with one PLAY button each."),
+}
+KIND_WORDS = {"addon": ("Addon", "an addon", "addons"), "mod": ("Mod", "a mod", "mods"), "mode": ("Game mode", "a game mode", "modes"),
+              "theme": ("Theme", "a theme", "creators")}
+GALLERY_FILTERS = (("", "All"), ("game", "In game"), ("mods", "Mods"), ("launcher", "Launcher"))
 # The header item each hub page highlights (the catalog: Addons when filtered to them, else Mods; an item page: Mods).
 ACTIVE = {BASE + "/realms": "realms", BASE + "/catalog": "mods", BASE + "/submit": "mods", BASE + "/modes": "modes",
-          BASE + "/beacon": "host", BASE + "/news": "news", BASE + "/creators": "creators"}
+          BASE + "/beacon": "host", BASE + "/news": "news", BASE + "/creators": "creators", BASE + "/gallery": "gallery",
+          FRONT + "/gallery": "gallery"}
 HEALTH_WORDS = {"ok": "All systems OK", "warn": "Some systems are down", "bad": "Systems offline"}
 # Who is signed in, for the header's account chip: set per request in get()/post() (the portal's threads).
 _REQ = threading.local()
@@ -2247,7 +2611,8 @@ def bind(lookup) -> None:
 def match(path: str) -> bool:
     if not hub_on():
         return False
-    return path == BASE or path.startswith(BASE + "/") or path == FEED or (path == FRONT and front_on())
+    return (path == BASE or path.startswith(BASE + "/") or path == FEED
+            or (path in (FRONT, FRONT + "/gallery") and front_on()))
 
 
 def _robots(public: bool = False) -> dict:
@@ -2273,6 +2638,10 @@ def get(handler, path: str, query: dict) -> None:
     if path in (BASE, FRONT):
         nonce = secrets.token_urlsafe(16)
         handler.send(200, hub.front_page(path, nonce), nonce=nonce, connect=True, headers=_robots())
+        return
+    if path in (BASE + "/gallery", FRONT + "/gallery"):
+        nonce = secrets.token_urlsafe(16)
+        handler.send(200, hub.gallery_page(query, path, nonce), nonce=nonce, headers=_robots())
         return
     if path == BASE + "/catalog":
         handler.send(200, hub.catalog_page(query), headers=_robots())

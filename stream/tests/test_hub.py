@@ -79,6 +79,7 @@ pages = ["/wrath/leyline-preview", "/wrath/leyline-preview/", "/wrath/leyline-pr
          "/wrath/leyline-preview/catalog?q=%3Cscript%3E&cat=nope&build=9&sort=x&page=-4",
          "/wrath/leyline-preview/creators", "/wrath/leyline-preview/beacon", "/wrath/leyline-preview/submit",
          "/wrath/leyline-preview/realms", "/wrath/leyline-preview/modes", "/wrath/leyline-preview/news",
+         "/wrath/leyline-preview/gallery", "/wrath/leyline-preview/gallery?f=mods", "/wrath/leyline-preview/gallery?f=%3Cx%3E",
          "/wrath/leyline-preview/p/" + first["id"].replace(":", "-"), "/wrath/leyline-preview/p/theme-night-sky"]
 for p in pages:
     st, h, b = req(p)
@@ -87,11 +88,13 @@ for p in pages:
     check(f"GET {p}: noindex header and meta", h.get("x-robots-tag") == "noindex, nofollow"
           and '<meta name="robots" content="noindex">' in s)
     csp = h.get("content-security-policy", "")
-    if p.rstrip("/").split("?")[0] in ("/wrath/leyline-preview", "/wrath/leyline-preview/realms"):
-        # the front page and the realm list: one small script, under this response's nonce, reading only this site
+    if p.rstrip("/").split("?")[0] in ("/wrath/leyline-preview", "/wrath/leyline-preview/realms", "/wrath/leyline-preview/gallery"):
+        # the front page, the realm list and the gallery: one small script, under this response's nonce, reading only this site
         nm = re.search(r"'nonce-([A-Za-z0-9_-]{16,})'", csp)
+        gal = p.split("?")[0].endswith("/gallery")
         check(f"GET {p}: one script, under the CSP nonce, connect-src 'self'", nm and s.count("<script") == 1
-              and f'<script nonce="{nm.group(1)}">' in s and "connect-src 'self'" in csp and "unsafe-inline" not in csp.split("script-src")[1].split(";")[0]
+              and f'<script nonce="{nm.group(1)}">' in s and ("connect-src" not in csp if gal else "connect-src 'self'" in csp)
+              and "unsafe-inline" not in csp.split("script-src")[1].split(";")[0]
               and "<script src" not in s, csp)
         check(f"GET {p}: no brand words", not BANNED.findall(visible(re.sub(r"<script.*?</script>", " ", s, flags=re.S))))
     else:
@@ -148,13 +151,13 @@ check("header: each item goes to the launcher page's web twin", hrefs == {
       "Addons": "/wrath/leyline-preview/catalog?cat=addons", "Modes": "/wrath/leyline-preview/modes", "Host": "/wrath/host",
       "Community": "/wrath/workshop"} and "addons" in HB.CATEGORY_IDS, hrefs)
 more = re.search(r'<details class="hb-more-d"><summary class="hb-ni[^"]*">.*?<span>More</span></summary><div class="hb-more-m">(.*?)</div></details>', nav, re.S)
-check("header: More is a details dropdown (no script needed) with Docs, News, Creators, Status",
-      more and re.findall(r"<span>([^<]+)</span>", more.group(1)) == ["Docs", "News", "Creators", "Status"]
-      and 'href="/wrath/leyline-preview#status"' in more.group(1))
+check("header: More is a details dropdown (no script needed) with Gallery, Docs, News, Creators, Status",
+      more and re.findall(r"<span>([^<]+)</span>", more.group(1)) == ["Gallery", "Docs", "News", "Creators", "Status"]
+      and 'href="/wrath/leyline-preview#status"' in more.group(1) and 'href="/wrath/leyline-preview/gallery"' in more.group(1))
 check("header: the phone sheet has the same items as tiles, and the download", re.findall(
-      r"<span>([^<]+)</span>", re.search(r'<div class="hb-nav-x">(.*?)</div>', nav, re.S).group(1)) == ["Docs", "News", "Creators", "Status"]
+      r"<span>([^<]+)</span>", re.search(r'<div class="hb-nav-x">(.*?)</div>', nav, re.S).group(1)) == ["Gallery", "Docs", "News", "Creators", "Status"]
       and 'class="hb-dl-x"' in nav and 'id="hb-menu" class="hb-menu-t"' in hd and '<label for="hb-menu" class="hb-menu-b"' in hd)
-check("header: a line icon by every item (inline SVG, currentColor)", nav.count('<svg viewBox="0 0 24 24" aria-hidden="true">') == 7 + 1 + 4 + 4
+check("header: a line icon by every item (inline SVG, currentColor)", nav.count('<svg viewBox="0 0 24 24" aria-hidden="true">') == 7 + 1 + 5 + 5
       and "stroke:currentColor" in front)
 check("header: Download (primary) and Sign In (the crystal) on the right, no item active on the front page",
       re.search(r'<div class="hb-end"><a class="hb-dl" href="https://github\.com/orionopenwow/Leyline/releases"[^>]*>.*?Download</a>'
@@ -204,13 +207,14 @@ check("feature sections: a TODO(owner) to reorder them", "TODO(owner): the order
 check("feature sections: the game modes line from playmodes.json, Hero Key as coming", "Minigolf" in fs[3][4]
       and "Hero Key sign-in across realms (coming)" in fs[2][5])
 check("feature sections: every one has its icon", front.count('<span class="hb-ico"><svg viewBox="0 0 24 24" aria-hidden="true">') == 7)
-shots = re.findall(r'<img src="/wrath/art/(leyline-ui-[a-z]+\.webp)" alt="([^"]+)" width="1240" height="760" loading="lazy"', front)
+feats = re.search(r'<div class="hb-feats" id="features">.*?(?=<section class="hb-sec hb-gal-s|<section class="hb-sec hb-rv" id="hosted"|<div class="hb-pair">)', front, re.S).group(0)
+shots = re.findall(r'<img src="/wrath/art/(leyline-ui-[a-z]+\.webp)" alt="([^"]+)" width="1240" height="760" loading="lazy"', feats)
 check("feature sections: the launcher's own pages as pictures (served, lazy, with alt text), CSS drawings for the rest",
       [n for n, _ in shots] == ["leyline-ui-home.webp", "leyline-ui-realms.webp", "leyline-ui-modes.webp", "leyline-ui-workshop.webp"]
       and all(a for _, a in shots) and all(n in wp.ART_TYPES and not n.startswith("leyline-shot-") for n, _ in shots)
       and all(os.path.isfile(os.path.join(HERE, "www-files", "art", n)) for n, _ in shots)
       and 'class="hb-draw hb-console"' in fs[1][7] and 'class="hb-draw hb-people"' in fs[5][7] and 'class="hb-draw hb-code"' in fs[6][7]
-      and not re.search(r"leyline-shot-|wu-load-orion|painted", front, re.I))
+      and not re.search(r"leyline-shot-|wu-load-orion|painted", feats, re.I) and not re.search(r"wu-load-orion|painted", front, re.I))
 how = re.search(r'<ol class="hb-how[^"]*" aria-label="How it works">(.*?)</ol>', front, re.S)
 check("how it works: three steps, launcher, game folder or browser, realm", how and re.findall(r"<b>([^<]+)</b>", how.group(1)) == [
       "Get the launcher", "Point it at your game folder", "Pick a realm"] and "play in your browser" in how.group(1)
@@ -534,9 +538,9 @@ def portal_with(name):
 HB.hub.portal = portal_with
 fp = req("/wrath/leyline-preview")[2].decode()
 order = [fp.find(x) for x in ('class="hb-hero"', 'class="hb-tick"', 'id="realms"', 'class="hb-how', 'class="hb-nums', 'id="features"',
-                              'id="f-agents"', 'id="hosted"', 'id="mod-week"', 'id="herokey"', 'id="creators-top"', 'id="news"',
+                              'id="f-agents"', 'id="gallery"', 'id="hosted"', 'id="mod-week"', 'id="herokey"', 'id="creators-top"', 'id="news"',
                               'id="status"', 'id="community"', 'Browse by category')]
-check("front page order: hero, ticker, realms, how it works, numbers, features, hosted, mod of the week, Hero Key, creators, "
+check("front page order: hero, ticker, realms, how it works, numbers, features, gallery, hosted, mod of the week, Hero Key, creators, "
       "news, status, spotlight, categories", -1 not in order and order == sorted(order), order)
 tick = re.search(r'<section class="hb-tick".*?</section>', fp, re.S).group(0)
 plain = re.search(r'<ul class="hb-tick-l">(.*?)</ul>', tick, re.S).group(1)
@@ -634,6 +638,124 @@ check("header signed in: the account chip, no Sign In", '<a class="hb-acct" href
       and 'class="hb-signin"' not in signed)
 check("header signed out (no cookie): Sign In, the social module never asked", 'class="hb-signin"' in req("/wrath/leyline-preview/creators")[2].decode())
 WHO["v"] = None
+
+# ---------------------------------------------------------------- the gallery (owner 2026-10-30: screenshots and featured mods)
+GALS = re.compile(r'<figure class="hb-gt( [a-z ]+)?" data-k="(game|mods|launcher)" id="([^"]+)">(.*?)</figure>', re.S)
+
+
+class ShotWorkshop(FakeWorkshop):
+    """A Workshop whose packaged mod has a screenshot (all.json doesn't list screenshots: the hub asks mod())."""
+    def mod(self, mid):
+        return {"id": mid, "screenshots": ["one.png"]} if mid == "pings" else None
+
+
+def portal_gal(name):
+    return ShotWorkshop() if name == "workshop" else portal_with(name)
+
+
+HB.hub.portal = portal_gal
+check("gallery: a game shot missing from the art folder is never a broken image (the flat tile instead)",
+      'id="g-leyline"' in req("/wrath/leyline-preview")[2].decode() and not os.path.isdir(wp.ART_DIR))
+ART_WAS = wp.ART_DIR
+wp.ART_DIR = os.path.join(HERE, "www-files", "art")
+fp = req("/wrath/leyline-preview")[2].decode()
+gsec = re.search(r'<section class="hb-sec hb-gal-s hb-rv" id="gallery".*?</section>', fp, re.S)
+check("gallery: on the front page, after the feature sections, before Hosted by the community",
+      gsec and fp.find('id="f-agents"') < fp.find('id="gallery"') < fp.find('id="hosted"') and '<h2 id="hb-gal-h">Gallery</h2>' in gsec.group(0))
+gsec = gsec.group(0) if gsec else ""
+tiles = GALS.findall(gsec)
+kinds = [t[1] for t in tiles]
+check("gallery: 8 to 12 tiles, in game, mods and launcher taken in turn", 8 <= len(tiles) <= 12
+      and kinds[:6] == ["game", "mods", "launcher"] * 2 and {"game", "mods", "launcher"} <= set(kinds), kinds)
+check("gallery: the first tile is the big in-game shot", tiles and "big" in tiles[0][0] and tiles[0][2] == "g-dalaran"
+      and 'src="/wrath/art/leyline-shot-dalaran.webp"' in tiles[0][3], tiles[0][:3] if tiles else "")
+mt = [t for t in tiles if t[1] == "mods"]
+check("gallery: the first mod is the Mod of the week (top Hot), then the rest of Hot",
+      mt and mt[0][2] == "m-" + HOT["id"].replace(":", "-") and "Mod of the week" in mt[0][3], [t[2] for t in mt])
+check("gallery: every mod tile has Install with Leyline (leyline://install/<id>), View and the author's credit", mt and all(
+      re.search(r'<a class="hb-gt-i" href="leyline://install/(?:mod|link|theme):[a-z0-9-]+">(?:Install with|Open in) Leyline</a>'
+                r'<a class="hb-gt-v" href="/wrath/leyline-preview/p/[a-z0-9-]+">View</a>', t[3]) and re.search(r"<i>by [^<]+</i>", t[3])
+      and 'class="hb-gt-x" hidden' not in t[3] for t in mt))
+check("gallery: the Mod of the week installs with Leyline", f'href="leyline://install/{HOT["id"]}">Install with Leyline</a>' in mt[0][3])
+gal = req("/wrath/leyline-preview/gallery")[2].decode()
+pings = next((t for t in GALS.findall(gal) if t[2] == "m-mod-pings"), None)
+check("gallery page: a Workshop mod with its own screenshot shows it (from the Workshop, same origin), with alt text and size",
+      pings and re.search(r'<img src="/wrath/mods/pings/shot/0" alt="A screenshot of Pings, an addon by WrathUnleashed" width="640" height="360" '
+                          r'loading="lazy" decoding="async">', pings[3]), pings[3][:300] if pings else "")
+gen = [t for t in GALS.findall(gal) if t[1] == "mods" and "<img" not in t[3]]
+check("gallery: a mod without our screenshot gets a tile drawn from its id (gradient, initial, kind icon), labelled",
+      gen and all(re.search(r'<span class="hb-gt-art gen" style="--h1:\d+;--h2:\d+;--a:\d+deg" aria-hidden="true"><b>.</b><svg', t[3])
+                  and re.search(r'<a class="hb-gt-a" href="[^"]+" data-lb aria-label="[^"]+">', t[3]) for t in gen))
+imgs = re.findall(r"<img\b[^>]*>", gal + gsec)
+check("gallery: every picture has alt text, a width and a height, and loads lazily", imgs and all(
+      re.search(r'alt="[^"]{12,}"', i) and re.search(r'width="\d+" height="\d+"', i) and 'loading="lazy"' in i
+      for i in re.findall(r'<img\b[^>]*>', "".join(t[3] for t in GALS.findall(gal + gsec)))), imgs[:3])
+tiles_all = GALS.findall(gal)
+check("gallery page: every eligible picture (4 in game, 4 launcher, the mods) and no game shot missing",
+      sum(1 for t in tiles_all if t[1] == "game") == 4 and sum(1 for t in tiles_all if t[1] == "launcher") == 4
+      and sum(1 for t in tiles_all if t[1] == "mods") >= 4 and 'data-gal="all"' in gal, [t[1] for t in tiles_all])
+check("gallery: without script each tile is a link: the image itself, or the mod's page", all(
+      re.search(r'<a class="hb-gt-a" href="(/wrath/art/leyline-(?:shot|ui)-[a-z]+\.webp|/wrath/leyline-preview/p/[a-z0-9-]+|/wrath)" data-lb', t[3])
+      for t in tiles_all))
+chips = re.findall(r'<a class="hb-chip( on)?" href="([^"]+)" data-f="([a-z]*)"(?: aria-current="true")?>([^<]+)</a>', gsec)
+check("gallery filters: All, In game, Mods, Launcher, links to the gallery page (?f=) that work without script",
+      [(c[1], c[3]) for c in chips] == [("/wrath/leyline-preview/gallery", "All"), ("/wrath/leyline-preview/gallery?f=game", "In game"),
+                                        ("/wrath/leyline-preview/gallery?f=mods", "Mods"), ("/wrath/leyline-preview/gallery?f=launcher", "Launcher")]
+      and chips[0][0] == " on", chips)
+for f in ("game", "mods", "launcher"):
+    g = req("/wrath/leyline-preview/gallery?f=" + f)[2].decode()
+    ks = [t[1] for t in GALS.findall(g)]
+    check(f"gallery ?f={f}: only those tiles, its chip on, no in-place filter", ks and set(ks) == {f} and 'data-gal="one"' in g
+          and re.search(rf'<a class="hb-chip on" href="/wrath/leyline-preview/gallery\?f={f}" data-f="{f}" aria-current="true">', g), ks)
+check("gallery ?f=<junk>: everything", [t[1] for t in GALS.findall(req("/wrath/leyline-preview/gallery?f=nope")[2].decode())] == [t[1] for t in tiles_all])
+hd, nav, labels, on = header_of(gal)
+check("gallery page: the hub header, More highlighted, Gallery in More and the phone sheet, the sub-nav",
+      labels == NAV_ORDER and on == ["More"] and '<a class="hb-mi on" href="/wrath/leyline-preview/gallery" aria-current="page">' in nav
+      and '<a href="/wrath/leyline-preview/gallery" aria-current="page" class="on">Gallery</a>' in gal)
+check("gallery: script filters in place and opens the lightbox (Esc, arrows, Tab kept inside, focus back to the tile), no innerHTML",
+      all(x in HB.HUB_JS for x in ('d.querySelectorAll("[data-gal]")', 'ev.key==="Escape"', 'ev.key==="ArrowLeft"', 'ev.key==="ArrowRight"',
+                                    'ev.key==="Tab"', 'aria-modal', "if(a)a.focus()", 'if(g.getAttribute("data-gal")!=="all")return;'))
+      and "innerHTML" not in HB.HUB_JS and HB.HUB_JS.find('d.querySelectorAll("[data-gal]")') < HB.HUB_JS.find("if(!rows.length||!window.fetch)return;"))
+check("gallery: hover zoom and caption reveal, none of it moving with reduced motion; uniform tiles while filtered",
+      ".hb-gt:is(:hover,:focus-within) :is(.hb-gt-a img,.hb-gt-a .hb-gt-art){transform:scale(1.05)}" in fp
+      and "@media (hover:none){.hb-gt-c{opacity:1;transform:none}}" in fp
+      and re.search(r"prefers-reduced-motion:reduce\)\{.*?\.hb-gt :is\(img,\.hb-gt-art\),\.hb-lb-in\{transform:none!important\}", fp, re.S)
+      and ".hb-gal.flt .hb-gt{grid-column:auto;grid-row:auto}" in fp)
+SRC = re.compile(r'(?:src|href)="([^"]+\.(?:webp|png|jpe?g|gif|avif|svg))"|<img\b[^>]*\bsrc="([^"]+)"|url\(([^)]+)\)', re.I)
+HB.hub.portal = lambda name: None if name == "hub_rank" else portal_gal(name)
+cat = req("/wrath/leyline-preview/catalog")[2].decode()
+catf = req("/wrath/leyline-preview/catalog?cat=addons")[2].decode()
+HB.hub.portal = portal_gal
+third = [u for page in (fp, gal, cat) for m in SRC.findall(page) for u in m if u and not u.startswith("#") and not (u.startswith("/") and not u.startswith("//"))]
+check("no third-party pictures anywhere on the hub: every image, image link and CSS url() is our own path", not third, third[:5])
+check("gallery: CSP img-src 'self' (the browser would refuse another site's picture anyway)",
+      "img-src 'self'" in req("/wrath/leyline-preview/gallery")[1].get("content-security-policy", ""))
+check("gallery: no client numbers or game names in captions, alt text or labels", not NOPE.findall(shown(gal)) and not NOPE.findall(shown(gsec))
+      and not BANNED.findall(visible(gal)), NOPE.findall(shown(gal))[:5])
+strip = re.search(r'<section class="hb-feat-s".*?</section>', cat, re.S)
+check("catalog: a Featured strip of the gallery's mod tiles (plain links, no script), only unfiltered on page 1",
+      strip and 1 <= len(GALS.findall(strip.group(0))) <= 4 and all(t[1] == "mods" for t in GALS.findall(strip.group(0)))
+      and "data-lb" not in strip.group(0) and "<script" not in cat
+      and 'class="hb-feat-s"' not in catf)
+# the game data killswitch: no game picture at all, one flat Leyline tile (the mark) in their place
+FLAG = os.path.join(DATA, "gamedata-off-test")
+os.environ["WU_GAMEDATA_FLAG"] = FLAG
+open(FLAG, "w").close()
+fk = req("/wrath/leyline-preview")[2].decode()
+gk = req("/wrath/leyline-preview/gallery?f=game")[2].decode()
+fk_tiles = GALS.findall(re.search(r'id="gallery".*?</section>', fk, re.S).group(0))
+check("killswitch on: no in-game screenshot anywhere on the front page or the gallery", "leyline-shot-" not in fk
+      and "leyline-shot-" not in req("/wrath/leyline-preview/gallery")[2].decode() and req("/wrath/art/leyline-shot-city.webp")[0] == 410)
+check("killswitch on: one flat Leyline tile with the mark instead, still In game, Play in your browser",
+      [t[2] for t in fk_tiles if t[1] == "game"] == ["g-leyline"] and [t[2] for t in GALS.findall(gk)] == ["g-leyline"]
+      and re.search(r'<figure class="hb-gt big flat" data-k="game" id="g-leyline"><a class="hb-gt-a" href="/wrath" data-lb aria-label="[^"]+">'
+                    r'<span class="hb-gt-art flat" aria-hidden="true"><span class="ly-spin slow"', fk)
+      and fk_tiles[1][1] == "mods" and fk_tiles[2][1] == "launcher", [t[:3] for t in fk_tiles][:4])
+os.remove(FLAG)
+os.environ.pop("WU_GAMEDATA_FLAG")
+check("killswitch off again: the shots are back", "leyline-shot-dalaran.webp" in req("/wrath/leyline-preview")[2].decode())
+wp.ART_DIR = ART_WAS
+HB.hub.portal = portal_with
 HB.hub.portal = lambda name: None if name == "hub_rank" else portal_with(name)
 best = sorted(pool, key=lambda i: (-float(i.get("score") or 0), i["name"].lower(), i["id"]))[0]
 check("mod of the week without rankings: the best score", f'leyline://install/{best["id"]}"' in req("/wrath/leyline-preview")[2].decode())
@@ -657,11 +779,16 @@ check("no page file, doc or launcher page links to the preview", not leaks, leak
 check("the site nav and footer don't", "leyline-preview" not in wp.site_nav() + wp.site_footer())
 old = req("/wrath/leyline")[2].decode()
 check("switch off (default): /wrath/leyline is the current page", 'class="hb-top"' not in old)
+check("switch off (default): /wrath/leyline/gallery is not served", 'class="hb-top"' not in req("/wrath/leyline/gallery")[2].decode())
 os.environ["WU_HUB_FRONT"] = "1"
 st, h, b = req("/wrath/leyline")
 s = b.decode()
 check("switch on: /wrath/leyline is the hub's front page, indexable", st == 200 and 'class="hb-top"' in s
       and "x-robots-tag" not in h and 'content="noindex"' not in s and "Preview:" not in s)
+st, h, b = req("/wrath/leyline/gallery")
+check("switch on: /wrath/leyline/gallery is the gallery, indexable, linked from More and the front page's filters",
+      st == 200 and "<h1>Gallery</h1>" in b.decode() and "x-robots-tag" not in h and 'content="noindex"' not in b.decode()
+      and 'href="/wrath/leyline/gallery"' in s and 'href="/wrath/leyline/gallery?f=game"' in s)
 os.environ.pop("WU_HUB_FRONT")
 os.environ["WU_HUB"] = "0"
 check("WU_HUB=0: the preview is off", req("/wrath/leyline-preview")[0] == 404 and req("/wrath/leyline/catalog.json")[0] == 404)
