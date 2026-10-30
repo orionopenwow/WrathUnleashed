@@ -78,6 +78,7 @@ pages = ["/wrath/leyline-preview", "/wrath/leyline-preview/", "/wrath/leyline-pr
          "/wrath/leyline-preview/catalog?cat=themes", "/wrath/leyline-preview/catalog?source=index&page=2",
          "/wrath/leyline-preview/catalog?q=%3Cscript%3E&cat=nope&build=9&sort=x&page=-4",
          "/wrath/leyline-preview/creators", "/wrath/leyline-preview/beacon", "/wrath/leyline-preview/submit",
+         "/wrath/leyline-preview/realms", "/wrath/leyline-preview/modes", "/wrath/leyline-preview/news",
          "/wrath/leyline-preview/p/" + first["id"].replace(":", "-"), "/wrath/leyline-preview/p/theme-night-sky"]
 for p in pages:
     st, h, b = req(p)
@@ -85,8 +86,17 @@ for p in pages:
     check(f"GET {p}: 200 html", st == 200 and h.get("content-type", "").startswith("text/html"), st)
     check(f"GET {p}: noindex header and meta", h.get("x-robots-tag") == "noindex, nofollow"
           and '<meta name="robots" content="noindex">' in s)
-    check(f"GET {p}: no script, no brand words", "<script" not in s and "script-src 'none'" in h.get("content-security-policy", "")
-          and not BANNED.findall(visible(s)), BANNED.findall(visible(s))[:5])
+    csp = h.get("content-security-policy", "")
+    if p.rstrip("/").split("?")[0] in ("/wrath/leyline-preview", "/wrath/leyline-preview/realms"):
+        # the front page and the realm list: one small script, under this response's nonce, reading only this site
+        nm = re.search(r"'nonce-([A-Za-z0-9_-]{16,})'", csp)
+        check(f"GET {p}: one script, under the CSP nonce, connect-src 'self'", nm and s.count("<script") == 1
+              and f'<script nonce="{nm.group(1)}">' in s and "connect-src 'self'" in csp and "unsafe-inline" not in csp.split("script-src")[1].split(";")[0]
+              and "<script src" not in s, csp)
+        check(f"GET {p}: no brand words", not BANNED.findall(visible(re.sub(r"<script.*?</script>", " ", s, flags=re.S))))
+    else:
+        check(f"GET {p}: no script, no brand words", "<script" not in s and "script-src 'none'" in csp
+              and not BANNED.findall(visible(s)), BANNED.findall(visible(s))[:5])
     front_p = p.rstrip("/") == "/wrath/leyline-preview"
     check(f"GET {p}: the hub's own header (mark, wordmark, Sign In) and, below the front page, its sub-nav",
           'class="hb-top"' in s and 'class="ly-spin slow hb-mark"' in s and "<b>Leyline</b><i>Launcher</i>" in s
@@ -138,6 +148,48 @@ check("Community Spotlight: two to four real items, with their own names and aut
 foot = re.search(r'<footer class="hb-foot">.*?</footer>', front, re.S).group(0)
 check("footer: Docs, Download, Community, Status, the wordmark, Discord and GitHub only",
       all(f">{x}<" in foot for x in ("Docs", "Download", "Community", "Status", "Discord", "GitHub")) and "<b>Leyline</b>" in foot)
+# the owner's 2026-10-30 additions: realms under the hero, the products in order, how it works, the polish
+feats = re.findall(r'<a class="hb-feat" href="([^"]+)"[^>]*>.*?<b>([^<]+)</b><span>([^<]+)</span><i>([^<]+)</i></a>', front, re.S)
+check("products: the recommended order, each one line and one link", [f[1] for f in feats] == [
+      "Leyline Launcher", "Host a server", "Realms &amp; hopping", "Game modes", "Mods &amp; addons", "Community hub",
+      "Agents &amp; tooling"] and all(f[2] and f[3] for f in feats), [f[1] for f in feats])
+check("products: links to pages that exist, nothing paid", [f[0] for f in feats][1:] == [
+      "/wrath/host", "/wrath/leyline-preview/realms", "/wrath/leyline-preview/modes", "/wrath/leyline-preview/catalog?sort=hot",
+      "/wrath/workshop", "/wrath/leyline-preview/creators"] and feats[0][0].startswith("https://github.com/orionopenwow/Leyline/releases")
+      and not re.search(r"(?i)support|donat|\bvip\b|\bshop\b", " ".join(" ".join(f) for f in feats)))
+check("products: a TODO(owner) to reorder them", "TODO(owner): the order of the products" in open(HB.__file__).read())
+check("products: the game modes line from playmodes.json", "Minigolf" in feats[3][2])
+check("products: every card has its icon", front.count('<span class="hb-ico"><svg viewBox="0 0 24 24" aria-hidden="true">') == 7)
+how = re.search(r'<ol class="hb-how[^"]*" aria-label="How it works">(.*?)</ol>', front, re.S)
+check("how it works: three steps, launcher, game folder or browser, realm", how and re.findall(r"<b>([^<]+)</b>", how.group(1)) == [
+      "Get the launcher", "Point it at your game folder", "Pick a realm"] and "play in your browser" in how.group(1)
+      and "TODO(owner): the \"how it works\" wording" in front)
+order = [front.index(x) for x in ('class="hb-hero"', 'id="realms"', 'class="hb-how', 'id="features"', 'id="status"', 'id="community"')]
+check("front page order: hero, realms, how it works, products, status, spotlight", order == sorted(order), order)
+check("realm list without a relay: our realm still there, one click", 'data-home="1"' in front and 'class="hb-play" href="/wrath"' in front
+      and f'>{wp.PUBLIC_HOST}</code>' in front and "may be a little out of date" in front)
+check("polish: hover lift and the reveal stop for reduced motion", "@media (prefers-reduced-motion:reduce)" in front
+      and "animation:none!important" in front and ".hb-js .hb-wait{" in front and "focus-visible{outline:2px" in front)
+check("polish: the script reads only this site's public JSON", re.findall(r'json\("([^"]+)"\)', HB.HUB_JS) == ["/wrath/realms.json", "/wrath/status.json"]
+      and "innerHTML" not in HB.HUB_JS and "eval" not in HB.HUB_JS)
+check("sub-nav: Realms, Modes and News", all(f'href="/wrath/leyline-preview/{x}"' in req("/wrath/leyline-preview/catalog")[2].decode()
+                                               for x in ("realms", "modes", "news")))
+modes = req("/wrath/leyline-preview/modes")[2].decode()
+mode_ids = [m["id"] for m in wp.playmodes.entries()]
+check("modes page: every mode in playmodes.json, live realm modes one click", all(f'id="mode-{i}"' in modes for i in mode_ids)
+      and 'class="hb-play" href="/wrath?go=mode:minigolf"' in modes and "Azeroth Survivors" in modes
+      and 'go=mode:azeroth-survivors' not in modes and "Coming soon" in modes and 'href="/wrath/host">Host it' in modes)
+check("modes page: no script", "<script" not in modes)
+news = req("/wrath/leyline-preview/news")[2].decode()
+check("news page: empty says so", "No news posts yet." in news)
+os.makedirs(os.path.join(DATA, "leyline"), exist_ok=True)
+json.dump({"format": 1, "posts": [{"id": "a", "date": "2026-10-29", "tag": "Launcher 0.3", "title": "Every client", "items": ["One", "Two"]},
+                                  {"id": "b", "title": "WoW news", "items": []}]}, open(os.path.join(DATA, "leyline", "news.json"), "w"))
+os.environ["WU_LEYLINE_DIR"] = os.path.join(DATA, "leyline")
+news = req("/wrath/leyline-preview/news")[2].decode()
+if wp.admin is not None:
+    check("news page: the admin console's posts, brand words dropped", "Every client" in news and "<li>One</li>" in news
+          and "WoW news" not in news)
 os.environ["WU_LEYLINE_DIR"] = os.path.join(DATA, "leyline")
 os.makedirs(os.environ["WU_LEYLINE_DIR"], exist_ok=True)
 rel = "https://github.com/orionopenwow/Leyline/releases/tag/launcher-v0.4.0"

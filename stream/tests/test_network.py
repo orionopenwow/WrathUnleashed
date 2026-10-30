@@ -268,6 +268,34 @@ st, _, front = req("GET", "/wrath/leyline-preview")
 check("hub front page: Platform Status has the network line, linked to the hub's realm list", "Realm network" in front
       and re.search(r"\d+ realms · \d+ players online", front) and 'href="/wrath/leyline-preview/realms"' in front
       and "Host a Beacon" in front)
+
+# the realm list under the hero (owner 2026-10-30): every server, ours first, one click to play
+sec = re.search(r'<section class="hb-sec hb-realms" id="realms".*?</section>', front, re.S)
+sec = sec.group(0) if sec else ""
+rows = re.findall(r'<li class="hb-rl[^"]*"( data-home="1"| data-rid="([a-z2-7]{16})") data-build="([^"]+)" data-live="(\d)"'
+                  r' data-players="(\d+)"><div class="hb-rl-n"><b>([^<]+)</b>', sec)
+names = [r[5] for r in rows]
+check("hub realm list: right under the hero, before the products and Platform Status", sec
+      and front.index('class="hb-hero"') < front.index('id="realms"') < front.index('id="features"') < front.index('id="status"'))
+check("hub realm list: the home realm first, as Official, played with a plain /wrath", rows and rows[0][0] == ' data-home="1"'
+      and names[0] == "Leyline Sample Hangout" and 'href="/wrath" aria-label="Play Leyline Sample Hangout in your browser"' in sec
+      and '<span class="hb-bdg o">Official</span>' in sec and "<b>Dalaran Hangout</b>" not in sec, names)
+check("hub realm list: featured next, offline last, hidden realms never", set(names[1:3]) == {"Picked One", "Plain Field"}
+      and names[-1] == "Sleepy Hollow" and rows[-1][3] == "0" and "Hidden Away" not in sec and "Busy Den" in names, names)
+check("hub realm list: Play in browser is the hop link, only for live 3.3.5a realms", f'href="/wrath?go=r:{BUSY}"' in sec
+      and f'go=r:{FEAT}' not in sec and f'go=r:{SLEEPY}' not in sec and "Needs a 1.12.1 client" in sec)
+check("hub realm list: the desktop address for each realm with a port, ours by the site's host", "relay.example:40002" in sec
+      and f'title="The realm address for a desktop client">{wp.PUBLIC_HOST}</code>' in sec)
+check("hub realm list: badges, build, core, region, uptime", all(x in sec for x in ('class="hb-bdg f">Featured', 'class="hb-bdg v"',
+      "1.12.1 · AzerothCore", "North America east", "98% up", "<b class=\"hb-n\">30</b> playing", "40 bots")), sec[:400])
+check("hub realm list: a GET form filter that works without script", f'action="/wrath/leyline-preview/realms" data-rf="hb-rlist"' in sec
+      and '<option value="1.12.1">' in sec and 'name="now" value="1"' in sec)
+check("hub realm list: no Open in launcher until deeplink.rs accepts a realm link", "leyline://" not in sec and wp.hub_mod.REALM_DEEPLINK == "")
+st, _, only = req("GET", "/wrath/leyline-preview/realms?build=1.12.1&now=1")
+check("hub realms page: the form's filters on the server", st == 200 and "<b>Picked One</b>" in only and "<b>Busy Den</b>" not in only
+      and "Leyline Sample Hangout" not in only)
+st, _, none = req("GET", "/wrath/leyline-preview/realms?build=2.4.3")
+check("hub realms page: no match says so", "No realms match these filters" in none)
 st, _, beacon = req("GET", "/wrath/leyline-preview/beacon")
 check("hub Host a Beacon: the launcher's Host page and the website", 'href="/wrath/leyline">Get the launcher' in beacon
       and 'href="/wrath/host"' in beacon)

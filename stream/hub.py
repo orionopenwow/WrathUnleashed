@@ -5,15 +5,19 @@ Built for the 2026-10-26 brief ("hide the full leyline front page thing but buil
 for people to submit their mods). Served by stream/wrath_portal.py, which loads this file from beside itself
 and runs without it.
 
-    GET  /wrath/leyline-preview               the front page: builds, categories, picks, creators, Host a Beacon
+    GET  /wrath/leyline-preview               the front page: the hero, every realm on the network (one-click Play in
+                                              browser, the desktop address), how it works, the products, Platform
+                                              Status, Community Spotlight, builds, categories, creators, Host a Beacon
     GET  /wrath/leyline-preview/catalog       everything, filtered by plain links and a GET form (no script):
                                               ?build=1.12|2.4.3|3.3.5a &cat=<category>|themes (4.3.4, 5.4.8 hidden: HIDDEN_BUILDS)
                                               &source=workshop|index|theme &q=<text> &sort=score|name|updated &page=N
     GET  /wrath/leyline-preview/p/<id>        one item (id: link-<12 hex>, mod-<mod id>, theme-<id>)
     GET  /wrath/leyline-preview/creators      for creators: the docs, how the index works, how to submit
     GET  /wrath/leyline-preview/beacon        Host a Beacon (your own realm on the Leyline list)
-    GET  /wrath/leyline-preview/realms        the Leyline network's realms (stream/network.py: community realms first,
-                                              the sample hangout pinned, filters ?build= &tag= &region= &lang= &now=1)
+    GET  /wrath/leyline-preview/realms        every realm on the network as rows: ours first, then stream/network.py's
+                                              order; filters ?build= &tag= &region= &lang= &now=1
+    GET  /wrath/leyline-preview/modes         the launcher's Modes page: every game mode, one click (/wrath?go=mode:<id>)
+    GET  /wrath/leyline-preview/news          the launcher's News page: the admin console's news.json posts
     GET  /wrath/leyline-preview/submit        the "Submit a mod" form;  POST it to queue a submission
     GET  /wrath/leyline-preview/approved.json the approved submissions and delisted repos (the index pipeline reads
                                               it: tools/hub-index/hub_index.py); repo URLs only, no notes
@@ -21,7 +25,9 @@ and runs without it.
                                               (mods/all-json.md) with the extra fields in docs/HUB-INDEX.md (CORS *)
 
 Hidden: every preview page carries <meta name="robots" content="noindex"> and an X-Robots-Tag header, and no
-other page links here. The one switch: WU_HUB_FRONT=1 serves the front page at /wrath/leyline too (the front
+other page links here. The front page and the realm list carry one small script (HUB_JS, under a CSP nonce):
+Copy buttons, the realm filter without a reload, live player counts and the section reveal; without it they work
+the same, only still. Every other hub page has no script. The one switch: WU_HUB_FRONT=1 serves the front page at /wrath/leyline too (the front
 door) and drops the noindex. Off by default. WU_HUB=0 turns the whole thing off (404s).
 
 Data (read-only /app, beside this file in a checkout):
@@ -42,6 +48,7 @@ import json
 import math
 import os
 import re
+import secrets
 import threading
 import time
 import urllib.parse
@@ -583,7 +590,8 @@ class Hub:
     def _wordmark(self) -> str:
         return f'{self._spin(44, "slow hb-mark")}<span class="hb-word"><b>Leyline</b><i>Launcher</i></span>'
 
-    def _shell(self, title: str, body: str, path: str) -> bytes:
+    def _shell(self, title: str, body: str, path: str, nonce: str = "") -> bytes:
+        """The page around body. nonce: the CSP nonce for HUB_JS (the front page and the realm list); "" for no script."""
         e = html.escape
         front = path in (BASE, FRONT)
         home = FRONT if front_on() else BASE
@@ -599,8 +607,9 @@ class Hub:
                'Sign In</a></header>')
         sub = "" if front else (f'<nav class="hb-sub" aria-label="Hub">'
                + "".join(f'<a href="{BASE}{h}"' + (' aria-current="page" class="on"' if path == BASE + h else "") + f">{t}</a>"
-                         for h, t in (("", "Hub"), ("/catalog", "Catalog"), ("/creators", "Creators"),
-                                      ("/realms", "Realms"), ("/beacon", "Host a Beacon"), ("/submit", "Submit a mod")))
+                         for h, t in (("", "Hub"), ("/realms", "Realms"), ("/modes", "Modes"), ("/catalog", "Catalog"),
+                                      ("/news", "News"), ("/creators", "Creators"), ("/beacon", "Host a Beacon"),
+                                      ("/submit", "Submit a mod")))
                + "</nav>")
         flag = '<p class="hb-flag">Preview: this page is hidden while it is being built.</p>' if not front_on() else ""
         repo = self.portal("LEYLINE_REPO") or "https://github.com/orionopenwow/Leyline"
@@ -625,7 +634,8 @@ class Hub:
                 f'<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">'
                 f'<title>{e(title)}</title>{meta}{robots}<style>{css}</style></head>'
                 f'<body class="hb"><a class="hb-skip" href="#main">Skip to content</a>{top}'
-                f'<main id="main" class="hb-main{" hb-front" if front else ""}">{flag}{sub}{body}</main>{foot}</body></html>').encode("utf-8")
+                f'<main id="main" class="hb-main{" hb-front" if front else ""}">{flag}{sub}{body}</main>{foot}'
+                + (f'<script nonce="{e(nonce)}">{HUB_JS}</script>' if nonce else "") + '</body></html>').encode("utf-8")
 
     def status_cards(self) -> str:
         """Platform Status: live values only, read when the page is made (no script). A source this portal doesn't
@@ -713,7 +723,154 @@ class Hub:
                 f'<div class="hb-spots">{"".join(cards)}</div>'
                 f'<p class="hb-more"><a href="{BASE}/catalog">Browse the whole catalog</a></p></section>')
 
-    def front_page(self, path: str = BASE) -> bytes:
+    # ---------------------------------------------------------------- the realm list (the sub hero and /realms)
+    def realm_rows(self, query: dict | None = None):
+        """(rows, network totals, fresh, filters, facets) for every realm on the network, or None without a realm list.
+        The order: the home realm (ours) first, then the network's own order (stream/network.py order(), the same as the
+        launcher's realms.rs): featured, the other live realms by the fair score and players, offline ones last.
+        Builds above 3.3.5a are left out (MAX_OFFERED_BUILD). query: the realm list's filters (?build, ?tag, ...)."""
+        got = self._network()
+        if got is None:
+            return None
+        net, realms, ok, st = got
+        shown = net.order(realms)
+        t = net.totals(shown, st)
+        si = self.portal("sample_info")
+        try:
+            sample = si() if si else {}
+        except Exception:   # noqa: BLE001
+            sample = {}
+        f = net.filters_from(query or {})
+        rec = next((r for r in shown if r["sample"]), None) or {}
+        live = bool(st.get("online")) if st else bool(rec.get("live"))
+        players = st.get("players") if st and isinstance(st.get("players"), int) else rec.get("players")
+        bots = st.get("bots") if st and isinstance(st.get("bots"), int) else rec.get("bots")
+        home = {**rec, "home": True, "official": True, "live": live, "players": players, "bots": bots, "build": BROWSER_BUILD,
+                "name": sample.get("name") or self.portal("REALM_NAME") or "Official realm",
+                "temporary": bool(sample.get("temporary")), "featured": False, "new": False, "group": "home",
+                "address": self.portal("PUBLIC_HOST") or "play.openvanilla.app"}
+        rows = [home] if net.matches(home, f) else []
+        for r in shown:
+            if r["sample"] or not net.matches(r, f):
+                continue
+            port, relay = r.get("port"), r.get("relay") or "relay.openvanilla.app"
+            rows.append({**r, "home": False, "address": f"{relay}:{port}" if port else ""})
+        return rows, t, ok, f, net.facets([r for r in shown if not r["sample"]])
+
+    def realm_row(self, r: dict) -> str:
+        e = html.escape
+        net = self.portal("network")
+        build = net.BUILDS.get(r.get("build", 12340), "3.3.5a")
+        bdg = []
+        if r.get("home") or r.get("official"):
+            bdg.append('<span class="hb-bdg o">Official</span>')
+        if r.get("temporary"):
+            bdg.append('<span class="hb-bdg">Temporary</span>')
+        if r.get("featured"):
+            bdg.append('<span class="hb-bdg f">Featured</span>')
+        if r.get("verified"):
+            bdg.append('<span class="hb-bdg v" title="Checked by Leyline staff">Verified</span>')
+        if r.get("new"):
+            bdg.append('<span class="hb-bdg">New</span>')
+        meta = [build, net.CORES.get(r.get("core"), "AzerothCore")]
+        reg, est = net.region_of(r)
+        if reg:
+            meta.append(net.REGION_LABEL[reg] + (" (est.)" if est else ""))
+        meta += [net.TAG_LABEL[t] for t in r.get("tags") or [] if t in net.TAG_LABEL and t != "hangout"]
+        up = r.get("up7") if r.get("up7") is not None else r.get("up24")
+        if up is not None:
+            meta.append(f"{up}% up")
+        live = bool(r.get("live"))
+        players = r.get("players") if isinstance(r.get("players"), int) else None
+        if not live:
+            count = '<div class="hb-rl-p off">Offline</div>'
+        elif players is None:
+            count = '<div class="hb-rl-p"><span class="hb-dot" aria-hidden="true"></span>Online</div>'
+        else:
+            bots = r.get("bots") or 0
+            count = (f'<div class="hb-rl-p"><span class="hb-dot" aria-hidden="true"></span><b class="hb-n">{players}</b> playing'
+                     f'<small class="hb-bots">{f"{bots} bots" if bots else ""}</small></div>')
+        acts = []
+        if live and r.get("build", 12340) == BROWSER_BUILD:
+            href = "/wrath" if r.get("home") else f'/wrath?go=r:{r["id"]}'
+            acts.append(f'<a class="hb-play" href="{e(href)}" aria-label="Play {e(r["name"])} in your browser">Play in browser</a>')
+        elif live:
+            acts.append(f'<span class="hb-need">Needs a {e(build)} client</span>')
+        if REALM_DEEPLINK and r.get("id") and not r.get("home"):
+            acts.append(f'<a class="hb-ghost" href="{e(REALM_DEEPLINK.format(id=r["id"]))}">Open in launcher</a>')
+        if r.get("address"):
+            acts.append(f'<code class="hb-addr" title="The realm address for a desktop client">{e(r["address"])}</code>')
+        rid = r.get("id") or ""
+        data = ' data-home="1"' if r.get("home") else (f' data-rid="{e(rid)}"' if rid else "")
+        return (f'<li class="hb-rl{" home" if r.get("home") else ""}"{data} data-build="{e(build)}" data-live="{1 if live else 0}" '
+                f'data-players="{players or 0}"><div class="hb-rl-n"><b>{e(r["name"])}</b>{"".join(bdg)}'
+                f'<span class="hb-rl-m">{e(" · ".join(meta))}</span></div>{count}'
+                f'<div class="hb-rl-a">{"".join(acts)}</div></li>')
+
+    def realm_section(self) -> str:
+        """The sub hero: every server on the network, the home realm first, one click to play. "" without a list."""
+        got = self.realm_rows()
+        if got is None:
+            return ""
+        e = html.escape
+        rows, t, ok, _f, fc = got
+        net = self.portal("network")
+        shown = rows[:FRONT_REALMS]
+        builds = [b for b in sorted({r.get("build", 12340) for r in rows}) if b in net.BUILDS]
+        opts = "".join(f'<option value="{e(net.BUILDS[b])}">{e(net.BUILDS[b])}</option>' for b in builds)
+        form = (f'<form class="hb-rf" method="get" action="{BASE}/realms" data-rf="hb-rlist" aria-label="Filter realms">'
+                f'<label>Client <select name="build"><option value="">Any</option>{opts}</select></label>'
+                '<label><input type="checkbox" name="now" value="1"> Has players</label>'
+                '<button type="submit">Filter</button></form>')
+        more = len(rows) > 8
+        stale = "" if ok else '<p class="hb-fine">The community list may be a little out of date right now.</p>'
+        return ('<section class="hb-sec hb-realms" id="realms" aria-labelledby="hb-rlh">'
+                f'<div class="hb-rl-head"><div><h2 id="hb-rlh">Realms on the network</h2>'
+                f'<p class="hb-netline" data-net>{e(net.network_line(t))}</p></div>{form}</div>'
+                f'<ul class="hb-rlist{" cap" if more else ""}" id="hb-rlist">{"".join(self.realm_row(r) for r in shown)}</ul>'
+                '<p class="hb-rl-none" hidden>No realms match. Try another client, or everyone.</p>' + stale +
+                f'<p class="hb-more"><a href="{BASE}/realms">Every realm, with filters</a> · '
+                '<a href="/wrath/host">Host your own</a></p></section>')
+
+    def how_strip(self) -> str:
+        e = html.escape
+        steps = (("Get the launcher", "Free, for Windows, macOS and Linux"),
+                 ("Point it at your game folder", "Or play in your browser, nothing to install"),
+                 ("Pick a realm", "Any server on the list, one click"))
+        return ('<!-- TODO(owner): the "how it works" wording -->'
+                '<ol class="hb-how hb-rv" aria-label="How it works">'
+                + "".join(f"<li><b>{e(a)}</b><span>{e(b)}</span></li>" for a, b in steps) + "</ol>")
+
+    def products(self) -> str:
+        """The products, in the recommended order. One card each: an icon, one line, one link to a page that exists."""
+        e = html.escape
+        pm = self.portal("playmodes")
+        try:
+            live = [m["title"] for m in (pm.entries() if pm is not None else []) if m["status"] == "live"][:3]
+        except Exception:   # noqa: BLE001
+            live = []
+        modes_line = (", ".join(live) + " and more, one click each") if live else "Minigames and game modes, one click each"
+        rk = self.portal("hub_rank")
+        # TODO(owner): the order of the products and their one-liners (this order is the recommendation; move the rows)
+        cards = [
+            ("launcher", "Leyline Launcher", "One app for your own game clients, every realm and every mod.", self._download(), "Download"),
+            ("host", "Host a server", "One-click hosting from the website, or the host kit for any client build.", "/wrath/host", "Start hosting"),
+            ("realms", "Realms & hopping", "Every server on the network. Hop from one to the next in a click.", BASE + "/realms", "See the realms"),
+            ("modes", "Game modes", modes_line + ".", BASE + "/modes", "Play a mode"),
+            ("mods", "Mods & addons", "Hot, rising and top picks. Install in one click with the launcher.",
+             BASE + "/catalog" + ("?sort=hot" if rk is not None else ""), "Browse mods"),
+            ("community", "Community hub", "What players made, the people behind it and where they meet.", "/wrath/workshop", "Explore"),
+            ("agents", "Agents & tooling", "The creator API, the package format and the tools to build on Leyline.", BASE + "/creators", "Start building"),
+        ]
+        out = []
+        for icon, name, line, href, act in cards:
+            ext = ' rel="noopener noreferrer"' if href.startswith("http") else ""
+            out.append(f'<a class="hb-feat" href="{e(href)}"{ext}><span class="hb-ico"><svg viewBox="0 0 24 24" aria-hidden="true">'
+                       f'{ICONS[icon]}</svg></span><b>{e(name)}</b><span>{e(line)}</span><i>{e(act)}</i></a>')
+        return ('<section class="hb-sec hb-rv" id="features" aria-labelledby="hb-ft"><h2 id="hb-ft">Everything in Leyline</h2>'
+                f'<div class="hb-feats">{"".join(out)}</div></section>')
+
+    def front_page(self, path: str = BASE, nonce: str = "") -> bytes:
         e = html.escape
         items = self.items()
         shown = offered_builds()
@@ -728,7 +885,7 @@ class Hub:
             "Realms show their server and build; PLAY picks a client that fits",
             "Updates itself in the background: restart when you're ready, never mid-game"))
         body = (
-            '<section class="hb-hero" id="features" aria-labelledby="hb-h">'
+            '<section class="hb-hero" id="top" aria-labelledby="hb-h">'
             f'<div class="hb-art" aria-hidden="true">{self._spin(560, "slow hb-swirl")}'
             '<img class="hb-crystal" src="/wrath/art/leyline-crystal-512.png" alt="" width="380" height="380" fetchpriority="high"></div>'
             '<!-- TODO(owner): the hero heading and bullets are from the owner\'s mockup; his final wording -->'
@@ -736,17 +893,18 @@ class Hub:
             f'<ul class="hb-bullets">{bullets}</ul>'
             f'<p><a class="hb-cta" href="{e(self._download())}" rel="noopener noreferrer">Download Now</a></p>'
             '<p class="hb-note">Free and open source, for Windows, macOS and Linux. Nothing to buy.</p></section>'
-            + self.status_cards() + self.spotlight() +
-            '<section class="hb-sec" aria-labelledby="hb-b"><h2 id="hb-b">Browse by client</h2>'
+            + self.realm_section() + self.how_strip() + self.products()
+            + f'<div class="hb-rv">{self.status_cards()}</div><div class="hb-rv">{self.spotlight()}</div>' +
+            '<section class="hb-sec hb-rv" aria-labelledby="hb-b"><h2 id="hb-b">Browse by client</h2>'
             f'<p class="hb-chips">{builds}</p><h3>Categories</h3><p class="hb-chips">{cats}</p></section>'
-            '<section class="hb-two">'
+            '<section class="hb-two hb-rv">'
             f'<a class="hb-box" href="{BASE}/creators"><b>For creators</b><span>Make an addon, a realm script or a whole mode: '
             'the docs, the package format and how the index works.</span></a>'
             f'<a class="hb-box" href="{BASE}/beacon"><b>Host a Beacon</b><span>Run your own realm and put it on the Leyline '
             'list, so players can hop over from the launcher.</span></a></section>'
             '<p class="hb-fine">Community projects are links: nothing of theirs is hosted here. Each belongs to its '
             'authors, under the licence they chose.</p>')
-        return self._shell("Leyline", body, path)
+        return self._shell("Leyline", body, path, nonce)
 
     def _network(self):
         """(network module, realms, ok, the sample's status) from the portal, or None when it has no realm list."""
@@ -764,25 +922,89 @@ class Hub:
             st = {}
         return net, realms, ok, st
 
-    def realms_page(self, query: dict) -> bytes:
-        got = self._network()
+    def realms_page(self, query: dict, nonce: str = "") -> bytes:
+        """Every realm on the network as the front page's rows (Play in browser, the address), with the network's
+        filters as links (they work without script) and Host your own."""
+        got = self.realm_rows(query)
         if got is None:
             body = '<section class="ly-panel"><h2>Realms</h2><p><a href="/wrath/realms">The realm list</a></p></section>'
             return self._shell("Realms · Leyline", body, BASE + "/realms")
-        net, realms, ok, st = got
+        e = html.escape
+        net = self.portal("network")
+        rows, t, ok, f, fc = got
         ln = self.portal("leyline_net")
         try:
             pack = ln.hostpack() if ln is not None else None
         except Exception:   # noqa: BLE001
             pack = None
-        css = (self.portal("REALM_CSS") or "") + net.NET_CSS
-        body = (f'<style>{css}</style><section class="ly-panel"><h1>Realms</h1>'
-                '<p>The Leyline network is realms hosted by players. The order is players online, uptime and staff '
-                'picks: nothing can be bought.</p></section>'
-                + net.page_body(realms, ok, query, st, self.portal("JOIN_BASE") or "https://relay.openvanilla.app",
-                                self.portal("RULESET_LABELS") or {}, None, pack["download"] if pack else None,
-                                base=BASE + "/realms", sample=si() if (si := self.portal("sample_info")) else None))
-        return self._shell("Realms · Leyline", body, BASE + "/realms")
+        if rows:
+            listing = f'<ul class="hb-rlist" id="hb-rlist">{"".join(self.realm_row(r) for r in rows)}</ul>'
+        elif f:
+            listing = f'<p class="hb-rl-none">No realms match these filters. <a href="{BASE}/realms">Show every realm</a></p>'
+        else:
+            listing = '<p class="hb-rl-none">The realm list isn\'t reachable right now. Try again in a minute.</p>'
+        body = ('<section class="hb-head"><h1>Realms</h1>'
+                '<p>Every server on the Leyline network, hosted by players. The order is players online, uptime and '
+                'staff picks: nothing can be bought.</p>'
+                f'<p class="hb-netline" data-net>{e(net.network_line(t))}</p></section>'
+                + net.filters_html(f, fc, BASE + "/realms")
+                + ("" if ok else '<p class="hb-fine">The community list may be a little out of date right now.</p>')
+                + listing
+                + '<p class="hb-fine">Play in browser opens the realm in this browser. For a desktop client, use the '
+                  'address in the launcher (Realms, then Add a realm) or in your realmlist file.</p>'
+                + net.host_cta("hub", pack["download"] if pack else None))
+        return self._shell("Realms · Leyline", body, BASE + "/realms", nonce)
+
+    def modes_page(self) -> bytes:
+        """The launcher's Modes page on the web: every game mode, one click to play (the go intent, /wrath?go=mode:)."""
+        e = html.escape
+        pm = self.portal("playmodes")
+        try:
+            modes = pm.entries() if pm is not None else []
+        except Exception:   # noqa: BLE001
+            modes = []
+        cards = []
+        for m in modes:
+            tags = [pm.KIND_TEXT.get(m["kind"], ""), pm.players_text(m["players"])]
+            if m["status"] == "coming":
+                tags.append("Coming soon")
+            href = pm.play_href(m, "/wrath/host")
+            act = ""
+            if href:
+                label = "Host it" if m["kind"] == "realm-type" else "Play"
+                act = (f'<p class="hb-act"><a class="{"hb-ghost" if m["kind"] == "realm-type" else "hb-play"}" href="{e(href)}">'
+                       f'{label}</a></p>')
+            c = m.get("credit") or {}
+            credit = (f'<p class="hb-meta">By {e(c["by"])} · {e(c.get("license", ""))} · '
+                      f'<a href="{e(c["source"])}" rel="noopener noreferrer">Source</a></p>') if c.get("by") and c.get("source") else ""
+            cards.append(f'<article class="hb-mode" id="mode-{e(m["id"])}"><h2>{e(m["title"])}</h2><p>{e(m["line"])}</p>'
+                         f'<p>{"".join(f"<span class=hb-tag>{e(x)}</span>" for x in tags if x)}</p>{credit}{act}</article>')
+        body = ('<section class="hb-head"><h1>Modes</h1><p>Minigames and game modes. Play signs you in and starts the game '
+                'in your browser once your character is in the world. The launcher lists the same games on its Modes page.</p></section>'
+                + (f'<div class="hb-modes">{"".join(cards)}</div>' if cards else
+                   '<p class="hb-empty">No modes are listed right now. <a href="/wrath/modes">The modes page</a></p>')
+                + '<p class="hb-fine">Duels, boss fights, dungeons and hangouts are on <a href="/wrath/modes">the full modes page</a>.</p>')
+        return self._shell("Modes · Leyline", body, BASE + "/modes")
+
+    def news_page(self) -> bytes:
+        """The launcher's News page on the web: the posts the admin console publishes (/wrath/leyline/news.json)."""
+        e = html.escape
+        adm = self.portal("admin")
+        try:
+            posts = adm.news_doc()["posts"] if adm is not None else []
+        except Exception:   # noqa: BLE001
+            posts = []
+        out = []
+        for p in posts[:30]:
+            items = [clean_line(x, 200) for x in (p.get("items") if isinstance(p.get("items"), list) else [])[:12]]
+            title, tag, date = clean_line(p.get("title"), 120), clean_line(p.get("tag"), 60), clean_line(p.get("date"), 10)
+            if not title or banned(" ".join([title, tag] + items)):
+                continue
+            out.append(f'<article><small>{e(tag)}{" · " if tag and date else ""}{e(date)}</small><h2>{e(title)}</h2>'
+                       + (f'<ul>{"".join(f"<li>{e(x)}</li>" for x in items if x)}</ul>' if any(items) else "") + "</article>")
+        body = ('<section class="hb-head"><h1>News</h1><p>What changed in the launcher, the realms and the browser game.</p></section>'
+                + (f'<div class="hb-news">{"".join(out)}</div>' if out else '<p class="hb-empty">No news posts yet.</p>'))
+        return self._shell("News · Leyline", body, BASE + "/news")
 
     def card(self, i: dict, m: dict | None = None, rk=None) -> str:
         e = html.escape
@@ -1188,8 +1410,158 @@ background:var(--lk-accent);color:#fff;font:600 14px var(--lk-font);cursor:point
 .hb-list li{margin:4px 0}.hb-empty{color:var(--lk-muted)}
 .hb .realm{background:var(--lk-surface)!important;border:1px solid var(--lk-border)!important;border-radius:var(--lk-r)!important;box-shadow:none!important}
 .hb .tag{background:var(--lk-surface-2)!important;border-color:var(--lk-border)!important;color:var(--lk-text-2)!important}
-@media (prefers-reduced-motion:reduce){.hb *{transition:none!important}}
+/* the realm list under the hero: every server on the network, one row each */
+.hb-rl-head{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:8px 16px;margin:0 0 10px}
+.hb-rl-head h2{margin:0}
+.hb-netline{margin:2px 0 0;color:var(--lk-muted);font-size:13.5px}
+.hb-dot{display:inline-block;width:8px;height:8px;margin-right:7px;border-radius:50%;background:var(--lk-ok);vertical-align:1px;
+box-shadow:0 0 0 3px rgba(79,209,139,.18)}
+.hb-rf{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:13.5px;color:var(--lk-text-2)}
+.hb-rf select{min-height:34px;padding:4px 8px;border-radius:var(--lk-r-sm);border:1px solid var(--lk-border-strong);background:var(--lk-surface-2);
+color:var(--lk-text);font:14px var(--lk-font)}
+.hb-rf input{accent-color:var(--lk-accent)}
+.hb-rf button{min-height:34px;padding:0 12px;border-radius:var(--lk-r-sm);border:1px solid var(--lk-border-strong);background:var(--lk-raised);
+color:var(--lk-text);font:600 13.5px var(--lk-font);cursor:pointer}
+.hb-rlist{list-style:none;margin:0;padding:0;border:1px solid var(--lk-border);border-radius:var(--lk-r);background:var(--lk-surface);overflow:hidden}
+.hb-rl{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:6px 16px;padding:11px 14px;
+border-top:1px solid var(--lk-border);transition:background-color .15s}
+.hb-rl:first-child{border-top:0}.hb-rl:hover{background:var(--lk-surface-2)}
+.hb-rl.home{background:linear-gradient(90deg,var(--lk-accent-soft),transparent 70%)}
+.hb-rl[hidden],.hb-rlist.cap>.hb-rl:nth-child(n+9){display:none}
+.hb-rl-n{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px;min-width:0}
+.hb-rl-n b{font-weight:650;overflow-wrap:anywhere}
+.hb-rl-m{flex:1 0 100%;color:var(--lk-muted);font-size:12.5px}
+.hb-bdg{padding:0 7px;border-radius:999px;border:1px solid var(--lk-border-strong);color:var(--lk-text-2);font-size:11px;font-weight:700;letter-spacing:.04em;line-height:18px}
+.hb-bdg.o{border-color:var(--lk-accent);color:var(--lk-accent-strong)}.hb-bdg.f{border-color:var(--lk-accent-2);color:var(--lk-accent-2)}
+.hb-bdg.v{border-color:var(--lk-ok);color:var(--lk-ok)}
+.hb-rl-p{text-align:right;font-size:13.5px;color:var(--lk-text-2);white-space:nowrap}
+.hb-rl-p b{color:var(--lk-text);font-weight:700;font-variant-numeric:tabular-nums}.hb-rl-p small{display:block;color:var(--lk-muted);font-size:12px}
+.hb-rl-p.off{color:var(--lk-muted)}
+.hb-rl-p b.bump{animation:hb-bump .9s ease-out}
+@keyframes hb-bump{from{color:var(--lk-ok)}}
+.hb-rl-a{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px}
+.hb-play,.hb-ghost{display:inline-flex;align-items:center;min-height:34px;padding:0 12px;border-radius:var(--lk-r-sm);text-decoration:none;
+font-weight:650;font-size:13.5px;white-space:nowrap}
+.hb-play{background:var(--lk-accent);color:#fff!important}.hb-play:hover{background:var(--lk-accent-strong)}
+.hb-ghost{border:1px solid var(--lk-border-strong);color:var(--lk-text)!important}.hb-ghost:hover{border-color:var(--lk-accent);background:var(--lk-accent-soft)}
+.hb-need{color:var(--lk-muted);font-size:12.5px}
+code.hb-addr{padding:6px 8px;border-radius:8px;background:var(--lk-surface-2);color:var(--lk-text-2);font:12.5px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+-webkit-user-select:all;user-select:all;overflow-wrap:anywhere}
+.hb-copy{min-height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--lk-border-strong);background:transparent;color:var(--lk-text-2);
+font:600 12.5px var(--lk-font);cursor:pointer}.hb-copy:hover{border-color:var(--lk-accent);color:var(--lk-text)}
+.hb-rl-none{padding:14px;color:var(--lk-muted);text-align:center}
+@media (max-width:640px){.hb-rl{grid-template-columns:minmax(0,1fr) auto;padding:11px 12px}.hb-rl-a{grid-column:1/-1;justify-content:flex-start}}
+/* how it works: three steps in one slim strip */
+.hb-how{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin:22px 0;padding:0;list-style:none;counter-reset:hb-how;
+border:1px solid var(--lk-border);border-radius:var(--lk-r);background:var(--lk-chrome)}
+.hb-how li{position:relative;display:grid;gap:2px;padding:12px 16px 12px 52px;counter-increment:hb-how;border-left:1px solid var(--lk-border)}
+.hb-how li:first-child{border-left:0}
+.hb-how li::before{content:counter(hb-how);position:absolute;left:16px;top:13px;display:grid;place-items:center;width:24px;height:24px;border-radius:50%;
+background:var(--lk-accent-soft);color:var(--lk-accent-strong);font-weight:700;font-size:13px;box-shadow:0 0 0 1px var(--lk-accent)}
+.hb-how b{font-weight:650}.hb-how span{color:var(--lk-muted);font-size:13px}
+@media (max-width:720px){.hb-how{grid-template-columns:1fr}.hb-how li{border-left:0;border-top:1px solid var(--lk-border)}.hb-how li:first-child{border-top:0}}
+/* the products, in the recommended order */
+.hb-feats{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));gap:12px}
+.hb-feat{display:grid;grid-template-rows:auto auto 1fr auto;gap:6px;padding:16px;background:var(--lk-surface);border:1px solid var(--lk-border);
+border-radius:var(--lk-r);text-decoration:none;color:var(--lk-text-2)!important}
+.hb-ico{display:grid;place-items:center;width:38px;height:38px;border-radius:10px;background:var(--lk-accent-soft);color:var(--lk-accent-strong)}
+.hb-ico svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.hb-feat b{color:var(--lk-text);font-size:16px;font-weight:650}.hb-feat span{font-size:14px}
+.hb-feat i{font-style:normal;font-weight:650;font-size:13.5px;color:var(--lk-accent-strong)}
+.hb-feat i::after{content:" →";transition:margin .15s}.hb-feat:hover i::after{margin-left:3px}
+/* lift and glow on hover, like the launcher's cards; never with reduced motion */
+.hb-feat,.hb-stat,.hb-spot,.hb-box,.hb-card,.hb-mode{transition:transform .15s ease,border-color .15s,box-shadow .15s}
+:is(.hb-feat,a.hb-stat,.hb-spot,.hb-box,.hb-mode):hover{transform:translateY(-2px);border-color:var(--lk-accent);
+box-shadow:0 8px 24px rgba(0,0,0,.28),0 0 0 1px rgba(91,141,239,.35),0 0 26px rgba(91,141,239,.12)}
+/* section reveal: only sections below the fold when the page loads, only with script, only with motion */
+.hb-js .hb-wait{opacity:0;transform:translateY(10px)}
+.hb-js .hb-wait.in{opacity:1;transform:none;transition:opacity .5s ease,transform .5s ease}
+/* the modes and news sub-pages */
+.hb-modes{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));gap:12px}
+.hb-mode{display:grid;gap:6px;align-content:start;padding:16px;background:var(--lk-surface);border:1px solid var(--lk-border);border-radius:var(--lk-r)}
+.hb-mode h2{margin:0;font-size:17px}.hb-mode p{margin:0;color:var(--lk-text-2);font-size:14px}
+.hb-mode .hb-act{margin-top:6px}
+.hb-news{display:grid;gap:12px}.hb-news article{padding:16px;background:var(--lk-surface);border:1px solid var(--lk-border);border-radius:var(--lk-r)}
+.hb-news small{color:var(--lk-accent-2);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:11px}
+.hb-news h2{margin:4px 0 6px;font-size:18px}.hb-news ul{margin:0;padding-left:20px;color:var(--lk-text-2)}
+/* the network's filters and Host your own, in the flat look */
+.hb .net-filters{display:flex;flex-wrap:wrap;gap:6px 14px;justify-content:center;margin:8px 0 14px;font-size:13.5px}
+.hb .net-filters span{color:var(--lk-muted)}.hb .net-filters a{color:var(--lk-text-2);white-space:nowrap}
+.hb .net-filters a.on{color:var(--lk-text);font-weight:700;text-decoration:none}
+.hb .host-cta{margin:18px 0;padding:18px 20px;border:1px solid var(--lk-border);border-radius:var(--lk-r);background:var(--lk-surface)}
+.hb .host-cta h2{margin:0 0 6px;font-size:20px}.hb .host-cta ol{margin:8px 0 10px 1.2em;padding:0;color:var(--lk-text-2)}
+.hb .host-cta .btn{display:inline-flex;padding:9px 16px;border-radius:var(--lk-r-sm);border:1px solid var(--lk-border-strong);
+color:var(--lk-text)!important;text-decoration:none;font-weight:600}
+.hb .host-cta .btn.primary{background:var(--lk-accent);border-color:var(--lk-accent);color:#fff!important}
+.hb .fine{color:var(--lk-muted);font-size:13.5px}
+@media (prefers-reduced-motion:reduce){.hb *{transition:none!important;animation:none!important}
+:is(.hb-feat,a.hb-stat,.hb-spot,.hb-box,.hb-mode):hover{transform:none}}
 """
+
+# The hub's only script (front page and realm list; every other hub page has none). Plain and small: it adds
+# Copy buttons to the realm addresses, the realm filter without a reload, the live player counts from the public
+# /wrath/realms.json and /wrath/status.json every 30 s (the page's own numbers stay when they don't answer), and
+# the section reveal. Everything works without it: the addresses are selectable text, the filter is a GET form.
+HUB_JS = r"""(function(){
+"use strict";
+var d=document,root=d.documentElement;root.classList.add("hb-js");
+var still=!!(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches);
+if(!still&&"IntersectionObserver" in window){
+  var io=new IntersectionObserver(function(es){es.forEach(function(x){if(x.isIntersecting){x.target.classList.add("in");io.unobserve(x.target);}});},{rootMargin:"0px 0px -6% 0px"});
+  d.querySelectorAll(".hb-rv").forEach(function(s){if(s.getBoundingClientRect().top>innerHeight){s.classList.add("hb-wait");io.observe(s);}});
+}
+if(navigator.clipboard){d.querySelectorAll("code.hb-addr").forEach(function(c){
+  var b=d.createElement("button");b.type="button";b.className="hb-copy";b.textContent="Copy";
+  b.setAttribute("aria-label","Copy the address "+c.textContent);
+  b.addEventListener("click",function(){navigator.clipboard.writeText(c.textContent).then(function(){
+    b.textContent="Copied";setTimeout(function(){b.textContent="Copy";},1600);},function(){});});
+  c.after(b);});}
+d.querySelectorAll("form[data-rf]").forEach(function(f){
+  var list=d.getElementById(f.getAttribute("data-rf"));if(!list)return;
+  var none=list.parentNode.querySelector(".hb-rl-none"),go=f.querySelector("button");if(go)go.hidden=true;
+  function run(){var b=f.elements.build?f.elements.build.value:"",n=f.elements.now&&f.elements.now.checked,shown=0;
+    list.querySelectorAll(".hb-rl").forEach(function(li){
+      var ok=(!b||li.getAttribute("data-build")===b)&&(!n||(li.getAttribute("data-live")==="1"&&+li.getAttribute("data-players")>0));
+      li.hidden=!ok;if(ok)shown++;});
+    list.classList.toggle("cap",!b&&!n);if(none)none.hidden=shown>0;}
+  f.addEventListener("change",run);f.addEventListener("submit",function(e){e.preventDefault();run();});});
+var rows=d.querySelectorAll(".hb-rl[data-rid],.hb-rl[data-home]");if(!rows.length||!window.fetch)return;
+function set(li,on,p,bots){var el=li.querySelector(".hb-n");if(!el||li.getAttribute("data-live")!=="1")return;
+  if(on===false){el.parentNode.classList.add("off");el.parentNode.textContent="Offline";li.setAttribute("data-live","0");return;}
+  if(typeof p!=="number"||p<0)return;
+  if(String(p)!==el.textContent){el.textContent=String(p);li.setAttribute("data-players",String(p));
+    if(!still){el.classList.remove("bump");void el.offsetWidth;el.classList.add("bump");}}
+  var s=li.querySelector(".hb-bots");if(s&&typeof bots==="number")s.textContent=bots?bots+" bots":"";}
+function line(t){return t.realms+" realm"+(t.realms===1?"":"s")+" · "+t.players+" player"+(t.players===1?"":"s")+" online"+(t.bots?" · "+t.bots+" bots":"");}
+function json(u){return fetch(u,{cache:"no-store",credentials:"omit"}).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;});}
+function tick(){if(d.hidden)return;
+  json("/wrath/realms.json").then(function(j){if(!j||!Array.isArray(j.realms))return;
+    j.realms.forEach(function(r){var c=r.community||{},h=c.lastHeartbeat||{};
+      if(!/^[a-z2-7]{16}$/.test(c.realmId||""))return;
+      var li=d.querySelector('.hb-rl[data-rid="'+c.realmId+'"]');if(li)set(li,h.online,h.players,h.bots);});
+    var nl=d.querySelector("[data-net]");if(nl&&j.network&&typeof j.network.players==="number")nl.textContent=line(j.network);});
+  var home=d.querySelector(".hb-rl[data-home]");
+  if(home)json("/wrath/status.json").then(function(s){if(s)set(home,s.online===true?true:s.online===false?false:undefined,s.players,s.bots);});}
+setInterval(tick,30000);d.addEventListener("visibilitychange",function(){if(!d.hidden)tick();});
+})();"""
+
+# The launcher's deep link for a realm. Today the launcher's leyline:// scheme (launcher/src-tauri/src/deeplink.rs)
+# only understands install/<catalog id>, so realm rows have no "Open in launcher" yet; set this to
+# "leyline://realm/{id}" once deeplink.rs accepts it (docs/LAUNCHER-IN-BROWSER.md, the first open gap).
+REALM_DEEPLINK = ""
+BROWSER_BUILD = 12340   # the browser game is a 3.3.5a client: only 3.3.5a realms get "Play in browser"
+FRONT_REALMS = 60       # rows sent on the front page (8 show until a filter is used; the rest are on the realm list)
+
+# Icons for the products (24x24 strokes, the launcher's nav style).
+ICONS = {
+    "launcher": '<rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3M9 9l3 3 3-3M12 6v6"/>',
+    "host": '<rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/>',
+    "realms": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
+    "modes": '<path d="M6 9h12a3 3 0 0 1 3 3v2a3 3 0 0 1-5.2 2L14 14h-4l-1.8 2A3 3 0 0 1 3 14v-2a3 3 0 0 1 3-3z"/><path d="M8 11v2M7 12h2M16 11.5h.01M17.5 13h.01"/>',
+    "mods": '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    "community": '<circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6M15 14.5c3 0 6 2 6 5"/>',
+    "agents": '<rect x="5" y="7" width="14" height="12" rx="3"/><path d="M12 3v4M9 12h.01M15 12h.01M9.5 16h5M2 12v3M22 12v3"/>',
+}
 
 
 def _slug(cid: str) -> str:
@@ -1241,7 +1613,8 @@ def get(handler, path: str, query: dict) -> None:
         handler.send(200, body, "application/json; charset=utf-8", headers=_robots())
         return
     if path in (BASE, FRONT):
-        handler.send(200, hub.front_page(path), headers=_robots())
+        nonce = secrets.token_urlsafe(16)
+        handler.send(200, hub.front_page(path, nonce), nonce=nonce, connect=True, headers=_robots())
         return
     if path == BASE + "/catalog":
         handler.send(200, hub.catalog_page(query), headers=_robots())
@@ -1250,7 +1623,14 @@ def get(handler, path: str, query: dict) -> None:
         handler.send(200, hub.creators_page(), headers=_robots())
         return
     if path == BASE + "/realms":
-        handler.send(200, hub.realms_page(query), headers=_robots())
+        nonce = secrets.token_urlsafe(16)
+        handler.send(200, hub.realms_page(query, nonce), nonce=nonce, connect=True, headers=_robots())
+        return
+    if path == BASE + "/modes":
+        handler.send(200, hub.modes_page(), headers=_robots())
+        return
+    if path == BASE + "/news":
+        handler.send(200, hub.news_page(), headers=_robots())
         return
     if path == BASE + "/beacon":
         handler.send(200, hub.beacon_page(), headers=_robots())
