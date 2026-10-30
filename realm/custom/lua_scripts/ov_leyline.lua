@@ -19,6 +19,10 @@
 --                                                                    V verified, N new, S the sample hangout (this
 --                                                                    realm and its relay record, OV_SAMPLER=1), E region
 --                                                                    estimated, or "-"; up = uptime %; tags a,b,c
+--                      S:<id>:<live 0|1>                             this realm's own relay listing (its Beacon), left
+--                                                                    out of the R lines: the window shows one row
+--                                                                    for this realm. The id: OV_LEYLINE_SELF_ID, else
+--                                                                    the host kit's host-realm.dat (ov_hostctl.lua)
 --                      N:<realms>:<players>:<bots>                   the network line (online now), before E
 --                      E:<count>                                     the list is complete
 --                      U:Realm list unavailable                      the file is missing or unreadable
@@ -200,9 +204,28 @@ local function meta(id, r, isSample)
         r.region or "-", r.lang or "-", dash(r.maxp), r.tags or "")
 end
 
+-- This realm's own relay id, when the realm knows it.
+local function selfId()
+    local id = os.getenv("OV_LEYLINE_SELF_ID")
+    if not id or id == "" then
+        local h = rawget(_G, "OVHostCtl")
+        local doc = h and h.ReadHost and h.ReadHost()
+        id = doc and doc.realm_id
+    end
+    if type(id) == "string" and #id == 16 and id:match("^[a-z2-7]+$") then return id end
+    return nil
+end
+
 local function sendList(player)
     local list, updated = realms()
     if not list then return send(player, "U:" .. UNAVAILABLE) end
+    local mine = selfId()
+    local own
+    if mine then
+        local rest = {}
+        for _, r in ipairs(list) do if r.id == mine then own = r else rest[#rest + 1] = r end end
+        list = rest
+    end
     local age = updated and math.max(0, os.time() - updated) or 0
     send(player, string.format("B:%d:%d", #list + 1, age))
     local people, bots = here()
@@ -212,6 +235,7 @@ local function sendList(player)
     local isSample = os.getenv("OV_SAMPLER") == "1"
     send(player, string.format("R:this:1:%d:%d:main:%s", people, bots, cleanName(realmName())))
     send(player, meta("this", { sample = isSample, score = 0, build = 12340, tags = isSample and "hangout" or "" }, isSample))
+    if own then send(player, string.format("S:%s:%d", own.id, own.live and 1 or 0)) end
     local n, p, b = 1, people, bots
     for _, r in ipairs(list) do
         send(player, string.format("R:%s:%d:%s:%s:%s:%s", r.id, r.live and 1 or 0, dash(r.players), dash(r.bots),
@@ -259,4 +283,4 @@ RegisterPlayerEvent(4, onLogout)        -- PLAYER_EVENT_ON_LOGOUT
 
 -- for tests
 OV_LEYLINE_TEST = { cleanName = cleanName, readFile = readFile, sendList = sendList, onAddonMessage = onAddonMessage,
-    cache = cache, hopTarget = hopTarget }
+    cache = cache, hopTarget = hopTarget, selfId = selfId }

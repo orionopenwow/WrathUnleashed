@@ -146,6 +146,24 @@ check("OV_SAMPLER=1: the hangout's record flagged S, and this realm is the sampl
 check("estimated region marked E, a bad language dropped", metas.ffffffffffffffff == "NE:5:-:12340:oce:-:-:")
 check("N counts this realm once (not its relay record too)", all[#all - 1] == "N:4:11:1")
 
+-- this realm's own relay listing (OV_LEYLINE_SELF_ID): an S line instead of a second R line, counted once
+envs.OV_LEYLINE_SELF_ID = "cccccccccccccccc"
+clock = clock + 6
+me.sent = {}
+T.cache.at = -1e9
+serverEvents[30](30, me, 7, "WULY", "L", me)
+all = msgs(me, true)
+local sLine, ownR
+for _, m in ipairs(all) do
+    if m:match("^S:") then sLine = m end
+    if m:match("^R:cccccccccccccccc:") then ownR = true end
+end
+check("own listing: S:<id>:<live>, no R line for it", sLine == "S:cccccccccccccccc:1" and not ownR)
+check("own listing: not counted twice in N", all[#all - 1] == "N:3:2:1")
+envs.OV_LEYLINE_SELF_ID = "../etc"
+check("a malformed OV_LEYLINE_SELF_ID is ignored", T.selfId() == nil)
+envs.OV_LEYLINE_SELF_ID = nil
+
 -- the data file is read as data only
 write(datFile, 'return { updated = 1, realms = { { id = "abcdefghijklmnop", name = "x" } } } while true do end')
 T.cache.at = -1e9

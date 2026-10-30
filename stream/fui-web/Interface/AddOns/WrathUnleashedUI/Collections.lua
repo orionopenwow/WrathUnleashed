@@ -42,6 +42,7 @@ local function label(parent, text, font, ...)
 end
 
 local function button(parent, text, w, onClick, ...)
+    if W.Style then local b = W.Style.Button(parent, text, w, onClick, nil, ...); b:SetHeight(22); return b end
     local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     b:SetWidth(w); b:SetHeight(22)
     b:SetText(text)
@@ -79,7 +80,7 @@ local function buildCompanionPage(page, tab)
     local P = { tab = tab, kind = tab.kind, offset = 0, list = {}, rows = {} }
     page.state = P
 
-    local search = CreateFrame("EditBox", nil, page, "InputBoxTemplate")
+    local search = (W.Style and W.Style.Input(page) or CreateFrame("EditBox", nil, page, "InputBoxTemplate"))
     search:SetWidth(LIST_W - 10); search:SetHeight(20)
     search:SetPoint("TOPLEFT", 22, -6)
     search:SetAutoFocus(false)
@@ -135,9 +136,9 @@ local function buildCompanionPage(page, tab)
     local box = CreateFrame("Frame", nil, page)
     box:SetPoint("TOPLEFT", LIST_W + 30, -6)
     box:SetPoint("BOTTOMRIGHT", -14, 70)
-    box:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    if W.Style then W.Style.Backdrop(box, W.Style.C.bg2) else box:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", tile = true, tileSize = 16, edgeSize = 16,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 } })
+        insets = { left = 4, right = 4, top = 4, bottom = 4 } }) end
     box:SetBackdropColor(0, 0, 0, 0.6)
     local ok, model = pcall(CreateFrame, "PlayerModel", nil, box)
     if ok and model then
@@ -277,17 +278,19 @@ local function build()
     win:RegisterForDrag("LeftButton")
     win:SetScript("OnDragStart", win.StartMoving)
     win:SetScript("OnDragStop", win.StopMovingOrSizing)
-    win:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    if not W.Style then   -- Style.lua draws the window (S.Window, at its title)
+        win:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32,
         insets = { left = 11, right = 12, top = 12, bottom = 11 } })
+    end
     win:SetBackdropColor(0.05, 0.06, 0.08, 0.95)   -- solid: the dialog texture draws see-through in the browser client
     do   -- a colour fill the engine draws itself (no texture file; the backdrop fill needs one)
         local bg = win:CreateTexture(nil, "BACKGROUND")
-        bg:SetTexture(0.05, 0.06, 0.08, 0.95)
+        bg:SetTexture(0.094, 0.106, 0.137, 0.97)   -- #181b23 (Style.lua)
         bg:SetPoint("TOPLEFT", 10, -10); bg:SetPoint("BOTTOMRIGHT", -10, 10)
     end
-    label(win, "Collections", "GameFontNormalLarge", "TOP", 0, -18)
-    local close = CreateFrame("Button", nil, win, "UIPanelCloseButton")
+    local _ = (W.Style and W.Style.Window(win, "Collections") or label(win, "Collections", "GameFontNormalLarge", "TOP", 0, -18))
+    local close = (W.Style and W.Style.Close(win) or CreateFrame("Button", nil, win, "UIPanelCloseButton"))
     close:SetPoint("TOPRIGHT", -6, -6)
     button(win, "Done", 90, function() win:Hide() end, "BOTTOMRIGHT", -16, 14)
     if UISpecialFrames then tinsert(UISpecialFrames, "WrathUnleashedCollectionsFrame") end -- Esc closes it

@@ -28,6 +28,7 @@ local function label(parent, text, font, ...)
 end
 
 local function button(parent, text, w, onClick, ...)
+    if W.Style then local b = W.Style.Button(parent, text, w, onClick, nil, ...); b:SetHeight(22); return b end
     local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     b:SetWidth(w); b:SetHeight(22)
     b:SetText(text)
@@ -39,7 +40,7 @@ end
 local function showTab(n)
     for i, page in ipairs(panel.pages) do
         if i == n then page:Show() else page:Hide() end
-        panel.tabs[i]:SetAlpha(i == n and 1 or 0.6)
+        if W.Style then W.Style.Tab(panel.tabs[i], i == n) else panel.tabs[i]:SetAlpha(i == n and 1 or 0.6) end
     end
     if n == 2 then panel.RefreshAddons() end
     if n == 3 and panel.RefreshWorkshop then panel.RefreshWorkshop() end
@@ -176,7 +177,7 @@ end
 local function buildWorkshop(page)
     local MOD_ROWS, MOD_H = 4, 42
     label(page, "Mods on this realm. Untick an addon to turn it off (after Reload UI).", "GameFontHighlightSmall", "TOPLEFT", 16, -12)
-    local box = CreateFrame("EditBox", nil, page, "InputBoxTemplate")
+    local box = W.Style and W.Style.Input(page, PANEL_W - 50, 20) or CreateFrame("EditBox", nil, page, "InputBoxTemplate")
     box:SetWidth(PANEL_W - 50); box:SetHeight(20)
     box:SetPoint("BOTTOMLEFT", 22, 46)
     box:SetAutoFocus(false)
@@ -250,24 +251,24 @@ local function build()
     panel:RegisterForDrag("LeftButton")
     panel:SetScript("OnDragStart", panel.StartMoving)
     panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
-    panel:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    if not W.Style then   -- Style.lua draws the window (S.Window, at its title)
+        panel:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32,
         insets = { left = 11, right = 12, top = 12, bottom = 11 } })
+    end
     panel:SetBackdropColor(0.05, 0.06, 0.08, 0.95)   -- solid: the dialog texture draws see-through in the browser client
     do   -- a colour fill the engine draws itself (no texture file; the backdrop fill needs one)
         local bg = panel:CreateTexture(nil, "BACKGROUND")
-        bg:SetTexture(0.05, 0.06, 0.08, 0.95)
+        bg:SetTexture(0.094, 0.106, 0.137, 0.97)   -- #181b23 (Style.lua)
         bg:SetPoint("TOPLEFT", 10, -10); bg:SetPoint("BOTTOMRIGHT", -10, 10)
     end
-    label(panel, "Mods & Workshop", "GameFontNormalLarge", "TOP", 0, -18)
-    local close = CreateFrame("Button", nil, panel, "UIPanelCloseButton")
+    local _ = (W.Style and W.Style.Window(panel, "Mods & Workshop") or label(panel, "Mods & Workshop", "GameFontNormalLarge", "TOP", 0, -18))
+    local close = (W.Style and W.Style.Close(panel) or CreateFrame("Button", nil, panel, "UIPanelCloseButton"))
     close:SetPoint("TOPRIGHT", -6, -6)
     button(panel, "Done", 90, function() panel:Hide() end, "BOTTOMRIGHT", -16, 14)
-    if W.ToggleLeyline then   -- Leyline.lua: the realms of the Leyline network
-        button(panel, "Leyline realms", 130, function() panel:Hide(); W.ToggleLeyline() end, "BOTTOMLEFT", 16, 14)
-    end
+    -- The Leyline realms have their own button in the Esc menu now (Realm List, below), not one here.
     if W.ToggleBuilder then   -- Builder.lua: place and share props in build areas
-        button(panel, "Builder", 90, function() panel:Hide(); W.ToggleBuilder() end, "BOTTOMLEFT", 152, 14)
+        button(panel, "Builder", 90, function() panel:Hide(); W.ToggleBuilder() end, "BOTTOMLEFT", 16, 14)
     end
     tinsert(UISpecialFrames, "WrathUnleashedModsFrame")   -- Esc closes it
 
@@ -293,25 +294,50 @@ function W.ToggleMods()
     if panel:IsShown() then panel:Hide() else panel:Show() end
 end
 
--- The Esc menu button (Forever UI lays it out; without Forever UI it goes under Macros).
-if GameMenuFrame and not _G["GameMenuButtonAddOns"] then
-    local b = CreateFrame("Button", "GameMenuButtonAddOns", GameMenuFrame, "GameMenuButtonTemplate")
-    b:SetText("Mods & Workshop")
-    b:SetScript("OnClick", function()
-        PlaySound("igMainMenuOption")
-        HideUIPanel(GameMenuFrame)
-        W.ToggleMods()
-    end)
-    if not (ForeverUI and ForeverUI.GameMenu) then
-        b:SetPoint("TOP", GameMenuButtonMacros, "BOTTOM", 0, -1)
-        GameMenuFrame:SetHeight(GameMenuFrame:GetHeight() + 25)
-        if GameMenuButtonLogout then
-            GameMenuButtonLogout:ClearAllPoints()
-            GameMenuButtonLogout:SetPoint("TOP", b, "BOTTOM", 0, -16)
+-- The Esc menu buttons: Mods & Workshop and, on its own, Realm List (the Leyline realm window and hosting).
+-- Forever UI lays out the one named GameMenuButtonAddOns; without Forever UI both go under Macros, and with it
+-- Realm List goes right under Mods & Workshop. Each closes the menu and opens its window; Esc closes that window
+-- (UISpecialFrames), as with the game's own panels.
+local MENU_GAP = 25
+function W.AddMenuButtons()
+    if not GameMenuFrame then return nil end
+    local mods = _G["GameMenuButtonAddOns"]
+    if not mods then
+        mods = CreateFrame("Button", "GameMenuButtonAddOns", GameMenuFrame, "GameMenuButtonTemplate")
+        mods:SetText("Mods & Workshop")
+        mods:SetScript("OnClick", function()
+            PlaySound("igMainMenuOption")
+            HideUIPanel(GameMenuFrame)
+            W.ToggleMods()
+        end)
+        if not (ForeverUI and ForeverUI.GameMenu) then
+            mods:SetPoint("TOP", GameMenuButtonMacros, "BOTTOM", 0, -1)
+            GameMenuFrame:SetHeight(GameMenuFrame:GetHeight() + MENU_GAP)
         end
     end
+    local realms = _G["GameMenuButtonRealmList"]
+    if not realms then
+        realms = CreateFrame("Button", "GameMenuButtonRealmList", GameMenuFrame, "GameMenuButtonTemplate")
+        realms:SetText("Realm List")
+        realms:SetScript("OnClick", function()
+            PlaySound("igMainMenuOption")
+            HideUIPanel(GameMenuFrame)
+            if W.ShowRealmList then W.ShowRealmList() elseif W.ToggleLeyline then W.ToggleLeyline() end
+        end)
+        GameMenuFrame:SetHeight(GameMenuFrame:GetHeight() + MENU_GAP)
+    end
     if ForeverUI and ForeverUI.GameMenu and ForeverUI.GameMenu.Layout then ForeverUI.GameMenu.Layout() end
+    -- after Forever UI's layout: Realm List under Mods & Workshop, the rest of the menu moved down one button
+    realms:ClearAllPoints()
+    realms:SetPoint("TOP", mods, "BOTTOM", 0, -1)
+    local below = _G["GameMenuButtonLogout"]
+    if below and below ~= realms then
+        below:ClearAllPoints()
+        below:SetPoint("TOP", realms, "BOTTOM", 0, -16)
+    end
+    return mods, realms
 end
+W.AddMenuButtons()
 
 -- Opens the panel on one tab (4: the Workshop).
 function W.ShowModsTab(n)

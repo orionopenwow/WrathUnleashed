@@ -2,7 +2,13 @@
 
     GET  /wrath/host               signed out: to the site's sign-in and back here. Signed in: the form
                                    (realm name, preset, house rules, public or private, the GM account
-                                   name, a tagline) and the account's own realms
+                                   name, a tagline, and "More settings": type, rates, start, bots, sign-up,
+                                   Hero Key sign-in, region, language, tags, max players) and the account's own
+                                   realms. GET /wrath/host?<choices> fills the form in: the in-game Host window
+                                   (WrathUnleashedUI/Host.lua) and the launcher's leyline://host link send the
+                                   host's choices here (prefill(): every name and value checked again; the same
+                                   rules as Host.lua, wrath-page.js hostQuery and deeplink.rs host_query). Nothing
+                                   is made until the host signs in and presses Start server.
     POST /wrath/host               checks everything, makes a pending realm for this account, 303 to its page
     GET  /wrath/host/<id>          owner only: the share link, the one-click setup for the host's PC and
                                    live status ("Waiting for your PC" -> "Online, listed"; meta refresh)
@@ -77,7 +83,133 @@ PRESETS = {   # setup.py PROFILES, in the order the form shows them (dalaran fir
     "main": ("Classic levelling", "The full world from level 1, with a one-time boost to 80 for anyone who wants it."),
     "brawl": ("Brawl", "Everyone starts at 80 in Dalaran with everything unlocked."),
     "progression": ("Progression", "Level 1x through the original world, then the two expansions, per character."),
+    # the host kit's other cores (hosting/kit/tools/wuhost/cores.py; docs/HOST-ANY-CLIENT.md)
+    "cmangos-1.12.1": ("CMaNGOS Classic", "The CMaNGOS core, built on your PC from its own source, for the classic client."),
+    "cmangos-2.4.3": ("CMaNGOS TBC", "The CMaNGOS core, built on your PC from its own source, for the first expansion's client."),
 }
+CORE_OF = {k: ("cmangos" if k.startswith("cmangos-") else "azerothcore") for k in PRESETS}
+
+# "More settings": the host kit's other choices (setup.py init / signup / herokey / listing, state/realm.env).
+# The same names and rules as the in-game Host window (Host.lua), the page (wrath-page.js hostQuery) and the launcher
+# (deeplink.rs host_query). Each is optional; a missing one is the ruleset's own.
+TYPES = {"normal": "Normal", "pvp": "PvP", "rp": "RP", "rppvp": "RP-PvP"}
+SIGNUPS = {"open": "Open: anyone can make an account", "invite": "Invite link only", "off": "Closed"}
+REGIONS = {"na-east": "NA east", "na-west": "NA west", "sa": "S. America", "eu": "Europe", "africa": "Africa",
+           "me": "Middle East", "asia": "Asia", "oce": "Oceania"}
+TAGS = ("blizzlike", "boosted", "custom", "pvp", "rp", "hangout")
+LANG_RE = re.compile(r"^[a-z]{2,3}(-[A-Z]{2})?$")
+NO_BOTS = ("dalaran",)                     # setup.py PROFILE_BOTS: 0 (and the other cores: none yet)
+OPTION_KEYS = ("type", "xp", "loot", "rep", "start", "bots", "signup", "herokey", "region", "lang", "tags", "max")
+
+
+def options(form: dict, preset: str) -> tuple[dict, dict]:
+    """The "More settings" answers, checked against the ruleset: (clean options, errors by field)."""
+    g = lambda k: form.get(k, "") if isinstance(form.get(k, ""), str) else ""   # noqa: E731
+    err, out = {}, {}
+    ac = CORE_OF.get(preset) == "azerothcore"
+
+    def num(k, lo, hi):
+        v = g(k).strip()
+        if v == "":
+            return None
+        if not re.fullmatch(r"\d{1,5}", v) or not lo <= int(v) <= hi:
+            err[k] = {"xp": "Rates: 1x to 10x.", "loot": "Rates: 1x to 10x.", "rep": "Rates: 1x to 10x.",
+                      "bots": "Bots: 0 to 200.", "max": "Max players: 0 (not shown) to 10000."}[k]
+            return None
+        return int(v)
+    t = g("type") or "normal"
+    if t not in TYPES:
+        err["type"] = "Pick a realm type."
+        t = "normal"
+    if t != "normal":
+        out["type"] = t
+    for k in ("xp", "loot", "rep"):
+        v = num(k, 1, 10)
+        if v is not None:
+            if not ac:
+                err[k] = "Rates are set by the ruleset on this core."
+            else:
+                out[k] = v
+    st = g("start")
+    if st:
+        if preset != "main" or st not in ("level1", "boost"):
+            err["start"] = "Level 1 or the boost: only for Classic levelling."
+        else:
+            out["start"] = st
+    b = num("bots", 0, 200)
+    if b is not None:
+        if b > 0 and (not ac or preset in NO_BOTS):
+            err["bots"] = "This ruleset runs without bots."
+        else:
+            out["bots"] = b
+    su = g("signup")
+    if su:
+        if su not in SIGNUPS:
+            err["signup"] = "Pick who can make accounts."
+        else:
+            out["signup"] = su
+    hk = g("herokey")
+    if hk:
+        if hk not in ("on", "off"):
+            err["herokey"] = "Hero Key sign-in: on or off."
+        else:
+            out["herokey"] = hk
+    r = g("region")
+    if r:
+        if r not in REGIONS:
+            err["region"] = "Pick a region."
+        else:
+            out["region"] = r
+    lang = g("lang").strip()
+    if lang:
+        if not LANG_RE.match(lang):
+            err["lang"] = "A language code like en, de or pt-BR."
+        else:
+            out["lang"] = lang
+    tags = [x for x in g("tags").split(",") if x]
+    if any(x not in TAGS for x in tags):
+        err["tags"] = "Tags: " + ", ".join(TAGS) + "."
+    elif tags:
+        out["tags"] = [x for x in TAGS if x in tags]
+    m = num("max", 0, 10000)
+    if m:
+        out["max"] = m
+    return out, err
+
+
+def prefill(query: str) -> tuple[dict, list[str]]:
+    """GET /wrath/host?<choices> (from the game or the launcher): the form's values, and the names left out because
+    they were not right. Unknown names are left out too; nothing here makes anything."""
+    try:
+        q = urllib.parse.parse_qs(query[:1000], keep_blank_values=False, max_num_fields=24)
+    except ValueError:
+        return {}, ["everything"]
+    one = {k: v[0] for k, v in q.items() if v}
+    vals, dropped = {}, []
+    for k in one:
+        if k not in ("core", "preset", "name", "vis") + OPTION_KEYS:
+            dropped.append(k)
+    preset = one.get("preset", "")
+    if preset in PRESETS and (not one.get("core") or CORE_OF[preset] == one.get("core")):
+        vals["preset"] = preset
+    elif "preset" in one or "core" in one:
+        dropped.append("preset")
+    name = _one_line(one.get("name", ""))
+    if name:
+        if NAME_RE.match(name) and not BANNED.search(name):
+            vals["name"] = name
+        else:
+            dropped.append("name")
+    if one.get("vis") in ("public", "private"):
+        vals["visibility"] = one["vis"]
+    elif "vis" in one:
+        dropped.append("vis")
+    opts, errs = options({k: one[k] for k in OPTION_KEYS if k in one}, vals.get("preset", "dalaran"))
+    dropped += [k for k in errs]
+    for k in OPTION_KEYS:
+        if k in opts:
+            vals[k] = ",".join(opts[k]) if k == "tags" else str(opts[k])
+    return vals, sorted(set(dropped))
 DEFAULT_TAGLINE = {"dalaran": "A Dalaran hangout: boost to 80, duel, queue, meet."}
 DEFAULT_RULES = ("Be kind: no harassment, hate speech or spam.\n"
                  "Duel anyone who agrees; no griefing in Dalaran.\n"
@@ -251,6 +383,9 @@ def validate(form: dict) -> tuple[dict, dict]:
     for k, text in (("name", name), ("tagline", tag), ("rules", " ".join(lines))):
         if k not in err and BANNED.search(text):
             err[k] = "Please leave game and publisher brand names out: Leyline is its own project."
+    opts, oerr = options(form, preset)
+    out["options"] = opts
+    err.update(oerr)
     return out, err
 
 
@@ -394,6 +529,8 @@ def seed_b64(rec: dict) -> str:
     doc = {"v": 2, "invite_secret": rec["invite_secret"], "host_secret": rec["host_secret"], "claim": rec["claim"],
            "name": rec["name"], "profile": rec["preset"], "visibility": rec["visibility"],
            "gm_name": rec["gm"], "tagline": rec.get("tagline", ""), "rules": rec.get("rules", [])}
+    if rec.get("options"):   # "More settings" (setup.py apply_options); an older kit ignores them
+        doc["options"] = rec["options"]
     if rec.get("realm_key"):
         doc.update(v=1, realm_id=rec["realm_id"], realm_key=rec["realm_key"])
     return base64.b64encode(json.dumps(doc, sort_keys=True, separators=(",", ":")).encode("utf-8")).decode("ascii")
@@ -491,6 +628,14 @@ font:14px/1.4 ui-monospace,monospace;overflow-wrap:anywhere;color:var(--ly-ink)}
 .hf ol{padding-left:1.3rem}.hf li{margin:8px 0}.hf .mine a{color:var(--ly-cyan)}
 .hf .back{display:inline-block;margin:0 0 6px;font-size:14px}
 .hf h1{font-size:clamp(40px,8vw,72px)}
+.hf .more{margin-top:18px;border:1px solid var(--ly-line);border-radius:6px;padding:4px 14px 14px;background:rgba(18,22,54,.4)}
+.hf .more summary{cursor:pointer;font-weight:600;padding:10px 0;color:var(--ly-cyan)}
+.hf select,.hf input[type=number]{width:100%;background:rgba(5,6,20,.85);color:var(--ly-ink);border:1px solid var(--ly-line);
+border-radius:5px;padding:9px 10px;font:15px system-ui,sans-serif}
+.hf .trio{display:grid;gap:10px;grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:560px){.hf .trio{grid-template-columns:1fr}}
+.hf .tags{display:flex;flex-wrap:wrap;gap:6px 14px}.hf label.tag{display:inline-flex;gap:6px;font-weight:400;margin:4px 0}
+.hf .note{border:1px solid rgba(91,141,239,.55);background:rgba(91,141,239,.12);border-radius:6px;padding:10px 12px;font-size:14px}
 """
 
 PLUS_CSS = (".ly-plus{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:999px;text-decoration:none;"
@@ -517,7 +662,49 @@ def page(title: str, inner: str, refresh: int = 0) -> bytes:
             f'<a class="back" href="/wrath/leyline">&larr; Leyline</a>{inner}</div></body></html>').encode("utf-8")
 
 
-def form_page(owner: str, display: str, vals: dict | None = None, errs: dict | None = None) -> bytes:
+def more_settings(vals: dict, errs: dict) -> str:
+    """The form's "More settings" (open when any is set): the host kit's other choices."""
+    e = html.escape
+    o = vals.get("options") if isinstance(vals.get("options"), dict) else {}
+    v = lambda k: str(vals.get(k, o.get(k, "")) if not isinstance(o.get(k), list) else ",".join(o[k]))   # noqa: E731
+
+    def er(k):
+        return f'<p class="err" id="err-{k}">{e(errs[k])}</p>' if k in errs else ""
+
+    def select(name, label, choices, hint=""):
+        cur = v(name)
+        opts = "".join(f'<option value="{e(k)}"{" selected" if k == cur else ""}>{e(t)}</option>' for k, t in choices)
+        return (f'<label for="f-{name}">{e(label)}' + (f'<span class="hint">{e(hint)}</span>' if hint else "")
+                + f'</label><select id="f-{name}" name="{name}">{opts}</select>{er(name)}')
+
+    def number(name, label, lo, hi, hint):
+        return (f'<label for="f-{name}">{e(label)}<span class="hint">{e(hint)}</span></label>'
+                f'<input type="number" id="f-{name}" name="{name}" min="{lo}" max="{hi}" value="{e(v(name))}">{er(name)}')
+    rate = [("", "The ruleset's own")] + [(str(i), f"{i}x") for i in (1, 2, 3, 5, 10)]
+    tags = set(v("tags").split(","))
+    tag_html = "".join(f'<label class="tag"><input type="checkbox" name="tags" value="{t}"{" checked" if t in tags else ""}> '
+                       f'{e(t.capitalize() if t not in ("pvp", "rp") else t.upper().replace("VP", "vP"))}</label>' for t in TAGS)
+    any_set = any(v(k) for k in OPTION_KEYS if k != "type") or v("type") not in ("", "normal")
+    return (f'<details class="more"{" open" if any_set or any(k in errs for k in OPTION_KEYS) else ""}>'
+            '<summary>More settings</summary>'
+            + select("type", "Realm type", list(TYPES.items()))
+            + '<div class="trio">' + select("xp", "XP rate", rate) + select("loot", "Loot rate", rate)
+            + select("rep", "Reputation rate", rate) + '</div>'
+            '<p class="hint">Rates apply on the AzerothCore rulesets; CMaNGOS realms use the ruleset\'s own.</p>'
+            + select("start", "New characters (Classic levelling)", [("", "The ruleset's own"), ("boost", "Level 1, or the boost to 80"),
+                                                                     ("level1", "Level 1 only")])
+            + number("bots", "Bots", 0, 200, "0 to 200 (not on the Dalaran hangout or CMaNGOS)")
+            + select("signup", "Who can make accounts", [("", "Open when public, invite link when private")] + list(SIGNUPS.items()))
+            + select("herokey", "Hero Key sign-in", [("", "Off"), ("on", "On: Leyline accounts sign in directly"), ("off", "Off")])
+            + select("region", "Region", [("", "Not set")] + list(REGIONS.items()))
+            + f'<label for="f-lang">Language<span class="hint">A code like en, de or pt-BR (optional)</span></label>'
+              f'<input type="text" id="f-lang" name="lang" maxlength="6" value="{e(v("lang"))}">{er("lang")}'
+            + f'<label>Tags</label><div class="tags">{tag_html}</div>{er("tags")}'
+            + number("max", "Max players shown on the list", 0, 10000, "0 = not shown")
+            + '</details>')
+
+
+def form_page(owner: str, display: str, vals: dict | None = None, errs: dict | None = None, note: str = "") -> bytes:
     e = html.escape
     vals, errs = vals or {}, errs or {}
 
@@ -551,6 +738,7 @@ def form_page(owner: str, display: str, vals: dict | None = None, errs: dict | N
         ('<section class="ly-panel"><p>You have made the most realms one account can for now '
          f'({PER_ACCOUNT}). Open one above to start it.</p></section>' if full else
          '<section class="ly-panel"><h2>New realm</h2>'
+         + (f'<p class="note" role="status">{e(note)}</p>' if note else "")
          + (f'<p class="err">{e(errs["_"])}</p>' if "_" in errs else "") +
          '<form method="post" action="/wrath/host">'
          f'<input type="hidden" name="csrf" value="{e(csrf(owner))}">'
@@ -562,6 +750,7 @@ def form_page(owner: str, display: str, vals: dict | None = None, errs: dict | N
          f'<label for="f-rules">House rules<span class="hint">One per line, up to {MAX_RULES}. Shown on the realm list and your join page.</span></label>'
          f'<textarea id="f-rules" name="rules">{e(rules_text)}</textarea>{er("rules")}'
          f'<label>Who can join</label><div class="opts">{visopts}</div>{er("visibility")}'
+         + more_settings(vals, errs) +
          '<label for="f-gm">Your GM account name<span class="hint">3 to 16 letters or digits. You make this game account '
          'yourself on your realm\'s join page, with your own password; it gets GM rights by itself.</span></label>'
          f'<input type="text" id="f-gm" name="gm" maxlength="16" required autocomplete="off" value="{e(vals.get("gm", ""))}">{er("gm")}'
@@ -679,12 +868,20 @@ def get(h, path: str) -> None:
     if path != "/wrath/host" and not m_dl and not m_start:
         _not_found(h)
         return
-    acct = who(h, path)
+    query = urllib.parse.urlsplit(getattr(h, "path", "") or "").query if path == "/wrath/host" else ""
+    acct = who(h, path + ("?" + query[:1000] if query else ""))   # the choices survive the sign-in
     if acct is None:
         return
     owner, display = acct
     if path == "/wrath/host":
-        h.send(200, form_page(owner, display))
+        if query:
+            vals, dropped = prefill(query)
+            note = "Filled in with your choices from the game. Check them, add your GM account name, then Start server."
+            if dropped:
+                note += " Left out (not valid): " + ", ".join(dropped) + "."
+            h.send(200, form_page(owner, display, vals, {}, note))
+        else:
+            h.send(200, form_page(owner, display))
         return
     rid = (m_dl or m_start).group(1)
     rec = load(rid)
@@ -714,10 +911,10 @@ def read_form(h) -> dict | None:
     if (h.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/x-www-form-urlencoded"):
         return None
     try:
-        q = urllib.parse.parse_qs(h.rfile.read(n).decode("utf-8"), keep_blank_values=True, max_num_fields=20)
+        q = urllib.parse.parse_qs(h.rfile.read(n).decode("utf-8"), keep_blank_values=True, max_num_fields=40)
     except (UnicodeDecodeError, ValueError):
         return None
-    return {k: v[0] for k, v in q.items()}
+    return {k: (",".join(x for x in v if x) if k == "tags" else v[0]) for k, v in q.items()}
 
 
 def post(h, path: str) -> None:
@@ -759,7 +956,7 @@ def post(h, path: str) -> None:
         rec.update(owner=owner, owner_display=display, created=int(time.time()), name=vals["name"],
                    preset=vals["preset"], visibility=vals["visibility"], gm=vals["gm"],
                    tagline=vals["tagline"] or DEFAULT_TAGLINE.get(vals["preset"], ""), rules=vals["rules"],
-                   claimed=False, first_online=None)
+                   options=vals.get("options") or {}, claimed=False, first_online=None)
         save(rec)
     h.send_response(303)
     h.send_header("Location", f"/wrath/host/{rec['pending_id']}")

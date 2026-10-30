@@ -43,6 +43,11 @@ ALLOW = [
     "hosting/README.md",
     "hosting/INSTALL-OPERATE.md",
     f"{ADDON}/Leyline.lua",                       # the in-game Leyline window (needs only the addon's table)
+    f"{ADDON}/Style.lua",                         # the Leyline look for the in-game windows (Leyline.lua uses it when there)
+    f"{ADDON}/Host.lua",                          # the in-game Host window: set up a realm, and Your realm for its GM
+    f"{ADDON}/Media",                             # its art: our own TGA files (stream/fui-web/make-wuui-media.py)
+    "stream/fui-web/make-wuui-media.py",          # makes that art from the Leyline art
+    "realm/custom/lua_scripts/ov_hostctl.lua",    # Your realm's realm half (GM only)
     "realm/custom/lua_scripts/ov_leyline.lua",    # its realm half: the WULY realm list
     "realm/custom/lua_scripts/ov_discord.lua",    # the Discord bridge's realm half
     "stream/links.py",                            # short share links (/r /h /q /m /u)

@@ -768,6 +768,7 @@ async function handleDeepLink() {
   let link = null;
   try { link = await invoke("deep_link_take"); } catch (_) { return; }
   if (link && link.action === "realm" && typeof link.id === "string") return showLinkedRealm(link.id);
+  if (link && link.action === "host" && typeof link.id === "string") return showHostLink(link.id);
   if (!link || link.action !== "install" || typeof link.id !== "string") return;
   const p = catalog.projects.find((x) => x.id === link.id);
   show("discover", true);   // the catalog was just loaded
@@ -783,6 +784,71 @@ async function handleDeepLink() {
   const card = document.querySelector(`#cat-grid .mod-card[data-id="${CSS.escape(p.id)}"]`);
   if (card) { card.scrollIntoView({ block: "center" }); const b = card.querySelector(".acts .btn"); if (b && !b.disabled) b.focus(); }
   say("cat-status", c ? `From the hub: ${p.name}. Press INSTALL to put it in ${c.name}.` : `From the hub: ${p.name}. Add your game client first, then press INSTALL.`, "ok");
+}
+
+// The in-game Host window (leyline://host?<choices>, checked by deeplink.rs): the Host page with the host's choices and
+// "MAKE IT ON THE WEBSITE" (the website's form filled in; the realm key is still made on this PC). From the game's
+// "Your realm" tab (leyline://host?manage=<what>): the Host page with what to do for that control. Nothing starts.
+const HOST_WORDS = {
+  core: { azerothcore: "AzerothCore", cmangos: "CMaNGOS" },
+  preset: { dalaran: "Dalaran hangout", main: "Classic levelling", brawl: "Brawl", progression: "Progression",
+    "cmangos-1.12.1": "CMaNGOS Classic", "cmangos-2.4.3": "CMaNGOS TBC" },
+  type: { normal: "Normal", pvp: "PvP", rp: "RP", rppvp: "RP-PvP" },
+  start: { level1: "Level 1 only", boost: "Level 1, or the boost to 80" },
+  vis: { public: "Public: on the Leyline list", private: "Private: invite link only" },
+  signup: { open: "Open: anyone", invite: "Invite link only", off: "Closed" },
+  herokey: { on: "On", off: "Off" },
+};
+const HOST_LABELS = [["core", "Core"], ["preset", "Ruleset"], ["name", "Realm name"], ["type", "Type"], ["xp", "XP rate"],
+  ["loot", "Loot rate"], ["rep", "Reputation rate"], ["start", "New characters"], ["bots", "Bots"], ["vis", "Who can find it"],
+  ["signup", "Accounts"], ["herokey", "Hero Key sign-in"], ["region", "Region"], ["lang", "Language"], ["tags", "Tags"],
+  ["max", "Max players shown"]];
+const HOST_MANAGE = {
+  bots: ["Bots", "In your host kit folder: leyline options --bots 40 (0 turns them off), then restart the realm (leyline stop, then leyline host)."],
+  rates: ["Rates", "In your host kit folder: leyline options --xp 3 --loot 1 --rep 2 (1 to 10), then restart the realm (leyline stop, then leyline host)."],
+  signup: ["Sign-up", "In your host kit folder: leyline signup open (anyone), leyline signup invite (invite link only) or leyline signup off."],
+  list: ["The Leyline list", "In your host kit folder: leyline public (on the list) or leyline private (invite link only). The list changes within a minute."],
+  invite: ["Invite link", "Your realm's invite link is below, under YOUR REALM: COPY INVITE LINK. NEW INVITE LINK stops the old one."],
+};
+
+function hostChoices(id) {
+  const p = new URLSearchParams(id);
+  return HOST_LABELS.filter(([k]) => p.has(k)).map(([k, label]) => {
+    const v = p.get(k);
+    const words = HOST_WORDS[k] && HOST_WORDS[k][v];
+    return [label, words || (["xp", "loot", "rep"].includes(k) ? v + "x" : k === "tags" ? v.split(",").join(", ") : v)];
+  });
+}
+
+function showHostLink(id) {
+  show("host");
+  const box = $("host-from-game");
+  if (!box) return;
+  box.hidden = false;
+  const list = $("host-from-game-list");
+  const go = $("host-from-game-go");
+  list.replaceChildren();
+  if (id.startsWith("manage=")) {
+    const m = HOST_MANAGE[id.slice(7)];
+    if (!m) return;
+    $("host-from-game-title").textContent = `FROM THE GAME: ${m[0].toUpperCase()}`;
+    list.append(el("li", "", m[1]));
+    go.hidden = true;
+    say("host-status-line", `From the game: ${m[0]}.`, "ok");
+    return;
+  }
+  $("host-from-game-title").textContent = "FROM THE GAME: YOUR NEW REALM";
+  for (const [label, v] of hostChoices(id)) {
+    const li = el("li", "");
+    li.append(el("b", "", label + ": "), document.createTextNode(v));
+    list.append(li);
+  }
+  go.hidden = false;
+  go.onclick = async () => {
+    try { await invoke("open_host_form", { query: id }); say("host-status-line", "The website's host page is open with your choices: sign in, add your GM account name, press Start server, then come back here for steps 2 and 3.", "ok"); }
+    catch (e) { say("host-status-line", String(e), "bad"); }
+  };
+  say("host-status-line", "Your choices from the game are below. Make the realm on the website, then start it here.", "ok");
 }
 
 // A website's "Open in launcher" (leyline://realm/<id>): show that realm on the Realms page with PLAY focused.

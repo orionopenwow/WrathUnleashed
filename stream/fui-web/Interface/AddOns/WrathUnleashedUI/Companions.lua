@@ -42,8 +42,8 @@ local FORMATIONS = { { "chaos", "Loose" }, { "near", "Close" }, { "melee", "Mele
     { "circle", "Circle" }, { "arrow", "Arrow" }, { "shield", "Shield" }, { "queue", "Single file" } }
 local FORMATION_LABEL = {}
 for _, f in ipairs(FORMATIONS) do FORMATION_LABEL[f[1]] = f[2] end
-local ACCENT = { 0.4, 0.8, 1 }
-local BG = { 0.05, 0.06, 0.08, 0.95 }
+local ACCENT = W.Style and { W.Style.C.accent[1], W.Style.C.accent[2], W.Style.C.accent[3] } or { 0.4, 0.8, 1 }
+local BG = W.Style and W.Style.C.bg or { 0.05, 0.06, 0.08, 0.95 }
 
 -- State, and the functions the tests reach (W.Companions).
 local C = { bots = {}, specs = {}, names = {}, count = 0, cap = 4, raid = false, formation = "chaos", assist = false,
@@ -224,6 +224,7 @@ local function label(parent, text, font, ...)
 end
 
 local function button(parent, text, w, onClick, ...)
+    if W.Style then local b = W.Style.Button(parent, text, w, onClick, nil, ...); b:SetHeight(22); return b end
     local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     b:SetWidth(w); b:SetHeight(22)
     b:SetText(text)
@@ -242,9 +243,12 @@ end
 local function panel(parent, name, w, h)
     local f = CreateFrame("Frame", name, parent)
     f:SetWidth(w); f:SetHeight(h)
-    f:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    if not W.Style then   -- Style.lua draws the window (S.Window, at its title)
+        f:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32,
         insets = { left = 11, right = 12, top = 12, bottom = 11 } })
+    end
+    if W.Style then W.Style.Backdrop(f, BG) end
     f:SetBackdropColor(BG[1], BG[2], BG[3], BG[4])   -- solid: the dialog texture draws see-through in the browser client
     local bg = f:CreateTexture(nil, "BACKGROUND")    -- a colour fill the engine draws itself (no texture file)
     bg:SetTexture(BG[1], BG[2], BG[3], BG[4])
@@ -291,9 +295,9 @@ local function buildMenu()
     menu:SetFrameStrata("FULLSCREEN_DIALOG")
     menu:EnableMouse(true)
     menu:SetClampedToScreen(true)
-    menu.title = label(menu, "", "GameFontNormal", "TOPLEFT", 20, -18)
+    menu.title = W.Style and W.Style.Window(menu, "") or label(menu, "", "GameFontNormal", "TOPLEFT", 20, -18)
     menu.sub = label(menu, "", "GameFontDisableSmall", "TOPLEFT", 20, -34)
-    local close = CreateFrame("Button", nil, menu, "UIPanelCloseButton")
+    local close = (W.Style and W.Style.Close(menu) or CreateFrame("Button", nil, menu, "UIPanelCloseButton"))
     close:SetPoint("TOPRIGHT", -4, -4)
     menu.specHead = section(menu, "Spec", -52)
     menu.specBtns = {}
@@ -493,10 +497,10 @@ local function build()
     win:SetScript("OnDragStop", win.StopMovingOrSizing)
     tinsert(UISpecialFrames, "WrathUnleashedBotsFrame")   -- Esc closes it
 
-    local title = label(win, "Bots", "GameFontNormalLarge", "TOPLEFT", 22, -20)
+    local title = (W.Style and W.Style.Window(win, "Bots") or label(win, "Bots", "GameFontNormalLarge", "TOPLEFT", 22, -20))
     title:SetTextColor(ACCENT[1], ACCENT[2], ACCENT[3])
     win.sub = label(win, "", "GameFontHighlightSmall", "TOPLEFT", 22, -42)
-    local close = CreateFrame("Button", nil, win, "UIPanelCloseButton")
+    local close = (W.Style and W.Style.Close(win) or CreateFrame("Button", nil, win, "UIPanelCloseButton"))
     close:SetPoint("TOPRIGHT", -6, -6)
     win.refresh = button(win, "Refresh", 76, function() C.Ask() end, "TOPRIGHT", -40, -18)
 

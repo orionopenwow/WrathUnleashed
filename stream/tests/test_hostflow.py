@@ -43,7 +43,8 @@ class Relay(BaseHTTPRequestHandler):
         self.reply(200, {"ok": True})
 
 
-ACCOUNTS = {"alice": ("Alice", "WR000001", "AlicePass1234567"), "bob": ("Bob", "WR000002", "BobPass123456789")}
+ACCOUNTS = {"alice": ("Alice", "WR000001", "AlicePass1234567"), "bob": ("Bob", "WR000002", "BobPass123456789"),
+            "carol": ("Carol", "WR000003", "CarolPass1234567")}
 
 
 class Portal(BaseHTTPRequestHandler):
@@ -298,6 +299,94 @@ check("kit: house rules", (cfg.get("record") or {}).get("rules") == rec["rules"]
 check("kit: no generated GM login", not os.path.exists(os.path.join(kit, "state", "host-login.txt")) and "gm" not in cfg)
 check("kit: seed used and deleted", not os.path.exists(os.path.join(kit, "state", "seed.b64")))
 check("kit: realm.key is 0600", stat.S_IMODE(os.stat(os.path.join(kit, "state", "realm.key")).st_mode) == 0o600)
+
+# --- from the game (WrathUnleashedUI/Host.lua, the launcher's leyline://host): the form filled in, checked again
+GAME_Q = ("core=azerothcore&preset=main&name=Frost%20Haven%27s&type=pvp&xp=5&loot=2&rep=3&start=level1&bots=20"
+          "&vis=private&signup=invite&herokey=on&region=eu&lang=de&tags=pvp%2Crp&max=60")
+st, h, b = req("GET", "/wrath/host?" + GAME_Q)
+check("from the game, signed out: sign-in keeps the choices", st == 302
+      and urllib.parse.unquote(h.get("location", "")) == "/login?next=/wrath/host?" + GAME_Q, h.get("location"))
+st, h, b = req("GET", "/wrath/host?" + GAME_Q, "carol")
+page = b.decode()
+check("from the game: filled in, says so", st == 200 and "Filled in with your choices from the game" in page
+      and 'value="Frost Haven&#x27;s"' in page and 'value="main" checked' in page and 'value="private" checked' in page)
+check("from the game: More settings open with every choice", "<details class=\"more\" open>" in page
+      and '<option value="pvp" selected>' in page and '<option value="5" selected>' in page
+      and '<option value="level1" selected>' in page and 'name="bots" min="0" max="200" value="20"' in page
+      and '<option value="invite" selected>' in page and '<option value="on" selected>' in page
+      and '<option value="eu" selected>' in page and 'name="lang" maxlength="6" value="de"' in page
+      and 'value="rp" checked' in page and 'value="pvp" checked' in page and 'value="60"' in page)
+check("from the game: no GM name (the host types it)", 'name="gm" maxlength="16" required autocomplete="off" value=""' in page)
+st, h, b = req("GET", "/wrath/host?core=azerothcore&preset=dalaran&name=My%20WoW&bots=40&xp=99&evil=1", "carol")
+page = b.decode()
+check("from the game: what is wrong is left out, and said", st == 200 and "Left out (not valid): bots, evil, name, xp." in page
+      and "My WoW" not in page and "<script" not in page)
+check("prefill: a ruleset of another core is left out", hf.prefill("core=cmangos&preset=main")[1] == ["preset"])
+check("prefill: rates and bots are AzerothCore's", hf.prefill("preset=cmangos-1.12.1&xp=3&bots=5")[1] == ["bots", "xp"])
+for label, kw, field in (("rate out of range", {"xp": "11"}, "xp"), ("bots on the hangout", {"bots": "5"}, "bots"),
+                         ("start outside Classic levelling", {"start": "level1"}, "start"), ("bad tag", {"tags": "bots"}, "tags"),
+                         ("bad language", {"lang": "klingon"}, "lang"), ("bad type", {"type": "evil"}, "type")):
+    st, h, b = req("POST", "/wrath/host", "carol", form("carol", **kw))
+    check(f"invalid more settings: {label}", st == 400 and f'id="err-{field}"'.encode() in b, (st, b[:200]))
+st, h, b = req("POST", "/wrath/host", "carol", form("carol", name="Frost Haven", preset="main", visibility="private",
+                                                    type="pvp", xp="5", loot="2", rep="3", start="level1", bots="20",
+                                                    signup="invite", herokey="on", region="eu", lang="de", tags="pvp,rp",
+                                                    max="60"))
+cm = re.match(r"^/wrath/host/([a-z2-7]{16})$", h.get("location", ""))
+crec = hf.load(cm.group(1)) if cm else {}
+check("more settings: saved with the realm", st == 303 and crec.get("options") == {
+    "type": "pvp", "xp": 5, "loot": 2, "rep": 3, "start": "level1", "bots": 20, "signup": "invite", "herokey": "on",
+    "region": "eu", "lang": "de", "tags": ["pvp", "rp"], "max": 60}, crec.get("options"))
+cpid = cm.group(1) if cm else "z" * 16
+st, h, csh = req("GET", f"/wrath/host/{cpid}/leyline-{cpid}.sh", "carol")
+cseed = re.search(r"([A-Za-z0-9+/=]{200,})", csh.decode())
+cdoc = json.loads(base64.b64decode(cseed.group(1))) if cseed else {}
+check("more settings: in the seed", cdoc.get("options") == crec.get("options"))
+kit2 = os.path.join(TMP, "kit2")
+os.makedirs(os.path.join(kit2, "realm-files", "lua_scripts"))
+for f in ("leyline", "host-wrath-realm.sh"):
+    shutil.copy(os.path.join(ROOT, "hosting", "kit", f), kit2)
+shutil.copytree(os.path.join(ROOT, "hosting", "kit", "tools"), os.path.join(kit2, "tools"),
+                ignore=shutil.ignore_patterns("__pycache__"))
+with open(os.path.join(kit2, f"leyline-{cpid}.sh"), "wb") as f:
+    f.write(csh)
+p = subprocess.run(["bash", os.path.join(kit2, f"leyline-{cpid}.sh"), "--config-only"], env=env, cwd=TMP,
+                   stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
+check("kit with more settings: config written", p.returncode == 0, p.stdout[-600:] + p.stderr[-600:])
+try:
+    c2 = json.load(open(os.path.join(kit2, "state", "host.json")))
+except (OSError, ValueError):
+    c2 = {}
+r2 = c2.get("record") or {}
+check("kit: bots, sign-up, Hero Key from the game", (c2.get("bots"), c2.get("signup"), c2.get("herokey")) == (20, "invite", True),
+      (c2.get("bots"), c2.get("signup"), c2.get("herokey")))
+check("kit: the realm list's type, tags, region, language, max", (r2.get("type"), r2.get("tags"), r2.get("region"),
+      r2.get("language"), r2.get("max_players")) == ("PvP", ["pvp", "rp", "bots"], "eu", "de", 60), r2)
+renv = open(os.path.join(kit2, "state", "realm.env")).read() if os.path.exists(os.path.join(kit2, "state", "realm.env")) else ""
+check("kit: state/realm.env (type, rates, start)", all(x in renv.splitlines() for x in (
+    "AC_GAME_TYPE=1", "AC_RATE_XP_KILL=5", "AC_RATE_XP_QUEST=5", "AC_RATE_DROP_ITEM_NORMAL=2", "AC_RATE_DROP_MONEY=2",
+    "AC_RATE_REPUTATION_GAIN=3", "OV_MAIN=0")), renv)
+dat_p = os.path.join(kit2, "realm-files", "lua_scripts", "host-realm.dat")
+dat = open(dat_p).read() if os.path.exists(dat_p) else ""
+check("kit: host-realm.dat for Your realm in game, no secrets (private: no join link)",
+      dat.startswith('return { realm_id = "') and 'visibility = "private"' in dat and "bots = 20" in dat
+      and 'rates = "5/2/3"' in dat and "join" not in dat and c2.get("invite_secret", "x") not in dat
+      and c2.get("host_secret", "x") not in dat, dat)
+p = subprocess.run(["bash", os.path.join(kit2, "leyline"), "options", "--xp", "2", "--type", "rp"], env=env, cwd=kit2,
+                   stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60)
+renv = open(os.path.join(kit2, "state", "realm.env")).read()
+check("leyline options: rates and type changed for the next start", p.returncode == 0 and "AC_RATE_XP_KILL=2" in renv
+      and "AC_GAME_TYPE=6" in renv and json.load(open(os.path.join(kit2, "state", "host.json")))["record"]["type"] == "RP",
+      p.stdout[-300:] + p.stderr[-300:])
+p = subprocess.run(["bash", os.path.join(kit2, "leyline"), "options", "--bots", "60"], env=env, cwd=kit2,
+                   stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60)
+envf = open(os.path.join(kit2, ".env")).read() if os.path.exists(os.path.join(kit2, ".env")) else ""
+check("leyline options --bots: the bot count for the next start", p.returncode == 0 and "WU_BOTS=60" in envf.splitlines()
+      and json.load(open(os.path.join(kit2, "state", "host.json")))["bots"] == 60 and "bots = 60" in
+      open(os.path.join(kit2, "realm-files", "lua_scripts", "host-realm.dat")).read(), p.stderr[-300:])
+p = subprocess.run(["bash", os.path.join(kit2, "leyline"), "options", "--xp", "99"], env=env, cwd=kit2,
+                   stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60)
+check("leyline options: out of range refused", p.returncode != 0 and "AC_RATE_XP_KILL=2" in open(os.path.join(kit2, "state", "realm.env")).read())
 check("kit: host link", open(os.path.join(kit, "state", "host-link.txt")).read().strip()
       == f"https://relay.test/join/{rid}#{rec['invite_secret']}~{rec['host_secret']}")
 p = subprocess.run(["bash", os.path.join(kit, f"leyline-{pid}.sh"), "--config-only"], env=env, cwd=TMP,

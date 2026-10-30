@@ -5,7 +5,12 @@
 --   Friends across realms: the place for the global friends list (coming).
 --   Your game folder: "Streamed: Dalaran, capitals, starting areas" or "Whole world: your game folder", and
 --            "Use my game folder", which asks the page for the folder picker (GameFolder.lua).
--- Opened by Esc > Mods & Workshop > Leyline realms, /leyline and /realms.
+-- Opened by Esc > Realm List, /leyline and /realms. "Host your own" opens the Host window (Host.lua): set up a realm,
+-- and "Your realm" for its GM.
+-- This realm is one row: its own relay listing (the Beacon of the same realm, e.g. the Dalaran Hangout's) is not a
+-- second row. The realm says which listing that is (S:<id>:<live>, below); an older realm doesn't, so a listed realm
+-- with this realm's own name is taken as it too. The row then keeps the listing's id: "Copy link" gives the relay
+-- link in the desktop client (where the relay is how other clients come in) and the /wrath link in the browser.
 --
 -- The client can't make HTTP calls, so the realm sends the list (realm/custom/lua_scripts/ov_leyline.lua) as
 -- addon messages, prefix WULY, whispered to yourself:
@@ -19,6 +24,8 @@
 --                      N:<realms>:<players>:<bots>                   the network line
 --                      E:<count>                                     the list is complete
 --                      U:<text>                                      no list (e.g. "Realm list unavailable")
+--                      S:<id>:<live 0|1>                             this realm's own relay listing (left out of the
+--                                                                    R lines); before E
 --
 -- The order (the same on every Leyline surface): this realm first when it is a community realm; featured realms;
 -- the Leyline Sample Hangout (our own realm, temporary); every other live realm by the network's fair score;
@@ -74,6 +81,7 @@ local function label(parent, text, font, ...)
 end
 
 local function button(parent, text, w, onClick, ...)
+    if W.Style then local b = W.Style.Button(parent, text, w, onClick, nil, ...); b:SetHeight(22); return b end
     local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     b:SetWidth(w); b:SetHeight(22)
     b:SetText(text)
@@ -87,6 +95,23 @@ local function now() return (GetTime and GetTime()) or 0 end
 function L.Link(id)
     if id == "this" then return PUBLIC_BASE .. THIS_REALM_PATH end
     return PUBLIC_BASE .. "/r/" .. id
+end
+
+-- The browser game's page publishes WUUI_GAMEFOLDER = { page = true, ... } (wrath-page.js); the desktop client has none.
+function L.HasPage() return WUUI_PAGE == true or (type(WUUI_GAMEFOLDER) == "table" and WUUI_GAMEFOLDER.page == true) end
+
+-- A row's link: this realm's is the /wrath page in the browser, its relay link in the desktop client when it is listed.
+function L.RowLink(r)
+    if r.id == "this" and r.relayId and not L.HasPage() then return L.Link(r.relayId) end
+    return L.Link(r.id)
+end
+
+-- The Join button's text: "You're here" on this realm's row; "Join through the relay" only where that is how this
+-- player would come back in (this realm listed on the relay, live, and no browser page: the desktop client), else Join.
+function L.JoinText(r)
+    if r.id ~= "this" then return "Join" end
+    if r.relayId and r.relayLive and not L.HasPage() then return "Join through the relay" end
+    return "You're here"
 end
 
 -- ---------------------------------------------------------------- Data
@@ -165,13 +190,32 @@ local function matches(r)
 end
 
 -- What the window shows, in the network's order (see the top of this file).
+local function sameName(a, b)
+    if type(a) ~= "string" or type(b) ~= "string" then return false end
+    local function k(x) return (x:lower():gsub("[^%w]", "")) end
+    return k(a) ~= "" and k(a) == k(b)
+end
+L.SameName = sameName
+
+-- This realm's own relay listing (the realm's S line, or a non-sample listing with this realm's name): merged into
+-- the "this" row, never a row of its own.
+local function isSelf(r, this)
+    if not this or r.id == "this" or r.sample then return false end
+    if L.selfId then return r.id == L.selfId end
+    return sameName(r.name, this.name)
+end
+L.IsSelf = isSelf
+
 function L.View()
     local this, sample, featured, rest, offline = nil, nil, {}, {}, {}
     for _, r in ipairs(L.all) do if r.id == "this" then this = r end end
     local thisSample = this and this.sample
+    if this then this.relayId, this.relayLive = L.selfId, L.selfLive end
     for _, r in ipairs(L.all) do
         if r.id == "this" then
             -- placed below
+        elseif isSelf(r, this) then
+            this.relayId, this.relayLive = r.id, r.live
         elseif r.sample then
             if not thisSample then sample = r end   -- on the sample itself, its relay record is this realm again
         elseif matches(r) then
@@ -216,7 +260,7 @@ function L.OnMessage(prefix, msg, channel, sender)
     if UnitName and sender ~= UnitName("player") then return end
     local kind, rest = msg:match("^(%u):(.*)$")
     if kind == "B" then
-        L.incoming, L.network = {}, nil
+        L.incoming, L.network, L.selfId, L.selfLive = {}, nil, nil, nil
         L.age = tonumber(rest:match(":(%d+)$") or "")
     elseif kind == "M" and L.incoming then
         local id, m = metaLine(rest)
@@ -224,6 +268,9 @@ function L.OnMessage(prefix, msg, channel, sender)
         if id and last and last.id == id then
             for k, v in pairs(m) do last[k] = v end
         end
+    elseif kind == "S" and L.incoming then
+        local id, live = rest:match("^([a-z2-7]+):([01])$")
+        if id and #id == 16 then L.selfId, L.selfLive = id, live == "1" end
     elseif kind == "N" and L.incoming then
         local n, p, b = rest:match("^(%d+):(%d+):(%d+)$")
         if n then L.network = { realms = tonumber(n), players = tonumber(p), bots = tonumber(b) } end
@@ -270,11 +317,11 @@ end
 function L.Texts(r)
     local name = r.name
     if r.sample then name = (brand().on and brand().home or SAMPLE_NAME) .. " · " .. SAMPLE_NOTE end
-    if r.id == "this" then name = name .. "  |cff8fd3ff(you are here)|r" end
+    if r.id == "this" then name = name .. "  |cff8b5cf6(you are here)|r" end
     local badges = {}
-    if r.featured then badges[#badges + 1] = "|cffffd100Featured|r" end
-    if r.verified then badges[#badges + 1] = "|cff40ff40Verified|r" end
-    if r.new then badges[#badges + 1] = "|cff8fd3ffNew|r" end
+    if r.featured then badges[#badges + 1] = "|cff8b5cf6Featured|r" end
+    if r.verified then badges[#badges + 1] = "|cff4cc38aVerified|r" end
+    if r.new then badges[#badges + 1] = "|cff5b8defNew|r" end
     if #badges > 0 then name = name .. "  " .. table.concat(badges, " ") end
     local extra = {}
     for _, t in ipairs(r.tags or {}) do if r.id ~= "this" or not r.sample then extra[#extra + 1] = TAGS[t] end end
@@ -282,7 +329,7 @@ function L.Texts(r)
     if r.region then extra[#extra + 1] = REGIONS[r.region] .. (r.est and "?" or "") end
     if r.lang then extra[#extra + 1] = r.lang end
     local rules = RULESETS[r.ruleset] .. (#extra > 0 and (" · " .. table.concat(extra, ", ")) or "")
-    local state = r.live and "|cff40ff40online|r" or "|cff9d9d9doffline|r"
+    local state = r.live and "|cff4cc38aonline|r" or "|cff9aa3b5offline|r"
     if r.up then state = state .. " · " .. r.up .. "% up" end
     return name, rules, state
 end
@@ -308,6 +355,12 @@ function L.Refresh()
             row.rules:SetText(rules)
             row.players:SetText(players(r))
             row.state:SetText(state)
+            -- this realm's row: "You're here" (or "Join through the relay", which also puts the link in the box, so
+            -- that row has no Copy link of its own)
+            local jt = L.JoinText(r)
+            row.join:SetText(jt)
+            row.join:SetWidth(jt == "Join through the relay" and 164 or jt == "You're here" and 80 or 56)
+            if jt == "Join through the relay" then row.copyBtn:Hide() else row.copyBtn:Show() end
             row:Show()
         else
             row:Hide()
@@ -347,7 +400,11 @@ end
 -- "Host your own": the three steps, and the website's page in the box to copy.
 L.HOST_LINK = PUBLIC_BASE .. "/wrath/realms#host-your-own"
 function L.HostYourOwn()
-    -- TODO(owner): the wording of the call to action
+    if W.Host and W.Host.Show then   -- Host.lua: set up a realm, and "Your realm" for its GM
+        if win then win:Hide() end
+        W.Host.Show(1)
+        return true
+    end
     info("Host your own realm: 1. Get the Leyline launcher and Docker. 2. Open Host, pick a profile and your rules. "
         .. "3. Make it public: it shows up here. The link has the details.")
     copy(L.HOST_LINK)
@@ -378,9 +435,14 @@ function L.Back()
 end
 
 function L.Join(r)
-    local link = L.Link(r.id)
+    local link = L.RowLink(r)
     if r.id == "this" then
-        info("You're on " .. r.name .. " now. Share the link above to bring friends here.")
+        if L.JoinText(r) == "Join through the relay" then
+            info("You're on " .. r.name .. " now. Other clients come in through the relay: the link above (or "
+                .. "leyline://realm/" .. r.relayId .. " in the Leyline launcher).")
+        else
+            info("You're on " .. r.name .. " now. Share the link above to bring friends here.")
+        end
     elseif not r.live then
         info(r.name .. " is offline right now. Its link is above: try again later.")
     else
@@ -393,7 +455,16 @@ local function buildRow(i)
     local row = CreateFrame("Button", nil, win.list)
     row:SetWidth(WIN_W - 40); row:SetHeight(ROW_H - 2)
     row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_H)
-    row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+    if W.Style then
+        local hl = row:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetTexture(W.Style.C.accent[1], W.Style.C.accent[2], W.Style.C.accent[3], 0.10)
+        hl:SetAllPoints()
+        local line = row:CreateTexture(nil, "BACKGROUND")
+        line:SetTexture(W.Style.Unpack(W.Style.C.border))
+        line:SetPoint("BOTTOMLEFT", 0, -1); line:SetPoint("BOTTOMRIGHT", 0, -1); line:SetHeight(1)
+    else
+        row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+    end
     row.name = label(row, "", "GameFontNormal", "TOPLEFT", 4, -2)
     row.name:SetWidth(230)
     row.rules = label(row, "", "GameFontHighlightSmall", "TOPLEFT", row.name, "BOTTOMLEFT", 0, -2)
@@ -403,14 +474,16 @@ local function buildRow(i)
     row.state = label(row, "", "GameFontHighlightSmall", "TOPLEFT", 244, -18)
     row.copyBtn = button(row, "Copy link", 80, function(self)
         local r = self:GetParent().realm
-        if r then L.selected = r; win.info:SetText("The link to " .. r.name .. ". Ctrl+C copies it."); copy(L.Link(r.id)) end
+        if r then L.selected = r; win.info:SetText("The link to " .. r.name .. ". Ctrl+C copies it."); copy(L.RowLink(r)) end
     end, "RIGHT", -64, 0)
     row.join = button(row, "Join", 56, function(self)
         local r = self:GetParent().realm
         if r then L.Join(r) end
     end, "RIGHT", -4, 0)
+    row.copyBtn:ClearAllPoints()
+    row.copyBtn:SetPoint("RIGHT", row.join, "LEFT", -4, 0)   -- left of Join, whatever its width
     row:SetScript("OnClick", function(self)
-        if self.realm then L.selected = self.realm; copy(L.Link(self.realm.id)) end
+        if self.realm then L.selected = self.realm; copy(L.RowLink(self.realm)) end
     end)
     row:Hide()
     return row
@@ -420,9 +493,9 @@ local function buildFriends(parent)
     local box = CreateFrame("Frame", nil, parent)
     box:SetPoint("BOTTOMLEFT", 16, 44); box:SetPoint("BOTTOMRIGHT", -16, 44)
     box:SetHeight(84)
-    box:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    if W.Style then W.Style.Backdrop(box, W.Style.C.bg2) else box:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", tile = true, tileSize = 16, edgeSize = 16,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 } })
+        insets = { left = 4, right = 4, top = 4, bottom = 4 } }) end
     box:SetBackdropColor(0, 0, 0, 0.45)
     label(box, "Friends across realms", "GameFontNormal", "TOPLEFT", 12, -10)
     box.soon = label(box, "Coming", "GameFontDisableSmall", "TOPRIGHT", -12, -12)
@@ -447,21 +520,24 @@ local function build()
     win:RegisterForDrag("LeftButton")
     win:SetScript("OnDragStart", win.StartMoving)
     win:SetScript("OnDragStop", win.StopMovingOrSizing)
-    win:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    if not W.Style then   -- Style.lua draws the window (S.Window, at its title)
+        win:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32,
         insets = { left = 11, right = 12, top = 12, bottom = 11 } })
+    end
     win:SetBackdropColor(0.05, 0.06, 0.08, 0.95)   -- solid: the dialog texture draws see-through in the browser client
     do   -- a colour fill the engine draws itself (no texture file; the backdrop fill needs one)
         local bg = win:CreateTexture(nil, "BACKGROUND")
-        bg:SetTexture(0.05, 0.06, 0.08, 0.95)
+        bg:SetTexture(0.094, 0.106, 0.137, 0.97)   -- #181b23 (Style.lua)
         bg:SetPoint("TOPLEFT", 10, -10); bg:SetPoint("BOTTOMRIGHT", -10, 10)
     end
-    label(win, "Leyline", "GameFontNormalLarge", "TOP", 0, -18)
-    local close = CreateFrame("Button", nil, win, "UIPanelCloseButton")
+    local _ = (W.Style and W.Style.Window(win, "Leyline") or label(win, "Leyline", "GameFontNormalLarge", "TOP", 0, -18))
+    local close = (W.Style and W.Style.Close(win) or CreateFrame("Button", nil, win, "UIPanelCloseButton"))
     close:SetPoint("TOPRIGHT", -6, -6)
     button(win, "Done", 90, function() win:Hide() end, "BOTTOMRIGHT", -16, 14)
     win.back = button(win, brand().back, brand().on and 170 or 120, function() L.Back() end, "BOTTOMLEFT", 16, 14)
     win.host = button(win, "Host your own", 120, function() L.HostYourOwn() end, "BOTTOM", 0, 14)
+    if W.Style then W.Style.SetKind(win.host, "primary") end
     tinsert(UISpecialFrames, "WrathUnleashedLeylineFrame")   -- Esc closes it
 
     label(win, "Realms", "GameFontNormal", "TOPLEFT", 20, -46)
@@ -494,7 +570,7 @@ local function build()
     button(win, "Down", 50, function() L.offset = L.offset + ROWS; L.Refresh() end, "TOPRIGHT", -20, listBottom - 4)
     win.report = button(win, "Report", 64, function() L.Report() end, "TOPRIGHT", -132, listBottom - 4)
 
-    local box = CreateFrame("EditBox", nil, win, "InputBoxTemplate")
+    local box = W.Style and W.Style.Input(win, WIN_W - 50, 20) or CreateFrame("EditBox", nil, win, "InputBoxTemplate")
     box:SetWidth(WIN_W - 50); box:SetHeight(20)
     box:SetPoint("TOPLEFT", 26, listBottom - 34)
     box:SetAutoFocus(false)
@@ -534,6 +610,12 @@ end
 function W.ToggleLeyline()
     if not win then build() end
     if win:IsShown() then win:Hide() else win:Show() end
+end
+
+-- Esc > Realm List (ModsPanel.lua's game menu button): always shows the window.
+function W.ShowRealmList()
+    if not win then build() end
+    win:Show()
 end
 
 local listener = CreateFrame("Frame")

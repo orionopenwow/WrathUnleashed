@@ -201,9 +201,9 @@ end
 local function panel(parent, w, h, border)
     local f = CreateFrame("Frame", nil, parent)
     f:SetWidth(w); f:SetHeight(h)
-    f:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    if W.Style then W.Style.Backdrop(f, W.Style.C.bg2) else f:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", tile = true, tileSize = 16, edgeSize = 16,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 } })
+        insets = { left = 4, right = 4, top = 4, bottom = 4 } }) end
     f:SetBackdropColor(0.06, 0.07, 0.09, 0.88)
     f:SetBackdropBorderColor(unpack(border or { 0.36, 0.40, 0.45, 1 }))
     return f
