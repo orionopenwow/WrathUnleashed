@@ -51,7 +51,7 @@ pub const LINKS: &[(&str, &str)] = &[
     ("support", "https://ko-fi.com/orionvanilla"),
     ("github", "https://github.com/orionopenwow/Leyline"),
     ("host", host::HOST_PAGE),
-    ("hostguide", "https://github.com/orionopenwow/WrathUnleashed/blob/main/hosting/INSTALL-OPERATE.md"),
+    ("hostguide", "https://github.com/orionopenwow/Leyline/blob/main/hosting/INSTALL-OPERATE.md"),
     ("themes", "https://github.com/orionopenwow/WrathUnleashed/blob/main/docs/THEMES.md"), // themes agent
     ("modders", "https://github.com/orionopenwow/WrathUnleashed/blob/main/mods/README-modders.md"),
     ("releases", update::RELEASES_PAGE),

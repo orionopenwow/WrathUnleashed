@@ -14,20 +14,20 @@ set "WU=%~dp0"
 set "WU=%WU:~0,-1%"
 set "BUILT=%WU%\launcher\src-tauri\target\release\leyline.exe"
 if /i "%~1"=="rebuild" goto build
+rem The launcher's version in this folder: a copy older than it (an old install, an old build) is never opened;
+rem this folder's launcher is built instead (so the look and the realm are always the current ones).
+set "SRCVER="
+for /f "usebackq delims=" %%V in (`powershell -NoProfile -Command "(Get-Content -Raw '%WU%\launcher\src-tauri\tauri.conf.json' | ConvertFrom-Json).version" 2^>nul`) do set "SRCVER=%%V"
 
 for %%P in ("%LOCALAPPDATA%\Leyline\leyline.exe" "%LOCALAPPDATA%\Leyline\Leyline.exe" "%LOCALAPPDATA%\Programs\Leyline\Leyline.exe" ^
-            "%ProgramFiles%\Leyline\Leyline.exe" "%ProgramFiles%\Leyline\leyline.exe") do (
-  if exist "%%~P" (
-    echo Opening the installed Leyline launcher: %%~P
+            "%ProgramFiles%\Leyline\Leyline.exe" "%ProgramFiles%\Leyline\leyline.exe" "%BUILT%") do (
+  if exist "%%~P" call :current "%%~P" && (
+    echo Opening the Leyline launcher: %%~P
     start "" "%%~P"
     exit /b 0
   )
 )
-if exist "%BUILT%" (
-  echo Opening the Leyline launcher built from this folder.
-  start "" "%BUILT%"
-  exit /b 0
-)
+if exist "%BUILT%" goto build
 
 rem --- 3. a released installer on GitHub
 where gh >nul 2>&1 || goto build
@@ -90,4 +90,17 @@ popd
 if not exist "%BUILT%" (echo The build finished but %BUILT% is missing. & pause & exit /b 1)
 echo Opening the Leyline launcher.
 start "" "%BUILT%"
+exit /b 0
+
+rem :current EXE  -> exit 0 when EXE's version is at least this folder's launcher version (or either is unknown)
+:current
+if not defined SRCVER exit /b 0
+set "EXEVER="
+for /f "usebackq delims=" %%V in (`powershell -NoProfile -Command "(Get-Item -LiteralPath '%~1').VersionInfo.ProductVersion" 2^>nul`) do set "EXEVER=%%V"
+if not defined EXEVER exit /b 0
+powershell -NoProfile -Command "if ([version]('%EXEVER%' -replace '[^0-9.].*$','') -ge [version]'%SRCVER%') { exit 0 } else { exit 1 }" >nul 2>&1
+if errorlevel 1 (
+  echo %~1 is version %EXEVER%, older than this folder's %SRCVER%: building the current one instead.
+  exit /b 1
+)
 exit /b 0
