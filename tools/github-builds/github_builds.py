@@ -303,6 +303,41 @@ def runs(gh: GitHub, repo: str, workflow: str) -> list[dict]:
         return []
 
 
+# GitHub masks its secrets in logs already; this is a second net for anything token- or key-shaped.
+SECRETISH = re.compile(r"(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}"
+                       r"|-----BEGIN [A-Z ]*PRIVATE KEY-----|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})")
+
+
+def why_failed(gh: GitHub, repo: str, workflow: str, keep: int = 80) -> list[str]:
+    """The newest failed run of a workflow: which job and step failed, and the last lines of its log.
+    Read-only (gh run view). [] when the newest finished run did not fail."""
+    rs = [r for r in runs(gh, repo, workflow) if r.get("status") == "completed"]
+    if not rs or rs[0].get("conclusion") in ("success", "skipped", "cancelled", None):
+        return []
+    run = rs[0]
+    rid = str(run.get("databaseId") or "")
+    if not rid:
+        return [f"{workflow} ended '{run.get('conclusion')}' (no run id to read)"]
+    out = [f"{workflow} run {rid} ended '{run.get('conclusion')}': {run.get('url') or ''}".rstrip()]
+    rc, js = gh.run(["gh", "run", "view", rid, "-R", repo, "--json", "jobs"])
+    try:
+        jobs = json.loads(js[js.index("{"):js.rindex("}") + 1]).get("jobs", []) if rc == 0 else []
+    except ValueError:
+        jobs = []
+    for j in jobs:
+        if j.get("conclusion") == "failure":
+            steps = [st.get("name") for st in j.get("steps", []) if st.get("conclusion") == "failure"]
+            out.append(f"  failed job '{j.get('name')}', step: {', '.join(steps) or '(none named)'}")
+    rc, log = gh.run(["gh", "run", "view", rid, "-R", repo, "--log-failed"])
+    lines = [SECRETISH.sub("[redacted]", ln.rstrip()) for ln in log.splitlines() if ln.strip()] if rc == 0 else []
+    if lines:
+        out.append(f"  -- the last {min(keep, len(lines))} lines of the failing step --")
+        out.extend("  " + ln for ln in lines[-keep:])
+    else:
+        out.append("  (GitHub returned no log for the failed step)")
+    return out
+
+
 def start_images(gh: GitHub, pushed_now: bool, sleep=time.sleep) -> str:
     """wu-images: 'started' (pushed or dispatched now), 'running', or 'done' (the last run passed)."""
     if pushed_now:
@@ -361,8 +396,23 @@ def main(argv=None, gh: GitHub | None = None, sleep=time.sleep, now=time.time, o
     ap.add_argument("--no-wait", action="store_true", help="start the builds, don't wait for them")
     ap.add_argument("--wait-minutes", type=int, default=300)
     ap.add_argument("--no-browser", action="store_true")
+    ap.add_argument("--why", action="store_true",
+                    help="read-only: only show why the newest wu-images / launcher build failed, then stop")
     a = ap.parse_args(argv)
     gh = gh or GitHub()
+    if a.why:
+        say("Why the last GitHub builds failed (read-only)")
+        found = False
+        for repo, wf in ((WU_REPO, "wu-images.yml"), (LY_REPO, "leyline-launcher.yml")):
+            lines = why_failed(gh, repo, wf)
+            if lines:
+                found = True
+                for ln in lines:
+                    say(ln)
+            else:
+                say(f"  {wf}: the newest finished run did not fail")
+        say("BUILD WHY OK" + ("" if found else " (nothing failed)"))
+        return 0
     wu, ly = Path(a.repo_dir), Path(a.leyline_dir)
     todo: list[str] = []
     try:
@@ -428,7 +478,10 @@ def main(argv=None, gh: GitHub | None = None, sleep=time.sleep, now=time.time, o
         result = {} if a.no_wait else wait_runs(gh, watch, a.wait_minutes, sleep=sleep, now=now)
         for (repo, wf), st in result.items():
             if st not in ("success", "running", "not started"):
-                todo.append(f"{wf} ended '{st}': open https://github.com/{repo}/actions and send Claude the failing step.")
+                todo.append(f"{wf} ended '{st}': the failing step is above (and in logs\\github-builds.log) "
+                            f"for Claude; https://github.com/{repo}/actions has the rest.")
+                for ln in why_failed(gh, repo, wf):
+                    say(ln)
 
         pages = []
         vis_of = {name: package_state(gh, owner_type, name) for name in PACKAGES}

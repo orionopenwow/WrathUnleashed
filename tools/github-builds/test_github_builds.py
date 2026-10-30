@@ -71,6 +71,10 @@ class FakeGitHub:
         if a[:2] == ["run", "list"]:
             wf = a[a.index("--workflow") + 1]
             return 0, json.dumps(self.runs if wf == "wu-images.yml" else self.ly_runs), ""
+        if a[:2] == ["run", "view"]:
+            if "--log-failed" in a:
+                return 0, getattr(self, "failed_log", ""), ""
+            return 0, json.dumps({"jobs": getattr(self, "jobs", [])}), ""
         if a[:2] == ["label", "create"]:
             self.labels.add((a[a.index("-R") + 1], a[2]))
             return 0, "", ""
@@ -289,6 +293,43 @@ class TurnOn(unittest.TestCase):
                                5, sleep=lambda s: None)
         self.assertEqual(set(res.values()), {"success"})
         self.assertIn("wu-images: success", out.getvalue())
+
+    def test_why_failed_names_the_step_and_tails_the_log(self):
+        self.gh.runs = [{"status": "completed", "conclusion": "failure", "databaseId": 42, "url": "https://x/42"}]
+        self.gh.jobs = [{"name": "worldserver", "conclusion": "failure",
+                         "steps": [{"name": "Checkout", "conclusion": "success"},
+                                   {"name": "Build and push", "conclusion": "failure"}]},
+                        {"name": "authserver", "conclusion": "success", "steps": []}]
+        self.gh.failed_log = "\n".join(f"worldserver\tBuild and push\tline {i}" for i in range(200)) + \
+            "\nworldserver\tBuild and push\ttoken ghp_" + "A" * 36 + " leaked"
+        with redirect_stdout(io.StringIO()):
+            out = gb.why_failed(gb.GitHub(self.gh), gb.WU_REPO, "wu-images.yml")
+        text = "\n".join(out)
+        self.assertIn("run 42 ended 'failure'", text)
+        self.assertIn("failed job 'worldserver', step: Build and push", text)
+        self.assertNotIn("authserver", text)
+        self.assertIn("line 199", text)
+        self.assertNotIn("line 100", text)              # only the tail is kept
+        self.assertNotIn("ghp_AAAA", text)
+        self.assertIn("[redacted]", text)
+        views = [c for c in self.gh.calls if c[0][1:3] == ("run", "view")]
+        self.assertTrue(all("rerun" not in c[0] and "cancel" not in c[0] for c in views))
+
+    def test_why_failed_quiet_when_green(self):
+        self.gh.runs = [{"status": "completed", "conclusion": "success", "databaseId": 7}]
+        self.assertEqual(gb.why_failed(gb.GitHub(self.gh), gb.WU_REPO, "wu-images.yml"), [])
+
+    def test_why_flag_is_read_only(self):
+        self.gh.runs = [{"status": "completed", "conclusion": "failure", "databaseId": 9}]
+        self.gh.failed_log = "img\tpush\tdenied: permission_denied: write_package"
+        out = io.StringIO()
+        with redirect_stdout(out):
+            rc = gb.main(["--why"], gh=gb.GitHub(self.gh), sleep=lambda s: None)
+        self.assertEqual(rc, 0)
+        self.assertIn("write_package", out.getvalue())
+        self.assertIn("BUILD WHY OK", out.getvalue())
+        kinds = {c[0][1] for c in self.gh.calls if c[0][0] == "gh"}
+        self.assertLessEqual(kinds, {"run"})              # no pushes, api writes, tags or workflow runs
 
     def test_owner_token_without_org_scopes(self):
         # The owner's real token (2026-10-25): repo + workflow, no write:packages/admin:org. The second

@@ -230,3 +230,5 @@
 1073a scripts  Leyline Sample Hangout fence (inert until OV_SAMPLER=1): Dalaran, starting zones and every dungeon and raid for streamed browser players; own game files keep the whole world
 1073b signin  Sample Hangout labels and the play-slice alias (inert until WU_SAMPLER=1)
 1073c ship  Save to GitHub (orionopenwow/WrathUnleashed): the Leyline Sample Hangout switch, overlay, slice and labels
+1073x sampler-check  Dry run of the Leyline Sample Hangout switch (read-only, changes nothing)
+1074a ship  Save to GitHub (orionopenwow/WrathUnleashed): the build-failure reader (read-only builds-why step)

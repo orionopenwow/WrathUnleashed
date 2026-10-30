@@ -111,6 +111,7 @@ STEPS = {
     "sampler": ("realm/Sample hangout - on.bat", "Leyline Sample Hangout on: lighter realm, browser fence (5-min restart)", False),
     "sampler-off": ("realm/Sample hangout - off.bat", "Leyline Sample Hangout off: back to the full realm (5-min restart)", False),
     "slice-sampler": ("stream/Make sampler slice.bat", "Sample Hangout streamed game files (30-60 min)", False),
+    "builds-why": ("tools/github-builds/Why did the build fail.bat", "Why the last GitHub build failed (read-only)", False),
 }
 CHECKS = [
     ("Play page", "https://play.openvanilla.app/wrath"),
