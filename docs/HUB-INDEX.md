@@ -16,6 +16,8 @@ other page. One switch makes it the front door later (below).
 | Holding list (output) | `tools/hub-index/holding.json`: `needs_licence`, `review`, `excluded` |
 | Hub pages, submissions, launcher feed | `stream/hub.py` (tests: `stream/tests/test_hub.py`) |
 | Daily refresh | `tools/github-workflows/hub-index.yml` → `.github/workflows/hub-index.yml` |
+| Preview thumbnails | `hub_index.py thumbs`, `stream/www-files/art/hub-thumbs/`, `tools/hub-index/Refresh hub thumbnails.bat` |
+| The scout (daily digest of new finds) | `tools/hub-index/scout.py` (tests: `test_scout.py`), `.github/workflows/scout.yml`, `docs/scout/` |
 | Issue form | `tools/github-workflows/ISSUE_TEMPLATE/submit-mod.yml` → Leyline's `.github/ISSUE_TEMPLATE/` |
 
 ## The rules
@@ -94,18 +96,20 @@ to 200 characters. Nothing else is copied from a repo.
 * `source`: `seed` (curated in `seeds.json`), `discovered`, `submitted`. `stars` is `null` when unknown.
 * Sorted by (category, name, id). `hub_index.py check` validates it (the hub's rules, the thumbnail fields and files,
   and the `external` list).
-* `thumb`, `thumb_credit` (optional, together): `"/wrath/art/hub-thumbs/<owner>__<repo>.webp"` and exactly
-  `"Preview image from the project's GitHub page"`. Written by `hub_index.py thumbs` (below) only once
-  `stream/hub.py`'s `ENTRY_KEYS` lists both fields: until then `validate_index` would reject the entry and the hub
-  would show no index at all, so the command writes the images and leaves the entries alone.
+* `thumb`, `thumb_credit` (optional, together): `"/wrath/art/hub-thumbs/<owner>__<repo>.webp"` for the entry's own
+  GitHub repo and exactly `"Preview image from the project's GitHub page"`. Written by `hub_index.py thumbs` (below);
+  `stream/hub.py` `validate_index` checks both (`thumb_problem`).
 * `external` (top level, beside `entries`): the link-only external packs (below), and `external_policy` their
-  one-line policy. `validate_index` reads only `entries`, so this list never affects the entries.
+  one-line policy. `validate_index` only checks that it is a list; the hub checks each pack on its own
+  (`external_problems`) and leaves a bad one out, so a bad pack never takes the entries down.
 
 ## Thumbnails
 
-`python3 -I tools/hub-index/hub_index.py thumbs [--top 30] [--only owner/repo ...] [--refresh]` (also
-`build --thumbs N`, which runs it after a good build for the top N and the `--only` repos; a thumbnail that can't be
-fetched never fails the build). For each picked GitHub entry (and each external pack with a GitHub `repo`):
+`python3 -I tools/hub-index/hub_index.py thumbs [--top 30] [--new] [--only owner/repo ...] [--refresh]` (also
+`build --thumbs N`, which runs it after a good build for the top N, every new entry and the `--only` repos; a
+thumbnail that can't be fetched never fails the build). `--new` adds every GitHub entry that has no thumb and was never
+tried (the cache remembers a skip, so a repo without a usable image isn't asked again each run). For each picked
+GitHub entry (and each external pack with a GitHub `repo`):
 
 1. Read the repo's page on github.com and take its `og:image`: the social preview the owner set, or else the card
    GitHub draws for every repo.
@@ -128,6 +132,18 @@ carry a brand word or a client number (which the hub never shows) the card is sk
 hub's generated tile. A custom preview can't be read that way: like any change to an entry beyond a refresh, a new or
 changed thumb waits for a person in the daily review PR (`thumb` is not one of the gate's refresh fields).
 
+**Where they run.** The daily workflow installs Pillow and runs `build --thumbs 30` before the gate: the gate holds
+every new thumb back (entries and external packs alike), and the WebP files are committed only with the review PR,
+never with the auto-merged daily one. On the owner's PC: `tools/hub-index/Refresh hub thumbnails.bat` (the Autopilot
+step `thumbs`) installs Pillow for the user when it's missing, runs `thumbs --top 30 --new` and `check`; then Ship
+(save to GitHub) and `signin` put them on the site.
+
+**On the site** (`stream/hub.py`): a catalog card, an item page (with the credit under the picture), the Community
+Spotlight, the Mod of the week and the gallery's mod tiles (the credit is in the tile's caption, which the lightbox
+shows) use the thumb when its file is on the site; otherwise the tile drawn from the item's id. The portal serves
+`/wrath/art/hub-thumbs/<owner>__<repo>.webp` from its art folder by pattern (lowercase, WebP magic bytes, 200 KB at
+most, nothing else from that folder). `fastloop.sh` (the `signin` step) installs `www-files/art/hub-thumbs/` as a set.
+
 ## External packs (a policy exception)
 
 The owner, 2026-10-30: "keep the ultraHD links for now and other similar". HD graphics packs (texture and model packs)
@@ -149,6 +165,13 @@ the index's top-level `external` list, curated by hand in `tools/hub-index/exter
 * Every other rule still holds: nothing decompiled or leaked, no whole-client downloads or repacks, no blocklisted
   repos or owners, nothing paid, no brand words or client numbers in the visible text.
 * `id` is `ext:` + the first 12 hex of sha256 of the lowercased `url`. Sorted by (category, name, id).
+
+**On the site:** the catalog shows them in their own group, "Graphics & external packs" (also the source filter
+`?source=external`; category, build and search filters apply), each with the badge "External download, made and
+hosted by its authors; not checked or hosted by Leyline" and a "Visit the authors' page" button (new tab,
+`rel="noopener nofollow ugc"`). Each has its own page at `/wrath/leyline-preview/p/ext-<12 hex>` with the same badge,
+the authors' page and (when it has one) its source repo. Never an Install or `leyline://install` link, never in the
+launcher feed, never the Mod of the week or the Spotlight; in the gallery only when it has a GitHub-repo thumb.
 
 Items using it: the UltraHD Graphics Modpack (r/wowservers 1xiqhdg), added 2026-10-30 from the thread alone (Reddit
 could not be read from the build machine; a person should open the thread and check the pack's page is a page, free,
@@ -234,7 +257,63 @@ repo and one latest-release call per GitHub entry, issues read from the public L
 "Allow GitHub Actions to create and approve pull requests" must be on: "Turn on GitHub builds.bat" sets it, or
 puts it on its checklist.
 
-Once merged, the "signin" step ships the new `stream/hub/` to the portal.
+Once merged, the "signin" step ships the new `stream/hub/` (and `stream/www-files/art/hub-thumbs/`) to the portal.
+
+## The scout
+
+`tools/hub-index/scout.py run [--date YYYY-MM-DD] [--probe 40] [--max-pages 1] [--no-reddit] [--report FILE]`, daily
+in `.github/workflows/scout.yml` (05:43 UTC and on dispatch). The owner, 2026-10-30: "a robust scanning system for
+novel GitHubs and other things we can merge into this ultimate launcher". Where `discover` grows the pool with
+everything that matches, the scout looks for what is *new or rising* and what it could add to Leyline.
+
+**Sources** (read-only, rate-limit aware; without a token it still runs, with fewer results):
+
+* GitHub search per area (launchers, server cores and modules, bots, addons and UI, tools and editors, web and
+  mobile clients, graphics; `AREAS` in the script): repos created in the last 30 days, and repos pushed in the last
+  14 days with 15+ stars (the risers). An anonymous run gets 10 searches a minute, the workflow's token 30; once GitHub
+  says the limit is used up, no more GitHub calls that run and the digest says so.
+* Codeberg and GitLab, newest first (the last 30 days), like `discover`.
+* r/wowservers: only its two public feeds, `new/.rss` and `top/.json?t=week`, with a polite User-Agent
+  (`leyline-scout/1.0 ...`). 403 or 429 means "not today". GitHub, GitLab and Codeberg links are taken from the posts;
+  nothing else is fetched from Reddit, and never a post's image.
+
+**Vetting**: the best `--probe` finds are cloned (`hub_index.probe`, cached by HEAD) and judged by the index's own
+rules (`hub_index.judge`: licence, including the rider check — a licence file with a no-commercial-use rider is not
+open even when the forge calls it MIT — game-format files, binaries, decompiled or wowdecomp-derived, paid, blocklist,
+cheats). The rest are checked on their own words (name, description, topics). Then the lure checks:
+
+* look-alike names: a repo from the last 60 days named like a project we know (the index, the seeds, the pool) by
+  another owner, with no more stars than it (`azerothcore-wotlk-free`);
+* star clusters: three or more new repos by different owners, made within a week, with exactly the same star count
+  (5+) and a shared name word or the same description;
+* release-only binaries: almost no files and no source, and a README that says to download it from Releases;
+* README patterns alone: an archive password, "turn off your antivirus".
+
+**Verdicts**: `index` (passes the index rules: the daily build will propose it), `watch` (fine, but not an entry: no
+supported build, too few stars, no licence yet, or a person should look), `unprobed`, `rejected` (a hard rule, with the
+reason), `lure`.
+
+**Scores**: stars (log), stars a week (from `scout-state.json`'s history; the pool's last-known stars against the last
+run; or stars over age for a repo made in the last 60 days), new to us, made in the window, merge tags, a Reddit
+mention, archived. **Merge tags** (heuristic, no LLM): web client, realm hosting, launcher, mobile, mod format, bots,
+editor, graphics, server core, addons/UI, tools, each with a one-line reason quoting the words that matched and where
+(its description or its README).
+
+**Output** (same input, same bytes; no clock but the date):
+
+* `docs/scout/<date>.md`: top 15 new, top risers, Reddit mentions (permalinks, points, the verdict of each linked
+  repo), merge candidates grouped by tag, rejected (counts by reason, then each), suspected lures (for a person to
+  blocklist).
+* `tools/hub-index/scout-state.json`: per repo its first-seen date, star history (12 points) and last verdict; Reddit
+  posts seen (60 days). Safe to delete: velocity starts over.
+* `tools/hub-index/candidates.json`: finds that are not rejected and not lures join the pool with `via: scout:...`, so
+  the daily index build vets them and its review gate shows the new entries to a person.
+
+**The workflow** opens or updates one PR, "Scout digest <date>", from the branch `scout/digest` (an unmerged branch's
+earlier digests and star history are carried over). It never merges, never pushes to main and posts nowhere else.
+It uses only the built-in `GITHUB_TOKEN`; the repo setting "Allow GitHub Actions to create and approve pull
+requests" must be on (as for the hub index). Tests: `python3 -I tools/hub-index/test_scout.py` (fakes for GitHub,
+Codeberg, GitLab, the Reddit feeds and the probe; no network).
 
 ## The launcher feed: `GET /wrath/leyline/catalog.json`
 

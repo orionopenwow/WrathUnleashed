@@ -1,0 +1,6 @@
+{
+ "format": 1,
+ "note": "tools/hub-index/scout.py's memory: star history, first seen, last verdict; Reddit posts seen. Safe to delete (velocity starts over).",
+ "repos": {},
+ "reddit": {}
+}

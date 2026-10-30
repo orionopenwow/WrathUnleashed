@@ -779,6 +779,11 @@ def judge(cand: dict, facts: dict, meta: dict, block: dict) -> dict:
         return {"verdict": "excluded", "reason": "built to sell things (shop, VIP, donations or payments)"}
     if PAID_STRONG.search(readme):
         return {"verdict": "excluded", "reason": "a paid or paywalled version (README)"}
+    if facts.get("licence") == "NONFREE":
+        # the licence file wins over the forge's guess: "MIT License (with Additional Restriction)" reads as MIT on the
+        # forge, but a no-commercial-use rider makes it not an open licence (LICENCE_RIDER)
+        return {"verdict": "excluded", "reason": "licence is not open (non-commercial or no-derivatives terms, or a rider "
+                                                 "on an open licence)"}
     if OTHER_GAME_RE.search(text):
         return {"verdict": "excluded", "reason": "made for the current game, not a classic client"}
     builds, why = detect_builds(cand, facts, meta)

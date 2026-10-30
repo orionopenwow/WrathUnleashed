@@ -482,6 +482,11 @@ class LicencesAndWaivers(unittest.TestCase):
         self.assertEqual(HI.classify_licence("Apache License\nVersion 2.0, January 2004\n... Commons Clause ..."), "NONFREE")
         v = HI.judge(cand(), facts(**ADDON_335, licence="NONFREE"), META, {})
         self.assertEqual(v["verdict"], "excluded")
+        # the forge says MIT (it reads the licence's first words), the file has the rider: the file wins
+        v = HI.judge(cand(), facts(**ADDON_335, licence="NONFREE"), {**META, "licence": "MIT"}, {})
+        self.assertEqual(v["verdict"], "excluded")
+        self.assertIn("rider", v["reason"])
+        self.assertTrue(HI.HARD_REMOVE.search(v["reason"]))
 
     def test_no_paid_features_is_not_a_paid_version(self):
         self.assertFalse(HI.PAID_STRONG.search("It is free, with no ads and no paid features."))

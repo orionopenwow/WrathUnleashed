@@ -31,7 +31,7 @@ def steps(doc, job):
 class Workflows(unittest.TestCase):
     def test_all_parse(self):
         names = sorted(p.name for p in HERE.glob("*.yml"))
-        self.assertEqual(names, ["hub-index.yml", "leyline-launcher.yml", "realm-scripts.yml", "wu-hosting.yml",
+        self.assertEqual(names, ["hub-index.yml", "leyline-launcher.yml", "realm-scripts.yml", "scout.yml", "wu-hosting.yml",
                                  "wu-images.yml"])
         for n in names:
             text, doc = load(n)
@@ -74,6 +74,24 @@ class Workflows(unittest.TestCase):
         self.assertEqual(labels[:3], ["Repo link", "Client build", "Category"])
         builds = next(b for b in form["body"] if b.get("id") == "build")["attributes"]["options"]
         self.assertEqual(builds, ["1.12.1", "2.4.3", "3.3.5a", "4.3.4", "5.4.8", "any"])
+
+    def test_scout(self):
+        """Daily and on demand; the built-in token only; one PR from the scout branch, never merged, never main."""
+        text, doc = load("scout.yml")
+        self.assertIn("schedule", doc["on"])
+        self.assertIn("workflow_dispatch", doc["on"])
+        self.assertNotIn("push", doc["on"])
+        self.assertEqual(doc["permissions"], {"contents": "write", "pull-requests": "write"})
+        self.assertEqual(set(re.findall(r"secrets\.([A-Za-z_]+)", text)), {"GITHUB_TOKEN"})
+        job = doc["jobs"]["scout"]
+        self.assertEqual(job["env"]["BRANCH"], "scout/digest")
+        run = "\n".join(s.get("run", "") for s in job["steps"])
+        self.assertIn("scout.py run", run)
+        self.assertIn("test_scout.py", run)
+        self.assertIn('git push -q -f origin "$BRANCH"', run)
+        self.assertNotRegex(run, r"push[^\n]*\bmain\b")
+        self.assertNotIn("gh pr merge", run)
+        self.assertEqual((REPO / ".github" / "workflows" / "scout.yml").read_text(encoding="utf-8"), text)
 
     def test_images(self):
         text, doc = load("wu-images.yml")
