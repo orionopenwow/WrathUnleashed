@@ -1,0 +1,1920 @@
+{
+ "slice": "sampler",
+ "title": "Leyline Sample Hangout in the browser (temporary)",
+ "comment": "The temporary Leyline Sample Hangout's streamed slice: mini.json less the capitals (Stormwind City, Orgrimmar) and the Goldshire inn. Every tier here is mini.json's own, unchanged, in mini.json's order (stream/tests/test_sampler.py checks it: change a tier in mini.json and copy it here). Streamed browser players get Dalaran, their starting area (Northshire Valley, the Valley of Trials, Ebon Hold for Death Knights) and every dungeon, raid, arena and battleground the Dungeon Finder and .play can send them to; their own 3.3.5a game folder opens the rest. The realm rule is ov_slices.lua with OV_SAMPLER=1 (realm/profiles/sampler.env), which also closes the capitals when the server still streams mini. Built by \"Make sampler slice.bat\" (the slice-sampler step); the server serves it as slice \"sampler\" next to \"mini\" (WU_SLICE=sampler bash stream-up.sh switches wu-play over).",
+ "maxTier": 54,
+ "budgetMB": 7424,
+ "lite": {
+  "comment": "Item models and textures are worn by everyone (spec kits, free Armory gear) and there are too many to pick from, so all of them ship, with textures cut to their mips of at most maxPx on the long side. --export reports what that saved.",
+  "maxPx": 256,
+  "prefixes": [
+   "Item\\ObjectComponents\\",
+   "Item\\TextureComponents\\"
+  ]
+ },
+ "soundPolicy": {
+  "comment": "Which tier kinds take their zone music and ambience (wenilla-host --deps walks them from each tier's areas and WMOs; a tier's own \"music\" / \"ambience\" true or false wins). What a tier does not take is deferred to the tier with \"collectDeferred\": true, the last in \"order\", so dungeon and raid music only streams if the budget leaves room. Doodad, game-object and creature-footstep sounds are always taken. Only the tiles inside a map entry's zone or box give music and ambience, never its marginTiles.",
+  "musicKinds": [
+   "base",
+   "home",
+   "city",
+   "starter"
+  ],
+  "ambienceKinds": [
+   "base",
+   "home",
+   "city",
+   "starter",
+   "dungeon",
+   "raid",
+   "arena",
+   "battleground"
+  ]
+ },
+ "lowLevel": {
+  "comment": "Stream characters below this level live in their faction's starter area and capital; from it on, the Dungeon Finder and the whole .play menu open.",
+  "level": 10
+ },
+ "order": [
+  "base",
+  "dalaran",
+  "northshire",
+  "valley-of-trials",
+  "ebon-hold",
+  "naxx-os-voa",
+  "ulduar",
+  "eoe-onyxia-rs",
+  "icc-toc",
+  "arenas",
+  "violet-hold-toc",
+  "battlegrounds",
+  "utgarde-keep",
+  "azjol-nerub",
+  "ahnkahet",
+  "draktharon-keep",
+  "gundrak",
+  "oculus",
+  "heroic-rotation",
+  "ragefire-chasm",
+  "wailing-caverns",
+  "deadmines",
+  "shadowfang-keep",
+  "blackfathom-deeps",
+  "stockade",
+  "gnomeregan",
+  "razorfen-kraul",
+  "scarlet-monastery",
+  "razorfen-downs",
+  "uldaman",
+  "maraudon",
+  "zulfarrak",
+  "sunken-temple",
+  "blackrock-depths",
+  "dire-maul",
+  "blackrock-spire",
+  "scholomance",
+  "stratholme",
+  "hellfire-ramparts",
+  "blood-furnace",
+  "slave-pens",
+  "underbog",
+  "mana-tombs",
+  "auchenai-crypts",
+  "old-hillsbrad",
+  "sethekk-halls",
+  "black-morass",
+  "steamvault",
+  "shadow-labyrinth",
+  "shattered-halls",
+  "botanica",
+  "mechanar",
+  "arcatraz",
+  "magisters-terrace",
+  "music"
+ ],
+ "notStreamed": "The open world beyond Dalaran and the starting areas, the capitals, questing outside them, Wintergrasp, Alterac Valley, Isle of Conquest, the Deeprun Tram.",
+ "tiers": [
+  {
+   "key": "base",
+   "kind": "base",
+   "name": "base",
+   "notes": "Login, character select and create for every race and class, the UI, spell effects, interface and character sounds, liquids, the shared models. Shared by every other tier. The boot read-set (boot-manifest.json, world-manifest.json) is exported before it. Not all of Textures\\ (the whole world's minimap and every baked NPC skin): the map tiers add the minimap tiles and baked NPC skins they need; the --record check finds the rest.",
+   "prefixes": [
+    "DBFilesClient\\",
+    "Interface\\",
+    "Fonts\\",
+    "Character\\",
+    "Item\\",
+    "Spells\\",
+    "XTextures\\",
+    "Environments\\Stars\\",
+    "Cameras\\",
+    "Particles\\",
+    "Sound\\Interface\\",
+    "Sound\\Spells\\",
+    "Sound\\Character\\",
+    "Sound\\Item\\",
+    "Sound\\Universal\\",
+    "Sound\\Music\\GlueScreenMusic\\",
+    "World\\Generic\\",
+    "Textures\\*",
+    "Textures\\Footsteps\\",
+    "Textures\\Weather\\",
+    "Textures\\SpellChainEffects\\",
+    "Textures\\Splash\\",
+    "Textures\\GuildEmblems\\"
+   ],
+   "prefixesNote": "Textures\\* is only the files directly in Textures\\ (unitselecttexture, shadowblob, waterpoop02, the sun and moon, minimapmask): the textures the client names in its own code. Footprints, weather, spell chain beams (ropebeam), water splashes and guild emblems (tabards) are small and needed everywhere. The base also gets every liquid loop and the ghost and underwater ambience by walking (wenilla-host --deps), and the minimap index md5translate.trs below.",
+   "names": [
+    "World\\Maps\\Northrend\\Northrend.wdl",
+    "Textures\\Minimap\\md5translate.trs",
+    "WTF\\DefaultBindings.wtf"
+   ],
+   "maps": [],
+   "capture": [
+    "Start the local host with --record names-0.txt, open the page, wait for the login screen.",
+    "Log in, open character create, click through every race, both genders and every class, rotate the model.",
+    "Create one character of each armor type if you can (cloth, leather, mail, plate) and log each in once."
+   ],
+   "mounts": true,
+   "mountsNote": "Every player mount's model and skins (horses, rams, wolves, kodos, raptors, mechanostriders, hawkstriders, elekks, gryphons, wyverns, drakes, mammoths, motorcycles...), the flight masters' mounts and a vehicle mount's passengers: displays.py reads Spell.dbc for aura 78 and prints those displays for this tier. Mounts are ridden everywhere and are not spawned anywhere, and the client seats a rider only once the mount's model has loaded, so they belong in the base. About 100-250 MB.",
+   "measuredMB": null
+  },
+  {
+   "key": "dalaran",
+   "kind": "home",
+   "name": "Dalaran",
+   "notes": "Dalaran (zone 4395 on Northrend, map 571): the city, the Underbelly (sewers) and the Violet Citadel. Only the ADT tiles under Dalaran's world-map rect plus one tile of margin; anything else on Northrend sends a stream player back.",
+   "zones": [
+    4395
+   ],
+   "maps": [
+    {
+     "id": 571,
+     "zone": 4395,
+     "tiles": [
+      30,
+      31,
+      20,
+      21
+     ],
+     "tilesNote": "WorldMapArea has no rect for Dalaran (all zeros), so the zone alone streamed the middle of Northrend (31-33 x 31-33). These are the tiles under the city (x from world y, y from world x: Northrend_30_21 holds 5808, 588); the realm rule still uses zone 4395.",
+     "marginTiles": 1,
+     "spawnBox": [
+      5500,
+      6150,
+      250,
+      1100
+     ],
+     "spawnBoxNote": "x min, x max, y min, y max: the creature and object spawns displays.py reads for Dalaran. No z min: the city floats above Crystalsong Forest, whose tiles stream with it, and the stags, herb nodes and taxi birds below are seen from the city (the live capture asked for them)."
+    }
+   ],
+   "prefixes": [
+    "Interface\\WorldMap\\Dalaran\\"
+   ],
+   "capture": [
+    "Log in a character who is in Dalaran (GM: .tele Dalaran).",
+    "Walk the rings: Krasus' Landing, the Violet Citadel (inside and up), the bank, the Eventide and Magus Commerce, Runeweaver Square, the Antonidas memorial, both inns.",
+    "Go down to the Underbelly (.tele DalaranSewer) and walk it to the Black Market and the Arena entrance.",
+    "Open the map (M) and both Dalaran floors."
+   ],
+   "measuredMB": null,
+   "play": [
+    {
+     "label": "Dalaran: the city centre",
+     "map": 571,
+     "x": 5807.98,
+     "y": 588.487,
+     "z": 660.94,
+     "o": 1.66594
+    },
+    {
+     "label": "Dalaran: the Visitor Center",
+     "map": 571,
+     "x": 5757.44,
+     "y": 621.777,
+     "z": 650.091,
+     "o": 0.460362
+    },
+    {
+     "label": "Dalaran: the Underbelly (sewers)",
+     "map": 571,
+     "x": 5804.89,
+     "y": 640.08,
+     "z": 609.887,
+     "o": 1.00618
+    }
+   ]
+  },
+  {
+   "key": "northshire",
+   "kind": "starter",
+   "faction": "alliance",
+   "name": "Northshire Valley",
+   "notes": "The Alliance starter area for stream players: Northshire Valley (area 9 of Elwynn Forest, zone 12, map 0). Bounded by a world box (box: x min, x max, y min, y max) because a subzone has no world-map rect; the tiles under the box plus marginTiles are streamed and the realm rule keeps a stream character below 15 inside the box (and Stormwind City). Every Alliance race starts here in the browser: dwarves, gnomes, night elves and draenei are moved here on their first login.",
+   "maps": [
+    {
+     "id": 0,
+     "box": [
+      -9200,
+      -8550,
+      -480,
+      80
+     ],
+     "marginTiles": 1,
+     "spawnBox": [
+      -9200,
+      -8550,
+      -480,
+      80
+     ]
+    }
+   ],
+   "home": {
+    "map": 0,
+    "x": -8949.95,
+    "y": -132.493,
+    "z": 83.5312,
+    "o": 0
+   },
+   "play": [
+    {
+     "label": "Northshire Abbey",
+     "map": 0,
+     "x": -8921.09,
+     "y": -119.135,
+     "z": 82.195,
+     "o": 5.82878
+    }
+   ],
+   "capture": [
+    "Make a human character and log in (Northshire Abbey). Walk the valley: the abbey, the vineyards, Echo Ridge Mine (inside), the wolf meadows, the gate to Elwynn."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "valley-of-trials",
+   "kind": "starter",
+   "faction": "horde",
+   "name": "Valley of Trials",
+   "notes": "The Horde starter area for stream players: Valley of Trials (area 363 of Durotar, zone 14, map 1). World box like Northshire. Undead, tauren and blood elves are moved here on their first login.",
+   "maps": [
+    {
+     "id": 1,
+     "box": [
+      -800,
+      -80,
+      -4550,
+      -4050
+     ],
+     "marginTiles": 1,
+     "spawnBox": [
+      -800,
+      -80,
+      -4550,
+      -4050
+     ]
+    }
+   ],
+   "home": {
+    "map": 1,
+    "x": -618.518,
+    "y": -4251.67,
+    "z": 38.718,
+    "o": 0
+   },
+   "play": [
+    {
+     "label": "Valley of Trials",
+     "map": 1,
+     "x": -601.294,
+     "y": -4296.76,
+     "z": 37.8115,
+     "o": 1.65401
+    }
+   ],
+   "capture": [
+    "Make an orc character and log in. Walk the valley: the den, the boar and scorpid fields, the Burning Blade Coven (inside), the road towards Razor Hill."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "ebon-hold",
+   "kind": "starter",
+   "faction": "deathknight",
+   "name": "Ebon Hold (Death Knight start)",
+   "notes": "Acherus: The Ebon Hold and the Scarlet Enclave (map 609, zone 4298): where every Death Knight starts at 55. Zone tiles plus one tile of margin (the map is only the Enclave). The chain ends at Light's Hope Chapel (Eastern Plaguelands, not streamed): a stream Death Knight is then sent to its capital.",
+   "maps": [
+    {
+     "id": 609,
+     "zone": 4298,
+     "marginTiles": 1
+    }
+   ],
+   "home": {
+    "map": 609,
+    "x": 2355.84,
+    "y": -5664.77,
+    "z": 426.028,
+    "o": 3.65997
+   },
+   "play": [
+    {
+     "label": "Acherus: The Ebon Hold",
+     "map": 609,
+     "x": 2355.84,
+     "y": -5664.77,
+     "z": 426.028,
+     "o": 3.65997
+    }
+   ],
+   "capture": [
+    "Make a Death Knight and play the start: Acherus (all floors), Death's Breach, New Avalon, the mine, Havenshire, the Scarlet fleet."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "ragefire-chasm",
+   "kind": "dungeon",
+   "name": "Ragefire Chasm",
+   "maps": [
+    {
+     "id": 389
+    }
+   ],
+   "play": [
+    {
+     "label": "Ragefire Chasm",
+     "map": 389,
+     "x": 3.81,
+     "y": -14.82,
+     "z": -17.84,
+     "o": 4.39
+    }
+   ],
+   "levels": [
+    10,
+    21
+   ],
+   "capture": [
+    "GM: .go xyz 3.81 -14.82 -17.84 389   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "wailing-caverns",
+   "kind": "dungeon",
+   "name": "Wailing Caverns",
+   "maps": [
+    {
+     "id": 43
+    }
+   ],
+   "play": [
+    {
+     "label": "Wailing Caverns",
+     "map": 43,
+     "x": -163.49,
+     "y": 132.9,
+     "z": -73.66,
+     "o": 5.83
+    }
+   ],
+   "levels": [
+    10,
+    25
+   ],
+   "capture": [
+    "GM: .go xyz -163.49 132.9 -73.66 43   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "deadmines",
+   "kind": "dungeon",
+   "name": "The Deadmines",
+   "maps": [
+    {
+     "id": 36
+    }
+   ],
+   "play": [
+    {
+     "label": "The Deadmines",
+     "map": 36,
+     "x": -16.4,
+     "y": -383.07,
+     "z": 61.78,
+     "o": 1.86
+    }
+   ],
+   "levels": [
+    10,
+    23
+   ],
+   "capture": [
+    "GM: .go xyz -16.4 -383.07 61.78 36   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "shadowfang-keep",
+   "kind": "dungeon",
+   "name": "Shadowfang Keep",
+   "maps": [
+    {
+     "id": 33
+    }
+   ],
+   "play": [
+    {
+     "label": "Shadowfang Keep",
+     "map": 33,
+     "x": -229.135,
+     "y": 2109.18,
+     "z": 76.8898,
+     "o": 1.267
+    }
+   ],
+   "levels": [
+    10,
+    26
+   ],
+   "capture": [
+    "GM: .go xyz -229.135 2109.18 76.8898 33   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "blackfathom-deeps",
+   "kind": "dungeon",
+   "name": "Blackfathom Deeps",
+   "maps": [
+    {
+     "id": 48
+    }
+   ],
+   "play": [
+    {
+     "label": "Blackfathom Deeps",
+     "map": 48,
+     "x": -151.89,
+     "y": 106.96,
+     "z": -39.87,
+     "o": 4.53
+    }
+   ],
+   "levels": [
+    20,
+    30
+   ],
+   "capture": [
+    "GM: .go xyz -151.89 106.96 -39.87 48   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "stockade",
+   "kind": "dungeon",
+   "name": "The Stockade",
+   "maps": [
+    {
+     "id": 34
+    }
+   ],
+   "play": [
+    {
+     "label": "The Stockade",
+     "map": 34,
+     "x": 54.23,
+     "y": 0.28,
+     "z": -18.34,
+     "o": 6.26
+    }
+   ],
+   "levels": [
+    22,
+    30
+   ],
+   "capture": [
+    "GM: .go xyz 54.23 0.28 -18.34 34   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "gnomeregan",
+   "kind": "dungeon",
+   "name": "Gnomeregan",
+   "maps": [
+    {
+     "id": 90
+    }
+   ],
+   "play": [
+    {
+     "label": "Gnomeregan",
+     "map": 90,
+     "x": -332.22,
+     "y": -2.28,
+     "z": -150.86,
+     "o": 2.77
+    }
+   ],
+   "levels": [
+    24,
+    34
+   ],
+   "capture": [
+    "GM: .go xyz -332.22 -2.28 -150.86 90   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "razorfen-kraul",
+   "kind": "dungeon",
+   "name": "Razorfen Kraul",
+   "maps": [
+    {
+     "id": 47
+    }
+   ],
+   "play": [
+    {
+     "label": "Razorfen Kraul",
+     "map": 47,
+     "x": 1943,
+     "y": 1544.63,
+     "z": 82,
+     "o": 1.38
+    }
+   ],
+   "levels": [
+    24,
+    34
+   ],
+   "capture": [
+    "GM: .go xyz 1943 1544.63 82 47   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "scarlet-monastery",
+   "kind": "dungeon",
+   "name": "Scarlet Monastery",
+   "maps": [
+    {
+     "id": 189
+    }
+   ],
+   "play": [
+    {
+     "label": "Scarlet Monastery",
+     "map": 189,
+     "x": 1688.99,
+     "y": 1053.48,
+     "z": 18.6775,
+     "o": 0.00117
+    }
+   ],
+   "levels": [
+    26,
+    45
+   ],
+   "capture": [
+    "GM: .go xyz 1688.99 1053.48 18.6775 189   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null,
+   "notes": "All four wings (Graveyard, Library, Armory, Cathedral) are one map (189) and one set of files: they stream together. .play goes to the Graveyard; the Dungeon Finder picks the wing you queue for."
+  },
+  {
+   "key": "razorfen-downs",
+   "kind": "dungeon",
+   "name": "Razorfen Downs",
+   "maps": [
+    {
+     "id": 129
+    }
+   ],
+   "play": [
+    {
+     "label": "Razorfen Downs",
+     "map": 129,
+     "x": 2592.55,
+     "y": 1107.5,
+     "z": 51.29,
+     "o": 4.74
+    }
+   ],
+   "levels": [
+    33,
+    43
+   ],
+   "capture": [
+    "GM: .go xyz 2592.55 1107.5 51.29 129   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "uldaman",
+   "kind": "dungeon",
+   "name": "Uldaman",
+   "maps": [
+    {
+     "id": 70
+    }
+   ],
+   "play": [
+    {
+     "label": "Uldaman",
+     "map": 70,
+     "x": -226.8,
+     "y": 49.09,
+     "z": -46.03,
+     "o": 1.39
+    }
+   ],
+   "levels": [
+    35,
+    45
+   ],
+   "capture": [
+    "GM: .go xyz -226.8 49.09 -46.03 70   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "maraudon",
+   "kind": "dungeon",
+   "name": "Maraudon",
+   "maps": [
+    {
+     "id": 349
+    }
+   ],
+   "play": [
+    {
+     "label": "Maraudon",
+     "map": 349,
+     "x": 1019.69,
+     "y": -458.31,
+     "z": -43.43,
+     "o": 0.31
+    }
+   ],
+   "levels": [
+    40,
+    52
+   ],
+   "capture": [
+    "GM: .go xyz 1019.69 -458.31 -43.43 349   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "zulfarrak",
+   "kind": "dungeon",
+   "name": "Zul'Farrak",
+   "maps": [
+    {
+     "id": 209
+    }
+   ],
+   "play": [
+    {
+     "label": "Zul'Farrak",
+     "map": 209,
+     "x": 1213.52,
+     "y": 841.59,
+     "z": 8.93,
+     "o": 6.09
+    }
+   ],
+   "levels": [
+    42,
+    54
+   ],
+   "capture": [
+    "GM: .go xyz 1213.52 841.59 8.93 209   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "sunken-temple",
+   "kind": "dungeon",
+   "name": "The Temple of Atal'Hakkar",
+   "maps": [
+    {
+     "id": 109
+    }
+   ],
+   "play": [
+    {
+     "label": "The Temple of Atal'Hakkar",
+     "map": 109,
+     "x": -319.24,
+     "y": 99.9,
+     "z": -131.85,
+     "o": 3.19
+    }
+   ],
+   "levels": [
+    45,
+    55
+   ],
+   "capture": [
+    "GM: .go xyz -319.24 99.9 -131.85 109   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "blackrock-depths",
+   "kind": "dungeon",
+   "name": "Blackrock Depths",
+   "maps": [
+    {
+     "id": 230
+    }
+   ],
+   "play": [
+    {
+     "label": "Blackrock Depths",
+     "map": 230,
+     "x": 456.929,
+     "y": 34.0923,
+     "z": -68.0896,
+     "o": 4.71239
+    }
+   ],
+   "levels": [
+    48,
+    60
+   ],
+   "capture": [
+    "GM: .go xyz 456.929 34.0923 -68.0896 230   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "dire-maul",
+   "kind": "dungeon",
+   "name": "Dire Maul",
+   "maps": [
+    {
+     "id": 429
+    }
+   ],
+   "play": [
+    {
+     "label": "Dire Maul",
+     "map": 429,
+     "x": 44.4499,
+     "y": -154.822,
+     "z": -2.71201,
+     "o": 0
+    }
+   ],
+   "levels": [
+    54,
+    60
+   ],
+   "capture": [
+    "GM: .go xyz 44.4499 -154.822 -2.71201 429   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "blackrock-spire",
+   "kind": "dungeon",
+   "name": "Blackrock Spire (Lower and Upper)",
+   "maps": [
+    {
+     "id": 229
+    }
+   ],
+   "play": [
+    {
+     "label": "Blackrock Spire (Lower and Upper)",
+     "map": 229,
+     "x": 78.5083,
+     "y": -225.044,
+     "z": 49.839,
+     "o": 5.1
+    }
+   ],
+   "levels": [
+    55,
+    60
+   ],
+   "capture": [
+    "GM: .go xyz 78.5083 -225.044 49.839 229   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "scholomance",
+   "kind": "dungeon",
+   "name": "Scholomance",
+   "maps": [
+    {
+     "id": 289
+    }
+   ],
+   "play": [
+    {
+     "label": "Scholomance",
+     "map": 289,
+     "x": 196.37,
+     "y": 127.05,
+     "z": 134.91,
+     "o": 6.09
+    }
+   ],
+   "levels": [
+    56,
+    60
+   ],
+   "capture": [
+    "GM: .go xyz 196.37 127.05 134.91 289   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "stratholme",
+   "kind": "dungeon",
+   "name": "Stratholme",
+   "maps": [
+    {
+     "id": 329
+    }
+   ],
+   "play": [
+    {
+     "label": "Stratholme",
+     "map": 329,
+     "x": 3593.15,
+     "y": -3646.56,
+     "z": 138.5,
+     "o": 5.33
+    }
+   ],
+   "levels": [
+    56,
+    60
+   ],
+   "capture": [
+    "GM: .go xyz 3593.15 -3646.56 138.5 329   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "hellfire-ramparts",
+   "kind": "dungeon",
+   "name": "Hellfire Ramparts",
+   "maps": [
+    {
+     "id": 543
+    }
+   ],
+   "play": [
+    {
+     "label": "Hellfire Ramparts",
+     "map": 543,
+     "x": -1355.24,
+     "y": 1641.12,
+     "z": 68.2491,
+     "o": 0.6687
+    }
+   ],
+   "levels": [
+    59,
+    67
+   ],
+   "capture": [
+    "GM: .go xyz -1355.24 1641.12 68.2491 543   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "blood-furnace",
+   "kind": "dungeon",
+   "name": "The Blood Furnace",
+   "maps": [
+    {
+     "id": 542
+    }
+   ],
+   "play": [
+    {
+     "label": "The Blood Furnace",
+     "map": 542,
+     "x": -3.9967,
+     "y": 14.6363,
+     "z": -44.8009,
+     "o": 4.88748
+    }
+   ],
+   "levels": [
+    61,
+    68
+   ],
+   "capture": [
+    "GM: .go xyz -3.9967 14.6363 -44.8009 542   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "slave-pens",
+   "kind": "dungeon",
+   "name": "The Slave Pens",
+   "maps": [
+    {
+     "id": 547
+    }
+   ],
+   "play": [
+    {
+     "label": "The Slave Pens",
+     "map": 547,
+     "x": 120.101,
+     "y": -131.957,
+     "z": -0.801547,
+     "o": 1.47574
+    }
+   ],
+   "levels": [
+    62,
+    69
+   ],
+   "capture": [
+    "GM: .go xyz 120.101 -131.957 -0.801547 547   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "underbog",
+   "kind": "dungeon",
+   "name": "The Underbog",
+   "maps": [
+    {
+     "id": 546
+    }
+   ],
+   "play": [
+    {
+     "label": "The Underbog",
+     "map": 546,
+     "x": 9.71391,
+     "y": -16.2008,
+     "z": -2.75334,
+     "o": 5.57082
+    }
+   ],
+   "levels": [
+    63,
+    70
+   ],
+   "capture": [
+    "GM: .go xyz 9.71391 -16.2008 -2.75334 546   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "mana-tombs",
+   "kind": "dungeon",
+   "name": "Mana-Tombs",
+   "maps": [
+    {
+     "id": 557
+    }
+   ],
+   "play": [
+    {
+     "label": "Mana-Tombs",
+     "map": 557,
+     "x": 0.0191,
+     "y": 0.9478,
+     "z": -0.9543,
+     "o": 3.03164
+    }
+   ],
+   "levels": [
+    64,
+    70
+   ],
+   "capture": [
+    "GM: .go xyz 0.0191 0.9478 -0.9543 557   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "auchenai-crypts",
+   "kind": "dungeon",
+   "name": "Auchenai Crypts",
+   "maps": [
+    {
+     "id": 558
+    }
+   ],
+   "play": [
+    {
+     "label": "Auchenai Crypts",
+     "map": 558,
+     "x": -21.8975,
+     "y": 0.16,
+     "z": -0.1206,
+     "o": 0.0353412
+    }
+   ],
+   "levels": [
+    65,
+    70
+   ],
+   "capture": [
+    "GM: .go xyz -21.8975 0.16 -0.1206 558   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "old-hillsbrad",
+   "kind": "dungeon",
+   "name": "Old Hillsbrad Foothills",
+   "maps": [
+    {
+     "id": 560
+    }
+   ],
+   "play": [
+    {
+     "label": "Old Hillsbrad Foothills",
+     "map": 560,
+     "x": 2741.87,
+     "y": 1315.25,
+     "z": 14.0423,
+     "o": 2.96016
+    }
+   ],
+   "levels": [
+    66,
+    70
+   ],
+   "capture": [
+    "GM: .go xyz 2741.87 1315.25 14.0423 560   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "sethekk-halls",
+   "kind": "dungeon",
+   "name": "Sethekk Halls",
+   "maps": [
+    {
+     "id": 556
+    }
+   ],
+   "play": [
+    {
+     "label": "Sethekk Halls",
+     "map": 556,
+     "x": -4.6811,
+     "y": -0.0930796,
+     "z": 0.0062,
+     "o": 0.0353424
+    }
+   ],
+   "levels": [
+    67,
+    70
+   ],
+   "capture": [
+    "GM: .go xyz -4.6811 -0.0930796 0.0062 556   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "black-morass",
+   "kind": "dungeon",
+   "name": "The Black Morass",
+   "maps": [
+    {
+     "id": 269
+    }
+   ],
+   "play": [
+    {
+     "label": "The Black Morass",
+     "map": 269,
+     "x": -1496.24,
+     "y": 7034.7,
+     "z": 32.5619,
+     "o": 1.75699
+    }
+   ],
+   "levels": [
+    68,
+    70
+   ],
+   "capture": [
+    "GM: .go xyz -1496.24 7034.7 32.5619 269   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "steamvault",
+   "kind": "dungeon",
+   "name": "The Steamvault",
+   "maps": [
+    {
+     "id": 545
+    }
+   ],
+   "play": [
+    {
+     "label": "The Steamvault",
+     "map": 545,
+     "x": -13.8425,
+     "y": 6.7542,
+     "z": -4.2586,
+     "o": 0
+    }
+   ],
+   "levels": [
+    68,
+    70
+   ],
+   "capture": [
+    "GM: .go xyz -13.8425 6.7542 -4.2586 545   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "shadow-labyrinth",
+   "kind": "dungeon",
+   "name": "Shadow Labyrinth",
+   "maps": [
+    {
+     "id": 555
+    }
+   ],
+   "play": [
+    {
+     "label": "Shadow Labyrinth",
+     "map": 555,
+     "x": 0.488033,
+     "y": -0.215935,
+     "z": -1.12788,
+     "o": 3.15888
+    }
+   ],
+   "levels": [
+    69,
+    70
+   ],
+   "capture": [
+    "GM: .go xyz 0.488033 -0.215935 -1.12788 555   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "shattered-halls",
+   "kind": "dungeon",
+   "name": "The Shattered Halls",
+   "maps": [
+    {
+     "id": 540
+    }
+   ],
+   "play": [
+    {
+     "label": "The Shattered Halls",
+     "map": 540,
+     "x": -40.8716,
+     "y": -19.7538,
+     "z": -13.8065,
+     "o": 1.11133
+    }
+   ],
+   "levels": [
+    69,
+    70
+   ],
+   "capture": [
+    "GM: .go xyz -40.8716 -19.7538 -13.8065 540   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "botanica",
+   "kind": "dungeon",
+   "name": "The Botanica",
+   "maps": [
+    {
+     "id": 553
+    }
+   ],
+   "play": [
+    {
+     "label": "The Botanica",
+     "map": 553,
+     "x": 40.0395,
+     "y": -28.613,
+     "z": -1.1189,
+     "o": 2.35856
+    }
+   ],
+   "levels": [
+    69,
+    70
+   ],
+   "capture": [
+    "GM: .go xyz 40.0395 -28.613 -1.1189 553   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "mechanar",
+   "kind": "dungeon",
+   "name": "The Mechanar",
+   "maps": [
+    {
+     "id": 554
+    }
+   ],
+   "play": [
+    {
+     "label": "The Mechanar",
+     "map": 554,
+     "x": -28.906,
+     "y": 0.680314,
+     "z": -1.81282,
+     "o": 0.0345509
+    }
+   ],
+   "levels": [
+    69,
+    70
+   ],
+   "capture": [
+    "GM: .go xyz -28.906 0.680314 -1.81282 554   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "arcatraz",
+   "kind": "dungeon",
+   "name": "The Arcatraz",
+   "maps": [
+    {
+     "id": 552
+    }
+   ],
+   "play": [
+    {
+     "label": "The Arcatraz",
+     "map": 552,
+     "x": -1.23165,
+     "y": 0.0143459,
+     "z": -0.204293,
+     "o": 0.0157123
+    }
+   ],
+   "levels": [
+    69,
+    70
+   ],
+   "capture": [
+    "GM: .go xyz -1.23165 0.0143459 -0.204293 552   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "magisters-terrace",
+   "kind": "dungeon",
+   "name": "Magisters' Terrace",
+   "maps": [
+    {
+     "id": 585
+    }
+   ],
+   "play": [
+    {
+     "label": "Magisters' Terrace",
+     "map": 585,
+     "x": 7.09,
+     "y": -0.45,
+     "z": -2.8,
+     "o": 0.05
+    }
+   ],
+   "levels": [
+    69,
+    70
+   ],
+   "capture": [
+    "GM: .go xyz 7.09 -0.45 -2.8 585   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "utgarde-keep",
+   "kind": "dungeon",
+   "name": "Utgarde Keep",
+   "maps": [
+    {
+     "id": 574
+    }
+   ],
+   "play": [
+    {
+     "label": "Utgarde Keep",
+     "map": 574,
+     "x": 153.789,
+     "y": -86.548,
+     "z": 12.551,
+     "o": 0.304
+    }
+   ],
+   "levels": [
+    69,
+    80
+   ],
+   "capture": [
+    "GM: .go xyz 153.789 -86.548 12.551 574   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null,
+   "notes": "Wrath levelling dungeon. The Nexus, Violet Hold, Halls of Stone and Lightning, Utgarde Pinnacle and Culling of Stratholme are in their own tiers below."
+  },
+  {
+   "key": "azjol-nerub",
+   "kind": "dungeon",
+   "name": "Azjol-Nerub",
+   "maps": [
+    {
+     "id": 601
+    }
+   ],
+   "play": [
+    {
+     "label": "Azjol-Nerub",
+     "map": 601,
+     "x": 413.314,
+     "y": 795.968,
+     "z": 831.351,
+     "o": 5.5
+    }
+   ],
+   "levels": [
+    72,
+    80
+   ],
+   "capture": [
+    "GM: .go xyz 413.314 795.968 831.351 601   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "ahnkahet",
+   "kind": "dungeon",
+   "name": "Ahn'kahet: The Old Kingdom",
+   "maps": [
+    {
+     "id": 619
+    }
+   ],
+   "play": [
+    {
+     "label": "Ahn'kahet: The Old Kingdom",
+     "map": 619,
+     "x": 333.351,
+     "y": -1109.94,
+     "z": 69.772,
+     "o": 0.553
+    }
+   ],
+   "levels": [
+    73,
+    80
+   ],
+   "capture": [
+    "GM: .go xyz 333.351 -1109.94 69.772 619   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "draktharon-keep",
+   "kind": "dungeon",
+   "name": "Drak'Tharon Keep",
+   "maps": [
+    {
+     "id": 600
+    }
+   ],
+   "play": [
+    {
+     "label": "Drak'Tharon Keep",
+     "map": 600,
+     "x": -517.343,
+     "y": -487.976,
+     "z": 11.01,
+     "o": 4.831
+    }
+   ],
+   "levels": [
+    74,
+    80
+   ],
+   "capture": [
+    "GM: .go xyz -517.343 -487.976 11.01 600   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "gundrak",
+   "kind": "dungeon",
+   "name": "Gundrak",
+   "maps": [
+    {
+     "id": 604
+    }
+   ],
+   "play": [
+    {
+     "label": "Gundrak",
+     "map": 604,
+     "x": 1891.84,
+     "y": 832.169,
+     "z": 176.669,
+     "o": 2.109
+    }
+   ],
+   "levels": [
+    76,
+    80
+   ],
+   "capture": [
+    "GM: .go xyz 1891.84 832.169 176.669 604   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "oculus",
+   "kind": "dungeon",
+   "name": "The Oculus",
+   "maps": [
+    {
+     "id": 578
+    }
+   ],
+   "play": [
+    {
+     "label": "The Oculus",
+     "map": 578,
+     "x": 1055.93,
+     "y": 986.85,
+     "z": 361.07,
+     "o": 5.745
+    }
+   ],
+   "levels": [
+    79,
+    80
+   ],
+   "capture": [
+    "GM: .go xyz 1055.93 986.85 361.07 578   (entrance inside, areatrigger_teleport)",
+    "Walk it to the last boss room."
+   ],
+   "measuredMB": null
+  },
+  {
+   "key": "arenas",
+   "kind": "arena",
+   "name": "arenas",
+   "notes": "The five 3.3.5a arenas. Arena maps cannot be teleported into without a match: queue a skirmish with a GM character and a second account, or check the walk with --record while a match runs.",
+   "maps": [
+    {
+     "id": 559
+    },
+    {
+     "id": 562
+    },
+    {
+     "id": 572
+    },
+    {
+     "id": 617
+    },
+    {
+     "id": 618
+    }
+   ],
+   "arenas": {
+    "559": "Nagrand Arena",
+    "562": "Blade's Edge Arena",
+    "572": "Ruins of Lordaeron",
+    "617": "Dalaran Sewers",
+    "618": "Ring of Valor"
+   },
+   "capture": [
+    "Two local accounts in one group: queue a 2v2 skirmish at an Arena Battlemaster until you have seen each arena once.",
+    "GM shortcut without a match: .go xyz <x> <y> <z> <map> does not work in arena maps; rely on --deps for these and use the skirmish run as the check."
+   ],
+   "measuredMB": null,
+   "text": "Arenas (Nagrand, Blade's Edge, Ruins of Lordaeron, Dalaran Sewers, Ring of Valor): queue a skirmish or rated game from an Arena Battlemaster or the PvP window."
+  },
+  {
+   "key": "violet-hold-toc",
+   "kind": "dungeon",
+   "name": "Violet Hold + Trial of the Champion",
+   "maps": [
+    {
+     "id": 608
+    },
+    {
+     "id": 650
+    }
+   ],
+   "capture": [
+    "GM: .go xyz 1808.82 803.93 44.364 608   (Violet Hold entrance inside)",
+    "GM: .go xyz 805.227 618.038 412.393 650 (Trial of the Champion)",
+    "Walk each to the last boss room; start an event once if you can (portals, jousting)."
+   ],
+   "measuredMB": null,
+   "play": [
+    {
+     "label": "Violet Hold",
+     "map": 608,
+     "x": 1808.82,
+     "y": 803.93,
+     "z": 44.364,
+     "o": 6.282,
+     "raid": false
+    },
+    {
+     "label": "Trial of the Champion",
+     "map": 650,
+     "x": 805.227,
+     "y": 618.038,
+     "z": 412.393,
+     "o": 3.1456,
+     "raid": false
+    }
+   ]
+  },
+  {
+   "key": "naxx-os-voa",
+   "kind": "raid",
+   "name": "Naxxramas, Obsidian Sanctum, Vault of Archavon",
+   "maps": [
+    {
+     "id": 533
+    },
+    {
+     "id": 615
+    },
+    {
+     "id": 624
+    }
+   ],
+   "capture": [
+    "GM: .go xyz 3005.68 -3447.77 293.93 533  then walk all four wings (.gm fly on helps)",
+    "GM: .go xyz 3228.58 385.86 65.549 615",
+    "GM: .go xyz -505.96 -103.353 157 624"
+   ],
+   "measuredMB": null,
+   "play": [
+    {
+     "label": "Naxxramas",
+     "map": 533,
+     "x": 3005.68,
+     "y": -3447.77,
+     "z": 293.93,
+     "o": 4.65,
+     "raid": true
+    },
+    {
+     "label": "The Obsidian Sanctum",
+     "map": 615,
+     "x": 3228.58,
+     "y": 385.86,
+     "z": 65.549,
+     "o": 1.578,
+     "raid": true
+    },
+    {
+     "label": "Vault of Archavon",
+     "map": 624,
+     "x": -505.96,
+     "y": -103.353,
+     "z": 157,
+     "o": 0,
+     "raid": true
+    }
+   ]
+  },
+  {
+   "key": "battlegrounds",
+   "kind": "battleground",
+   "name": "battlegrounds",
+   "maps": [
+    {
+     "id": 489
+    },
+    {
+     "id": 529
+    },
+    {
+     "id": 566
+    },
+    {
+     "id": 607
+    }
+   ],
+   "notes": "Warsong Gulch, Arathi Basin, Eye of the Storm, Strand of the Ancients. Not Alterac Valley, Isle of Conquest or Wintergrasp.",
+   "capture": [
+    "Battleground maps need a running match: with BG minimum players at 1 on the local realm (Battleground.InvitationType / minimum players settings), queue each once and walk the bases."
+   ],
+   "measuredMB": null,
+   "text": "Battlegrounds (Warsong Gulch, Arathi Basin, Eye of the Storm, Strand of the Ancients): queue from the PvP window (H). Alterac Valley, Isle of Conquest and Wintergrasp are not streamed."
+  },
+  {
+   "key": "heroic-rotation",
+   "kind": "dungeon",
+   "name": "heroic rotation",
+   "maps": [
+    {
+     "id": 575
+    },
+    {
+     "id": 602
+    },
+    {
+     "id": 599
+    },
+    {
+     "id": 576
+    },
+    {
+     "id": 595
+    }
+   ],
+   "notes": "Utgarde Pinnacle, Halls of Lightning, Halls of Stone, The Nexus, The Culling of Stratholme, for the Dungeon Finder (Specific Dungeons only for stream players).",
+   "capture": [
+    "GM: .go xyz 584.117 -327.974 110.138 575",
+    "GM: .go xyz 1331.47 259.619 53.398 602",
+    "GM: .go xyz 1153.24 806.164 195.937 599",
+    "GM: .go xyz 145.87 -10.554 -16.636 576",
+    "GM: .go xyz 1431.1 556.92 36.69 595"
+   ],
+   "measuredMB": null,
+   "play": [
+    {
+     "label": "Utgarde Pinnacle",
+     "map": 575,
+     "x": 584.117,
+     "y": -327.974,
+     "z": 110.138,
+     "o": 3.122,
+     "raid": false
+    },
+    {
+     "label": "Halls of Lightning",
+     "map": 602,
+     "x": 1331.47,
+     "y": 259.619,
+     "z": 53.398,
+     "o": 4.772,
+     "raid": false
+    },
+    {
+     "label": "Halls of Stone",
+     "map": 599,
+     "x": 1153.24,
+     "y": 806.164,
+     "z": 195.937,
+     "o": 4.715,
+     "raid": false
+    },
+    {
+     "label": "The Nexus",
+     "map": 576,
+     "x": 145.87,
+     "y": -10.554,
+     "z": -16.636,
+     "o": 1.528,
+     "raid": false
+    },
+    {
+     "label": "The Culling of Stratholme",
+     "map": 595,
+     "x": 1431.1,
+     "y": 556.92,
+     "z": 36.69,
+     "o": 5.16,
+     "raid": false
+    }
+   ]
+  },
+  {
+   "key": "icc-toc",
+   "kind": "raid",
+   "name": "Icecrown Citadel, Trial of the Crusader and the ICC 5-mans",
+   "maps": [
+    {
+     "id": 632
+    },
+    {
+     "id": 658
+    },
+    {
+     "id": 668
+    },
+    {
+     "id": 649
+    },
+    {
+     "id": 631
+    }
+   ],
+   "capture": [
+    "GM: .go xyz 4922.86 2175.63 638.734 632",
+    "GM: .go xyz 435.743 212.413 528.709 658",
+    "GM: .go xyz 5239.01 1932.64 707.695 668",
+    "GM: .go xyz 563.61 80.6815 395.2 649",
+    "GM: .go xyz 76.8638 2211.37 30 631"
+   ],
+   "measuredMB": null,
+   "play": [
+    {
+     "label": "The Forge of Souls",
+     "map": 632,
+     "x": 4922.86,
+     "y": 2175.63,
+     "z": 638.734,
+     "o": 2.00355,
+     "raid": false
+    },
+    {
+     "label": "Pit of Saron",
+     "map": 658,
+     "x": 435.743,
+     "y": 212.413,
+     "z": 528.709,
+     "o": 6.25646,
+     "raid": false
+    },
+    {
+     "label": "Halls of Reflection",
+     "map": 668,
+     "x": 5239.01,
+     "y": 1932.64,
+     "z": 707.695,
+     "o": 0.800565,
+     "raid": false
+    },
+    {
+     "label": "Trial of the Crusader",
+     "map": 649,
+     "x": 563.61,
+     "y": 80.6815,
+     "z": 395.2,
+     "o": 1.59,
+     "raid": true
+    },
+    {
+     "label": "Icecrown Citadel",
+     "map": 631,
+     "x": 76.8638,
+     "y": 2211.37,
+     "z": 30,
+     "o": 3.14965,
+     "raid": true
+    }
+   ]
+  },
+  {
+   "key": "ulduar",
+   "kind": "raid",
+   "name": "Ulduar",
+   "maps": [
+    {
+     "id": 603
+    }
+   ],
+   "capture": [
+    "GM: .go xyz -914.041 -148.98 463.137 603  then walk every wing (.gm fly on helps)"
+   ],
+   "measuredMB": null,
+   "play": [
+    {
+     "label": "Ulduar",
+     "map": 603,
+     "x": -914.041,
+     "y": -148.98,
+     "z": 463.137,
+     "o": 6.28,
+     "raid": true
+    }
+   ]
+  },
+  {
+   "key": "eoe-onyxia-rs",
+   "kind": "raid",
+   "name": "The Eye of Eternity, Onyxia's Lair, The Ruby Sanctum",
+   "maps": [
+    {
+     "id": 616
+    },
+    {
+     "id": 249
+    },
+    {
+     "id": 724
+    }
+   ],
+   "capture": [
+    "GM: .go xyz 728.055 1329.03 267.235 616",
+    "GM: .go xyz 29.1607 -71.3372 -8.18032 249",
+    "GM: .go xyz 3274 533.531 87.665 724"
+   ],
+   "measuredMB": null,
+   "play": [
+    {
+     "label": "The Eye of Eternity",
+     "map": 616,
+     "x": 728.055,
+     "y": 1329.03,
+     "z": 267.235,
+     "o": 5.51524,
+     "raid": true
+    },
+    {
+     "label": "Onyxia's Lair",
+     "map": 249,
+     "x": 29.1607,
+     "y": -71.3372,
+     "z": -8.18032,
+     "o": 4.58,
+     "raid": true
+    },
+    {
+     "label": "The Ruby Sanctum",
+     "map": 724,
+     "x": 3274,
+     "y": 533.531,
+     "z": 87.665,
+     "o": 3.16,
+     "raid": true
+    }
+   ]
+  },
+  {
+   "key": "music",
+   "kind": "base",
+   "name": "Dungeon, raid, arena and battleground music",
+   "notes": "Not a place: the zone music the dungeon, raid, arena and battleground tiers left out (soundPolicy), collected here by wenilla-host --deps. Last in order, so it streams only if the budget leaves room; without it those places play their ambience and effects with no music.",
+   "collectDeferred": true,
+   "maps": [],
+   "capture": [],
+   "measuredMB": null
+  }
+ ]
+}

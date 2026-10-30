@@ -56,6 +56,21 @@ rm -rf "$D/$NAME.old"
 echo "  old slice removed; disk free now: $(df -h --output=avail "$D" | tail -1 | tr -d ' ')"
 echo "  slice $NAME: $(du -sh "$D/$NAME" | cut -f1), $(find "$D/$NAME" -type f | wc -l) files"
 if [ -f "$D/$NAME.json" ] && [ -d "$WU/portal/slices" ]; then install -m 644 "$D/$NAME.json" "$WU/portal/slices/$NAME.json"; fi
+# Only the slice wu-play serves (STREAM_SLICES in portal.env, default mini) feeds the realm rule and wu-play. Another
+# one (the Leyline Sample Hangout's "sampler") waits beside it until slice-serve.sh switches over; WU_SLICE_SERVE=1
+# ("Make sampler slice.bat") does that right away.
+served=$(grep -E '^STREAM_SLICES=' "$WU/portal.env" 2>/dev/null | tail -1 | cut -d= -f2 | tr -d '\r"' || true)
+served=${served:-mini}
+case ",$served," in
+  *",$NAME,"*) ;;
+  *)
+    if [ "${WU_SLICE_SERVE:-}" = 1 ]; then
+      exec bash "$ST/slice-serve.sh" "$NAME"
+    fi
+    echo "  slice $NAME is installed beside the served one ($served): the realm rule and wu-play are unchanged"
+    echo "  to serve it: bash $ST/slice-serve.sh $NAME   (back: bash $ST/slice-serve.sh $served)"
+    exit 0 ;;
+esac
 if [ -f "$D/$NAME.json" ] && [ -f "$WU/custom/lua_scripts/ov_slices.lua" ]; then
   if realm_tables "$D/$NAME.json" "$D/$NAME"; then
     soap "reload ale" >/dev/null 2>&1 && echo "  realm rule reloaded" || echo "  WARNING: reload ale failed: the realm keeps the old tier list until it restarts"

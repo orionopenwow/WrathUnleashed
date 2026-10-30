@@ -1175,5 +1175,20 @@ check("no game-brand names in anything players saw", (function()
     for _, c in ipairs(T.CATALOG()) do if c.name:lower():find("darkmoon") or c.name:lower():find("wotlk") then return false end end
     return true end)())
 
+-- The Leyline Sample Hangout (OV_BUILD_DALARAN=1): a second build area on Krasus' Landing, inside the browser
+-- stream's Dalaran fence (ov_slices.lua: map 571, x 5500-6150, y 250-1100, z above 450).
+env.OV_BUILD_DALARAN = "1"
+dofile(file)
+do
+    local A = OV_BUILD_TEST.BUILD_AREAS
+    local d = A[#A]
+    check("OV_BUILD_DALARAN=1: Goldshire plus Krasus' Landing", #A == 2 and A[1].map == 0 and d.map == 571)
+    check("Krasus' Landing area sits inside the Dalaran fence", d.x - d.r >= 5500 and d.x + d.r <= 6150
+        and d.y - d.r >= 250 and d.y + d.r <= 1100 and d.z - d.r > 450)
+end
+env.OV_BUILD_DALARAN = nil
+dofile(file)
+check("OV_BUILD_DALARAN unset: Goldshire only again", #OV_BUILD_TEST.BUILD_AREAS == 1)
+
 realPrint(string.format("\n%d/%d passed", pass, pass + fail))
 os.exit(fail == 0 and 0 or 1)

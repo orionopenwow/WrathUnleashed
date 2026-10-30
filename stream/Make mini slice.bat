@@ -28,14 +28,18 @@ set "DATA=%~1"
 if "%DATA%"=="" set "DATA=C:\Users\campw\Downloads\World of Warcraft 3.3.5a\Data"
 set "HOSTEXE=%~dp0bin\wenilla-host.exe"
 set "W=%~dp0work"
+rem Which slice: WU_SLICE (default mini; "Make sampler slice.bat" sets sampler). slices\<name>.json is the definition.
+if not defined WU_SLICE set "WU_SLICE=mini"
+set "SL=%WU_SLICE%"
+if not exist "slices\%SL%.json" (echo No slices\%SL%.json. & pause & exit /b 1)
 
 if not exist "%DATA%\common.MPQ" if not exist "%DATA%\common-2.MPQ" (echo "%DATA%" is not a 3.3.5a Data folder. & pause & exit /b 1)
 if not exist "%HOSTEXE%" (echo bin\wenilla-host.exe is missing. & pause & exit /b 1)
-for /f %%t in ('powershell -NoProfile -Command "(Get-Content -Raw slices\mini.json | ConvertFrom-Json).maxTier"') do set "MAXTIER=%%t"
+for /f %%t in ('powershell -NoProfile -Command "(Get-Content -Raw slices\%SL%.json | ConvertFrom-Json).maxTier"') do set "MAXTIER=%%t"
 if not "%~2"=="" set "MAXTIER=%~2"
-if "%MAXTIER%"=="" (echo Could not read maxTier from slices\mini.json. & pause & exit /b 1)
+if "%MAXTIER%"=="" (echo Could not read maxTier from slices\%SL%.json. & pause & exit /b 1)
 echo Data folder: %DATA%
-echo Tiers:       0 to %MAXTIER%  (budget: budgetMB in slices\mini.json)
+echo Tiers:       0 to %MAXTIER%  (budget: budgetMB in slices\%SL%.json)
 
 echo [1/5] Uploading the streaming kit (one connection: the server limits rapid SSH logins)...
 if not exist "%W%" mkdir "%W%"
@@ -54,6 +58,7 @@ copy /y lua\lfg_ids.py "%W%\kit\lua\" >nul || goto fail
 copy /y lua\tiers_lua.py "%W%\kit\lua\" >nul || goto fail
 copy /y sql\ov_stream_accounts.sql "%W%\kit\sql\" >nul || goto fail
 copy /y slices\mini.json "%W%\kit\slices\" >nul || goto fail
+if /i not "%SL%"=="mini" copy /y "slices\%SL%.json" "%W%\kit\slices\" >nul || goto fail
 rem No www\ yet: use the newest browser client test build from ..\play (dist-test parts).
 if not exist "www\index.html" if exist "..\play\dist-test.tgz.part00" (
   echo        unpacking the browser client from ..\play\dist-test ...
@@ -78,12 +83,12 @@ if "%WWW%"=="1" echo uploaded> "www\.uploaded"
 
 echo [2/5] Asking the server what is spawned in the slice...
 if not exist "%W%" mkdir "%W%"
-%SSH% "cd /srv/wrath/stream && python3 -I displays.py slices/mini.json --tiers 0-%MAXTIER%" > "%W%\displays.tsv" || goto fail
+%SSH% "cd /srv/wrath/stream && python3 -I displays.py slices/%SL%.json --tiers 0-%MAXTIER%" > "%W%\displays.tsv" || goto fail
 for /f %%n in ('find /c /v "" ^< "%W%\displays.tsv"') do echo        %%n creature, object and mount displays
 
 echo [3/5] Walking the game data (wenilla-host --deps)...
 if exist "%W%\names" rmdir /s /q "%W%\names"
-"%HOSTEXE%" --data "%DATA%" --deps slices\mini.json --tiers 0-%MAXTIER% --displays "%W%\displays.tsv" --out "%W%\names" || goto fail
+"%HOSTEXE%" --data "%DATA%" --deps slices\%SL%.json --tiers 0-%MAXTIER% --displays "%W%\displays.tsv" --out "%W%\names" || goto fail
 
 echo [4/5] Exporting the slice (wenilla-host --export)...
 set "LISTS="
@@ -94,19 +99,19 @@ set NTIER=0
 for /l %%i in (0,1,%MAXTIER%) do if exist "%W%\names\tier-%%i.txt" (set "TIERS=!TIERS! "%W%\names\tier-%%i.txt"" & set /a NTIER+=1)
 rem Your own --record captures (record\names-*.txt) go last, so whatever the walk missed is added.
 if exist "record\*.txt" for %%r in (record\*.txt) do set "TIERS=!TIERS! "%%r""
-if exist "%W%\mini" rmdir /s /q "%W%\mini"
-"%HOSTEXE%" --data "%DATA%" --slice slices\mini.json !LISTS! --export !TIERS! "%W%\mini" || goto fail
+if exist "%W%\%SL%" rmdir /s /q "%W%\%SL%"
+"%HOSTEXE%" --data "%DATA%" --slice slices\%SL%.json !LISTS! --export !TIERS! "%W%\%SL%" || goto fail
 rem The highest tier that fit in the budget becomes the server's maxTier (lists = boot, tiers, records).
-for /f %%t in ('powershell -NoProfile -Command "$r = Get-Content -Raw '%W%\mini\.export.json' | ConvertFrom-Json; $fit = @($r.lists | Select-Object -Skip %NBOOT% -First %NTIER% | Where-Object { -not $_.over_budget }).Count - 1; $s = Get-Content -Raw 'slices\mini.json' | ConvertFrom-Json; $s.maxTier = [Math]::Min([int]%MAXTIER%, $fit); [IO.File]::WriteAllText('%W%\mini.json', ($s | ConvertTo-Json -Depth 20)); $s.maxTier"') do set "FITTIER=%%t"
-for /f %%b in ('powershell -NoProfile -Command "(Get-Content -Raw '%W%\mini\.export.json' | ConvertFrom-Json).bytes"') do set "BYTES=%%b"
-if %FITTIER% LSS 1 (echo The base and Dalaran tiers alone are over the budget: raise budgetMB in slices\mini.json or trim tier 0's prefixes. & goto fail)
+for /f %%t in ('powershell -NoProfile -Command "$r = Get-Content -Raw '%W%\%SL%\.export.json' | ConvertFrom-Json; $fit = @($r.lists | Select-Object -Skip %NBOOT% -First %NTIER% | Where-Object { -not $_.over_budget }).Count - 1; $s = Get-Content -Raw 'slices\%SL%.json' | ConvertFrom-Json; $s.maxTier = [Math]::Min([int]%MAXTIER%, $fit); [IO.File]::WriteAllText('%W%\%SL%.json', ($s | ConvertTo-Json -Depth 20)); $s.maxTier"') do set "FITTIER=%%t"
+for /f %%b in ('powershell -NoProfile -Command "(Get-Content -Raw '%W%\%SL%\.export.json' | ConvertFrom-Json).bytes"') do set "BYTES=%%b"
+if %FITTIER% LSS 1 (echo The base and Dalaran tiers alone are over the budget: raise budgetMB in slices\%SL%.json or trim tier 0's prefixes. & goto fail)
 echo        tiers 0 to %FITTIER% fit; the server will hold those.
 
 echo [5/5] Uploading the slice (it streams straight into place)...
-tar -cf - -C "%W%" mini.json mini | %SSH% "bash /srv/wrath/stream/slice-install.sh mini %BYTES%" || goto fail
+tar -cf - -C "%W%" %SL%.json %SL% | %SSH% "WU_SLICE_SERVE=%WU_SLICE_SERVE% bash /srv/wrath/stream/slice-install.sh %SL% %BYTES%" || goto fail
 
 echo.
-echo The mini slice is on the server (tiers 0 to %FITTIER%).
+echo The %SL% slice is on the server (tiers 0 to %FITTIER%).
 echo First time: on the server run   bash /srv/wrath/stream/stream-up.sh
 echo (after the DNS record wrath.openvanilla.app points at the server).
 pause

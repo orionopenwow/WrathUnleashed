@@ -27,6 +27,15 @@
 --   The main realm's "Boost to level 80" (ov_main.lua) works unchanged: it sets level 80 and
 --   teleports to Dalaran, which is always inside the slice.
 --
+-- The Leyline Sample Hangout (OV_SAMPLER=1 in the realm profile, realm/profiles/sampler.env): a temporary
+-- realm to try the game in the browser. A streamed browser session then has Dalaran, its faction's starting
+-- area (Ebon Hold for Death Knights) and every streamed dungeon, raid, arena and battleground; the capitals
+-- are closed to it even when the slice holds them (OV_SAMPLER_CITIES=1 opens them again), so home below
+-- level 10 is the starting area and from 10 on Dalaran. The messages say to add your own game folder for the
+-- whole world, or to join a community realm from Leyline. Everyone gets a short welcome line at login.
+-- Sessions with their own files (a desktop client, or the browser after "Use my game folder", which clears
+-- the mark) are never fenced, exactly as on the main realm.
+--
 -- APIs (mod-ale, checked against src/LuaEngine/Hooks.h, LuaFunctions.cpp and the method headers):
 --   RegisterPlayerEvent 3 LOGIN (event, player), 13 LEVEL_CHANGE (event, player, oldLevel),
 --   27 UPDATE_ZONE (event, player, newZone, newArea), 28 MAP_CHANGE (event, player), 42 COMMAND
@@ -57,6 +66,20 @@ local BYOC = "This part of the world isn't streamed to the browser. Drop your ow
     .. "read on your computer, nothing is uploaded. How: " .. HELP .. " - or ask on our Discord: " .. DISCORD
 local BYOC_SHORT = "Not streamed: drop your 3.3.5a game folder on the page to go here"
 local TAG = "|cffff9933[Browser play]|r "
+
+-- The Leyline Sample Hangout (see the top). Read at each use, so a profile switch needs no script edit.
+local function sampler() return os.getenv("OV_SAMPLER") == "1" end
+local function citiesOff() return sampler() and os.getenv("OV_SAMPLER_CITIES") ~= "1" end
+local SAMPLER_NAME = "Leyline Sample Hangout"
+local SAMPLER_BYOC = "The " .. SAMPLER_NAME .. " streams Dalaran, the starting areas and every dungeon and raid. "
+    .. "Add your own 3.3.5a game folder to explore the whole world (Esc > Mods & Workshop > Leyline realms > Use "
+    .. "my game folder, or drop it on the game page): it is read on your computer, nothing is uploaded. How: " .. HELP
+    .. ". Or join a community realm from Leyline."
+local SAMPLER_SHORT = "Add your own game folder to explore the whole world"
+local SAMPLER_WELCOME = "|cff66ccff[Leyline]|r Welcome to the " .. SAMPLER_NAME .. " (temporary). "
+    .. "Try it out here; community realms on Leyline are where the world opens up."
+local function byoc() return sampler() and SAMPLER_BYOC or BYOC end
+local function byocShort() return sampler() and SAMPLER_SHORT or BYOC_SHORT end
 
 -- Dalaran (game_tele "Dalaran") is home at every tier: tier 1 of every slice.
 local HOME = { 571, 5807.98, 588.487, 660.94, 1.66594 }
@@ -151,6 +174,7 @@ end
 -- capital. From lowLevel on: everything streamed.
 local function tierOpen(t, p)
     if t.kind == "base" then return false end
+    if t.kind == "city" and citiesOff() then return false end
     if t.kind == "home" or not p then return true end
     if isLow(p) then
         return (t.kind == "starter" or t.kind == "city") and ownFaction(t, p)
@@ -212,7 +236,8 @@ local function findTier(f, p, kind)
     local T = tiers()
     for n = 2, topTier(f) do
         local t = T[n]
-        if t and t.kind == kind and ownFaction(t, p) and t.faction ~= "deathknight" then return t end
+        if t and t.kind == kind and ownFaction(t, p) and t.faction ~= "deathknight"
+            and not (kind == "city" and citiesOff()) then return t end
     end
 end
 
@@ -236,8 +261,8 @@ local function tell(p, guid, long)
     local t = now()
     if (lastSent[guid] or 0) + 60 <= t then
         lastSent[guid] = t
-        p:SendBroadcastMessage(TAG .. (long or BYOC))
-        p:SendAreaTriggerMessage(BYOC_SHORT)
+        p:SendBroadcastMessage(TAG .. (long or byoc()))
+        p:SendAreaTriggerMessage(byocShort())
     end
 end
 
@@ -368,7 +393,7 @@ end
 
 local GROUPS = {
     { "home", "Dalaran" },
-    { "places", "Your capital and starting area" },
+    { "places", "Your capital and starting area", "Your starting area" },
     { "classic", "Dungeons: Azeroth" },
     { "outland", "Dungeons: Outland" },
     { "northrend", "Dungeons: Northrend" },
@@ -414,7 +439,7 @@ local function showMenu(player, group)
         for _, e in ipairs(list) do have[e.g] = (have[e.g] or 0) + 1 end
         for i, g in ipairs(GROUPS) do
             if have[g[1]] then
-                player:GossipMenuAddItem(g[1] == "pvp" and 9 or 2, g[2], 0, 2000 + i)
+                player:GossipMenuAddItem(g[1] == "pvp" and 9 or 2, (citiesOff() and g[3]) or g[2], 0, 2000 + i)
             end
         end
         if f and isLow(player) then
@@ -517,6 +542,7 @@ end
 local function onLogin(event, player)
     -- A player's timed events end at logout: forget the ones of an earlier session.
     pendingHome[player:GetGUIDLow()], watching[player:GetGUIDLow()] = nil, nil
+    if sampler() then player:SendBroadcastMessage(SAMPLER_WELCOME) end
     loadAccount(player:GetAccountId())
     local f = flagFor(player)
     if not f then return end
@@ -524,8 +550,9 @@ local function onLogin(event, player)
     watch(player)
     if isLow(player) and not player:IsGM() then
         player:SendBroadcastMessage(TAG .. "In the browser you live in " .. placeNames(f, player) .. " until level "
-            .. lowLevel() .. "; then the Dungeon Finder opens. Type .play for the menu. To go everywhere, drop "
-            .. "your own 3.3.5a game folder on the game page (how: " .. HELP .. ").")
+            .. lowLevel() .. "; then the Dungeon Finder opens. Type .play for the menu. "
+            .. (sampler() and "Add your own game folder to explore the whole world" or "To go everywhere, drop "
+            .. "your own 3.3.5a game folder on the game page") .. " (how: " .. HELP .. ").")
     end
 end
 
@@ -606,8 +633,8 @@ local function onCanJoinLfg(event, player, roles, dungeons, comment)
         elseif not map or not maps[map] then
             player:SendBroadcastMessage(TAG .. "In the browser the Dungeon Finder only "
                 .. "queues for the streamed dungeons (choose them under Specific Dungeons; random queues "
-                .. "can send you anywhere). " .. BYOC)
-            player:SendAreaTriggerMessage(BYOC_SHORT)
+                .. "can send you anywhere). " .. byoc())
+            player:SendAreaTriggerMessage(byocShort())
             return false
         end
         local r = levels and levels[id]
@@ -655,4 +682,5 @@ RegisterPlayerGossipEvent(MENU_ID, 2, onSelect)
 
 -- for tests (tests/test_ov_slices.lua loads this file under a fake ALE)
 OV_SLICES_TEST = { tiers = tiers, flagged = flagged, inSlice = inSlice, allowedMaps = allowedMaps,
-                   homeOf = homeOf, BYOC = BYOC, FALLBACK = FALLBACK }
+                   homeOf = homeOf, BYOC = BYOC, FALLBACK = FALLBACK,
+                   SAMPLER_BYOC = SAMPLER_BYOC, SAMPLER_WELCOME = SAMPLER_WELCOME, sampler = sampler }

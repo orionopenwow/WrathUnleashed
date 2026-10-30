@@ -11,7 +11,9 @@ local timers, nextTimer = {}, 0
 local clock = 1000000
 os.time = function() return clock end
 local realGetenv = os.getenv
-os.getenv = function(k) if k == "OV_MAIN" then return "1" end return realGetenv(k) end
+-- the realm's environment (the profile): tests switch OV_SAMPLER on and off through this table
+local ENV = { OV_MAIN = "1" }
+os.getenv = function(k) if ENV[k] ~= nil then return ENV[k] or nil end return realGetenv(k) end
 
 local function query(result)
     if not result then return nil end
@@ -576,6 +578,144 @@ do
     function ok100:GetPlayerIP() return "100.20.1.1" end
     ok100.map, ok100.zone = LATER_MAP, 0; fire(28, ok100); runTimers()
     check("100.20.x is public (only 100.64/10 is shared space)", #ok100.tp == 0, #ok100.tp)
+end
+
+-- ---- the Leyline Sample Hangout (OV_SAMPLER=1, realm/profiles/sampler.env) --------------------------
+-- Streamed browser sessions: Dalaran, the starting areas and every streamed instance; no capitals.
+-- Sessions with their own files (desktop, or the browser after "Use my game folder") keep the whole world.
+ENV.OV_SAMPLER = "1"
+local function noBrand(t)
+    local l = (t or ""):lower()
+    return not (l:find("world of warcraft", 1, true) or l:find("warcraft", 1, true) or l:find("blizzard", 1, true)
+        or l:find("lich king", 1, true) or l:find("%f[%a]wow%f[%A]"))
+end
+local function web(acct, map, x, y, opts)
+    local q = player(acct, map, x, y, opts)
+    function q:GetPlayerIP() return "172.18.0.9" end
+    return q
+end
+local function desk(acct, map, x, y, opts)
+    local q = player(acct, map, x, y, opts)
+    function q:GetPlayerIP() return "198.51.100.20" end
+    return q
+end
+clock = clock + 120
+-- a mark as the console makes it, also in the fake auth database (a login reads the row back)
+local function markAll(name, id)
+    fire(42, nil, "ovstream mark " .. name .. " mini " .. ALL .. " 43200", handler)
+    rows[id] = { slice = "mini", tier = ALL, left = 43200 }
+end
+markAll("WR000123", 42)
+markAll("HORDIE", 51)
+markAll("LOWBIE", 50)
+do
+    local s80 = web(42, 0, -8833, 628, { level = 80 })   -- Stormwind City, browser session
+    fire(3, s80); runTimers()
+    check("sampler: welcome line at login names the Sample Hangout and says temporary",
+        s80.msgs[1] and s80.msgs[1]:match("Leyline Sample Hangout") and s80.msgs[1]:match("temporary"), s80.msgs[1])
+    check("sampler, browser: a capital is closed (level 80 in Stormwind goes to Dalaran)",
+        #s80.tp == 1 and s80.tp[1][1] == 571, #s80.tp)
+    local m = s80.msgs[#s80.msgs]
+    check("sampler message: add your own game folder to explore the whole world",
+        m:match("Add your own 3.3.5a game folder to explore the whole world") and m:match("Use my game folder")
+        and m:match("nothing is uploaded") and m:match("play.openvanilla.app/wrath/docs/play"), m)
+    check("sampler message: points to community realms on Leyline", m:match("community realm from Leyline") ~= nil, m)
+    check("sampler centre text: add your own game folder", s80.center[1] == "Add your own game folder to explore the whole world", s80.center[1])
+    check("sampler messages: no game-brand words", noBrand(m) and noBrand(s80.center[1]) and noBrand(s80.msgs[1]))
+    s80.map, s80.zone, s80.x, s80.y = 571, 4395, 5807, 588; fire(28, s80); runTimers()
+    check("sampler, browser: Dalaran stays open", #s80.tp == 1)
+    s80.map, s80.zone = 36, 0; fire(28, s80); runTimers()
+    check("sampler, browser: a dungeon (the Deadmines) stays open", #s80.tp == 1)
+    s80.map, s80.zone = 533, 0; fire(28, s80); runTimers()
+    check("sampler, browser: a raid (Naxxramas) stays open", #s80.tp == 1)
+    s80.map, s80.zone = 617, 0; fire(28, s80); runTimers()
+    check("sampler, browser: the Dalaran arena stays open", #s80.tp == 1)
+    clock = clock + 61
+    s80.map, s80.x, s80.y, s80.zone = 0, -10500, 1000, 40; fire(28, s80); runTimers()
+    check("sampler, browser: the open world (Westfall) goes back to Dalaran", #s80.tp == 2 and s80.tp[2][1] == 571)
+    -- the boost spot / Hearthstone into a capital: same rule, wherever the character was bound
+    clock = clock + 61
+    local h = web(42, 1, 1629, -4373, { level = 80, team = 1 })  -- hearthed to Orgrimmar
+    fire(28, h); runTimers()
+    check("sampler, browser: a Hearthstone into Orgrimmar lands back in Dalaran", #h.tp == 1 and h.tp[1][1] == 571)
+    -- a portal or the Deeprun Tram out of a capital: map 369 is not streamed
+    local tram = web(42, 369, 0, 0, { level = 80 })
+    fire(28, tram); runTimers()
+    check("sampler, browser: a portal to an unstreamed map lands back in Dalaran", #tram.tp == 1 and tram.tp[1][1] == 571)
+
+    -- level 1-9: their starting area, not the capital
+    local h1s = web(50, 0, -8949.95, -132.49, { level = 1, team = 0 })
+    fire(3, h1s); runTimers()
+    check("sampler, browser: a new human starts in Northshire and stays", #h1s.tp == 0)
+    check("sampler, browser: the level-1 line names the starting area only",
+        h1s.msgs[#h1s.msgs]:match("Northshire Valley until level") and not h1s.msgs[#h1s.msgs]:match("Stormwind"), h1s.msgs[#h1s.msgs])
+    h1s.x, h1s.y, h1s.zone = -8833, 628, 1519; fire(27, h1s, 1519, 1519); runTimers()
+    check("sampler, browser: level 1 in Stormwind goes back to Northshire", #h1s.tp == 1 and h1s.tp[1][1] == 0
+        and math.abs(h1s.tp[1][2] + 8949.95) < 0.01)
+    local o1 = web(51, 1, -618.5, -4251.7, { level = 1, team = 1 })
+    fire(3, o1); runTimers()
+    check("sampler, browser: a new orc starts in the Valley of Trials and stays", #o1.tp == 0)
+    o1.x, o1.y, o1.zone = 1629, -4373, 1637; fire(27, o1, 1637, 1637); runTimers()
+    check("sampler, browser: level 1 in Orgrimmar goes back to the Valley of Trials", #o1.tp == 1 and o1.tp[1][1] == 1
+        and math.abs(o1.tp[1][2] + 618.518) < 0.01)
+    local dk2 = web(52, 609, 2355.84, -5664.77, { level = 55, class = 6 })
+    markAll("DEEKAY", 52)
+    fire(3, dk2); runTimers()
+    check("sampler, browser: a new Death Knight stays in Ebon Hold", #dk2.tp == 0)
+    -- level 10 to 67: home is Dalaran (no capital)
+    local m16 = web(51, 0, -10500, 1000, { level = 16, team = 1 })
+    fire(28, m16); runTimers()
+    check("sampler, browser: level 16 outside goes to Dalaran, not Orgrimmar", m16.tp[1] and m16.tp[1][1] == 571)
+    -- .play: no capitals
+    local pm = web(42, 571, 5807, 588, { level = 80 })
+    fire(42, pm, ".play", nil)
+    local topS = menuText(pm)
+    check(".play under the sampler: \"Your starting area\", dungeons, raids and Dalaran",
+        topS:match("Your starting area") and not topS:match("Your capital") and topS:match("Dungeons")
+        and topS:match("Raids") and topS:match("Dalaran"), topS)
+    gossip[61700](2, pm, pm, 0, menuId(pm, "^Your starting area"), nil, 61700)
+    check(".play under the sampler: no capital in the places menu", not menuText(pm):match("Stormwind")
+        and menuText(pm):match("Northshire"), menuText(pm))
+    -- the Dungeon Finder stays on
+    check("sampler: the Dungeon Finder still queues a streamed dungeon", fire(50, pm, 0, { 241 }, "") == true)
+
+    -- own files: a desktop client, or the browser after "Use my game folder" (the mark is cleared)
+    local d80 = desk(42, 0, -10500, 1000, { level = 80 })
+    fire(3, d80); runTimers()
+    check("sampler, desktop client: the whole world (Westfall stays)", #d80.tp == 0, #d80.tp)
+    check("sampler, desktop client: welcome line too", d80.msgs[1]:match("Leyline Sample Hangout") ~= nil)
+    check("sampler, desktop client: no position watch", repeating(d80) == 0)
+    d80.map, d80.x, d80.y, d80.zone = 0, -8833, 628, 1519; fire(28, d80); runTimers()
+    check("sampler, desktop client: capitals open", #d80.tp == 0)
+    fire(42, nil, "ovstream clear WR000123", handler); rows[42] = nil   -- the DELETE, in the fake database
+    local own = web(42, 0, -10500, 1000, { level = 80 })
+    fire(3, own); runTimers()
+    check("sampler, browser with its own game folder (mark cleared): the whole world", #own.tp == 0)
+    -- streaming switched off (stream-switch.sh off, or the data killswitch): every mark is deleted and
+    -- "reload ale" reloads the script, so every browser session is an own-files session with the whole world
+    rows = {}
+    for k in pairs(events) do events[k] = nil end
+    dofile(script); runTimers()
+    local killed = web(51, 0, -10500, 1000, { level = 30, team = 1 })
+    fire(3, killed); runTimers()
+    check("sampler, streaming off (no marks): a browser session keeps the whole world", #killed.tp == 0 and repeating(killed) == 0)
+    markAll("WR000123", 42)
+
+    -- OV_SAMPLER_CITIES=1 opens the capitals again; OV_SAMPLER off is the main realm's rule
+    ENV.OV_SAMPLER_CITIES = "1"
+    local sc = web(42, 0, -8833, 628, { level = 80 })
+    fire(28, sc); runTimers()
+    check("sampler with OV_SAMPLER_CITIES=1: Stormwind open", #sc.tp == 0)
+    ENV.OV_SAMPLER_CITIES = nil
+    ENV.OV_SAMPLER = false
+    local mainP = web(42, 0, -8833, 628, { level = 80 })
+    fire(3, mainP); runTimers()
+    check("OV_SAMPLER off: Stormwind open again (the main realm's rule)", #mainP.tp == 0)
+    check("OV_SAMPLER off: no Sample Hangout welcome", not (mainP.msgs[1] or ""):match("Sample Hangout"))
+    clock = clock + 61
+    mainP.map, mainP.x, mainP.y, mainP.zone = 0, -10500, 1000, 40; fire(28, mainP); runTimers()
+    check("OV_SAMPLER off: the old message (drop your game folder)", mainP.msgs[#mainP.msgs]:match("Drop your own 3.3.5a game folder") ~= nil)
+    ENV.OV_SAMPLER = nil
 end
 
 -- tiers in the script, as text for the JSON cross-check (tests/test_lua.py)

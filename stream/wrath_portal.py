@@ -249,6 +249,16 @@ BRIDGE_HOST = os.environ.get("BRIDGE_HOST", "ovlive-realm")
 
 STREAM_HOST = os.environ.get("STREAM_HOST", "wrath.openvanilla.app")
 STREAM_SLICES = {x.strip() for x in os.environ.get("STREAM_SLICES", "mini").split(",") if x.strip()}
+# The slice behind "Play now" and every ?mini=mini link (stream/server/slice-serve.sh sets it; default mini), so
+# the Leyline Sample Hangout's "sampler" slice can be served without changing a link.
+PLAY_SLICE = os.environ.get("WU_PLAY_SLICE", "").strip() or "mini"
+# The Leyline Sample Hangout (realm/sampler.sh sets WU_SAMPLER=1 in portal.env): the official realm's cards on the
+# play page, /wrath/realms and /wrath/leyline name it and say it is temporary. REALM_NAME (the site) stays.
+SAMPLER = os.environ.get("WU_SAMPLER") == "1"
+SAMPLER_NAME = "Leyline Sample Hangout"
+SAMPLER_NOTE = ("Temporary: a place to try the game. Dalaran, the starting areas and every dungeon and raid stream "
+                "to your browser; add your own 3.3.5a game folder to explore the whole world. Community realms on "
+                "Leyline are where the world opens up.")  # TODO(owner): the Sample Hangout's own pitch line
 SLICE_DIR = os.environ.get("WU_SLICE_DIR", "/app/slices")
 ART_DIR = os.environ.get("WU_ART_DIR", "/app/art")
 # Forever UI in the browser client (only where it is installed: fui-install.sh lays it over the slice).
@@ -408,7 +418,9 @@ OWN = "own"  # the session mode of "Play with my own game files"
 
 
 def slice_info(slug: str) -> dict | None:
-    """<WU_SLICE_DIR>/<slug>.json, or None when the slice is unknown or not set up here."""
+    """<WU_SLICE_DIR>/<slug>.json, or None when the slice is unknown or not set up here. "mini" means PLAY_SLICE."""
+    if slug == "mini":
+        slug = PLAY_SLICE
     if slug not in STREAM_SLICES or not SLUG_RE.match(slug):
         return None
     try:
@@ -529,7 +541,7 @@ class Layers:
     def lift(self, user: str, sid: str, sess: dict, now: float | None = None) -> None:
         now = time.time() if now is None else now
         with self.lock:
-            self.leases[user.upper()] = {"sid": sid, "until": now + LAYER_LEASE, "slice": sess.get("slice") or "mini",
+            self.leases[user.upper()] = {"sid": sid, "until": now + LAYER_LEASE, "slice": sess.get("slice") or PLAY_SLICE,
                                          "tier": int(sess.get("tier") or 0), "sess_exp": float(sess.get("exp") or now),
                                          "retry": False}
 
@@ -572,7 +584,7 @@ def layer_mark(user: str, lease: dict, now: float | None = None) -> None:
     """The stream mark back, for what is left of the stream session (at least a minute)."""
     now = time.time() if now is None else now
     secs = int(max(60, min(SESSION_TTL, lease.get("sess_exp", now) - now)))
-    realm_mark(user, lease.get("slice") or "mini", int(lease.get("tier") or 0), secs)
+    realm_mark(user, lease.get("slice") or PLAY_SLICE, int(lease.get("tier") or 0), secs)
 
 
 def sweep_layers(now: float | None = None) -> int:
@@ -937,11 +949,15 @@ def account_page(display: str, user: str, password: str, nonce: str) -> bytes:
         '<a class="keylink" href="/account/key">Your Hero Key</a></div>'
         f'{crest("Choose a realm")}<p class="sub">Signed in as {html.escape(display)}</p>{RULE}'
         # 1. Dalaran: the streamed mini version
-        '<div class="realm"><h2>Dalaran</h2>'
-        f'<div class="tags"><span class="tag">In your browser</span><span class="tag">No download</span>{live}</div>'
-        '<p>Jump straight in: Dalaran, arenas, dungeons and raids, streamed to your browser. '
-        'Start at level 1 or boost to 80.</p>'
-        f'<p>{dalaran_btn}</p>'
+        + (f'<div class="realm"><h2>{SAMPLER_NAME}</h2>'
+           f'<div class="tags"><span class="tag">Temporary</span><span class="tag">In your browser</span>'
+           f'<span class="tag">No download</span>{live}</div>'
+           f'<p>{html.escape(SAMPLER_NOTE)} Start at level 1 or boost to 80.</p>' if SAMPLER else
+           '<div class="realm"><h2>Dalaran</h2>'
+           f'<div class="tags"><span class="tag">In your browser</span><span class="tag">No download</span>{live}</div>'
+           '<p>Jump straight in: Dalaran, arenas, dungeons and raids, streamed to your browser. '
+           'Start at level 1 or boost to 80.</p>')
+        + f'<p>{dalaran_btn}</p>'
         + (f'<p class="fine">Have a 3.3.5a game folder? Drop it on the game page (or choose it from the page menu) '
            f'to go anywhere, on the same characters. It is read on your computer and never uploaded. '
            f'<a href="{GAME_FOLDER_HELP}">How</a></p>' if streamed else '')
@@ -1168,11 +1184,15 @@ def _players_text(players, bots, live) -> str:
 def realms_page() -> bytes:
     st = realm_status()
     official = (
-        f'<div class="realm"><h2>{html.escape(REALM_NAME)}</h2>'
-        '<div class="tags"><span class="tag">Official</span><span class="tag">Level 1 or boost to 80</span>'
+        f'<div class="realm"><h2>{html.escape(SAMPLER_NAME if SAMPLER else REALM_NAME)}</h2>'
+        '<div class="tags"><span class="tag">Official</span>'
+        + ('<span class="tag">Temporary</span>' if SAMPLER else '') +
+        '<span class="tag">Level 1 or boost to 80</span>'
         f'{_players_text(_nonneg(st.get("players")), _nonneg(st.get("bots")), bool(st.get("online")))}</div>'
-        '<p>The WrathUnleashed realm: Dalaran in your browser, or the whole world with your own game files '
-        f'(drop your 3.3.5a game folder on the game page: <a href="{GAME_FOLDER_HELP}">how</a>).</p>'
+        + (f'<p>{html.escape(SAMPLER_NOTE)} '
+           f'(<a href="{GAME_FOLDER_HELP}">How to add your game folder</a>.)</p>' if SAMPLER else
+           '<p>The WrathUnleashed realm: Dalaran in your browser, or the whole world with your own game files '
+           f'(drop your 3.3.5a game folder on the game page: <a href="{GAME_FOLDER_HELP}">how</a>).</p>') +
         '<p><a class="btn primary" href="/wrath">Play</a></p>'
         + share_box("/wrath/r/wrath") + '</div>')
     realms, ok = community_realms()
@@ -1678,7 +1698,8 @@ def leyline_page() -> bytes:
     The hero line under the title is the owner's own (from his mockup), trimmed to what's true today."""
     e = html.escape
     st = realm_status()
-    rows = [(REALM_NAME, "Official · level 1 or boost to 80", "PvE", _nonneg(st.get("players")), _nonneg(st.get("bots")),
+    rows = [(SAMPLER_NAME if SAMPLER else REALM_NAME,
+             "Official · temporary · level 1 or boost to 80" if SAMPLER else "Official · level 1 or boost to 80", "PvE", _nonneg(st.get("players")), _nonneg(st.get("bots")),
              bool(st.get("online")), "/wrath")]
     realms, ok = community_realms()
     with _listing_lock:
@@ -2092,6 +2113,8 @@ class PageHandler(BaseHTTPRequestHandler):
             self.send(429, busy_page())
             return
         slug = (query.get("mini") or ["mini"])[0]
+        if slug == "mini":
+            slug = PLAY_SLICE
         info = slice_info(slug)
         if not info:
             self.send(404, error_page("That part of the game isn't streamed here."))

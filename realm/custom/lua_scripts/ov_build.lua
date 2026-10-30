@@ -113,6 +113,12 @@ local BUILD_AREAS = {
     -- A second area, off by default: game_tele 1490 'CrystalsongForest', the forest below Dalaran (map 571).
     -- { name = "Crystalsong glade", map = 571, x = 5258.39, y = 156.96, z = 191.70, r = 60 },
 }
+-- The Leyline Sample Hangout (OV_BUILD_DALARAN=1 in realm/profiles/sampler.env): a build area on Krasus' Landing,
+-- Dalaran's south platform (5813.37, 453.40, 658.93: MiniGM's TeleportDB spot), inside the browser stream's fence
+-- (ov_slices.lua), where Goldshire is not. Read when the script loads (a profile switch recreates the server).
+if os.getenv("OV_BUILD_DALARAN") == "1" then
+    BUILD_AREAS[#BUILD_AREAS + 1] = { name = "Krasus Landing", map = 571, x = 5813.37, y = 453.40, z = 658.93, r = 30 }
+end
 
 ------------------------------------------------------------------------------------------------
 -- catalog: gameobject entries players may place. Checked on 2026-10-25 against AzerothCore's

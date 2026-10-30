@@ -15,6 +15,11 @@ BK=/root/lean-backups/$(date +%Y%m%d-%H%M%S); mkdir -p "$BK"; cp -p "$PF" "$BK/p
 sed -i 's/\r$//' "$PF"
 # Bot counts live in modules.env (read after the profile, so it wins); grid settings go in the profile.
 MF=modules.env
+# The Leyline Sample Hangout (realm/sampler.sh) sets its own bot count and grid settings: leave them alone.
+if grep -qxF "# <<< Leyline Sample Hangout" "$PF" 2>/dev/null || grep -qxF "# <<< Leyline Sample Hangout" "$MF" 2>/dev/null; then
+  echo "  the Leyline Sample Hangout is on: its settings (realm/profiles/sampler.env) are already the lean ones; nothing changed"
+  echo "LEAN OK"; exit 0
+fi
 [ -f "$MF" ] && cp -p "$MF" "$BK/modules.env" && sed -i 's/\r$//' "$MF"
 need=0
 setkv() {  # file key value

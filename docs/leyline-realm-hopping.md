@@ -82,6 +82,28 @@ in-game list (`leyline-fetch.py` reads `/srv/wrath/hangout-realm.id`). Limits: t
 per-realm caps (`RELAY_MAX_STREAMS` 128 = 64 players at once, `RELAY_KBPS`); the site's button and "Back to
 Wrath" go direct.
 
+## The Leyline Sample Hangout (temporary, 2026-10-29)
+
+Community-hosted realms are the main Leyline network; the official realm becomes a temporary, lighter **Leyline
+Sample Hangout** to try the game. It is the main realm with an overlay (`realm/profiles/sampler.env`), switched by
+`realm/sampler.sh` (Autopilot `sampler-check`, `sampler`, `sampler-off`):
+
+- **Streamed browser sessions** (marked by the sign-in gate) get Dalaran, their starting area (Northshire Valley,
+  the Valley of Trials, Ebon Hold for Death Knights) and every streamed dungeon, raid, arena and battleground. The
+  capitals close (`OV_SAMPLER_CITIES=1` opens them). Elsewhere `ov_slices.lua` brings them home with "Add your own
+  3.3.5a game folder to explore the whole world ... Or join a community realm from Leyline."
+- **Own files** (a desktop client, or "Use my game folder" in the browser, which clears the mark) keep the whole
+  world, as on the main realm. With streaming switched off, every session is an own-files session.
+- The Dungeon Finder, raids, Companions, the boost, minigolf, Modes, the Workshop, friends and the admin console
+  are unchanged. A build area opens on Krasus' Landing (`OV_BUILD_DALARAN=1`).
+- 12 random bots, all level 80, living around Dalaran's bankers (`AC_PLAYERBOTS_*` in the overlay); idle grids
+  unload after a minute; open-world visibility 75 yards.
+- Labels: the realm list name, the play page, `/wrath/realms` and `/wrath/leyline` say "Leyline Sample Hangout"
+  and "temporary" (`WU_SAMPLER=1` in portal.env); everyone gets a one-line welcome in game.
+- The browser slice `stream/slices/sampler.json` is `mini.json` less the capitals and the Goldshire inn; the
+  `slice-sampler` step builds it and `stream/server/slice-serve.sh sampler` serves it beside mini
+  (`slice-serve.sh mini` switches back; `sampler.sh off` does it too).
+
 ## Website realms: the key is made on the host's PC
 
 `/wrath/host` makes a page id, invite/host secrets and a claim token, never a key. The download (seed v2)
