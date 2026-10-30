@@ -16,7 +16,7 @@ Leyline-Launcher clone at `.repos\leyline-launcher`, and renamed this GitHub rep
 `orionopenwow/leyline-workspace`. `.repos/` is not part of this repo (gitignored).
 
 **The top of the workspace is only what gets clicked regularly:** `Leyline Control.bat`, `UPDATE.bat` (with
-`UPDATES-PENDING.txt` and `UPDATES-DONE.txt`), `Ship to GitHub.bat`, `Ship the Leyline launcher.bat`, this README
+`UPDATES-PENDING.txt` and `UPDATES-DONE.txt`), `Ship to GitHub.bat`, `Ship the Leyline launcher.bat`, `Open Leyline Launcher.bat`, this README
 and `.gitignore`. One-time setup is in `setup\` (Autopilot at sign-in, GitHub builds, launcher updates, automatic
 deploys); local play is in `play\`.
 
@@ -41,6 +41,9 @@ deploys); local play is in `play\`.
   main, checks for secrets and game data, commits as "Leyline update <date> <time>" and pushes to main; it
   closes by itself when done and stays open on a problem. In Autopilot every ship also refreshes the public
   Leyline copy (`tools/leyline-repo/Update Leyline repo.bat`).
+- **Open the launcher:** double-click `Open Leyline Launcher.bat`. It opens the installed launcher, else the copy built
+  here, else installs the newest launcher release from GitHub, else builds it from `launcher\` once (Node.js and
+  Rust; it says how to get them) and opens it. `Open Leyline Launcher.bat rebuild` builds again after launcher changes.
 - **Release the launcher:** `Ship the Leyline launcher.bat`.
 - **Host a realm:** `hosting/kit/Host a Leyline realm.bat`, or `/wrath/host` on the site. Guide:
   `hosting/INSTALL-OPERATE.md`.

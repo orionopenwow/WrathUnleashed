@@ -392,6 +392,9 @@ def shown(p):
     hidden inputs, URLs, the script or the styles)."""
     p = re.sub(r"<(script|style)\b.*?</\1>", " ", p, flags=re.S)
     p = re.sub(r"<!--.*?-->|<input[^>]*type=\"hidden\"[^>]*>", " ", p, flags=re.S)
+    # the realm list's version chip is the one allowed client number (owner 2026-10-30: "list the client version number in
+    # the realm list too")
+    p = re.sub(r'<span class="hb-ver" title="Game client version">[0-9a-z.]+</span>', " ", p)
     attrs = " ".join(re.findall(r'(?:alt|title|content|aria-label|placeholder)="([^"]*)"', p))
     import html as _h
     return _h.unescape(re.sub(r"<[^>]+>", " ", p) + " " + attrs)
@@ -629,6 +632,9 @@ want = "ok" if all(w == "ok" for w in st_words) else "warn" if "ok" in st_words 
 check(f"footer: the status dot ({want}), linking to Platform Status, pulsing only when all is OK",
       re.search(rf'<a class="hb-health {want}" href="/wrath/leyline-preview#status"><span class="hb-hdot" aria-hidden="true"></span>', foot)
       and ".hb-health.ok .hb-hdot{animation:hb-pulse" in fp and ".hb-health.warn .hb-hdot{background:#f0b54a}" in fp, (want, foot[:300]))
+check("realm list: each row shows its client version as a chip (the one place the hub names a build), an icon and a fill bar",
+      re.search(r'<li class="hb-rl home[^"]*" data-home="1"[^>]*><span class="hb-rl-ic home" style="--h:\d+" aria-hidden="true"><svg class="hb-crest"', fp)
+      and '<span class="hb-ver" title="Game client version">3.3.5a</span>' in fp and 'class="hb-rl-bar"' in fp)
 check("the front page with all of this: no client numbers or game names", not NOPE.findall(shown(fp)), NOPE.findall(shown(fp))[:6])
 check("still one script, under the nonce, reading only this site's JSON", fp.count("<script") == 1
       and re.findall(r'json\("([^"]+)"\)', HB.HUB_JS) == ["/wrath/realms.json", "/wrath/status.json"] and "innerHTML" not in HB.HUB_JS)
