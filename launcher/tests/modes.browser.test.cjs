@@ -137,7 +137,7 @@ test('Key art: on the Azeroth Survivors card and as the featured banner on Home,
   await page.waitForFunction(() => { const i = document.querySelector('#feat-mode img'); return i && i.complete && i.naturalWidth > 0; });
   assert.equal(await ban.getAttribute('data-mode'), 'azeroth-survivors');
   assert.match(await ban.getAttribute('aria-label'), /Featured mode: Azeroth Survivors/);
-  assert.equal(await page.evaluate(() => document.querySelector('#feat-mode').nextElementSibling.id), 'news-title', 'above the hero heading');
+  assert.ok(await page.evaluate(() => document.querySelector('.news').classList.contains('has-feat') && document.querySelector('.news').firstElementChild.id === 'feat-mode'), 'the art is the hero card\'s backdrop');
   assert.match(await ban.textContent(), /FEATURED MODE.*Azeroth Survivors.*See it in Modes/);
   assert.equal(await page.$eval('#feat-mode img', (i) => i.getAttribute('src')), 'art/modes/azeroth-survivors.webp');
   await ban.click();

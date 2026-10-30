@@ -305,3 +305,5 @@
 1096e signin  Leyline site: show the preview pictures
 1097a signin  Leyline site: featured UltraHD modpack, server software, realm list panel, Minigolf loop, sharper launcher screenshots
 1097b ship  Save to GitHub (orionopenwow/WrathUnleashed): site showcase and the launcher's Survivors banner
+1098a signin  Leyline site: header mark without its ring, new launcher Home screenshot
+1098b ship  Save to GitHub (orionopenwow/WrathUnleashed): launcher Home art fills the hero card, header mark, window buttons

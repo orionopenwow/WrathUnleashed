@@ -112,7 +112,7 @@ svg { flex: none; }
 .titlebar {
   grid-column: 1 / -1;
   display: flex; align-items: center; gap: 12px;
-  padding: 0 8px 0 0;
+  padding: 0;
   background: var(--t-chrome);
   border-bottom: var(--t-border-w) solid var(--t-border);
 }
@@ -168,11 +168,13 @@ svg { flex: none; }
 .chip-txt { display: grid; text-align: left; line-height: 1.2; }
 .chip-txt span { font-size: 13px; font-weight: 600; }
 .chip-txt i { font-style: normal; font-size: 11.5px; color: var(--t-ok); }
-.winbtns { display: flex; gap: 2px; }
-.winbtns button { width: 36px; height: 32px; border: 0; border-radius: var(--t-radius-xs); background: transparent; color: var(--t-muted); cursor: pointer; display: grid; place-items: center; }
+/* the window buttons tucked into the top-right corner (owner 2026-10-30): flush with the edge, small, no gap */
+.winbtns { display: flex; gap: 0; align-self: flex-start; margin-left: 4px; }
+.winbtns button { width: 34px; height: 26px; border: 0; border-radius: 0; background: transparent; color: var(--t-muted); cursor: pointer; display: grid; place-items: center; }
 .winbtns button:hover { background: var(--t-raised); color: var(--t-text); }
 .winbtns #win-close:hover { background: var(--t-danger); color: #fff; }
-.winbtns svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.winbtns #win-close { border-top-right-radius: var(--t-radius-xs); }
+.winbtns svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 
 /* ---------------------------------------------------------------- sidebar */
 .side {
