@@ -78,6 +78,7 @@ pages = ["/wrath/leyline-preview", "/wrath/leyline-preview/", "/wrath/leyline-pr
          "/wrath/leyline-preview/catalog?cat=themes", "/wrath/leyline-preview/catalog?source=index&page=2",
          "/wrath/leyline-preview/catalog?q=%3Cscript%3E&cat=nope&build=9&sort=x&page=-4",
          "/wrath/leyline-preview/creators", "/wrath/leyline-preview/beacon", "/wrath/leyline-preview/submit",
+         "/wrath/leyline-preview/forge", "/wrath/leyline-preview/agents",
          "/wrath/leyline-preview/realms", "/wrath/leyline-preview/modes", "/wrath/leyline-preview/news",
          "/wrath/leyline-preview/gallery", "/wrath/leyline-preview/gallery?f=mods", "/wrath/leyline-preview/gallery?f=%3Cx%3E",
          "/wrath/leyline-preview/p/" + first["id"].replace(":", "-"), "/wrath/leyline-preview/p/theme-night-sky"]
@@ -151,13 +152,13 @@ check("header: each item goes to the launcher page's web twin", hrefs == {
       "Addons": "/wrath/leyline-preview/catalog?cat=addons", "Modes": "/wrath/leyline-preview/modes", "Host": "/wrath/host",
       "Community": "/wrath/workshop"} and "addons" in HB.CATEGORY_IDS, hrefs)
 more = re.search(r'<details class="hb-more-d"><summary class="hb-ni[^"]*">.*?<span>More</span></summary><div class="hb-more-m">(.*?)</div></details>', nav, re.S)
-check("header: More is a details dropdown (no script needed) with Gallery, Docs, News, Creators, Status",
-      more and re.findall(r"<span>([^<]+)</span>", more.group(1)) == ["Gallery", "Docs", "News", "Creators", "Status"]
+check("header: More is a details dropdown (no script needed) with Forge, Agents, Gallery, Docs, News, Creators, Status",
+      more and re.findall(r"<span>([^<]+)</span>", more.group(1)) == ["Forge", "Agents", "Gallery", "Docs", "News", "Creators", "Status"]
       and 'href="/wrath/leyline-preview#status"' in more.group(1) and 'href="/wrath/leyline-preview/gallery"' in more.group(1))
 check("header: the phone sheet has the same items as tiles, and the download", re.findall(
-      r"<span>([^<]+)</span>", re.search(r'<div class="hb-nav-x">(.*?)</div>', nav, re.S).group(1)) == ["Gallery", "Docs", "News", "Creators", "Status"]
+      r"<span>([^<]+)</span>", re.search(r'<div class="hb-nav-x">(.*?)</div>', nav, re.S).group(1)) == ["Forge", "Agents", "Gallery", "Docs", "News", "Creators", "Status"]
       and 'class="hb-dl-x"' in nav and 'id="hb-menu" class="hb-menu-t"' in hd and '<label for="hb-menu" class="hb-menu-b"' in hd)
-check("header: a line icon by every item (inline SVG, currentColor)", nav.count('<svg viewBox="0 0 24 24" aria-hidden="true">') == 7 + 1 + 5 + 5
+check("header: a line icon by every item (inline SVG, currentColor)", nav.count('<svg viewBox="0 0 24 24" aria-hidden="true">') == 7 + 1 + 7 + 7
       and "stroke:currentColor" in front)
 check("header: Download (primary) and Sign In (the crystal) on the right, no item active on the front page",
       re.search(r'<div class="hb-end"><a class="hb-dl" href="https://github\.com/orionopenwow/Leyline/releases"[^>]*>.*?Download</a>'
@@ -192,21 +193,21 @@ fs = re.findall(r'<section class="hb-fs hb-rv( flip)?" id="f-([a-z]+)".*?<p clas
                 r'<p class="hb-lede">([^<]+)</p><ul class="hb-points">(.*?)</ul><p class="hb-fs-a">(.*?)</p></div>'
                 r'<div class="hb-fs-v">(.*?)</div></section>', front, re.S)
 check("feature sections: one per part of Leyline, in the recommended order", [f[1] for f in fs] == [
-      "launcher", "host", "realms", "modes", "mods", "community", "agents"] and [f[2] for f in fs] == [
-      "Desktop launcher", "Host a server", "Realms &amp; hopping", "Game modes", "Mods &amp; the Workshop", "Community hub",
-      "Agents &amp; tooling"], [f[1:3] for f in fs])
-check("feature sections: alternating sides (every other one flips)", [bool(f[0]) for f in fs] == [False, True] * 3 + [False])
+      "launcher", "host", "realms", "modes", "mods", "forge", "agents", "community"] and [f[2] for f in fs] == [
+      "Desktop launcher", "Server hosting software", "Realms &amp; hopping", "Minigolf &amp; game modes", "Mods &amp; the Workshop",
+      "Forge", "Agents", "Community hub"], [f[1:3] for f in fs])
+check("feature sections: alternating sides (every other one flips)", [bool(f[0]) for f in fs] == [False, True] * 4)
 check("feature sections: a heading, a lede, points and a first link each", all(f[3] and f[4] and f[5].count("<li>") >= 2
       and 'class="hb-cta sm"' in f[6] for f in fs))
 hrefs = [re.findall(r'href="([^"]+)"', f[6]) for f in fs]
 check("feature sections: links to pages that exist, nothing paid", [h[0] for h in hrefs][1:] == [
-      "/wrath/host", "/wrath/leyline-preview/realms", "/wrath/leyline-preview/modes", "/wrath/leyline-preview/catalog?sort=hot",
-      "/wrath/workshop", "/wrath/leyline-preview/creators"] and hrefs[0][0].startswith("https://github.com/orionopenwow/Leyline/releases")
+      "/wrath/host", "/wrath/leyline-preview/realms", "/wrath?go=mode:minigolf", "/wrath/leyline-preview/catalog?sort=hot",
+      "/wrath/leyline-preview/forge", "/wrath/leyline-preview/agents", "/wrath/workshop"] and hrefs[0][0].startswith("https://github.com/orionopenwow/Leyline/releases")
       and not re.search(r"(?i)support|donat|\bvip\b|\bshop\b", " ".join(f[6] for f in fs)))
 check("feature sections: a TODO(owner) to reorder them", "TODO(owner): the order of the products" in open(HB.__file__).read())
 check("feature sections: the game modes line from playmodes.json, Hero Key as coming", "Minigolf" in fs[3][4]
       and "Hero Key sign-in across realms (coming)" in fs[2][5])
-check("feature sections: every one has its icon", front.count('<span class="hb-ico"><svg viewBox="0 0 24 24" aria-hidden="true">') == 7)
+check("feature sections: every one has its icon", front.count('<span class="hb-ico"><svg viewBox="0 0 24 24" aria-hidden="true">') == 8)
 feats = re.search(r'<div class="hb-feats" id="features">.*?(?=<section class="hb-sec hb-gal-s|<section class="hb-sec hb-rv" id="hosted"|<div class="hb-pair">)', front, re.S).group(0)
 shots = re.findall(r'<img src="/wrath/art/(leyline-ui-[a-z]+\.webp)" alt="([^"]+)" width="1240" height="760" loading="lazy"', feats)
 check("feature sections: the launcher's own pages as pictures (served, lazy, with alt text), our own panels for the rest "
@@ -215,7 +216,7 @@ check("feature sections: the launcher's own pages as pictures (served, lazy, wit
       and 'class="hb-sw"' in fs[1][7] and 'class="hb-rlx"' in fs[2][7]
       and all(a for _, a in shots) and all(n in wp.ART_TYPES and not n.startswith("leyline-shot-") for n, _ in shots)
       and all(os.path.isfile(os.path.join(HERE, "www-files", "art", n)) for n, _ in shots)
-      and 'class="hb-draw hb-people"' in fs[5][7] and 'class="hb-draw hb-code"' in fs[6][7]
+      and 'class="hb-draw hb-people"' in fs[7][7] and 'class="hb-draw hb-code"' in fs[5][7] and 'class="hb-draw hb-code"' in fs[6][7]
       and not re.search(r"leyline-shot-|wu-load-orion|painted", feats, re.I) and not re.search(r"wu-load-orion|painted", front, re.I))
 how = re.search(r'<ol class="hb-how[^"]*" aria-label="How it works">(.*?)</ol>', front, re.S)
 check("how it works: three steps, launcher, game folder or browser, realm", how and re.findall(r"<b>([^<]+)</b>", how.group(1)) == [
@@ -432,7 +433,7 @@ class BrandWorkshop(FakeWorkshop):
 
 HB.hub.portal = lambda name: BrandWorkshop() if name == "workshop" else real(name)
 every = ["", "/realms", "/realms?client=own", "/realms?client=browser&now=1", "/realms?build=1.12.1", "/modes", "/news",
-         "/catalog", "/catalog?build=1.12", "/catalog?build=3.3.5a&sort=name", "/catalog?q=bags", "/creators", "/beacon",
+         "/catalog", "/catalog?build=1.12", "/catalog?build=3.3.5a&sort=name", "/catalog?q=bags", "/creators", "/beacon", "/forge", "/agents",
          "/submit", "/p/mod-bags", "/p/" + e0["id"].replace(":", "-"), "/p/theme-night-sky"]
 for path in every:
     st, _, b = req("/wrath/leyline-preview" + path)

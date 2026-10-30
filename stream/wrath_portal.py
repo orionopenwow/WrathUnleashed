@@ -895,6 +895,9 @@ ART_TYPES = {
     # the owner's Minigolf recording for the Game modes section: a short muted loop and its poster
     "leyline-shot-minigolf.mp4": "video/mp4", "leyline-shot-minigolf.webm": "video/webm", "leyline-shot-minigolf.webp": "image/webp",
     "leyline-mode-azeroth-survivors.webp": "image/webp",   # the mode's key art (the owner's; crest cropped out)
+    # the front page's Forge and Agents sections: the owner's own app screenshots (Forge's map of its own island;
+    # the Agents inn), game pictures, so behind the killswitch like the other leyline-shot- files
+    "leyline-shot-forge.webp": "image/webp", "leyline-shot-agents.webp": "image/webp",
     "leyline-display.woff2": "font/woff2", "leyline-display-OFL.txt": "text/plain; charset=utf-8",   # Big Shoulders Display 600 (SIL OFL 1.1, leyline-display-OFL.txt)
     "leyline-corner-tl.webp": "image/webp", "leyline-corner-tr.webp": "image/webp",   # our gold frame art, hued blue
     "leyline-corner-bl.webp": "image/webp", "leyline-corner-br.webp": "image/webp", "leyline-divider.webp": "image/webp",
