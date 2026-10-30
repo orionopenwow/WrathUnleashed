@@ -112,7 +112,13 @@ pub fn id_ok(id: &str) -> bool {
 
 /// One project made safe to show, or None when it is not a real entry. `origin` is the catalog's own site
 /// (`https://play.openvanilla.app`): a download anywhere else is dropped.
-pub fn clean(mut p: Project, origin: &str) -> Option<Project> {
+pub fn clean(p: Project, origin: &str) -> Option<Project> {
+    clean_in(p, origin, crate::clients::all_clients())
+}
+
+/// `clean`; a project made only for builds that are not offered now (4.3.4, 5.4.8: `clients::MAX_OFFERED_BUILD`)
+/// is hidden unless `all`.
+pub fn clean_in(mut p: Project, origin: &str, all: bool) -> Option<Project> {
     if !id_ok(&p.id) {
         return None;
     }
@@ -127,6 +133,12 @@ pub fn clean(mut p: Project, origin: &str) -> Option<Project> {
         .builds
         .into_iter()
         .filter_map(|b| if b == "any" { Some(b) } else { Build::from_tag(&b).map(|x| x.catalog_tag().to_string()) })
+        .collect::<Vec<_>>();
+    let known = !p.builds.is_empty();
+    p.builds = p
+        .builds
+        .into_iter()
+        .filter(|b| b == "any" || Build::from_tag(b).is_some_and(|x| x.offered_in(all)))
         .fold(Vec::new(), |mut v, b| {
             if !v.contains(&b) {
                 v.push(b);
@@ -136,6 +148,9 @@ pub fn clean(mut p: Project, origin: &str) -> Option<Project> {
         .into_iter()
         .take(8)
         .collect();
+    if known && p.builds.is_empty() {
+        return None;
+    }
     p.author = text(&p.author, 80);
     p.author_url = link(&p.author_url);
     p.licence = text(&p.licence, 80);
@@ -159,12 +174,17 @@ pub fn clean(mut p: Project, origin: &str) -> Option<Project> {
 
 /// The categories and projects of an all.json document.
 pub fn parse(v: &Value, origin: &str) -> Result<(Vec<Category>, Vec<Project>), String> {
+    parse_in(v, origin, crate::clients::all_clients())
+}
+
+/// `parse`, with every known build offered when `all`.
+pub fn parse_in(v: &Value, origin: &str, all: bool) -> Result<(Vec<Category>, Vec<Project>), String> {
     let items = v.get("projects").and_then(Value::as_array).ok_or("no \"projects\" list in the catalog")?;
     let projects = items
         .iter()
         .take(MAX_PROJECTS)
         .filter_map(|i| serde_json::from_value::<Project>(i.clone()).ok())
-        .filter_map(|p| clean(p, origin))
+        .filter_map(|p| clean_in(p, origin, all))
         .collect();
     let categories = v
         .get("categories")
@@ -257,7 +277,10 @@ mod tests {
           {"id":"mod:cata-map","source":"packaged","builds":["4.3.4","5.4.8","9.9.9"]},
           {"id":"mod:vanilla-x","source":"packaged","builds":["1.12.1"]},
           {"id":"mod:any-thing","source":"packaged","builds":["any"]}]}"#;
-        let (_, ps) = parse(&serde_json::from_str(doc).unwrap(), "https://play.openvanilla.app").unwrap();
+        // Not offered for now (owner, 2026-10-30): a project made only for 4.3.4/5.4.8 is hidden; the override shows it.
+        let capped = parse_in(&serde_json::from_str(doc).unwrap(), "https://play.openvanilla.app", false).unwrap().1;
+        assert_eq!(capped.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), ["mod:tbc-bars", "mod:vanilla-x", "mod:any-thing"]);
+        let (_, ps) = parse_in(&serde_json::from_str(doc).unwrap(), "https://play.openvanilla.app", true).unwrap();
         assert_eq!(ps[0].builds, vec!["2.4.3"], "spellings fold into one tag");
         assert_eq!(ps[1].builds, vec!["4.3.4", "5.4.8"], "unknown builds are dropped");
         assert_eq!(ps[2].builds, vec!["1.12"]);

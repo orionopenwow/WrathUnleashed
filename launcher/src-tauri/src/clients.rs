@@ -47,9 +47,41 @@ pub enum RealmFile {
     ConfigWtf,
 }
 
+/// The newest build Leyline offers. Hidden by the owner on 2026-10-30 ("3.3.5 at max until I research"): 4.3.4 and
+/// 5.4.8 stay in the code but are not shown to players or hosts. Set this back to 18414 (or set the environment
+/// variable `LEYLINE_ALL_CLIENTS=1`) to show 4.3.4 and 5.4.8 again.
+pub const MAX_OFFERED_BUILD: u16 = 12340;
+/// The override that shows every known build despite `MAX_OFFERED_BUILD`.
+pub const ALL_CLIENTS_ENV: &str = "LEYLINE_ALL_CLIENTS";
+
+/// The override is on (`LEYLINE_ALL_CLIENTS=1`).
+pub fn all_clients() -> bool {
+    all_clients_from(std::env::var(ALL_CLIENTS_ENV).ok().as_deref())
+}
+pub fn all_clients_from(v: Option<&str>) -> bool {
+    matches!(v.map(str::trim), Some("1" | "true" | "yes" | "on"))
+}
+
 impl Build {
-    /// The builds Leyline knows, oldest first.
+    /// The builds Leyline knows, oldest first (offered or not: see `OFFERED`).
     pub const KNOWN: [Build; 5] = [Build::V1121, Build::V243, Build::V335a, Build::V434, Build::V548];
+
+    /// Offered to players and hosts now (`MAX_OFFERED_BUILD`, or every build with `all` / the override).
+    pub fn offered_in(self, all: bool) -> bool {
+        all || self.number() <= MAX_OFFERED_BUILD
+    }
+    pub fn offered(self) -> bool {
+        self.offered_in(all_clients())
+    }
+    /// The builds offered now, oldest first.
+    pub fn offered_list() -> Vec<Build> {
+        Build::KNOWN.into_iter().filter(|b| b.offered()).collect()
+    }
+    /// The build as a player sees it: a build that is not offered shows as `Other` (it still starts and takes a
+    /// realm address, but no mods are offered).
+    pub fn shown_in(self, all: bool) -> Build {
+        if self.offered_in(all) { self } else { Build::Other }
+    }
 
     /// The build number (0 for other builds).
     pub fn number(self) -> u16 {
@@ -378,6 +410,11 @@ pub fn profile_realm_file(p: &ClientProfile) -> PathBuf {
 
 /// Look at a folder and say which client it is. An executable of a build Leyline does not know is `Other`.
 pub fn detect(root: &Path) -> Result<Detection, DetectError> {
+    detect_in(root, all_clients())
+}
+
+/// `detect`, with every known build shown when `all` (else a build that is not offered is `Other`).
+pub fn detect_in(root: &Path, all: bool) -> Result<Detection, DetectError> {
     if !root.is_dir() {
         return Err(DetectError::NotAFolder);
     }
@@ -404,7 +441,7 @@ pub fn detect(root: &Path) -> Result<Detection, DetectError> {
         build = by_data_files(root);
         detected_by = DetectedBy::DataFiles;
     }
-    let build = build.ok_or(DetectError::Unrecognised)?;
+    let build = build.ok_or(DetectError::Unrecognised)?.shown_in(all);
     let major = exe_version.as_deref().and_then(|v| v.split('.').next()).and_then(|m| m.parse::<u16>().ok());
     let rule = build.realm_file(major);
     let locale = match (build, rule) {
@@ -695,6 +732,36 @@ pub mod testutil {
 mod tests {
     use super::testutil::*;
     use super::*;
+
+    /// These tests cover every known build, offered or not (see `capped_at_335a_until_the_override` for the cap).
+    fn detect(root: &Path) -> Result<Detection, DetectError> {
+        detect_in(root, true)
+    }
+
+    #[test]
+    fn capped_at_335a_until_the_override() {
+        assert_eq!(MAX_OFFERED_BUILD, 12340, "hidden by the owner on 2026-10-30: 4.3.4 and 5.4.8 are not offered");
+        let shown: Vec<Build> = Build::KNOWN.into_iter().filter(|b| b.offered_in(false)).collect();
+        assert_eq!(shown, vec![Build::V1121, Build::V243, Build::V335a]);
+        assert!(Build::KNOWN.into_iter().all(|b| b.offered_in(true)), "the override brings 4.3.4 and 5.4.8 back");
+        assert!(Build::Other.offered_in(false));
+        assert_eq!(Build::V434.shown_in(false), Build::Other);
+        assert_eq!(Build::V548.shown_in(true), Build::V548);
+        for v in ["1", "true", " yes "] {
+            assert!(all_clients_from(Some(v)));
+        }
+        for v in [None, Some(""), Some("0"), Some("no")] {
+            assert!(!all_clients_from(v));
+        }
+        // A 4.3.4 or 5.4.8 folder is listed as an other build (it still starts and takes a realm address).
+        for b in [Build::V434, Build::V548] {
+            let d = tempfile::tempdir().unwrap();
+            fake_client(d.path(), b, true);
+            let det = detect_in(d.path(), false).unwrap();
+            assert_eq!((det.build, det.realm_file), (Build::Other, RealmFile::ConfigWtf), "{b:?}");
+            assert_eq!(detect_in(d.path(), true).unwrap().build, b);
+        }
+    }
 
     #[test]
     fn detects_335a_from_the_exe_version() {
