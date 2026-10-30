@@ -753,16 +753,19 @@ def cmd_herokey(a):
 
 def cmd_options(a):
     """The realm's own settings (type, rates, start): state/realm.env for the next start, and the list's type."""
-    o = {k: getattr(a, k) for k in ("type", "xp", "loot", "rep", "start") if getattr(a, k, None) is not None}
+    o = {k: getattr(a, k) for k in ("type", "xp", "loot", "rep", "start", "bots") if getattr(a, k, None) is not None}
     cfg = load()
     if not cfg:
         sys.exit("Run Host a Wrath realm first.")
     clean = check_options(o, cfg.get("profile"))
     if clean is None:
         sys.exit("Options: --type normal|pvp|rp|rppvp, --xp/--loot/--rep 1-10 (AzerothCore rulesets), "
-                 "--start level1|boost (Classic levelling)")
+                 "--start level1|boost (Classic levelling), --bots 0-200 (not the Dalaran hangout or other cores)")
 
     def ch(c):
+        if "bots" in clean:   # the bot count is the compose file's WU_BOTS (.env), not realm.env
+            c["bots"] = clean.pop("bots")
+            set_env_value("WU_BOTS", str(c["bots"]))
         c.setdefault("realm_env", {}).update(clean)
         if "type" in clean:
             c.setdefault("record", {})["type"] = TYPES[clean["type"]][0]
@@ -776,7 +779,21 @@ def cmd_options(a):
             except (OSError, ValueError):
                 pass
     _edit(ch)
-    sys.stderr.write("Saved. Restart your realm for rates and type to take effect.\n")
+    sys.stderr.write("Saved. Restart your realm (leyline stop, then leyline host) for it to take effect.\n")
+
+
+def set_env_value(key, value):
+    """One KEY=value line of the kit's .env (the rest kept; 0600 as write_env makes it)."""
+    p = os.path.join(KIT, ".env")
+    try:
+        with open(p, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return
+    lines = [ln for ln in lines if not ln.startswith(key + "=")] + [f"{key}={value}"]
+    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(lines) + "\n")
 
 
 def cmd_rules(a):
@@ -896,6 +913,7 @@ def main(argv=None):
     p.add_argument("--loot", type=int)
     p.add_argument("--rep", type=int)
     p.add_argument("--start", choices=["level1", "boost"])
+    p.add_argument("--bots", type=int, help="random bots, 0-200 (not the Dalaran hangout or other cores)")
     p.set_defaults(fn=cmd_options)
     p = sub.add_parser("volunteer-relay", help="relay for others (the Leyline mesh's community relay; off by default)")
     p.add_argument("--host", help="this PC's public DNS name (needed for TLS)")

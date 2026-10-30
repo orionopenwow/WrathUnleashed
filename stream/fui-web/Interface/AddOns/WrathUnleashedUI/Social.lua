@@ -50,7 +50,7 @@ local function button(parent, text, w, onClick, ...)
 end
 
 local function input(parent, w, ...)
-    local e = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    local e = (W.Style and W.Style.Input(parent) or CreateFrame("EditBox", nil, parent, "InputBoxTemplate"))
     e:SetWidth(w); e:SetHeight(20)
     e:SetPoint(...)
     e:SetAutoFocus(false)

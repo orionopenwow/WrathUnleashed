@@ -8,8 +8,8 @@
 -- (Media\white8x8.tga) on top of that; the mark is Media\leyline-mark-64.tga / -128.tga, made from the website's
 -- Leyline art by stream/fui-web/make-wuui-media.py. No game textures, no new fonts (the client's own).
 --
---   S.Window(frame, title, opts)    the window: fill, border, title bar with the mark and the title, close button
---                                   (opts.noClose; opts.titleY). Returns the title FontString.
+--   S.Window(frame, title)          the window: fill, border, title bar with the mark and the title (the window adds
+--                                   its own S.Close). Returns the title FontString.
 --   S.Button(parent, text, w, onClick, kind, point...)   our button: kind "primary" (accent), "ghost" (default),
 --                                   "danger"; normal / hover / pressed / disabled states. h = 22.
 --   S.Box(frame, alpha)             an inner panel (cards, boxes): the darker fill and the border.
@@ -182,8 +182,7 @@ end
 
 -- ---------------------------------------------------------------- windows
 
-function S.Window(frame, title, opts)
-    opts = opts or {}
+function S.Window(frame, title)
     backdrop(frame, S.C.bg)
     if not frame.styleFill then
         frame.styleFill = solid(frame, "BACKGROUND", S.C.bg)
@@ -212,7 +211,6 @@ function S.Window(frame, title, opts)
         frame.styleWatch = watch
     end
     frame.styleTitle:SetText(title or "")
-    if not opts.noClose and not frame.styleClose then frame.styleClose = S.Close(frame) end
     return frame.styleTitle
 end
 

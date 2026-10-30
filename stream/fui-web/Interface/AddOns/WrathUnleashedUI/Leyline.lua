@@ -355,8 +355,12 @@ function L.Refresh()
             row.rules:SetText(rules)
             row.players:SetText(players(r))
             row.state:SetText(state)
-            row.join:SetText(L.JoinText(r))
-            row.join:SetWidth(r.id == "this" and L.JoinText(r) ~= "Join" and 150 or 56)
+            -- this realm's row: "You're here" (or "Join through the relay", which also puts the link in the box, so
+            -- that row has no Copy link of its own)
+            local jt = L.JoinText(r)
+            row.join:SetText(jt)
+            row.join:SetWidth(jt == "Join through the relay" and 164 or jt == "You're here" and 80 or 56)
+            if jt == "Join through the relay" then row.copyBtn:Hide() else row.copyBtn:Show() end
             row:Show()
         else
             row:Hide()
@@ -476,6 +480,8 @@ local function buildRow(i)
         local r = self:GetParent().realm
         if r then L.Join(r) end
     end, "RIGHT", -4, 0)
+    row.copyBtn:ClearAllPoints()
+    row.copyBtn:SetPoint("RIGHT", row.join, "LEFT", -4, 0)   -- left of Join, whatever its width
     row:SetScript("OnClick", function(self)
         if self.realm then L.selected = self.realm; copy(L.RowLink(self.realm)) end
     end)

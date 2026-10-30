@@ -80,7 +80,7 @@ local function buildCompanionPage(page, tab)
     local P = { tab = tab, kind = tab.kind, offset = 0, list = {}, rows = {} }
     page.state = P
 
-    local search = CreateFrame("EditBox", nil, page, "InputBoxTemplate")
+    local search = (W.Style and W.Style.Input(page) or CreateFrame("EditBox", nil, page, "InputBoxTemplate"))
     search:SetWidth(LIST_W - 10); search:SetHeight(20)
     search:SetPoint("TOPLEFT", 22, -6)
     search:SetAutoFocus(false)

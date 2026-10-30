@@ -378,6 +378,12 @@ renv = open(os.path.join(kit2, "state", "realm.env")).read()
 check("leyline options: rates and type changed for the next start", p.returncode == 0 and "AC_RATE_XP_KILL=2" in renv
       and "AC_GAME_TYPE=6" in renv and json.load(open(os.path.join(kit2, "state", "host.json")))["record"]["type"] == "RP",
       p.stdout[-300:] + p.stderr[-300:])
+p = subprocess.run(["bash", os.path.join(kit2, "leyline"), "options", "--bots", "60"], env=env, cwd=kit2,
+                   stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60)
+envf = open(os.path.join(kit2, ".env")).read() if os.path.exists(os.path.join(kit2, ".env")) else ""
+check("leyline options --bots: the bot count for the next start", p.returncode == 0 and "WU_BOTS=60" in envf.splitlines()
+      and json.load(open(os.path.join(kit2, "state", "host.json")))["bots"] == 60 and "bots = 60" in
+      open(os.path.join(kit2, "realm-files", "lua_scripts", "host-realm.dat")).read(), p.stderr[-300:])
 p = subprocess.run(["bash", os.path.join(kit2, "leyline"), "options", "--xp", "99"], env=env, cwd=kit2,
                    stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60)
 check("leyline options: out of range refused", p.returncode != 0 and "AC_RATE_XP_KILL=2" in open(os.path.join(kit2, "state", "realm.env")).read())
