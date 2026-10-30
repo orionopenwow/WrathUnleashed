@@ -14,6 +14,7 @@
 pub mod catalog;
 pub mod clients;
 pub mod deeplink; // leyline://install/<id> (hub rankings agent)
+pub mod herokey; // Hero Key sign-in to community realms (docs/HERO-KEY-SSO.md; the herokey_sso flag)
 pub mod host;
 pub mod launch;
 pub mod modes; // the Modes page: game modes one click away (modes agent)

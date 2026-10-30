@@ -16,7 +16,7 @@ os.environ.update(SOAP_USER="WUSOAP", SOAP_PASS="x", AC_SOAP_URL=f"http://127.0.
                   PORTAL_URL=f"http://127.0.0.1:{REALM_PORT}", WU_SLICE_DIR=slices, WU_STREAM="1", WU_OWNFILES="1",
                   STREAM_HOST="wrath.example", WU_RELAY_LISTING=f"http://127.0.0.1:{RELAY_PORT}/api/listing/realms.json",
                   WU_JOIN_BASE="https://relay.example", WU_RELAY_WS="wss://relay.example",
-                  WU_HANGOUT_REALM="hangouthangout22")
+                  WU_HANGOUT_REALM="hangouthangout22", WU_LEYLINE_DIR=tempfile.mkdtemp())
 spec = importlib.util.spec_from_file_location("wp", sys.argv[1])
 wp = importlib.util.module_from_spec(spec); spec.loader.exec_module(wp)
 
@@ -182,6 +182,53 @@ saved = wp.HANGOUT_REALM
 wp.HANGOUT_REALM = "not-an-id"
 check("junk hangout id: none", wp.hangout_id() is None)
 wp.HANGOUT_REALM = saved
+
+# --- Hero Key sign-in on Beacons (docs/HERO-KEY-SSO.md): the herokey_sso flag, OFF by default
+_, _, env, txt = session_env(f"/wrath/play?mini=mini&go=r:{LIVE}")
+check("herokey off (default): no hop_sso, no login, the join page flow", "hop_sso" not in env and "user" not in env
+      and "pass" not in env and env.get("hop_join"))
+check("herokey off: no public key published", get("/wrath/leyline/herokey.json")[0] == 404)
+check("herokey off: the launcher's call says it isn't on", wp.herokey_issue_api("WR000123", LIVE, "launcher")[0] == 404)
+check("herokey off: no key files made", not os.listdir(wp.HEROKEY_DIR) or "herokey-site.key" not in os.listdir(wp.HEROKEY_DIR))
+wp.leyline_net.write_flags(None, {"herokey_sso": True}, by="test")
+_, _, env, txt = session_env(f"/wrath/play?mini=mini&go=r:{LIVE}")
+sso = env.get("hop_sso") or {}
+a = sso.get("assertion") or {}
+check("herokey on: the hop carries a signed assertion for that realm", a.get("aud") == LIVE and len(sso.get("sig", "")) == 128
+      and sso.get("redeem") == f"https://relay.example/api/realms/{LIVE}/herokey", sso)
+check("herokey on: a one-time login for the realm's own account (HK + pseudonym)", re.match(r"^HK[A-Z2-7]{14}$", env.get("user", ""))
+      and len(env.get("pass", "")) == 16 and env["user"] == "HK" + a["sub"][:14].upper(), env.get("user"))
+check("herokey on: never the Wrath login or the global account id", "Pa55word" not in txt and "WR000123" not in txt.upper())
+pub = json.loads(get("/wrath/leyline/herokey.json")[2])
+check("herokey on: the public key is published, and only it", pub.get("ctx") == "leyline-herokey-sso-v1"
+      and len(pub["keys"]) == 1 and pub["keys"][0]["kid"] == a.get("kid") and wp.herokey_keys.secret().hex() not in json.dumps(pub))
+check("herokey on: the key files are 0600", oct(os.stat(os.path.join(wp.HEROKEY_DIR, "herokey-site.key")).st_mode & 0o777) == "0o600"
+      and oct(os.stat(os.path.join(wp.HEROKEY_DIR, "herokey-pepper.key")).st_mode & 0o777) == "0o600")
+# the realm side accepts it (the host kit's checker, the key pinned)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "hosting", "kit", "tools"))
+from wunet import herokey as kit_hk   # noqa: E402
+pinned = {p["kid"]: bytes.fromhex(p["pub"]) for p in pub["keys"]}
+claims, why = kit_hk.check(a, sso["sig"], LIVE, pinned, kit_hk.ReplayCache())
+check("herokey on: the realm's agent verifies it", why is None and kit_hk.account_name(claims["sub"]) == env["user"], why)
+_, _, env2, _ = session_env(f"/wrath/play?mini=mini&go=r:{LIVE}")
+check("herokey on: the same pseudonym next time, a new one-time password", env2["user"] == env["user"] and env2["pass"] != env["pass"]
+      and env2["hop_sso"]["assertion"]["nonce"] != a["nonce"])
+gate, land, env3, _ = session_env(f"/wrath/play?mini=mini&go=r:{HANG}")
+check("herokey on: the Dalaran Hangout still uses the Wrath login", "hop_sso" not in env3 and env3.get("user") == "WR000123")
+_, _, env4, _ = session_env("/wrath/play?mini=mini")
+check("herokey on: a plain Wrath session is unchanged", "hop_sso" not in env4 and env4.get("user") == "WR000123")
+st, doc = wp.herokey_issue_api("WR000123", LIVE, "launcher")
+check("launcher call: assertion, login, redeem; longer login window", st == 200 and doc["assertion"]["login_ttl"] == 600
+      and doc["login"]["user"] == env["user"] and doc["redeem"].endswith(f"/api/realms/{LIVE}/herokey"), (st, doc.get("error")))
+check("launcher call: offline realm / bad id / the hangout refused",
+      [wp.herokey_issue_api("WR000123", r, "launcher")[0] for r in (OFF, "../x", HANG)] == [404, 400, 400])
+for _ in range(70):
+    wp.herokey_issue("WR000555", LIVE, 120)
+check("rate limit: 60 assertions an hour per account", wp.herokey_issue("WR000555", LIVE, 120) is None
+      and wp.herokey_issue("WR000556", LIVE, 120) is not None)
+wp.leyline_net.write_flags(None, {"herokey_sso": False}, by="test")
+_, _, env5, _ = session_env(f"/wrath/play?mini=mini&go=r:{LIVE}")
+check("herokey back off: the old hop at once", "hop_sso" not in env5 and "user" not in env5)
 
 print(f"\n{count - fails}/{count} passed")
 sys.exit(1 if fails else 0)

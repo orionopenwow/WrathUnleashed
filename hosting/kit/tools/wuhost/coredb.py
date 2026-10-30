@@ -84,6 +84,22 @@ class CmangosDB(RealmDB):
         finally:
             c.close()
 
+    def set_login(self, username, salt, verifier):
+        """Hero Key sign-in: a new salt + verifier (see agent.RealmDB.set_login)."""
+        if not salt_ok(salt):
+            return "bad_salt"
+        c = self._conn(self.AUTH)
+        try:
+            with c.cursor() as cur:
+                cur.execute("SELECT id FROM account WHERE username = %s", (username,))
+                if not cur.fetchone():
+                    return "missing"
+                cur.execute("UPDATE account SET v = %s, s = %s WHERE username = %s",
+                            (to_mangos_hex(verifier), to_mangos_hex(salt), username))
+                return "updated"
+        finally:
+            c.close()
+
     def grant_gm(self, username, gmlevel=3):
         c = self._conn(self.AUTH)
         try:
@@ -152,6 +168,22 @@ class TrinityDB(RealmDB):
                     cur.execute("INSERT INTO account_access (AccountID, SecurityLevel, RealmID) SELECT id, %s, -1 "
                                 "FROM account WHERE username = %s", (gmlevel, username))
                 return "ok"
+        finally:
+            c.close()
+
+    def set_login(self, username, salt, verifier):
+        """Hero Key sign-in: a new salt + verifier (see agent.RealmDB.set_login)."""
+        if not salt_ok(salt):
+            return "bad_salt"
+        c = self._conn(self.AUTH)
+        try:
+            with c.cursor() as cur:
+                cur.execute("SELECT id FROM account WHERE username = %s", (username,))
+                if not cur.fetchone():
+                    return "missing"
+                cur.execute("UPDATE account SET salt = %s, verifier = %s WHERE username = %s",
+                            (bytes.fromhex(salt), bytes.fromhex(verifier), username))
+                return "updated"
         finally:
             c.close()
 

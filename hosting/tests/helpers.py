@@ -77,6 +77,12 @@ class FakeDB:
             self.gm[username.upper()] = gmlevel
         return "ok"
 
+    def set_login(self, username, salt, verifier):
+        if username.upper() not in self.realm.accounts:
+            return "missing"
+        self.realm.add_account_raw(username, bytes.fromhex(salt), bytes.fromhex(verifier))
+        return "updated"
+
     def grant_gm(self, username, gmlevel=3):
         u = username.upper()
         if u not in self.realm.accounts:
@@ -90,13 +96,15 @@ class FakeDB:
         return {"players": 2, "bots": 40, "uptime_s": 1234, "bots_method": "rndbot_account_prefix"}
 
 
-def make_host_state(tmp, name="Test Realm", visibility="public", relay_url="", listing_url=None, signup="invite"):
+def make_host_state(tmp, name="Test Realm", visibility="public", relay_url="", listing_url=None, signup="invite",
+                    extra=None):
     secret = keys.load_or_create(os.path.join(tmp, "realm.key"))
     rid = keys.realm_id(keys.public_key(secret))
     cfg = {"realm_id": rid, "name": name, "visibility": visibility, "signup": signup,
            "invite_secret": "INV" + "".join(random.choice("ABCDEFGHJKMNPQRSTVWXYZ23456789") for _ in range(20)),
            "relay_url": relay_url, "listing_url": listing_url, "profile": "main",
            "record": {"name": name, "tagline": "A test realm", "type": "PvE", "ruleset": "main"}}
+    cfg.update(extra or {})
     with open(os.path.join(tmp, "host.json"), "w") as f:
         json.dump(cfg, f)
     return cfg, secret
@@ -144,8 +152,9 @@ def ws_opener(base, realm_id, invite=None, headers=None):
 class Rig:
     """relay + fake realm + agent. `async with Rig(...) as r:`"""
 
-    def __init__(self, visibility="public", signup="invite", listing=True, **cfg_over):
+    def __init__(self, visibility="public", signup="invite", listing=True, host_extra=None, **cfg_over):
         self.visibility, self.signup, self.listing = visibility, signup, listing
+        self.host_extra = host_extra
         self.cfg_over = cfg_over
         self.tmp = tempfile.mkdtemp(prefix="wu-test-")
         self.agents = []
@@ -167,7 +176,7 @@ class Rig:
         os.makedirs(self.host_dir)
         self.cfg, self.secret = make_host_state(
             self.host_dir, visibility=self.visibility, signup=self.signup, relay_url=self.base + "/agent",
-            listing_url=(self.http + "/api/listing/heartbeat") if self.listing else None)
+            listing_url=(self.http + "/api/listing/heartbeat") if self.listing else None, extra=self.host_extra)
         self.rid = self.cfg["realm_id"]
         self.agent = self.new_agent()
         await self.wait_online()

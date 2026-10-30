@@ -287,7 +287,7 @@ pub fn find_ci(dir: &Path, name: &str) -> Option<PathBuf> {
 }
 
 /// A path relative to `root`, each part matched without regard to case.
-fn find_rel(root: &Path, rel: &str) -> Option<PathBuf> {
+pub(crate) fn find_rel(root: &Path, rel: &str) -> Option<PathBuf> {
     rel.split('/').try_fold(root.to_path_buf(), |d, part| find_ci(&d, part))
 }
 

@@ -553,6 +553,9 @@ export function interfaceMenu(panel, current = window.__wuInterface?.choice || '
 // from someone else can't make the page hop. "Back to Wrath" lands in Dalaran (?go=h:dalaran, ov_go.lua).
 // In a hop session (wrath-early.js set it up): a "Back to Wrath" bar, and the realm's join page over the game
 // when this browser has no login for that realm yet; the login it hands back is kept here (wrath-early.js).
+// With Hero Key sign-in (hop.state.ssoPending, docs/HERO-KEY-SSO.md) the join page only shows when the realm
+// refused it; "Use another account" turns Hero Key sign-in off for that realm in this browser, and the join page
+// then offers "Sign in with your Hero Key" to turn it back on.
 export const HOP_TAKE = 'local h = WUUI_LEYLINE_HOP; WUUI_LEYLINE_HOP = nil; return h';
 const HOP_ID = /^[a-z2-7]{16}$/;
 
@@ -674,11 +677,23 @@ export function hopUi(env = window.__wenilla_env || {}, hop = window.__wuHop) {
   other.type = 'button';
   other.textContent = 'Use another account';
   other.title = 'Forget the login this browser keeps for ' + name;
-  other.addEventListener('click', () => { hop.forgetLogin(localStorage, env.hop); location.reload(); });
+  other.addEventListener('click', () => {
+    hop.forgetLogin(localStorage, env.hop);
+    if (hop.state.sso) hop.setSso?.(localStorage, env.hop, false);   // and no Hero Key sign-in here, until asked again
+    location.reload();
+  });
   bar.append(label, back);
   if (!hangout) bar.append(other);   // the hangout uses the Wrath login: nothing to forget
   document.body.append(bar);
-  if (hop.state.login) return { bar };
+  if (hop.state.login) {
+    // Hero Key sign-in in flight: the join page only if the realm refuses it and no login is kept here
+    if (hop.state.ssoPending) hop.state.ssoPending.then((ok) => { if (!ok && !hop.state.login) joinPage(); });
+    return { bar };
+  }
+  return { bar, join: joinPage() };
+
+  function joinPage() {
+  if (document.getElementById('wu-hop-join')) return null;
   // First hop here: the realm's own join page (make an account, or sign in to yours), framed.
   const join = document.createElement('div');
   join.id = 'wu-hop-join';
@@ -688,6 +703,14 @@ export function hopUi(env = window.__wenilla_env || {}, hop = window.__wuHop) {
     + '<button type="button" class="home" data-x="home"></button></div></div>';
   join.querySelector('.head span').textContent = 'Join ' + name;
   join.querySelector('[data-x="home"]').textContent = words.back;
+  if (hop.state.ssoOffer) {   // Hero Key sign-in was declined here with "Use another account": offer it back
+    const hk = document.createElement('button');
+    hk.type = 'button';
+    hk.dataset.x = 'herokey';
+    hk.textContent = 'Sign in with your Hero Key';
+    hk.addEventListener('click', () => { hop.setSso?.(localStorage, env.hop, true); location.reload(); });
+    join.querySelector('[data-x="later"]').before(hk);
+  }
   const frame = document.createElement('iframe');
   frame.title = 'Join ' + name;
   frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-same-origin');
@@ -704,7 +727,8 @@ export function hopUi(env = window.__wenilla_env || {}, hop = window.__wuHop) {
     if (got && hop.saveLogin(localStorage, env.hop, got.user, got.pass)) location.reload();
   });
   document.body.append(join);
-  return { bar, join };
+  return join;
+  }
 }
 // <<< leyline-hop -----------------------------------------------------------------------------------
 

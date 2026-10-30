@@ -80,6 +80,18 @@ class Setup(unittest.TestCase):
         self.assertIn("WU_OLD_PROFILE=progression", out)
         with self.assertRaises(SystemExit):
             self.run_cmd("init", "--name", "Bad;Name")
+        # Hero Key sign-in (docs/HERO-KEY-SSO.md): off unless the host turns it on; a kit without the site key says so
+        def hk():
+            with open(os.path.join(st, "host.json")) as f:
+                return json.load(f).get("herokey")
+        self.assertIsNone(hk())
+        _, err = self.run_cmd("herokey", "on")
+        self.assertTrue(hk())
+        self.assertIn("knows the website's key", err)
+        self.run_cmd("herokey", "off")
+        self.assertIs(hk(), False)
+        with self.assertRaises(SystemExit):
+            self.run_cmd("herokey", "maybe")
 
 
     def write_seed(self, **over):

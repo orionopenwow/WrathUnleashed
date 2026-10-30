@@ -40,6 +40,8 @@ pub const ACTIONS: &[(&str, &str, &str, &[&str])] = &[
     ("send", "POST", "send", &["to", "text"]),
     ("read", "POST", "read", &["with"]),
     ("report", "POST", "report", &["pid", "reason", "note"]),
+    // Hero Key sign-in to a community realm (crate::herokey, docs/HERO-KEY-SSO.md)
+    ("herokey", "POST", "herokey", &["realm"]),
 ];
 
 /// The API base: the official one, or LEYLINE_SOCIAL_API for a test server (https, or http on this PC only).

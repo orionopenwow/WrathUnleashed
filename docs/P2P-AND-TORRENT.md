@@ -29,7 +29,7 @@ Everything ships **off**. Two layers decide:
     "format": 1,
     "updated_at": "2026-10-29T00:00:00Z",
     "flags": {"p2p_hosting": false, "torrent_downloads": false, "torrent_seeding": false, "webrtc_presence": false,
-              "mesh_realms": false, "mesh_relays": false, "relay_volunteer": false},
+              "mesh_realms": false, "mesh_relays": false, "relay_volunteer": false, "herokey_sso": false},
     "limits": {"seed_upload_kbps": 0, "seed_ratio_pct": 0, "max_peers": 0},
     "stun": ["stun.cloudflare.com:3478"],
     "sha256": "<hex>"
@@ -59,6 +59,7 @@ Everything ships **off**. Two layers decide:
 | `mesh_realms` | **The realm list from the Leyline mesh**: signed records from peers and the seed relays, verified in the launcher. Falls back to today's listings. | Built and tested (`p2p/mesh.rs`, docs/LEYLINE-MESH.md). |
 | `mesh_relays` | **Community relays** may carry this PC's game traffic when closer. Off: only our seeds and each realm's own relay. | Built and tested. Relays see game traffic in the clear until the sealed path exists (docs/LEYLINE-MESH.md section 9). |
 | `relay_volunteer` | **"Help the network: relay for others" is offered.** A PC relays only when this PC is also set to "On". | Built (Host pack compose file, `host_volunteer_relay`). |
+| `herokey_sso` | **Hero Key sign-in on Beacons**: a hop or the launcher signs in to a community realm with the website account, no join page and no kept password. Off: the realm's own join page. | Built and tested (docs/HERO-KEY-SSO.md). Realms also need their own opt-in and a kit with the site key pinned. |
 
 ### For the admin console
 

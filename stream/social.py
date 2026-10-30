@@ -31,6 +31,7 @@ The JSON API, under /wrath/api/social (Caddy sends /wrath* here; /api/* belongs 
     POST device/start            {device_code, user_code, verify_url, interval, expires_in}  (no sign-in)
     POST device/poll {device_code}  {status: pending|ok|denied|expired, token?}
     POST token/revoke            the launcher signs itself out (Bearer)
+    POST herokey {realm}         Hero Key sign-in to a community realm (herokey_sso flag; docs/HERO-KEY-SSO.md)
   GET/POST /wrath/link           the approval page (and the list of linked launchers, with Revoke)
 
 Privacy: presence only between accepted friends (both said yes); "appear offline" shows you offline to
@@ -1245,6 +1246,9 @@ def post(h, path: str) -> None:
             return _json(h, 200, {"ok": True})
         if sub == "report":
             return _json(h, 200, {"ok": True, "text": store.report(acct, pid(), doc.get("reason"), doc.get("note"), via)})
+        if sub == "herokey":   # Hero Key sign-in to a Beacon (wrath_portal.herokey_issue_api, docs/HERO-KEY-SSO.md)
+            st, out = P("herokey_issue_api")(acct, doc.get("realm"), via)
+            return _json(h, st, out)
         if sub == "token/revoke" and how == "token":
             store.revoke(acct, tok=extra)
             store.seen.pop(acct, None)

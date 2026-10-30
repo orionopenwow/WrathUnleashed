@@ -397,12 +397,20 @@
 //     One exception: the Dalaran Hangout (env.hop_home "1") is Wrath itself through the relay, so the env keeps
 //     the player's own Wrath login there (the same account; SRP only, the password never crosses the wire).
 // wrath-page.js shows "Back to Wrath" and, with no login kept yet, the realm's join page.
+// Hero Key sign-in (the site's herokey_sso flag; docs/HERO-KEY-SSO.md): the env may instead carry hop_sso, a signed
+// assertion for this realm, with a one-time login for it in user/pass. This posts the assertion to the relay
+// (<relay>/api/realms/<id>/herokey; the realm's agent checks it and sets that login) and holds the client's start
+// (the wasm download) until the realm answered, at most 8 s. No join page, nothing kept in localStorage. A realm
+// that doesn't take it (or any failure) falls back to the login this browser keeps, else the join page.
+// "Use another account" turns it off for that realm in this browser (wu.leyline.sso.off.<id>).
 // window.__wuHop.status(): what this page did (the hop, the rewritten sockets, the hop watcher), for live tests;
 // never a password.
 (function (root) {
   'use strict';
   var ID = /^[a-z2-7]{16}$/;
   var KEY = 'wu.leyline.login.';
+  var SSO_OFF = 'wu.leyline.sso.off.';
+  var SSO_WAIT = 8000;
   var USER = /^[A-Za-z0-9]{3,16}$/, PASS = /^[\x21-\x7e]{1,16}$/;
 
   /** hop_ws when it is the relay bridge for this very realm (wss:, or ws: on a plain-http dev page), else null. */
@@ -435,17 +443,105 @@
 
   function forgetLogin(storage, id) { try { storage.removeItem(KEY + id); } catch (e) { /* blocked */ } }
 
+  /** Hero Key sign-in for this realm declined in this browser ("Use another account")? */
+  function ssoDeclined(storage, id) { try { return storage.getItem(SSO_OFF + id) === '1'; } catch (e) { return false; } }
+
+  function setSso(storage, id, on) {
+    try { if (on) storage.removeItem(SSO_OFF + id); else storage.setItem(SSO_OFF + id, '1'); } catch (e) { /* blocked */ }
+  }
+
+  /** The address to redeem env.hop_sso at, when it is well formed: the same relay as the bridge, this realm's
+   * herokey route, an assertion for this realm and a one-time login beside it. Else null. */
+  function ssoRedeem(env, base) {
+    var s = env.hop_sso;
+    if (!s || typeof s !== 'object' || !s.assertion || typeof s.assertion !== 'object' ||
+        typeof s.sig !== 'string' || !/^[0-9a-f]{128}$/.test(s.sig)) return null;
+    var m = /^(wss?):\/\/([A-Za-z0-9.-]+(?::\d{1,5})?)\/ws\/[a-z2-7]{16}$/.exec(base || '');
+    if (!m) return null;
+    var want = (m[1] === 'wss' ? 'https' : 'http') + '://' + m[2] + '/api/realms/' + env.hop + '/herokey';
+    if (s.redeem !== want || s.assertion.aud !== env.hop) return null;
+    if (!/^HK[A-Z2-7]{14}$/.test(env.user || '') || !PASS.test(env.pass || '')) return null;
+    return want;
+  }
+
+  /** POST the assertion; resolves {ok, code} (never rejects), within SSO_WAIT. */
+  function redeem(win, url, sso) {
+    return new Promise(function (done) {
+      var settled = false, timer = null;
+      var finish = function (ok, code) {
+        if (settled) return;
+        settled = true;
+        if (timer !== null && typeof clearTimeout === 'function') clearTimeout(timer);
+        done({ ok: ok, code: code });
+      };
+      timer = setTimeout(function () { finish(false, 'timeout'); }, SSO_WAIT);
+      try {
+        win.fetch(url, { method: 'POST', mode: 'cors', credentials: 'omit', referrerPolicy: 'no-referrer',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify({ assertion: sso.assertion, sig: sso.sig }) })
+          .then(function (r) {
+            if (r.ok) return finish(true, 'ok');
+            return r.json().then(function (j) { finish(false, String((j && j.code) || r.status).slice(0, 20)); },
+                                 function () { finish(false, String(r.status)); });
+          }, function () { finish(false, 'network'); });
+      } catch (e) { finish(false, 'network'); }
+    });
+  }
+
+  /** Hold the client's start (its wasm download) until `pending` settles. */
+  function holdStart(win, pending) {
+    var orig = win.fetch;
+    if (typeof orig !== 'function') return;
+    win.fetch = function (input) {
+      var path = '';
+      try {
+        var url = typeof input === 'string' ? input : (input && input.url) || '';
+        path = new URL(String(url), win.location.href).pathname;
+      } catch (e) { /* not a URL */ }
+      if (!/\/wenilla_bg\.wasm$/.test(path)) return orig.apply(this, arguments);
+      var self = this, args = arguments;
+      return pending.then(function () { return orig.apply(self, args); });
+    };
+  }
+
   function apply(win) {
     var env = win.__wenilla_env;
     if (!env || typeof env !== 'object' || !ID.test(env.hop || '')) return null;
     var base = hopBase(env, win.location.protocol);
     if (!base) { console.warn('leyline hop: no usable relay address; staying put'); return null; }
     var home = env.hop_home === '1' && USER.test(env.user || '') && PASS.test(env.pass || '');
-    var login = null;
+    var login = null, sso = null, pending = null, declined = false;
     if (!home) {
-      delete env.user; delete env.pass;   // only ever this realm's own login
-      try { login = savedLogin(win.localStorage, env.hop); } catch (e) { login = null; }
-      if (login) { env.user = login.user; env.pass = login.pass; }
+      var url = null;
+      if (env.hop_sso) {
+        try { declined = ssoDeclined(win.localStorage, env.hop); } catch (e) { declined = false; }
+        url = declined ? null : ssoRedeem(env, base);
+      }
+      var one = url ? { user: env.user, pass: env.pass } : null;
+      var ticket = env.hop_sso;
+      delete env.user; delete env.pass; delete env.hop_sso;   // only ever this realm's own login
+      var fallback = function () {
+        var saved = null;
+        try { saved = savedLogin(win.localStorage, env.hop); } catch (e) { saved = null; }
+        if (saved) { env.user = saved.user; env.pass = saved.pass; }
+        return saved;
+      };
+      if (url && typeof win.fetch === 'function') {
+        env.user = one.user; env.pass = one.pass;   // the one-time login, once the realm took the assertion
+        sso = 'pending';
+        pending = redeem(win, url, ticket).then(function (r) {
+          if (api.state) api.state.sso = r.ok ? 'ok' : 'failed:' + r.code;
+          if (!r.ok) {
+            delete env.user; delete env.pass;
+            var saved = fallback();
+            if (api.state) api.state.login = !!saved;
+          }
+          return r.ok;
+        });
+        holdStart(win, pending);
+      } else {
+        login = fallback();
+      }
     }
     var Orig = win.WebSocket;
     if (typeof Orig === 'function' && !Orig.__wuHop) {
@@ -464,7 +560,8 @@
       Hop.__wuHop = true;
       win.WebSocket = Hop;
     }
-    return { id: env.hop, name: String(env.hop_name || ''), base: base, login: !!login || home, home: home };
+    return { id: env.hop, name: String(env.hop_name || ''), base: base, login: !!login || home || !!pending, home: home,
+             sso: sso, ssoPending: pending, ssoOffer: declined };
   }
 
   /** For live tests: the hop (no secrets), the sockets the client opened and where they went, the hop watcher. */
@@ -474,7 +571,7 @@
     return {
       page: (root.location && root.location.host) || '',
       hop: api.state ? { id: api.state.id, name: api.state.name, base: api.state.base, login: api.state.login,
-                         home: !!api.state.home } : null,
+                         home: !!api.state.home, sso: api.state.sso || undefined } : null,
       envHop: typeof env.hop === 'string' ? env.hop : null,
       signedIn: !!(env.user && env.pass),
       sockets: api.sockets.slice(),
@@ -482,8 +579,9 @@
     };
   }
 
-  var api = { KEY: KEY, hopBase: hopBase, rewrite: rewrite, savedLogin: savedLogin, saveLogin: saveLogin,
-              forgetLogin: forgetLogin, apply: apply, state: null, sockets: [], watch: null, status: status };
+  var api = { KEY: KEY, SSO_OFF: SSO_OFF, hopBase: hopBase, rewrite: rewrite, savedLogin: savedLogin, saveLogin: saveLogin,
+              forgetLogin: forgetLogin, ssoDeclined: ssoDeclined, setSso: setSso, ssoRedeem: ssoRedeem, apply: apply,
+              state: null, sockets: [], watch: null, status: status };
   root.__wuHop = api;
   try { if (root.location) api.state = apply(root); } catch (e) { console.warn('wrath-early.js leyline hop', e); }
 })(typeof window !== 'undefined' ? window : globalThis);

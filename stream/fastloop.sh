@@ -37,6 +37,8 @@ rm -rf "$BK/docs"
 if [ -d "$WU/portal/docs" ]; then cp -a "$WU/portal/docs" "$BK/docs"; had_docdir=1; fi
 had_host=""
 if [ -f "$WU/portal/hostflow.py" ]; then cp -p "$WU/portal/hostflow.py" "$BK/"; [ ! -f "$WU/portal/ed25519_pure.py" ] || cp -p "$WU/portal/ed25519_pure.py" "$BK/"; had_host=1; fi
+had_herokey=""
+if [ -f "$WU/portal/herokey_sso.py" ]; then cp -p "$WU/portal/herokey_sso.py" "$BK/herokey_sso.py"; had_herokey=1; fi
 had_projects=""
 if [ -f "$WU/portal/projects.py" ]; then cp -p "$WU/portal/projects.py" "$BK/projects.py"; had_projects=1; fi
 had_social=""
@@ -69,6 +71,7 @@ put_back() {
   if [ -n "$had_docdir" ]; then cp -a "$BK/docs" "$WU/portal/docs"; fi
   if [ -n "$had_host" ]; then cp -p "$BK/hostflow.py" "$WU/portal/hostflow.py"; [ ! -f "$BK/ed25519_pure.py" ] || cp -p "$BK/ed25519_pure.py" "$WU/portal/"
   else rm -f "$WU/portal/hostflow.py"; fi
+  if [ -n "$had_herokey" ]; then cp -p "$BK/herokey_sso.py" "$WU/portal/herokey_sso.py"; else rm -f "$WU/portal/herokey_sso.py"; fi
   if [ -n "$had_projects" ]; then cp -p "$BK/projects.py" "$WU/portal/projects.py"; else rm -f "$WU/portal/projects.py"; fi
   if [ -n "$had_social" ]; then cp -p "$BK/social.py" "$WU/portal/social.py"; else rm -f "$WU/portal/social.py"; fi
   if [ -n "$had_network" ]; then cp -p "$BK/network.py" "$WU/portal/network.py"; else rm -f "$WU/portal/network.py"; fi
@@ -119,6 +122,13 @@ if [ -f hostflow.py ] && [ -f ed25519_pure.py ]; then
   python3 -I -c 'import ast,sys;[ast.parse(open(f).read()) for f in sys.argv[1:]]' hostflow.py ed25519_pure.py \
     && install -m 644 hostflow.py ed25519_pure.py "$WU/portal/"
   install -d -m 700 "$WU/hosted"
+fi
+# Hero Key sign-in on Beacons (herokey_sso.py, docs/HERO-KEY-SSO.md): optional, and idle until the herokey_sso flag is
+# on. It signs with `cryptography` when the image has it, else the kit's ed25519_pure.py (installed above with hostflow,
+# or here). Its key files are made in $WU/portal-data/leyline (/data/leyline, 0600) on first use.
+if [ -f herokey_sso.py ]; then
+  python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' herokey_sso.py && install -m 644 herokey_sso.py "$WU/portal/herokey_sso.py"
+  if [ -f ed25519_pure.py ] && [ ! -f "$WU/portal/ed25519_pure.py" ]; then install -m 644 ed25519_pure.py "$WU/portal/"; fi
 fi
 # its community links (stream/projects.py): stored in $WU/portal-data (wu-portal's /data, mounted by stream-lib.sh/deploy.sh)
 if [ -f projects.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' projects.py && install -m 644 projects.py "$WU/portal/projects.py"; fi

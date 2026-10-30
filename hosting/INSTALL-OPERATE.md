@@ -141,6 +141,7 @@ Friends open the link once on the PC they play from, make an account on that pag
 | list it / unlist it | `Realm tools.bat public` / `private` | `... public` / `private` |
 | claim it (token from the site) | `Realm tools.bat claim TOKEN` | `... claim TOKEN` |
 | join-page signups | `Realm tools.bat signup invite\|open\|off` | `... signup invite\|open\|off` |
+| Hero Key sign-in (off by default; docs/HERO-KEY-SSO.md) | | `... herokey on\|off` |
 | logs | `Realm tools.bat logs` | `... logs [service]` |
 
 Keep `state\` and `.env`: they are the realm's identity (key, invite, passwords). Back up

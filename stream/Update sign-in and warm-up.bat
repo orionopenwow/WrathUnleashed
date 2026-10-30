@@ -44,6 +44,10 @@ if exist hub_rank.py set "LINKS=%LINKS% hub_rank.py"
 rem "+ Your server" (hostflow.py) with the kit's Ed25519, always as a pair
 if exist hostflow.py if exist ..\hosting\kit\tools\wunet\ed25519_pure.py copy /y "..\hosting\kit\tools\wunet\ed25519_pure.py" ed25519_pure.py >nul
 if exist hostflow.py if exist ed25519_pure.py set "LINKS=%LINKS% hostflow.py ed25519_pure.py"
+rem Hero Key sign-in on Beacons (herokey_sso.py, docs\HERO-KEY-SSO.md; idle until the herokey_sso flag is on), with the kit's Ed25519
+if exist herokey_sso.py if not exist ed25519_pure.py if exist ..\hosting\kit\tools\wunet\ed25519_pure.py copy /y "..\hosting\kit\tools\wunet\ed25519_pure.py" ed25519_pure.py >nul
+if exist herokey_sso.py set "LINKS=%LINKS% herokey_sso.py"
+if exist herokey_sso.py if exist ed25519_pure.py if not exist hostflow.py set "LINKS=%LINKS% ed25519_pure.py"
 rem the Leyline docs: docs.py and the pages, which live in the repo's docs\leyline (or docs\leyline next to this file)
 set "DOCS="
 if exist docs.py if exist docs\leyline\index.md set "DOCS=docs.py docs/leyline"
@@ -54,7 +58,7 @@ echo [1/2] Uploading...
 scp %OPTS% "%T%" %HOST%:/tmp/wu-fastloop.tgz || (echo Upload failed. If it says "timed out", wait 2 minutes and run this again. & pause & exit /b 1)
 
 echo [2/2] Applying it on the server (under a minute)...
-ssh %OPTS% %HOST% "mkdir -p /srv/wrath/fastloop && rm -rf /srv/wrath/fastloop/www-files /srv/wrath/fastloop/docs /srv/wrath/fastloop/hub && tar -xzf /tmp/wu-fastloop.tgz -C /srv/wrath/fastloop && rm -f /tmp/wu-fastloop.tgz && cd /srv/wrath/fastloop && sed -i 's/\r$//' fastloop.sh wrath_portal.py $(ls links.py demo.py armory.py modes.py modes_data.py playmodes.py workshop.py creations.py hostflow.py ed25519_pure.py projects.py social.py network.py docs.py leyline_net.py admin.py wu-mod.py hub.py hub_rank.py 2>/dev/null) && bash fastloop.sh 2>&1 | tee fastloop.log; grep -q '^FASTLOOP OK' fastloop.log"
+ssh %OPTS% %HOST% "mkdir -p /srv/wrath/fastloop && rm -rf /srv/wrath/fastloop/www-files /srv/wrath/fastloop/docs /srv/wrath/fastloop/hub && tar -xzf /tmp/wu-fastloop.tgz -C /srv/wrath/fastloop && rm -f /tmp/wu-fastloop.tgz && cd /srv/wrath/fastloop && sed -i 's/\r$//' fastloop.sh wrath_portal.py $(ls links.py demo.py armory.py modes.py modes_data.py playmodes.py workshop.py creations.py hostflow.py ed25519_pure.py herokey_sso.py projects.py social.py network.py docs.py leyline_net.py admin.py wu-mod.py hub.py hub_rank.py 2>/dev/null) && bash fastloop.sh 2>&1 | tee fastloop.log; grep -q '^FASTLOOP OK' fastloop.log"
 if errorlevel 1 (
   echo.
   echo It did not report success; see the lines above. Anything it changed was put back.

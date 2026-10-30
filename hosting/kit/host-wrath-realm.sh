@@ -12,6 +12,7 @@
 #   bash host-wrath-realm.sh public|private
 #   bash host-wrath-realm.sh claim TOKEN   link the realm to your Hero Key account (token from the site)
 #   bash host-wrath-realm.sh signup invite|open|off   who may make accounts on the join page
+#   bash host-wrath-realm.sh herokey on|off   Hero Key sign-in from the Leyline website (off by default)
 #   bash host-wrath-realm.sh rules         after editing state/rules.txt or state/beacon.json (realm list text)
 #   bash host-wrath-realm.sh logs [service]
 #
@@ -325,6 +326,7 @@ case "${1:-up}" in
   new-invite) need_tools; tools new-invite ;;
   public|private) need_tools; tools visibility "$1"; say "Restart for the anti-cheat setting: bash host-wrath-realm.sh" ;;
   signup) need_tools; [ $# -ge 2 ] || die "Usage: bash host-wrath-realm.sh signup invite|open|off"; tools signup "$2" ;;
+  herokey) need_tools; [ "${2:-}" = on ] || [ "${2:-}" = off ] || die "Usage: bash host-wrath-realm.sh herokey on|off"; tools herokey "$2" ;;
   rules) need_tools; tools rules ;;
   claim) need_tools; [ $# -ge 2 ] || die "Usage: bash host-wrath-realm.sh claim TOKEN"; tools claim "$2" ;;
   logs) need_docker; shift; "${COMPOSE[@]}" logs --tail 200 "$@" ;;

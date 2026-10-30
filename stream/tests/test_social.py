@@ -273,6 +273,17 @@ st, doc, _ = call("POST", API + "send", {"to": friend(s, "Bob")["pid"], "text": 
 check("the launcher sends with its token (no csrf needed)", st == 200 and doc["message"]["via"] == "launcher")
 st, doc, _ = call("GET", API + "state", token="x" * 43)
 check("a wrong token: 401", st == 401)
+# Hero Key sign-in to a Beacon (docs/HERO-KEY-SSO.md): the herokey_sso flag is off by default
+st, doc, _ = call("POST", API + "herokey", {"realm": "abcdefghijk2345a"}, token=TOKEN)
+check("herokey with the flag off: 404, nothing issued", st == 404 and "isn't on" in doc.get("error", ""), doc)
+st, doc, _ = call("POST", API + "herokey", {"realm": "abcdefghijk2345a"}, token="x" * 43)
+check("herokey with a wrong token: 401", st == 401)
+_hk_seen = []
+_hk_saved = wp.herokey_issue_api
+wp.herokey_issue_api = lambda acct, realm, via: (_hk_seen.append((acct, realm, via)), (200, {"ok": True}))[1]
+st, doc, _ = call("POST", API + "herokey", {"realm": "abcdefghijk2345a", "acct": "WR000002"}, token=TOKEN)
+check("herokey: the launcher's own account, its realm, via launcher", st == 200 and _hk_seen == [("WR000001", "abcdefghijk2345a", "launcher")], _hk_seen)
+wp.herokey_issue_api = _hk_saved
 
 # long poll: wakes on a change
 v = state(token=TOKEN)["v"]

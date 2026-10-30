@@ -143,6 +143,9 @@ class Config:
         self.accounts_per_ip_hour = _env_int("RELAY_ACCOUNTS_PER_IP_HOUR", 3)
         self.accounts_per_realm_day = _env_int("RELAY_ACCOUNTS_PER_REALM_DAY", 50)
         self.knocks_per_ip_min = _env_int("RELAY_KNOCKS_PER_IP_MIN", 10)
+        # Hero Key sign-in (docs/HERO-KEY-SSO.md): assertions passed to a realm that takes them, per IP and per realm
+        self.herokey_per_ip_min = _env_int("RELAY_HEROKEY_PER_IP_MIN", 20)
+        self.herokey_per_realm_min = _env_int("RELAY_HEROKEY_PER_REALM_MIN", 120)
         self.pair_lookups_per_ip_min = _env_int("RELAY_PAIR_PER_MIN_PER_IP", 60)   # the website asks for its realms
         self.max_pairs = _env_int("RELAY_MAX_PAIRS", 20000)
         self.status_ttl = _env_int("RELAY_STATUS_TTL_SECS", 30)
@@ -270,6 +273,7 @@ class Session:
         self.signup = hello.get("signup", "invite")
         self.host_sha = (hello.get("host_sha256") or "").lower() or None
         self.pair_sha = (hello.get("pair_sha256") or "").lower() or None
+        self.herokey = hello.get("herokey") is True   # the realm takes Hero Key sign-in (its agent says so)
         self.version = str(hello.get("version", ""))[:40]
         self.alloc = alloc
         self.streams: dict[int, Stream] = {}
@@ -371,6 +375,8 @@ class Relay:
         self.acct_realm = Window(86400)
         self.knock_rate = Window(60)
         self.pair_rate = Window(60)
+        self.hk_ip = Window(60)
+        self.hk_realm = Window(60)
         self.salt = secrets.token_bytes(16)
         self.metrics = collections.Counter()
         self.dirty = False
@@ -842,6 +848,8 @@ class Relay:
         if isinstance(u.get("pair_sha256"), str) and HEX64_RE.match(u["pair_sha256"]):
             s.pair_sha = u["pair_sha256"].lower()
             self.remember_pair(s)
+        if isinstance(u.get("herokey"), bool):
+            s.herokey = u["herokey"]
         if isinstance(u.get("name"), str) and NAME_RE.match(u["name"]):
             s.name = u["name"]
         if s.visibility == "private" and self.listing:
@@ -862,6 +870,14 @@ class Relay:
             return {"Access-Control-Allow-Origin": origin, "Vary": "Origin",
                     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
                     "Access-Control-Allow-Headers": "Content-Type"}
+        return {}
+
+    def cors_play(self, req):
+        """CORS for the browser game's own pages too (the Hero Key sign-in is posted from the game page)."""
+        origin = req.headers.get("origin", "")
+        if origin in self.cfg.play_origins or origin in self.cfg.site_origins:
+            return {"Access-Control-Allow-Origin": origin, "Vary": "Origin",
+                    "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type"}
         return {}
 
     async def on_http(self, reader, writer):
@@ -932,6 +948,8 @@ class Relay:
                 return self.api_knock(req, rid)
             if len(parts) == 4 and parts[3] == "accounts" and m == "POST":
                 return await self.api_account(req, rid)
+            if len(parts) == 4 and parts[3] == "herokey" and m == "POST":
+                return await self.api_herokey(req, rid)
         if len(parts) == 3 and parts[:2] == ["api", "pair"] and HEX64_RE.match(parts[2]) and m == "GET":
             return self.api_pair(req, parts[2])
         if parts[:2] == ["api", "listing"] and self.listing:
@@ -1008,6 +1026,8 @@ class Relay:
                "address": self.cfg.name, "auth_port": alloc["auth"], "world_port": alloc["world"],
                "shared_auth_port": self.cfg.shared_auth_port or None,
                "status_url": f"https://{self.cfg.name}/r/{rid}/status.json"}
+        if s and s.herokey:
+            doc["herokey"] = True
         return httpd.response(200, doc, headers=self.cors(req, True))
 
     def api_knock(self, req, rid):
@@ -1067,6 +1087,44 @@ class Relay:
         self.knock(req.ip, rid)
         self.metrics["accounts_created"] += 1
         return httpd.response(201, {"ok": True, "username": user.upper()}, headers=h)
+
+    async def api_herokey(self, req, rid):
+        """POST /api/realms/<id>/herokey {assertion, sig[, invite]}: a Hero Key sign-in for that realm. The relay
+        passes the website's signed assertion to the realm's agent, which checks it (the relay can't forge or
+        alter one: it holds no site key, and the assertion carries only an SRP verifier, never a password)."""
+        h = self.cors_play(req)
+        if not self.hk_ip.hit(req.ip, self.cfg.herokey_per_ip_min):
+            return httpd.response(429, {"error": "slow down", "code": "rate"}, headers=h)
+        doc = req.json()
+        s = self.sessions.get(rid)
+        if not s:
+            return httpd.response(404, {"error": "realm offline", "code": "offline"}, headers=h)
+        if not s.herokey:
+            return httpd.response(403, {"error": "this realm does not take Hero Key sign-in", "code": "off"}, headers=h)
+        if s.visibility == "private" and not (self.knocked(req.ip, rid) or self.invite_ok(s, doc.get("invite"))):
+            return httpd.response(403, {"error": "private realm: open your invite link first", "code": "private"},
+                                  headers=h)
+        a, sig = doc.get("assertion"), doc.get("sig")
+        if not (isinstance(a, dict) and len(json.dumps(a)) < 2048 and isinstance(sig, str) and len(sig) == 128
+                and a.get("aud") == rid):
+            return httpd.response(400, {"error": "not a Hero Key sign-in for this realm", "code": "shape"}, headers=h)
+        if not self.hk_realm.hit(rid, self.cfg.herokey_per_realm_min):
+            return httpd.response(429, {"error": "this realm is busy; try again in a minute", "code": "rate"}, headers=h)
+        try:
+            res = await s.request("herokey_login", assertion=a, sig=sig)
+        except (asyncio.TimeoutError, ConnectionError, ws.WSClosed):
+            return httpd.response(504, {"error": "the realm did not answer", "code": "timeout"}, headers=h)
+        if not res.get("ok"):
+            why = str(res.get("error") or "failed")[:20]
+            self.metrics["herokey_refused"] += 1
+            code = {"off": 403, "banned": 403, "taken": 409, "replay": 409, "expired": 410, "early": 425}.get(why, 400)
+            if why in ("failed", "missing"):
+                code = 502
+            return httpd.response(code, {"error": "the realm refused this sign-in", "code": why}, headers=h)
+        self.knock(req.ip, rid)   # the desktop client's raw TCP path (the shared port) works from this address now
+        self.metrics["herokey_logins"] += 1
+        return httpd.response(200, {"ok": True, "username": str(res.get("user", ""))[:16],
+                                    "valid_s": int(res.get("valid_s") or 0)}, headers=h)
 
     async def status(self, req, rid):
         h = dict(self.cors(req, True), **{"Cache-Control": f"public, max-age={self.cfg.status_ttl}"})
@@ -1134,7 +1192,7 @@ class Relay:
             if n % 12 == 0:
                 self.load_blocklist()
                 for w in (self.conn_rate, self.ws_rate, self.reg_rate, self.acct_ip, self.acct_realm, self.knock_rate,
-                          self.pair_rate):
+                          self.pair_rate, self.hk_ip, self.hk_realm):
                     w.sweep()
                 self.save()
                 if self.listing:

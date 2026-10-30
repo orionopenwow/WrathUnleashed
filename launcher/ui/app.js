@@ -1032,6 +1032,7 @@ async function loadRealms(quiet) {
 // other live realms by the network's fair score, offline ones. The filters narrow the community realms.
 let networkTotals = null;
 let p2pHosting = false;   // direct connections are shown only when the p2p_hosting flag is on (Settings > Advanced)
+let heroKeyOn = false;    // "Sign in with your Hero Key" only with the herokey_sso flag on (docs/HERO-KEY-SSO.md)
 const TAG_LABELS = { blizzlike: "Blizzlike", boosted: "Boosted", custom: "Custom", pvp: "PvP", rp: "RP", hangout: "Hangout", bots: "Bots" };
 const REGION_LABELS = { "na-east": "North America east", "na-west": "North America west", sa: "South America", eu: "Europe",
   africa: "Africa", me: "Middle East", asia: "Asia", oce: "Oceania" };
@@ -1120,6 +1121,13 @@ function renderRealms() {
     else play.title = `Plays with ${fit.name}`;
     play.addEventListener("click", () => playRealm(r, play));
     acts.append(play);
+    if (heroKeyOn && !r.official && r.realm_id && r.state === "live") {
+      const hk = el("button", "btn small", "Sign in with your Hero Key");
+      hk.title = "No account to make: your Hero Key signs you in here (a one-time password, shown below)";
+      hk.disabled = play.disabled;
+      hk.addEventListener("click", () => playRealmHeroKey(r, hk));
+      acts.append(hk);
+    }
     if (r.join_url) acts.append(linkBtn("Make an account", r.join_url));
     if (r.discord) acts.append(linkBtn("Discord", r.discord));
     if (r.report_url && !r.official) { const rep = linkBtn("Report", r.report_url); rep.title = "Report this realm to Leyline staff (on the website)"; acts.append(rep); }
@@ -1134,7 +1142,10 @@ for (const id of ["rl-f-build", "rl-f-tag", "rl-f-region", "rl-f-lang", "rl-f-no
   if ($(id)) $(id).addEventListener("change", () => renderRealms());
 }
 if ($("rl-host")) $("rl-host").addEventListener("click", () => show("host"));
-invoke("p2p_flags").then((v) => { p2pHosting = !!(v && v.effective && v.effective.p2p_hosting); }).catch(() => {});
+invoke("p2p_flags").then((v) => {
+  p2pHosting = !!(v && v.effective && v.effective.p2p_hosting);
+  heroKeyOn = !!(v && v.effective && v.effective.herokey_sso);   // Hero Key sign-in on realms (docs/HERO-KEY-SSO.md)
+}).catch(() => {});
 const CORE_LABELS = { azerothcore: "AzerothCore", trinitycore: "TrinityCore", cmangos: "CMaNGOS", vmangos: "vMaNGOS", mangos: "MaNGOS", other: "Other server" };
 $("rl-mine").addEventListener("change", () => renderRealms());
 
@@ -1147,6 +1158,25 @@ async function playRealm(r, btn) {
   try {
     const msg = await invoke("play_realm", { client: picked.id, slug: r.slug });
     say("rl-status", msg + (r.official ? "" : " First time here? Make your account with Make an account."), "ok");
+    await refresh();
+    renderRealms();
+  } catch (e) { say("rl-status", String(e), "bad"); }
+  btn.disabled = false;
+}
+
+// "Sign in with your Hero Key" (the herokey_sso flag): the realm sets a one-time login for this player's account
+// there; the client starts with the account name filled in, and the password is shown here to type (the client
+// can't take one from outside). Nothing is saved.
+async function playRealmHeroKey(r, btn) {
+  const picked = needClient("rl-status");
+  if (!picked) return;
+  btn.disabled = true;
+  say("rl-status", `Signing in to ${r.name} with your Hero Key…`);
+  try {
+    const l = await invoke("play_realm_herokey", { client: picked.id, slug: r.slug });
+    const mins = Math.max(1, Math.round((l.valid_s || 600) / 60));
+    say("rl-status", `Started on ${r.name} as ${l.user}. At the login screen type this one-time password: ${l.pass} `
+      + `(it works for ${mins} minutes and is not saved).`, "ok");
     await refresh();
     renderRealms();
   } catch (e) { say("rl-status", String(e), "bad"); }

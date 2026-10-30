@@ -30,7 +30,7 @@ import time
 import urllib.error
 import urllib.request
 
-from wunet import keys, mux, ws
+from wunet import herokey, keys, mux, ws
 
 from . import cores
 from wunet.mux import CLOSE, DATA, OPEN
@@ -67,6 +67,14 @@ def resolve_ipv4(name):
 def split_hp(s, default_port):
     h, _, p = s.rpartition(":")
     return (h, int(p)) if h else (s, default_port)
+
+
+def herokey_salt():
+    """32 random bytes whose most significant (last) byte is not 0 (every core stores it at 32 bytes)."""
+    while True:
+        b = os.urandom(32)
+        if b[-1]:
+            return b
 
 
 # ------------------------------------------------------------------------------ the realm's DB
@@ -112,6 +120,21 @@ class RealmDB:
                     cur.execute("INSERT INTO account_access (id, gmlevel, RealmID) SELECT id, %s, -1 FROM account "
                                 "WHERE username = %s", (gmlevel, username))
                 return "ok"
+        finally:
+            c.close()
+
+    def set_login(self, username, salt, verifier):
+        """Hero Key sign-in (wunet/herokey.py): a new SRP6 salt + verifier on an account this agent made for a
+        Hero Key pseudonym. 'updated', or 'missing' (the host deleted it: the agent makes it again)."""
+        c = self._conn("acore_auth")
+        try:
+            with c.cursor() as cur:
+                cur.execute("SELECT id FROM account WHERE username = %s", (username,))
+                if not cur.fetchone():
+                    return "missing"
+                cur.execute("UPDATE account SET salt = %s, verifier = %s WHERE username = %s",
+                            (bytes.fromhex(salt), bytes.fromhex(verifier), username))
+                return "updated"
         finally:
             c.close()
 
@@ -193,6 +216,12 @@ class Agent:
         self.tick = 5          # housekeeping interval (tests shorten it)
         self.ping_every = 20
         self.heartbeat_every = int(os.environ.get("WU_HEARTBEAT_SECS", "60"))
+        # Hero Key sign-in (wunet/herokey.py, docs/HERO-KEY-SSO.md): off unless host.json "herokey": true and the
+        # site's key is pinned
+        self.hk_seen = herokey.ReplayCache()
+        self.hk_gen = {}          # account -> generation of its one-time login (a newer sign-in wins)
+        self.hk_lock = asyncio.Lock()
+        self.hk_tasks = set()
 
     def _mtime(self):
         try:
@@ -218,6 +247,12 @@ class Agent:
         with it, and only those may take the GM account's name."""
         hs = self.cfg.get("host_secret")
         return hashlib.sha256(hs.encode()).hexdigest() if hs else None
+
+    def herokey_on(self):
+        """Hero Key sign-in: the host turned it on (`setup.py herokey on`), the site's key is pinned, and this is a
+        realm whose accounts the agent keeps (not the operator's own realm, which has its own sign-in)."""
+        return (self.cfg.get("herokey") is True and self.db is not None and not self.official()
+                and bool(herokey.pinned_keys()))
 
     def save_state(self, **kw):
         self.relay_state.update(kw, updated=int(time.time()))
@@ -273,6 +308,8 @@ class Agent:
             hello["host_sha256"] = self.host_sha()
         if self.pair_sha():
             hello["pair_sha256"] = self.pair_sha()
+        if self.herokey_on():
+            hello["herokey"] = True   # only sent when on: an agent with it off says what it always said
         await self.ws.send(json.dumps({"hello": hello, "sig": keys.sign_doc(self.secret, hello, keys.CTX_RELAY_LOGIN)}))
         op, msg = await asyncio.wait_for(self.ws.recv(), 15)
         doc = json.loads(msg)
@@ -428,11 +465,76 @@ class Agent:
                     r = await asyncio.to_thread(self.db.create_account, doc["username"], doc["salt"], doc["verifier"])
                     res = {"res": rid, "ok": r == "ok", "error": None if r == "ok" else r}
                     log.info("account %s for a player: %s", doc["username"], r)
+            elif doc.get("op") == "herokey_login":
+                res = dict(res, **await self.herokey_login(doc))
         except Exception as e:  # report, never crash the tunnel
             log.warning("request %s failed: %s", doc.get("op"), e)
             res["error"] = "failed"
         if self.ws and not self.ws.closed:
             self.ws.send_nowait(json.dumps(res))
+
+    # -------------------------------------------------------------- Hero Key sign-in
+    def hk_map_path(self):
+        return os.path.join(self.state_dir, "herokey-accounts.json")
+
+    async def herokey_login(self, doc):
+        """A signed assertion from the website (relayed, unread, by the relay): check it, make or find the account for
+        its pseudonym, set the one-time SRP login it carries, and expire that login after login_ttl seconds. Never
+        logs the assertion; the account name is enough to follow what happened."""
+        if not self.herokey_on():
+            return {"ok": False, "error": "off"}
+        claims, why = herokey.check(doc.get("assertion"), doc.get("sig"), self.cfg["realm_id"],
+                                    herokey.pinned_keys(), self.hk_seen)
+        if why:
+            log.info("Hero Key sign-in refused: %s", why)
+            return {"ok": False, "error": why}
+        sub = claims["sub"]
+        if sub in (self.cfg.get("herokey_banned") or []):
+            return {"ok": False, "error": "banned"}
+        user = herokey.account_name(sub)
+        if user == (self.cfg.get("gm_name") or "").upper():
+            return {"ok": False, "error": "reserved"}
+        salt, ver = claims["salt"], claims["verifier"]
+        async with self.hk_lock:
+            m = read_json(self.hk_map_path(), {}) or {}
+            known = isinstance(m.get(sub), dict)
+            if known:
+                r = await asyncio.to_thread(self.db.set_login, user, salt, ver)
+                if r == "missing":   # the host deleted the account: a fresh one, same name
+                    r = await asyncio.to_thread(self.db.create_account, user, salt, ver)
+                    r = "updated" if r == "ok" else r
+                if r != "updated":
+                    return {"ok": False, "error": r}
+            else:
+                r = await asyncio.to_thread(self.db.create_account, user, salt, ver)
+                if r != "ok":   # "taken": an account of that name this agent did not make for a Hero Key
+                    return {"ok": False, "error": r}
+                m[sub] = {"account": user, "first": int(time.time())}
+            m[sub]["last"] = int(time.time())
+            try:
+                write_json(self.hk_map_path(), m)
+            except OSError as e:
+                log.warning("cannot write herokey-accounts.json: %s", e)
+        ttl = max(30, min(int(claims["login_ttl"]), int(self.cfg.get("herokey_login_ttl_max") or herokey.LOGIN_TTL_MAX)))
+        gen = self.hk_gen.get(user, 0) + 1
+        self.hk_gen[user] = gen
+        t = asyncio.ensure_future(self.herokey_expire(user, gen, ttl))
+        self.hk_tasks.add(t)
+        t.add_done_callback(self.hk_tasks.discard)
+        log.info("Hero Key sign-in: account %s (%s), login valid %d s", user, "known" if known else "new", ttl)
+        return {"ok": True, "user": user, "new": not known, "valid_s": ttl}
+
+    async def herokey_expire(self, user, gen, after):
+        """After login_ttl: a random salt and verifier, so the one-time password stops working. A player already in
+        the world stays (the world server checks the session key, not the verifier)."""
+        await asyncio.sleep(after)
+        if self.hk_gen.get(user) != gen:
+            return   # a newer sign-in set its own login (and its own expiry)
+        salt = herokey_salt()
+        try:
+            await asyncio.to_thread(self.db.set_login, user, salt.hex(), os.urandom(32).hex())
+        except Exception as e:  # the next sign-in sets a new login anyway
+            log.warning("could not expire the one-time login of %s: %s", user, e)
 
     @staticmethod
     def status_from_url(url):
@@ -484,7 +586,7 @@ class Agent:
             if m != self.cfg_mtime:
                 self.cfg_mtime = m
                 new = read_json(self.cfg_path) or self.cfg
-                changed = {k for k in ("name", "visibility", "invite_secret", "signup", "host_secret", "claim")
+                changed = {k for k in ("name", "visibility", "invite_secret", "signup", "host_secret", "claim", "herokey")
                            if new.get(k) != self.cfg.get(k)}
                 self.cfg = new
                 if changed and self.ws and not self.ws.closed:
@@ -494,6 +596,8 @@ class Agent:
                         upd["host_sha256"] = self.host_sha()
                     if self.pair_sha():
                         upd["pair_sha256"] = self.pair_sha()
+                    if "herokey" in changed:
+                        upd["herokey"] = self.herokey_on()
                     self.ws.send_nowait(json.dumps({"update": upd}))
                     log.info("told the relay: %s changed", ", ".join(sorted(changed)))
                 if "name" in changed:

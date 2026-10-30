@@ -31,6 +31,13 @@ The listing side is built and tested. The website side, the "Claim a realm" page
 
 The design calls this Hero Key v2: an Ed25519 challenge and response, so the host never types a password into anything a realm can see.
 
+## Signing in to community realms (coming)
+
+Built but switched off for now: one Hero Key signs you in to any community realm that takes it, in the browser game
+and in the launcher, with no account to make per realm and no password kept in the browser. Each realm sees a
+different id for you, so realms can't tell it's the same player. The details, for the curious and for hosts:
+`docs/HERO-KEY-SSO.md` in the repo.
+
 ## To confirm
 
 These are in the Leyline Launcher repo, not here, so this page can't check them:
