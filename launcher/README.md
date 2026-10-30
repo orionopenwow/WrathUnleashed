@@ -11,7 +11,7 @@ No telemetry, no accounts.
 | Page | State |
 |---|---|
 | **Home** | pick a client and a realm, then PLAY: sets the client's realm address (see below; the original is kept as `<file>.leyline-backup`) and starts it. A realm of another build says which client it needs. *Browser* opens https://play.openvanilla.app/wrath. |
-| **Game clients** | add a client by folder. The build is read from the executable's version resource: 1.12.1 (5875), 2.4.3 (8606), 3.3.5a (12340), 4.3.4 (15595), 5.4.8 (18414); anything else is listed as **other** (realms only, no mods). No executable version: the data files decide. It checks the install looks complete and lists what is missing. Leyline never downloads a client. |
+| **Game clients** | add a client by folder. The build is read from the executable's version resource: 1.12.1 (5875), 2.4.3 (8606) and 3.3.5a (12340) for now; anything else (4.3.4 and 5.4.8 included, see below) is listed as **other** (realms only, no mods). No executable version: the data files decide. It checks the install looks complete and lists what is missing. Leyline never downloads a client. |
 | **Discover** | the Workshop catalog (`/wrath/mods/all.json`): 12 categories, search, credits, links to each project's page, source and author; one-click INSTALL / UPDATE into the picked client; mods for other builds are flagged and can't be installed. |
 | **My Mods** | per client: what is installed, the update ready, native code; one click to update or remove, turn off / on, UPDATE ALL; drop (or choose) a .zip, an addon folder, a .MPQ patch or a native mod (.dll, .asi; a one-time OK per mod). The title bar's pill counts Workshop updates across all clients. |
 | **Realms** | the official realm plus the relay's Beacons, with their server (AzerothCore, TrinityCore, CMaNGOS, vMaNGOS, MaNGOS, other), build, status and players; PLAY picks one of your clients of the realm's build (or says which is missing), sets its realm address and starts it; "Only realms my clients can play"; join a private realm with its invite link; BACK TO WRATH; put back your own realmlist. |
@@ -21,13 +21,15 @@ No telemetry, no accounts.
 
 ### Builds: what Leyline knows per client
 
+**For now Leyline offers the 1.12.1, 2.4.3 and 3.3.5a clients only** (the owner's call, 2026-10-30). 4.3.4 and 5.4.8 stay in the code but are hidden from players and hosts; `MAX_OFFERED_BUILD` (`clients.rs`, `app.js`) or `LEYLINE_ALL_CLIENTS=1` brings them back.
+
 | Build | Executable version | Realm address goes to | Addon `## Interface:` | Client patches (.MPQ) |
 |---|---|---|---|---|
 | 1.12.1 | 1.12.1.5875 | `realmlist.wtf` next to the game | 11200 | yes |
 | 2.4.3 | 2.4.3.8606 | `Data/<locale>/realmlist.wtf` (+ `realmList` in `WTF/Config.wtf` if there is one) | 20400 | yes |
 | 3.3.5a | 3.3.5.12340 | `Data/<locale>/realmlist.wtf` (+ `realmList` in `WTF/Config.wtf` if there is one) | 30300 | yes |
-| 4.3.4 | 4.3.4.15595 | `SET realmlist "..."` in `WTF/Config.wtf` (added if missing) | 40300 | no |
-| 5.4.8 | 5.4.8.18414 | `SET realmlist "..."` in `WTF/Config.wtf` (added if missing) | 50400 | no |
+| 4.3.4 (hidden for now) | 4.3.4.15595 | `SET realmlist "..."` in `WTF/Config.wtf` (added if missing) | 40300 | no |
+| 5.4.8 (hidden for now) | 5.4.8.18414 | `SET realmlist "..."` in `WTF/Config.wtf` (added if missing) | 50400 | no |
 | other | anything else | by its major version: 1 next to the game, 2-3 `Data/<locale>`, 4+ `WTF/Config.wtf` | no addons | no |
 
 The first time Leyline changes a realm file it keeps the original next to it as `<file>.leyline-backup`; MY OWN

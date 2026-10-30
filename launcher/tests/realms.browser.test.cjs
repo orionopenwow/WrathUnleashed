@@ -121,3 +121,46 @@ test('Direct connect shows with p2p_hosting on; the Host page saves the realm li
   assert.match(await page.textContent('#hl-card .status'), /Saved/);
   assert.deepEqual(errors, []);
 });
+
+// 4.3.4 and 5.4.8 are not offered for now (the owner, 2026-10-30; app.js MAX_OFFERED_BUILD): a realm on those builds
+// is not listed and not a build filter, and a client on one shows as an other build; the override brings them back.
+async function openWithCata(all) {
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.addInitScript(FAKE, false);
+  await page.addInitScript((all) => {
+    if (all) window.LEYLINE_ALL_CLIENTS = true;
+    const inner = window.__TAURI__.core.invoke;
+    window.__TAURI__.core.invoke = async (cmd, args) => {
+      const r = await inner(cmd, args);
+      if (cmd === 'get_state') r.settings.clients.push({ id: 'c434-1', name: 'My Cata', path: '/y', build: '4.3.4', realmlist: '' });
+      if (cmd === 'realms_list') r.realms = r.realms.concat([Object.assign({}, r.realms[2], { slug: 'c-eeeeeeeeeeeeeeee', realm_id: 'eeeeeeeeeeeeeeee',
+        name: 'Cata Den', build: '4.3.4', version: '4.3.4', core: 'trinitycore', group: 'community' })]);
+      return r;
+    };
+  }, all);
+  await page.goto(INDEX);
+  await page.click('.nav[data-page="realms"]');
+  await page.waitForFunction(() => document.querySelectorAll('#rl-list .realm-card').length > 0);
+  return { page, errors };
+}
+
+test('Realms page: 4.3.4 / 5.4.8 are hidden until the override', async () => {
+  const { page, errors } = await openWithCata(false);
+  assert.ok(!(await names(page)).includes('Cata Den'), 'a 4.3.4 realm is not listed');
+  assert.deepEqual(await page.$$eval('#rl-f-build option', (o) => o.map((x) => x.value)), ['', '1.12.1', '3.3.5a']);
+  await page.click('.nav[data-page="play"]');
+  await page.click('#client-change');
+  const cata = await page.locator('#page-clients .card', { hasText: 'My Cata' }).textContent();
+  assert.match(cata, /other build/); assert.doesNotMatch(cata, /4\.3\.4|15595|40300/);
+  assert.doesNotMatch(await page.textContent('#page-clients .lede'), /4\.3\.4|5\.4\.8/);
+  assert.deepEqual(errors, []);
+  await page.close();
+
+  const all = await openWithCata(true);
+  assert.ok((await names(all.page)).includes('Cata Den'), 'the override lists it');
+  assert.deepEqual(await all.page.$$eval('#rl-f-build option', (o) => o.map((x) => x.value)), ['', '1.12.1', '3.3.5a', '4.3.4']);
+  assert.deepEqual(all.errors, []);
+  await all.page.close();
+});
