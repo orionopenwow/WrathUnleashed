@@ -327,6 +327,17 @@ page = b.decode()
 check("from the game: what is wrong is left out, and said", st == 200 and "Left out (not valid): bots, evil, name, xp." in page
       and "My WoW" not in page and "<script" not in page)
 check("prefill: a ruleset of another core is left out", hf.prefill("core=cmangos&preset=main")[1] == ["preset"])
+# ready-made realms (owner 2026-10-30: "a Duels Server with simple rules, example build and mod servers"): each fills the
+# form with what the kit already supports, and passes the same checks as a typed-in form
+for _rid, rcp in hf.RECIPES.items():
+    v, dropped = hf.prefill("recipe=" + _rid)
+    fm = {"name": "Test " + _rid, "preset": v.get("preset", ""), "tagline": v.get("tagline", ""),
+            "rules": "\n".join(v.get("rules", [])), "visibility": "private", "gm": "TESTGM", **{k: v[k] for k in hf.OPTION_KEYS if k in v}}
+    clean, errs = hf.validate(fm)
+    check(f"recipe {_rid}: fills preset, options, tagline and rules, and passes validate", not dropped and v.get("preset") == rcp[2]
+          and v.get("rules") == list(rcp[5]) and not errs, (dropped, errs))
+check("recipe: the query still wins over the recipe", hf.prefill("recipe=duels&bots=5")[0].get("bots") == "5")
+check("recipe: an unknown recipe is just left out", hf.prefill("recipe=nope")[0] == {})
 check("prefill: rates and bots are AzerothCore's", hf.prefill("preset=cmangos-1.12.1&xp=3&bots=5")[1] == ["bots", "xp"])
 for label, kw, field in (("rate out of range", {"xp": "11"}, "xp"), ("bots on the hangout", {"bots": "5"}, "bots"),
                          ("start outside Classic levelling", {"start": "level1"}, "start"), ("bad tag", {"tags": "bots"}, "tags"),
