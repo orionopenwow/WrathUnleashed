@@ -31,6 +31,8 @@ import urllib.error
 import urllib.request
 
 from wunet import keys, mux, ws
+
+from . import cores
 from wunet.mux import CLOSE, DATA, OPEN
 
 log = logging.getLogger("wu-agent")
@@ -457,7 +459,8 @@ class Agent:
 
     async def status(self):
         st = {"online": await self.world_up(), "players": None, "bots": None, "uptime_s": None,
-              "profile": self.cfg.get("profile")}
+              "profile": self.cfg.get("profile"),
+              "build": cores.version((self.cfg.get("record") or {}).get("build"))}   # the client players need
         if self.db and not self.cfg.get("status_url"):
             try:
                 st.update(await asyncio.to_thread(self.db.status))
@@ -571,10 +574,8 @@ def main(argv=None):
     ap.add_argument("--state", default=os.environ.get("WU_STATE", "/state"))
     a = ap.parse_args(argv)
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(message)s")
-    db = None
-    if os.environ.get("DB_HOST"):
-        db = RealmDB(os.environ["DB_HOST"], int(os.environ.get("DB_PORT", "3306")), os.environ.get("DB_USER", "root"),
-                     os.environ["DB_PASSWORD"], int(os.environ.get("WU_REALM_DB_ID", "1")))
+    from .coredb import open_db   # WU_CORE: the profile's core (cores.py); AzerothCore's RealmDB when unset
+    db = open_db()
     agent = Agent(a.state, db=db)
     try:
         asyncio.run(agent.run())

@@ -150,12 +150,39 @@ pub fn plain(s: &str) -> String {
     out
 }
 
+/// The compose file for the realm this kit hosts, as the kit's own scripts pick it from `state/host.json`: a
+/// profile for another client (host any client) has its own, `profiles/<profile>/docker-compose.<name>.yml`;
+/// the 3.3.5a profiles (and any kit without that folder) use `docker-compose.host.yml`.
+pub fn compose_file(kit: &Path) -> std::path::PathBuf {
+    let default = kit.join("docker-compose.host.yml");
+    let profile = std::fs::read_to_string(kit.join("state").join("host.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|v| v.get("profile").and_then(|p| p.as_str()).map(str::to_string));
+    let Some(p) = profile.filter(|p| super::profiles::id_ok(p)) else {
+        return default;
+    };
+    let mut found: Vec<std::path::PathBuf> = std::fs::read_dir(kit.join("profiles").join(&p))
+        .map(|d| {
+            d.flatten()
+                .map(|e| e.path())
+                .filter(|f| {
+                    let n = f.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                    f.is_file() && n.starts_with("docker-compose.") && n.ends_with(".yml")
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    found.sort();
+    found.into_iter().next().unwrap_or(default)
+}
+
 /// The compose arguments for the kit (the same as the kit's own scripts use).
 pub fn compose_args(kit: &Path, tail: &[&str]) -> Vec<String> {
     let mut a = vec![
         "compose".to_string(),
         "-f".into(),
-        kit.join("docker-compose.host.yml").display().to_string(),
+        compose_file(kit).display().to_string(),
         "--project-directory".into(),
         kit.display().to_string(),
     ];
@@ -209,6 +236,27 @@ mod tests {
         assert_eq!(t[3], "/home/me/hostpack/kit:/kit");
         assert_eq!(t.last().unwrap(), "new-invite");
         assert_eq!(plain("\u{1b}[32mok\u{1b}[0m\r\nnext\u{7}"), "ok\nnext");
+    }
+
+    #[test]
+    fn a_profile_for_another_client_uses_its_compose_file() {
+        let d = std::env::temp_dir().join(format!("wu-compose-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("state")).unwrap();
+        std::fs::create_dir_all(d.join("profiles/cmangos-2.4.3")).unwrap();
+        std::fs::write(d.join("profiles/cmangos-2.4.3/docker-compose.cmangos-2.4.3.yml"), "services: {}").unwrap();
+        assert!(compose_file(&d).ends_with("docker-compose.host.yml"), "no host.json yet: the 3.3.5a default");
+        std::fs::write(d.join("state/host.json"), r#"{"profile":"dalaran"}"#).unwrap();
+        assert!(compose_file(&d).ends_with("docker-compose.host.yml"));
+        std::fs::write(d.join("state/host.json"), r#"{"profile":"cmangos-2.4.3"}"#).unwrap();
+        assert!(compose_file(&d).ends_with("profiles/cmangos-2.4.3/docker-compose.cmangos-2.4.3.yml"));
+        assert!(compose_args(&d, &["stop"])[2].ends_with("docker-compose.cmangos-2.4.3.yml"));
+        std::fs::write(d.join("state/host.json"), r#"{"profile":"../../etc"}"#).unwrap();
+        assert!(compose_file(&d).ends_with("docker-compose.host.yml"), "never a path from host.json");
+        std::fs::remove_file(d.join("profiles/cmangos-2.4.3/docker-compose.cmangos-2.4.3.yml")).unwrap();
+        std::fs::write(d.join("state/host.json"), r#"{"profile":"cmangos-2.4.3"}"#).unwrap();
+        assert!(compose_file(&d).ends_with("docker-compose.host.yml"), "an old kit without the folder");
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[cfg(unix)]

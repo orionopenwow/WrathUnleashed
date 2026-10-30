@@ -15,8 +15,9 @@
 #   bash host-wrath-realm.sh rules         after editing state/rules.txt or state/beacon.json (realm list text)
 #   bash host-wrath-realm.sh logs [service]
 #
-# Answers can come from the environment (no questions): WU_NAME, WU_PROFILE (main|brawl|progression|dalaran),
-# WU_VISIBILITY (private|public), WU_WOW_DIR (your 3.3.5a folder). Images: WU_IMAGE / WU_TAG
+# Answers can come from the environment (no questions): WU_NAME, WU_PROFILE (main|brawl|progression|dalaran, or a
+# profile for another client: profiles/<id>/, e.g. cmangos-1.12.1, cmangos-2.4.3, tcpp-4.3.4), WU_VISIBILITY
+# (private|public), WU_WOW_DIR (your 3.3.5a folder), WU_CLIENT_DIR (your game folder for another client's profile). Images: WU_IMAGE / WU_TAG
 # (prebuilt, default below), falling back to the locally built ov/ac-wotlk-*:custom. Not published yet and
 # not built here: it asks "build or stock" (WU_BUILD=1 builds, WU_BUILD=0 takes AzerothCore's stock images).
 set -euo pipefail
@@ -80,6 +81,15 @@ state_get() {  # value of a top-level key in state/host.json (no jq needed)
   [ -f "$KIT/state/host.json" ] || return 0
   sed -n "s/^ *\"$1\": *\"\{0,1\}\([^\",]*\)\"\{0,1\},\{0,1\}$/\1/p" "$KIT/state/host.json" | head -1
 }
+
+# Host any client: a profile for another client has its own folder and compose file (profiles/<id>/, its steps in
+# profiles/host-profile.sh); stop, logs and check use that compose file once state/host.json names the profile.
+. "$KIT/profiles/host-profile.sh" 2>/dev/null || profile_known() { return 1; }
+if profile_known "$(state_get profile)"; then
+  for _f in "$KIT/profiles/$(state_get profile)"/docker-compose.*.yml; do
+    [ -f "$_f" ] && COMPOSE=(docker compose -f "$_f" --project-directory "$KIT") && break
+  done
+fi
 
 pull_prebuilt() {  # all three realm images, or the first error (stderr) for not_published
   local part
@@ -227,13 +237,15 @@ profile_sql() {
 
 cmd_up() {
   [ "${WU_CONFIG_ONLY:-0}" = 1 ] && [ "${LEYLINE_LOCAL_TOOLS:-0}" = 1 ] || need_docker
-  [ "${WU_CONFIG_ONLY:-0}" = 1 ] || [ -f "$KIT/realm-files/profiles/main.env" ] || die "This kit has no realm-files/ (run make-kit first, or download the full kit)."
   WU_NAME="${WU_NAME:-$(state_get name)}"
   WU_PROFILE="${WU_PROFILE:-$(state_get profile)}"
   WU_VISIBILITY="${WU_VISIBILITY:-$(state_get visibility)}"
+  local others; others="$(profile_list 2>/dev/null | tr '\n' ' ' || true)"
   step "Your realm"
   ask WU_NAME "Realm name" "My Wrath Realm"
-  ask WU_PROFILE "Profile: main (level 1 or boost to 80), brawl (everyone 80), progression (Vanilla->TBC->Wrath), dalaran (light hangout, no bots)" "main" main brawl progression dalaran
+  ask WU_PROFILE "Profile: main (level 1 or boost to 80), brawl (everyone 80), progression (Vanilla->TBC->Wrath), dalaran (light hangout, no bots)${others:+, or for another client: $others}" "main" main brawl progression dalaran $others
+  profile_known "$WU_PROFILE" \
+    || [ "${WU_CONFIG_ONLY:-0}" = 1 ] || [ -f "$KIT/realm-files/profiles/main.env" ] || die "This kit has no realm-files/ (run make-kit first, or download the full kit)."
   ask WU_VISIBILITY "Private (friends with your link) or public (listed in Beacons)" "private" private public
   local extra=()
   [ -n "${WU_GM_NAME:-}" ] && extra+=(--gm-name "$WU_GM_NAME")
@@ -243,6 +255,9 @@ cmd_up() {
   [ -n "${WU_LISTING_URL:-}" ] && extra+=(--listing-url "$WU_LISTING_URL")
   [ -n "${WU_JOIN_BASE:-}" ] && extra+=(--join-base "$WU_JOIN_BASE")
   [ -n "${WU_SEED:-}" ] && [ -f "$KIT/$WU_SEED" ] && extra+=(--seed "$WU_SEED")   # a realm made on the website (used once)
+  if profile_known "$WU_PROFILE"; then   # a realm for another client: its own build and start (profiles/)
+    profile_up "$WU_PROFILE"; return
+  fi
   if [ "${WU_CONFIG_ONLY:-0}" = 1 ]; then
     IMG="${WU_IMAGE}"; TAG="${WU_TAG}"
     ensure_tools
@@ -295,6 +310,7 @@ cmd_check() {
 
 cmd_friend() {
   need_docker
+  profile_known "$(state_get profile)" && die "On this realm friends make their own account on your join page (bash host-wrath-realm.sh show)."
   [ $# -ge 1 ] || die "Usage: bash host-wrath-realm.sh friend NAME [PASSWORD]"
   docker run --rm --user "$WU_UID:$WU_GID" -v "$KIT:/kit" -e WU_KIT=/kit "$WU_TOOLS_IMAGE" python -m wuhost.setup friend "$@" | db_sql acore_auth \
     && say "Done. Your friend opens your invite link once, then logs in with that account."

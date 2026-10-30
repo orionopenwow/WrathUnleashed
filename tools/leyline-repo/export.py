@@ -46,6 +46,7 @@ ALLOW = [
     "realm/custom/lua_scripts/ov_leyline.lua",    # its realm half: the WULY realm list
     "realm/custom/lua_scripts/ov_discord.lua",    # the Discord bridge's realm half
     "stream/links.py",                            # short share links (/r /h /q /m /u)
+    "stream/playmodes.json",                      # the mode catalog the launcher builds in (modes.rs include_str!)
     "stream/www-files/art/leyline-*",             # the Leyline art, leyline-display-OFL.txt included
     "mods/SPEC.md",                               # the mod package format
     "docs/leyline",                               # the Leyline docs (also served at /wrath/docs)
@@ -267,8 +268,13 @@ Leyline's own code is MIT licensed (`LICENSE`). These parts come from elsewhere 
   No AzerothCore source is in this repo; its sources are at https://github.com/azerothcore.
 - **Tauri** (MIT or Apache-2.0) and the Rust crates in `launcher/src-tauri/Cargo.lock`, each under its own
   license (mostly MIT or Apache-2.0): the launcher is built with them; none of their source is in this repo.
-- **Game data**: none here. Hosts extract dbc and map files from their own 3.3.5a install, on their own PC,
-  and they never leave it.
+- **Other server cores** (host any client): the host kit's profiles in `hosting/kit/profiles/` build CMaNGOS
+  Classic and TBC (GPL-2.0, https://github.com/cmangos) and TrinityCore 4.3.4 (GPL-2.0,
+  https://github.com/The-Cataclysm-Preservation-Project/TrinityCore) on the host's PC from that source at pinned
+  commits, with each project's own database. None of their source is in this repo; credits and licences: each
+  profile's `NOTICE.md`.
+- **Game data**: none here. Hosts extract dbc and map files from their own client of the realm's version (3.3.5a,
+  or 1.12.1, 2.4.3, 4.3.4 for the other profiles), on their own PC, and they never leave it.
 """
 
 GITIGNORE = """# Leyline: our own code and docs only. Never game data, secrets or machine-local files.
@@ -385,6 +391,32 @@ def prune_empty(target: Path) -> None:
                 pass
 
 
+INCLUDE_RE = re.compile(rb'include_(?:str|bytes)!\(\s*"([^"]+)"\s*\)')
+
+
+def missing_includes(files: dict) -> list:
+    """Every include_str!/include_bytes! in an exported .rs file must point at an exported file, or the
+    Leyline repo's launcher build fails (2026-10-30: modes.rs and stream/playmodes.json)."""
+    out = []
+    for rel, (data, _x) in files.items():
+        if not rel.endswith(".rs"):
+            continue
+        base = rel.rsplit("/", 1)[0]
+        for m in INCLUDE_RE.finditer(data):
+            parts = (base + "/" + m.group(1).decode()).split("/")
+            norm = []
+            for part in parts:
+                if part == "..":
+                    if norm:
+                        norm.pop()
+                elif part not in ("", "."):
+                    norm.append(part)
+            target = "/".join(norm)
+            if target not in files:
+                out.append(f"{rel}: {m.group(1).decode()} -> {target}")
+    return out
+
+
 def export(src: Path, target: Path, dry: bool = False, out=print) -> dict:
     src, target = src.resolve(), target.resolve()
     if target == src or src in target.parents or target in src.parents:
@@ -395,6 +427,10 @@ def export(src: Path, target: Path, dry: bool = False, out=print) -> dict:
     files["THIRD-PARTY-NOTICES.md"] = (NOTICES.encode(), False)
     files[".gitignore"] = (GITIGNORE.encode(), False)
 
+    missing = missing_includes(files)
+    if missing:
+        raise Refused("the launcher builds in files the export leaves out (its build would fail):\n  "
+                      + "\n  ".join(missing))
     hits = [h for rel in sorted(files) if user_facing(rel) for h in brand_hits(rel, files[rel][0])]
     if hits:
         raise Refused("brand words in user-facing files (nothing was written):\n  " + "\n  ".join(hits))

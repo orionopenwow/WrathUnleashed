@@ -54,5 +54,6 @@ pause & exit /b 0
 %T% rules && echo Done. The realm list and your join page show it within a minute ^(public realms^).
 pause & exit /b 0
 :logs
-docker compose -f "%~dp0docker-compose.host.yml" --project-directory "%~dp0." logs --tail 80
+call "%~dp0profiles\pick-compose.bat"
+docker compose -f "%CF%" --project-directory "%~dp0." logs --tail 80
 pause & exit /b 0

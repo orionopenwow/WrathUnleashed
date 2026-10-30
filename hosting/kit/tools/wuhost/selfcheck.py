@@ -16,6 +16,8 @@ import urllib.request
 
 from wunet import keys, wire335
 
+from .agent import split_hp
+
 OK, BAD, WARN = "  OK      ", "  PROBLEM ", "  NOTE    "
 
 
@@ -62,6 +64,12 @@ async def world_hello(host, port, timeout=10):
         w.close()
 
 
+def world_ok(op, build):
+    """The world server's first packet: SMSG_AUTH_CHALLENGE on 1.12.1, 2.4.3 and 3.3.5a. 4.3.4 and newer open
+    with their own connection greeting first, so any answer there means the server is up."""
+    return op == wire335.SMSG_AUTH_CHALLENGE if build in (5875, 8606, wire335.BUILD) else op is not None
+
+
 def read_login(state):
     try:
         with open(os.path.join(state, "host-login.txt"), encoding="utf-8") as f:
@@ -89,6 +97,12 @@ async def run(state, login=True, db=None, local_auth=("ac-authserver", 3724), lo
         rep.fail(f"The realm settings are missing or broken ({e}).", "Run \"Host a Wrath realm\" again.")
         return rep
     relay = cfg["relay"]
+    # Another core (cores.py: cmangos, trinitycore): its own service names and client build.
+    build = (cfg.get("record") or {}).get("build") or wire335.BUILD
+    if local_auth == ("ac-authserver", 3724) and cfg.get("auth_service"):
+        local_auth = split_hp(cfg["auth_service"], 3724)
+    if local_world == ("ac-worldserver", 8085) and cfg.get("world_service"):
+        local_world = split_hp(cfg["world_service"], 8085)
     relay_http = relay_http or f"https://{relay}"
     relay_host = relay_host or relay
 
@@ -103,7 +117,7 @@ async def run(state, login=True, db=None, local_auth=("ac-authserver", 3724), lo
 
     # 2. the game servers on this PC
     try:
-        code = await wire335.logon_probe(*local_auth, timeout=8)
+        code = await wire335.logon_probe(*local_auth, timeout=8, build=build)
         if code == 0x04:
             rep.ok("The login server is running.")
         else:
@@ -112,7 +126,7 @@ async def run(state, login=True, db=None, local_auth=("ac-authserver", 3724), lo
         rep.fail("The login server is not running.", "Start the realm with \"Host a Wrath realm\"; first starts take minutes.")
     try:
         op = await world_hello(*local_world)
-        if op == wire335.SMSG_AUTH_CHALLENGE:
+        if world_ok(op, build):
             rep.ok("The world server is running.")
         else:
             rep.fail("The world server answered oddly.", "Look at: docker logs wu-host-worldserver")
@@ -151,7 +165,7 @@ async def run(state, login=True, db=None, local_auth=("ac-authserver", 3724), lo
         except OSError as e:
             rep.fail(f"Could not reach the relay's website ({e}).", "Is this PC online?")
         try:
-            code = await wire335.logon_probe(relay_host, ap, timeout=10)
+            code = await wire335.logon_probe(relay_host, ap, timeout=10, build=build)
             if code == 0x04:
                 rep.ok(f"Players can reach your login server through the relay ({relay}:{ap}).")
             else:
@@ -161,12 +175,12 @@ async def run(state, login=True, db=None, local_auth=("ac-authserver", 3724), lo
                      "Run the check again in a minute; if it stays, send the output of this check to the realm team.")
         try:
             op = await world_hello(relay_host, wp)
-            if op == wire335.SMSG_AUTH_CHALLENGE:
+            if world_ok(op, build):
                 rep.ok("Players can reach your world server through the relay.")
         except (OSError, asyncio.TimeoutError, asyncio.IncompleteReadError):
             rep.fail("The world server is not reachable through the relay.")
         user, pw = read_login(state)
-        if login and user:
+        if login and user and build == wire335.BUILD:   # the headless login speaks 3.3.5a only
             try:
                 rep_ = await wire335.full_run(relay_host, ap, user, pw, enter=False, timeout=20,
                                               world_override=None if relay_host == relay else f"{relay_host}:{wp}")
@@ -210,10 +224,8 @@ def main(argv=None):
     ap.add_argument("--state", default=os.environ.get("WU_STATE", "/state"))
     ap.add_argument("--no-login", action="store_true")
     a = ap.parse_args(argv)
-    db = None
-    if os.environ.get("DB_HOST"):
-        from .agent import RealmDB
-        db = RealmDB(os.environ["DB_HOST"], 3306, "root", os.environ.get("DB_PASSWORD", ""))
+    from .coredb import open_db   # WU_CORE: the profile's core (cores.py)
+    db = open_db()
     rep = asyncio.run(run(a.state, login=not a.no_login, db=db))
     return 1 if rep.bad else 0
 

@@ -848,6 +848,8 @@ pub fn run() {
             crate::p2p::cmds::hostpack_info,
             crate::p2p::cmds::hostpack_install,
             crate::p2p::cmds::docker_info,
+            crate::p2p::cmds::host_profiles, // host any client (host/profiles.rs)
+            crate::p2p::cmds::host_choose,
             crate::p2p::cmds::host_stop,
             crate::p2p::cmds::host_logs,
             crate::p2p::cmds::host_invite,

@@ -285,8 +285,9 @@ try:
                                                  for l in bat.splitlines() if not l.lower().startswith("rem")))
     check("bat: ok/fail lines and exit codes like the other steps",
           "exit /b 0" in bat and "exit /b 1" in bat and "LEYLINE OK" in bat and "LEYLINE FAILED" in bat)
-    check("bat: CRLF line endings (cmd's goto)", b"\r\n" in bat_path.read_bytes() and b"\n" not in
-          bat_path.read_bytes().replace(b"\r\n", b""))
+    raw = bat_path.read_bytes()
+    check("bat: one line-ending style (LF in git, CRLF on the PC: the deploy converts)",
+          (b"\r\n" in raw and b"\n" not in raw.replace(b"\r\n", b"")) or b"\r" not in raw)
     spec_c = importlib.util.spec_from_file_location("control_t", REPO / "tools/control/control.py")
     os.environ.setdefault("LOCALAPPDATA", str(tmp / "appdata"))
     ctlmod = importlib.util.module_from_spec(spec_c)

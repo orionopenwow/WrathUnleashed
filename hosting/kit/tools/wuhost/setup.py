@@ -38,6 +38,8 @@ import sys
 
 from wunet import domains, keys, srp6
 
+from . import cores
+
 KIT = os.environ.get("WU_KIT", "/kit")
 STATE = os.path.join(KIT, "state")
 NAME_RE = re.compile(r"^[A-Za-z0-9 _'-]{1,32}$")
@@ -67,6 +69,14 @@ DEFAULT_RULES = {"dalaran": [
     "The host's word is final: the host is the GM here.",
 ]}
 DEFAULT_TAGLINE = {"dalaran": "A Dalaran hangout: boost to 80, duel, queue, meet."}
+# Host any client: the profiles on other cores (cores.py; their files in profiles/<id>/, steps in
+# profiles/host-profile.sh). (core, client build, the login and world services in their compose file)
+PROFILE_CORE = {k: (p["core"], p["build"], cores.LOGON, cores.WORLD) for k, p in cores.PROFILES.items()}
+for _k, _p in cores.PROFILES.items():
+    PROFILES[_k] = _p["label"]
+    PROFILE_BOTS[_k] = 0
+    PROFILE_TAGS[_k] = list(_p["tags"])
+    DEFAULT_TAGLINE[_k] = _p["tagline"]
 RULES_HELP = ("# Your realm's rules: one per line (up to 10, 120 characters each). Lines starting with # are\n"
               "# ignored. Shown on the realm list and your join page. After editing: Realm tools > rules.\n")
 ALNUM = string.ascii_uppercase + string.digits
@@ -251,7 +261,8 @@ def listing_fields(rec, cfg):
     mp = rec.get("max_players", PROFILE_MAX.get(cfg.get("profile")))
     rec["max_players"] = mp if isinstance(mp, int) and not isinstance(mp, bool) and 1 <= mp <= 10000 else None
     rec["direct"] = rec.get("direct") is True
-    rec.update(core=CORE, build=BUILD)
+    core, build = PROFILE_CORE.get(cfg.get("profile"), (CORE, BUILD))[:2]
+    rec.update(core=core, build=build)
     return rec
 
 
@@ -308,7 +319,7 @@ def cmd_init(a):
         sys.exit("Realm name: 1-32 letters, digits, spaces, _ ' or -")
     profile = a.profile or cfg.get("profile", "main")
     if profile not in PROFILES:
-        sys.exit("Profile must be main, brawl, progression or dalaran")
+        sys.exit("Profile must be " + ", ".join(sorted(PROFILES)))
     vis = a.visibility or cfg.get("visibility", "private")
     if vis not in ("public", "private"):
         sys.exit("Choose private or public")
@@ -325,7 +336,8 @@ def cmd_init(a):
                    or (domains.JOIN if relay == domains.RELAY else f"https://{relay}")).rstrip("/"),
         relay_url=a.relay_url or f"wss://{relay}/agent",
         listing_url=a.listing_url or f"https://{relay}/api/listing/heartbeat",
-        auth_service="ac-authserver:3724", world_service="ac-worldserver:8085",
+        auth_service=PROFILE_CORE.get(profile, (0, 0, "ac-authserver:3724"))[2],
+        world_service=PROFILE_CORE.get(profile, (0, 0, 0, "ac-worldserver:8085"))[3],
         # Warden: stock clients on a public realm get the core's anti-cheat; a friends' realm leaves
         # it off so the WrathUnleashed browser/desktop client (no Warden module) can join too.
         warden=(vis == "public") if a.warden is None else a.warden == "on",
@@ -554,6 +566,8 @@ def cmd_get(a):
 
 def cmd_friend(a):
     """SQL that makes a friend's account; the .bat pipes it into the database container."""
+    if (load() or {}).get("profile") in PROFILE_CORE:
+        sys.exit("On this realm friends make their own account on your join page (send them your invite link).")
     user = a.name.upper()
     if not re.match(r"^[A-Z0-9]{3,16}$", user):
         sys.exit("Account names: 3-16 letters or digits")

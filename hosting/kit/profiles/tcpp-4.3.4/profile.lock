@@ -1,0 +1,31 @@
+# Leyline host kit, "host any client": the tcpp-4.3.4 profile (a plain 4.3.4 realm on TrinityCore, the 4.3.4 fork
+# kept by The Cataclysm Preservation Project). Read by profiles/host-profile.sh and "profiles/Host a profile
+# realm.bat" (KEY=VALUE lines only; nothing in this file is run) and passed to the Dockerfile as build args. Nothing
+# here is ours and nothing here is game data: the server is compiled on the host's PC from its authors' source at
+# this commit; the world database is the project's own TDB release, checked against the sha256 below.
+# Bumping: change the commit and, when the project makes a new TDB release, the release file with its sha256.
+
+LL_PROFILE=tcpp-4.3.4
+LL_CORE=trinitycore
+LL_BUILD=15595
+LL_VERSION=4.3.4
+LL_IMAGE=leyline-tcpp-434
+LL_COMPOSE=docker-compose.tcpp-4.3.4.yml
+
+# The server (GPL-2.0): TrinityCore 4.3.4, The Cataclysm Preservation Project's fork.
+LL_CORE_REPO=https://github.com/The-Cataclysm-Preservation-Project/TrinityCore
+LL_CORE_COMMIT=b061f46ef86f84f713ea3956b2318383e0b71278
+# The world and hotfix databases (GPL-2.0): the project's TDB 434.22011 release (the file the core's
+# revision_data.h.in.cmake names). TODO(owner): the release file has no published checksum (GitHub shows none for
+# files uploaded before 2025) and this session could not download it. Pin it once, on any PC:
+#   curl -fsSL <LL_DB_URL> | sha256sum
+# and put the 64 hex digits here. Until then host-profile.sh refuses to build this profile.
+LL_DB_URL=https://github.com/The-Cataclysm-Preservation-Project/TrinityCore/releases/download/TDB434.22011/TDB_full_434.22011_2022_01_09.7z
+LL_DB_SHA256=TODO-owner-pin-this
+LL_DB_FILES=TDB_full_world_434.22011_2022_01_09.sql,TDB_full_hotfixes_434.22011_2022_01_09.sql
+
+# The host's own client: files that must be in the folder they pick, the world server's "ready" log line.
+LL_CLIENT_FILES=Data/art.MPQ,Data/expansion3.MPQ
+LL_READY=(worldserver-daemon) ready...
+LL_BUILD_TIME=60-150 minutes and about 8 GB of disk
+LL_EXTRACT_TIME=40-90 minutes, plus 2-4 hours for the monster paths

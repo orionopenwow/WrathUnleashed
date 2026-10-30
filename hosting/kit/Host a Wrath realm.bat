@@ -6,7 +6,8 @@ rem No port forwarding: the realm talks out to the relay, players connect to the
 rem sees your home IP address. Safe to run again: it keeps your realm, characters and invite link.
 rem
 rem It asks three things the first time: the realm's name, its profile, private or public.
-rem Answers can also come from the environment: WU_NAME, WU_PROFILE (main, brawl, progression, dalaran),
+rem Answers can also come from the environment: WU_NAME, WU_PROFILE (main, brawl, progression, dalaran, or a
+rem profile for another client in profiles\: cmangos-1.12.1, cmangos-2.4.3, tcpp-4.3.4; WU_CLIENT_DIR is its game folder),
 rem WU_VISIBILITY, WU_WOW_DIR, WU_BUILD (1: build the realm images here if they are not published, 0: stock).
 cd /d "%~dp0"
 
@@ -23,7 +24,6 @@ set "ARAC_COMMIT=3f605e09c656eb3b620ef2d70c7ef61808c1cfb0"
 set COMPOSE=docker compose -f "%~dp0docker-compose.host.yml" --project-directory "%~dp0."
 
 docker version >nul 2>&1 || (echo Docker Desktop is not running. Start it ^(or install it from docker.com^), then run this again. & pause & exit /b 1)
-if not exist "realm-files\profiles\main.env" (echo This kit is missing its realm-files folder. Download the full kit again. & pause & exit /b 1)
 
 echo.
 echo == Helper image
@@ -51,10 +51,13 @@ if not defined WU_PROFILE (
   echo   brawl        everyone starts at 80 in Dalaran, everything unlocked
   echo   progression  blizzlike, Vanilla then TBC then Wrath per character
   echo   dalaran      a light Dalaran hangout: no bots, boost to 80 straight to Dalaran, your own rules
+  for /d %%P in ("%~dp0profiles\*") do if exist "%%P\profile.lock" echo   %%~nxP   a realm for another client ^(profiles\%%~nxP\NOTICE.md^)
   set "WU_PROFILE=!D!"
   set /p "WU_PROFILE=Profile [!D!]: "
 )
-if /i not "%WU_PROFILE%"=="main" if /i not "%WU_PROFILE%"=="brawl" if /i not "%WU_PROFILE%"=="progression" if /i not "%WU_PROFILE%"=="dalaran" (echo Please type main, brawl, progression or dalaran. & set "WU_PROFILE=" & goto askprofile)
+set "OTHER=0"
+if exist "%~dp0profiles\%WU_PROFILE%\profile.lock" set "OTHER=1"
+if "%OTHER%"=="0" if /i not "%WU_PROFILE%"=="main" if /i not "%WU_PROFILE%"=="brawl" if /i not "%WU_PROFILE%"=="progression" if /i not "%WU_PROFILE%"=="dalaran" (echo Please type main, brawl, progression, dalaran or one of the profiles listed. & set "WU_PROFILE=" & goto askprofile)
 :askvis
 if not defined WU_VISIBILITY (
   set "D=private"
@@ -65,6 +68,12 @@ if not defined WU_VISIBILITY (
   set /p "WU_VISIBILITY=Private or public [!D!]: "
 )
 if /i not "%WU_VISIBILITY%"=="private" if /i not "%WU_VISIBILITY%"=="public" (echo Please type private or public. & set "WU_VISIBILITY=" & goto askvis)
+rem A realm for another client: its own build and start (profiles\Host a profile realm.bat).
+if "%OTHER%"=="1" (
+  call "%~dp0profiles\Host a profile realm.bat"
+  exit /b !ERRORLEVEL!
+)
+if not exist "realm-files\profiles\main.env" (echo This kit is missing its realm-files folder. Download the full kit again. & pause & exit /b 1)
 
 echo.
 echo == Realm images

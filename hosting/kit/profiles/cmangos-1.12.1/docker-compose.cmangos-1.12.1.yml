@@ -1,0 +1,128 @@
+# A 1.12.1 realm on CMaNGOS Classic: the host kit's "cmangos-1.12.1" profile ("host any client"). Started by
+# profiles/host-profile.sh or "profiles/Host a profile realm.bat" (from "Host a Wrath realm", `leyline host` or the
+# launcher's Host page when the profile is cmangos-1.12.1), which build the images on this PC first. Don't run it by
+# hand the first time.
+#
+# Same rules as the kit's main compose file: nothing is published on this PC's network. The servers and the
+# database sit on an internal Docker network with no internet access; only wu-agent talks out, to the relay.
+#
+#   .env (written by setup):  DB_ROOT_PASSWORD   generated, never leaves this PC
+#                             WU_IMAGE / WU_TAG   the images built here (leyline-cmangos-1121-*:<version>-<commit>)
+#                             WU_DB_BUFFER, WU_PLAYER_LIMIT, WU_TOOLS_IMAGE
+#
+# Volumes: the database (accounts, characters, the world) and the client data (made from YOUR 1.12 client by the
+# extractors image; it never leaves this PC). The kit's 3.3.5a volumes are separate and untouched.
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "20m", max-file: "3" }
+
+x-db: &db
+  DB_HOST: realm-db
+  DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?run Host a Wrath realm first}
+  LL_DB_PREFIX: classic
+
+networks:
+  realm:
+    internal: true      # the game servers and the database: no route out, nothing published
+  egress: {}            # the agent's way out to the relay
+
+services:
+  realm-db:
+    container_name: wu-host-realm-db
+    image: mariadb:11.4
+    restart: unless-stopped
+    logging: *logging
+    networks: [realm]
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?run Host a Wrath realm first}
+    command: ["--innodb-buffer-pool-size=${WU_DB_BUFFER:-512M}", "--max-allowed-packet=256M"]
+    volumes:
+      - cmangos-1121-database:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 20s
+      retries: 60
+      start_period: 30s
+
+  realm-db-import:
+    image: ${WU_IMAGE:-leyline-cmangos-1121}-db-import:${WU_TAG:?run Host a Wrath realm first}
+    logging: *logging
+    networks: [realm]
+    environment: *db
+    depends_on:
+      realm-db: { condition: service_healthy }
+
+  realm-logon:
+    container_name: wu-host-realm-logon
+    image: ${WU_IMAGE:-leyline-cmangos-1121}-server:${WU_TAG:?run Host a Wrath realm first}
+    command: ["realmd"]
+    restart: unless-stopped
+    logging: *logging
+    networks: [realm]
+    environment: *db
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/3724"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      realm-db: { condition: service_healthy }
+      realm-db-import: { condition: service_completed_successfully }
+
+  realm-world:
+    container_name: wu-host-realm-world
+    image: ${WU_IMAGE:-leyline-cmangos-1121}-server:${WU_TAG:?run Host a Wrath realm first}
+    command: ["mangosd"]
+    restart: unless-stopped
+    logging: *logging
+    networks: [realm]
+    stop_grace_period: 2m      # saves every online player on the way down
+    volumes:
+      # dbc, maps, vmaps, mmaps made from YOUR 1.12 client by the extractors image (read-only here)
+      - cmangos-1121-client-data:/data:ro
+    environment:
+      <<: *db
+      WU_PLAYER_LIMIT: "${WU_PLAYER_LIMIT:-100}"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8085"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10m
+    depends_on:
+      realm-db: { condition: service_healthy }
+      realm-db-import: { condition: service_completed_successfully }
+
+  wu-agent:
+    container_name: wu-host-agent
+    image: ${WU_TOOLS_IMAGE:-wu-host-tools:1}
+    restart: unless-stopped
+    logging: *logging
+    networks: [realm, egress]
+    command: ["python", "-m", "wuhost.agent", "--state", "/state"]
+    user: "${WU_UID:-0}:${WU_GID:-0}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp"]
+    volumes:
+      - ./state:/state
+    environment:
+      DB_HOST: realm-db
+      DB_PASSWORD: ${DB_ROOT_PASSWORD:?run Host a Wrath realm first}
+      WU_REALM_DB_ID: "1"
+      WU_CORE: cmangos            # wuhost/coredb.py: CmangosDB
+      WU_DB_AUTH: classicrealmd
+      WU_DB_CHARS: classiccharacters
+      WU_EXPANSION: "0"
+    depends_on:
+      realm-db: { condition: service_healthy }
+
+volumes:
+  cmangos-1121-database:
+  cmangos-1121-client-data:
+    name: leyline-cmangos-1121-client-data
+    external: true

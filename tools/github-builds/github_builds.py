@@ -73,7 +73,11 @@ LOG_PATH = Path(__file__).resolve().parents[2] / "logs" / "github-builds.log"
 
 
 def say(msg=""):
-    print(msg, flush=True)
+    try:
+        print(msg, flush=True)
+    except UnicodeEncodeError:                  # a Windows console that can't show a character in a build log
+        enc = getattr(sys.stdout, "encoding", None) or "ascii"
+        print(str(msg).encode(enc, "replace").decode(enc, "replace"), flush=True)
     # Also kept in logs\github-builds.log, so the result can be read back without the window.
     try:
         LOG_PATH.parent.mkdir(exist_ok=True)

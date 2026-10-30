@@ -258,3 +258,9 @@
 1081d ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline mesh (signed realm records, gossip, volunteer relays; all off)
 1082a signin  Mod hub rankings: installs, 1-5 star ratings, Hot/Rising/Top rated/Most installed/New/Updated, /wrath/leyline/mods.json
 1082b ship  Save to GitHub (orionopenwow/WrathUnleashed): hub rankings, daily index workflow source, launcher Discover tabs
+1082x builds-why  Did the realm image build (in-place moves fix) pass? (read-only)
+1083a relay  Join pages say which client a realm needs; account salts every core can read
+1083b signin  Join page: the client note and the salt fix
+1083c hostkit  Host pack: host a realm for 1.12.1 or 2.4.3 (CMaNGOS, built from source with your own client), 4.3.4 waits for a pinned checksum
+1083d ship  Save to GitHub (orionopenwow/WrathUnleashed): host any client (profiles, launcher WHICH GAME card)
+1084a ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline export carries playmodes.json (fixes the launcher CI), fresh-history tool (dormant)
