@@ -34,6 +34,7 @@ class FakePC(m.System):
         self.busy = {}                    # src path -> how many renames fail first
         self.listening = ["  TCP    127.0.0.1:8097     0.0.0.0:0     LISTENING     4242"]
         self.renamed_on_github = False
+        self.copy_fails = set()
         self.patch_fails = False
         self.renames = []
 
@@ -84,6 +85,27 @@ class FakePC(m.System):
         self.files = {mv(k): v for k, v in self.files.items()}
         self.origins = {mv(k): v for k, v in self.origins.items()}
         self.renames.append((str(src), str(dst)))
+
+    def copytree(self, src, dst):
+        src, dst = P(src), P(dst)
+        if src in self.copy_fails or self.exists(dst):
+            return False
+        for d in [x for x in self.dirs if x == src or src in x.parents]:
+            self.dirs.add(dst / d.relative_to(src))
+        for k, v in list(self.files.items()):
+            if src in k.parents:
+                self.files[dst / k.relative_to(src)] = v
+        for k, v in list(self.origins.items()):
+            if k == src or src in k.parents:
+                self.origins[dst / k.relative_to(src)] = v
+        self.calls.append(["copytree", str(src), str(dst)])
+        return True
+
+    def rmtree(self, p):
+        p = P(p)
+        self.dirs = {x for x in self.dirs if not (x == p or p in x.parents)}
+        self.files = {k: v for k, v in self.files.items() if p not in k.parents}
+        self.origins = {k: v for k, v in self.origins.items() if not (k == p or p in k.parents)}
 
     def read_text(self, p):
         v = self.files.get(P(p))
@@ -264,8 +286,17 @@ class Go(unittest.TestCase):
         self.assertEqual(mv.run(True), 0)
         self.assertTrue(any("trying again (2/5)" in l for l in out))
 
+    def test_workspace_in_use_is_copied(self):
+        pc = pc_today(); pc.busy[WU] = 99                       # Windows never lets go of the workspace
+        mv, out = mover(pc)
+        self.assertEqual(mv.run(True), 0, "\n".join(out))
+        self.assertTrue(pc.isdir(WU), "the old folder stays")
+        self.assertIn(P(WU) / "MOVED-TO-LEYLINE.txt", pc.files)
+        self.assertTrue(pc.isdir(LY) and pc.origins.get(LY, "").endswith("leyline-workspace.git"), pc.origins.get(LY))
+        self.assertTrue(any("COPIED instead" in l for l in out))
+
     def test_partial_failure_puts_everything_back(self):
-        pc = pc_today(); pc.busy[OV] = 99            # the last move never works
+        pc = pc_today(); pc.busy[OV] = 99; pc.copy_fails.add(OV)   # the last move never works, nor its copy
         before_dirs = set(pc.dirs)
         mv, out = mover(pc)
         self.assertEqual(mv.run(True), 1)
@@ -278,7 +309,7 @@ class Go(unittest.TestCase):
         self.assertIn("Undo plan", pc.files[P("/tmp/leyline-move.log")])
 
     def test_partial_failure_stuck_writes_the_plan(self):
-        pc = pc_today(); pc.busy[OV] = 99
+        pc = pc_today(); pc.busy[OV] = 99; pc.copy_fails.add(OV)
         mv, out = mover(pc)
         real = pc.rename
 
@@ -347,7 +378,7 @@ class Files(unittest.TestCase):
     def test_standard_library_only_and_standalone(self):
         src = open(os.path.join(HERE, "move_to_leyline.py"), encoding="utf-8").read()
         imports = {l.split()[1].split(".")[0] for l in src.splitlines() if l.startswith(("import ", "from "))}
-        self.assertTrue(imports <= {"__future__", "argparse", "json", "os", "re", "subprocess", "sys", "time",
+        self.assertTrue(imports <= {"__future__", "argparse", "json", "os", "re", "shutil", "subprocess", "sys", "time",
                                     "urllib", "pathlib"}, imports)
 
     def test_repos_ignored(self):

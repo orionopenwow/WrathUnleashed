@@ -32,6 +32,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -88,6 +89,22 @@ class System:
 
     def mkdir(self, p: Path) -> None:
         os.mkdir(p)
+
+    def copytree(self, src: Path, dst: Path) -> bool:
+        """A full copy of a folder that Windows won't let us rename (something keeps it open). robocopy reads
+        files other programs hold open; exit codes below 8 mean success."""
+        if os.name == "nt":
+            rc, _ = self.run(["robocopy", str(src), str(dst), "/E", "/COPY:DAT", "/DCOPY:T", "/R:2", "/W:1",
+                              "/XJ", "/NFL", "/NDL", "/NP", "/NJH", "/NJS"])
+            return rc < 8
+        try:
+            shutil.copytree(src, dst, symlinks=True)
+            return True
+        except OSError:
+            return False
+
+    def rmtree(self, p: Path) -> None:
+        shutil.rmtree(p, ignore_errors=True)
 
     def rmdir(self, p: Path) -> None:
         os.rmdir(p)
@@ -322,10 +339,27 @@ class Mover:
                     self.say(f"  could not make {parent}: {e}")
                     return self.undo(done, made)
             self.say(f"  {src} -> {dst}   ({what})")
-            if not self._rename(src, dst):
-                self.say(f"  STOPPED: {src} could not be moved (a window, an editor or a program is still using it).")
+            if self._rename(src, dst):
+                done.append((src, dst, "move"))
+                continue
+            # Windows keeps the folder open (the Claude app, Explorer, OneDrive...): copy it instead, and leave the
+            # old folder in place with a note; it can be deleted after a restart.
+            self.say(f"  {src} is in use, so it is COPIED instead (the old folder stays, with a note; delete it later)")
+            if not self.sys.copytree(src, dst):
+                self.say(f"  STOPPED: {src} could not be copied either.")
+                try:
+                    self.sys.rmtree(dst)
+                except OSError:
+                    pass
                 return self.undo(done, made)
-            done.append((src, dst))
+            done.append((src, dst, "copy"))
+            try:
+                self.sys.write_text(src / "MOVED-TO-LEYLINE.txt",
+                                    f"This folder was copied to {dst} on the move to one Leyline folder.\r\n"
+                                    "Nothing here is used any more. Delete this folder (after a restart if Windows "
+                                    "says it is in use).\r\n")
+            except OSError:
+                pass
         return True
 
     def undo(self, done, made) -> bool:
@@ -338,8 +372,16 @@ class Mover:
                         self.sys.rmdir(d)
                 except OSError:
                     pass
-        for src, dst in reversed(done):
+        for src, dst, how in reversed(done):
             drop_made()
+            if how == "copy":                   # the original never moved: drop the copy and the note
+                self.sys.rmtree(dst)
+                try:
+                    self.sys.remove(src / "MOVED-TO-LEYLINE.txt")
+                except OSError:
+                    pass
+                self.say(f"  removed the copy {dst} ({src} was never moved)")
+                continue
             if self._rename(dst, src):
                 self.say(f"  put back: {dst} -> {src}")
             else:
