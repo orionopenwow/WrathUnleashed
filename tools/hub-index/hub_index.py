@@ -28,8 +28,18 @@ stream/hub/community-index.json. Nothing of anyone's is mirrored or hosted; each
         A build never drops an entry because its forge didn't answer, and refuses to shrink the index by more than
         20% at once (build --allow-shrink to override).
 
+    python3 -I tools/hub-index/hub_index.py thumbs [--top 30] [--new] [--only owner/repo ...] [--refresh]
+        Each picked GitHub entry's own preview image (its og:image: the owner's social preview or GitHub's card), only
+        from GitHub's image hosts, only real images (magic bytes, 2 MB cap), as a 640x320 WebP of at most 60 KB in
+        stream/www-files/art/hub-thumbs/<owner>__<repo>.webp; the entry gets thumb and thumb_credit once stream/hub.py
+        accepts them. --new adds every GitHub entry without a thumb that was never tried. Needs Pillow (or ffmpeg).
+        build --thumbs N runs it after a good build (the daily workflow: build --thumbs 30, before the gate, so new
+        thumbnails go to the review PR). On the owner's PC: "tools/hub-index/Refresh hub thumbnails.bat"
+        (Autopilot step "thumbs"), then ship.
+
     python3 -I tools/hub-index/hub_index.py check
-        Validate the index with the hub's own rules (stream/hub.py validate_index). Exit 1 on any problem.
+        Validate the index with the hub's own rules (stream/hub.py validate_index), the thumbnail fields and files, and
+        the "external" list. Exit 1 on any problem.
 
 The rules (docs/HUB-INDEX.md has the reasoning):
   * no game data: a repo with game-format files (MPQ, M2, BLP, ADT, WMO, WDT, WDL, DBC, SKIN, ANIM, vmaps, mmaps)
@@ -43,8 +53,10 @@ The rules (docs/HUB-INDEX.md has the reasoning):
   * a supported client build, from the addon TOC's Interface number first, then the repo's own words;
   * the game's brand words never appear in our display text: names are cleaned, descriptions scrubbed, and an
     author whose name carries one goes to review;
-  * discovered (not curated or submitted) projects need a little signal: MIN_STARS stars.
-Standard library only (plus the git command).
+  * discovered (not curated or submitted) projects need a little signal: MIN_STARS stars;
+  * the one exception, link-only external packs (HD graphics packs, owner's decision 2026-10-30): never entries, a
+    separate "external" list of links to their authors' pages, flagged external, never mirrored or installable.
+Standard library only (plus the git command; the thumbs command uses Pillow or ffmpeg).
 """
 from __future__ import annotations
 
@@ -131,9 +143,11 @@ CHEAT_RE = re.compile(r"(?i)\bunlocker\b|speed[ _-]?hack|(?<!anti)(?<!anti-)(?<!
 MONEY_RE = re.compile(r"(?i)\bvip\b|donat(e|ion|ions|or)s?\b|\bpay(ment|pal|wall)s?\b|\bstripe\b|credit[ _-]?card|"
                       r"cash[ _-]?shop|\bdonation[ _-]?(shop|store|points)|store[ _-]?system|\bin-?game[ _-]?(store|shop)\b|"
                       r"\bpremium\b|micro[ _-]?transactions?|\bbattle[ _-]?pass\b|\bshop\b|\bwebshop\b")
-PAID_STRONG = re.compile(r"(?i)\b(paid|premium|pro|full) (version|edition|tier|features?)\b|licen[cs]e key|\bpaywall|"
+# "no paid features" / "without a paywall" is the opposite of what this looks for (the negated phrases are skipped).
+PAID_STRONG = re.compile(r"(?i)(?<!\bno )(?<!\bnot )(?<!\bwithout )(?<!\bwithout a )"
+                         r"(?:\b(paid|premium|pro|full) (version|edition|tier|features?)\b|licen[cs]e key|\bpaywall|"
                          r"buy (it|now|a licen[cs]e)|purchase (a |the )?(licen[cs]e|copy|full)|sold separately|"
-                         r"(only )?for (patrons|subscribers|supporters)\b|early access for|patreon[- ]exclusive")
+                         r"(only )?for (patrons|subscribers|supporters)\b|early access for|patreon[- ]exclusive)")
 PAID_SOFT = re.compile(r"(?i)\bpatreon\b|\bsubscription\b|\bpremium\b|\bvip\b")
 GAME_SIGNAL = re.compile(r"(?i)\baddons?\b|\brealms?\b|azerothcore|trinitycore|\bmangos|\beluna\b|private[ _-]?server|"
                          r"\bemulator\b|\.toc\b|\bwow\b|warcraft|azeroth|\bwotlk\b|\bvanilla\b|\bdungeon|\braid|"
@@ -172,6 +186,10 @@ CORE_PHRASE = {"3.3.5a": "AzerothCore, TrinityCore or CMaNGOS realms", "1.12": "
 
 # ------------------------------------------------------------------------------------------- licences
 LICENCE_FILE = re.compile(r"^(?:licen[cs]e|copying|unlicense)(?:[._-][A-Za-z0-9.-]+)?(?:\.(?:md|txt|rst))?$", re.I)
+# "MIT License (with Additional Restriction) ... may not be used ... in any commercial game", the Commons Clause and
+# the like: an open licence's words with a field-of-use limit added, which makes it not an open licence.
+LICENCE_RIDER = re.compile(r"(?i)\bcommons clause\b|additional restriction|may not be (used|sold)[^.]{0,200}\bcommercial|"
+                           r"\bnot (be )?used for (any )?commercial purposes?\b")
 
 
 def classify_licence(text: str) -> str | None:
@@ -179,6 +197,8 @@ def classify_licence(text: str) -> str | None:
     terms, or None when it isn't recognised."""
     t = re.sub(r"\s+", " ", text.lower())
     head = re.sub(r"[#*=_-]+", " ", t[:400])
+    if LICENCE_RIDER.search(t):                      # a known licence with a no-commercial-use rider added on top
+        return "NONFREE"
     if "affero general public license" in head:
         return "AGPL-3.0"
     if "lesser general public license" in head or "library general public license" in head:
@@ -702,10 +722,28 @@ def summary_line(typ: str, builds: list[str], needs: str) -> str:
     return f"A tool for {on} modders and realm hosts."
 
 
+def waive(cand: dict, facts: dict) -> dict:
+    """A curated seed can waive named files that trip a file-pattern rule by their name alone (a docs page in MDX,
+    the editor's own "decompile.ts" that turns database scripts into words): {"waive": [{"file", "why"}]}. Only when
+    every file the probe listed is waived and the list is complete (the probe keeps 5 at most), so a sixth file or a
+    new one still trips the rule."""
+    named = {w["file"] for w in cand.get("waive") or []
+             if isinstance(w, dict) and isinstance(w.get("file"), str) and str(w.get("why") or "").strip()}
+    if not named:
+        return facts
+    out = dict(facts)
+    for k in ("game_data", "binaries", "decomp_files"):
+        got = out.get(k) or []
+        if got and len(got) < 5 and set(got) <= named:
+            out[k] = []
+    return out
+
+
 def judge(cand: dict, facts: dict, meta: dict, block: dict) -> dict:
     """{verdict: listed | needs_licence | review | excluded, reason, entry?}"""
     url, key = cand["url"], cand["key"]
     owner = cand["owner"]
+    facts = waive(cand, facts)
     text = " ".join([cand.get("name_raw", ""), meta.get("description", ""), " ".join(meta.get("topics") or [])])
     readme = facts.get("readme", "")
     for b in block.get("repos", []):
@@ -741,6 +779,11 @@ def judge(cand: dict, facts: dict, meta: dict, block: dict) -> dict:
         return {"verdict": "excluded", "reason": "built to sell things (shop, VIP, donations or payments)"}
     if PAID_STRONG.search(readme):
         return {"verdict": "excluded", "reason": "a paid or paywalled version (README)"}
+    if facts.get("licence") == "NONFREE":
+        # the licence file wins over the forge's guess: "MIT License (with Additional Restriction)" reads as MIT on the
+        # forge, but a no-commercial-use rider makes it not an open licence (LICENCE_RIDER)
+        return {"verdict": "excluded", "reason": "licence is not open (non-commercial or no-derivatives terms, or a rider "
+                                                 "on an open licence)"}
     if OTHER_GAME_RE.search(text):
         return {"verdict": "excluded", "reason": "made for the current game, not a classic client"}
     builds, why = detect_builds(cand, facts, meta)
@@ -818,6 +861,111 @@ def score(e: dict, ref: datetime.date) -> float:
     return round(s, 1)
 
 
+# ------------------------------------------------------------------------------------------- external packs
+# A policy exception, by the owner's decision on 2026-10-30 ("keep the ultraHD links for now and other similar"):
+# HD graphics packs (texture and model packs) ship client patch files, so they can never be index entries. They are
+# listed apart, in the index's top-level "external" list, as link-only items: a link to the pack's own page (its repo,
+# its official page or its announcement thread), our own neutral words, and a visible flag that we neither checked nor
+# host it. Never mirrored, never installable, nothing fetched from them but (for a GitHub repo) its preview image.
+# Every other rule still holds: nothing decompiled or leaked, no whole-client downloads or repacks, no lure repos,
+# nothing paid. Curated by hand in tools/hub-index/external-packs.json.
+EXTERNAL = os.path.join(HERE, "external-packs.json")
+EXTERNAL_NOTE = "External download, made and hosted by its authors; not checked or hosted by Leyline"
+EXTERNAL_TYPE = "external-pack"
+EXTERNAL_KEYS = {"id", "name", "author", "url", "repo", "category", "type", "builds", "summary", "external", "note",
+                 "source_thread", "added", "thumb", "thumb_credit"}
+EXTERNAL_POLICY = ("External packs (owner's decision, 2026-10-30): HD graphics packs are client patch files, so they "
+                   "are never index entries; they are listed here as links to their authors' own pages, flagged "
+                   "external, never mirrored, hosted or installable by Leyline.")
+DIRECT_FILE = re.compile(r"(?i)\.(zip|rar|7z|mpq|exe|msi|apk|dmg|torrent|tar(\.\w+)?|tgz)(\?|#|$)|/releases/download/|"
+                         r"[?&]download=|mega\.nz|mediafire\.com|drive\.google\.com|dropbox\.com/s|wetransfer\.com")
+EXTERNAL_BAD = re.compile(r"(?i)wowdecomp|waystone|decompil|leak|repack|full[ _-]?client|client[ _-]?(download|installer)|"
+                          r"chumpton")
+
+
+def external_id(url: str) -> str:
+    import hashlib
+    return "ext:" + hashlib.sha256(url.strip().lower().encode("utf-8")).hexdigest()[:12]
+
+
+def external_items(block: dict | None = None) -> tuple[list[dict], list[str]]:
+    """(items for the index's "external" list, problems) from external-packs.json. A pack with a problem is left out
+    (and named in the problems)."""
+    doc = read_json(EXTERNAL, {})
+    block = block if block is not None else read_json(BLOCKLIST, {})
+    out, probs = [], []
+    for raw in doc.get("packs") or []:
+        if not isinstance(raw, dict) or raw.get("skip"):
+            continue
+        url = str(raw.get("url") or "").strip()
+        repo = H.canonical(raw.get("repo") or "") if raw.get("repo") else None
+        item = {"id": external_id(url), "name": H.clean_name(str(raw.get("name") or "")),
+                "author": H.clean_line(raw.get("author") or "", 60), "url": url,
+                "category": raw.get("category") or "graphics", "type": EXTERNAL_TYPE,
+                "builds": sorted({H.build_tag(b) or b for b in raw.get("builds") or ["any"]}, key=H._build_order),
+                "summary": H.clean_line(raw.get("summary") or "", 240), "external": True, "note": EXTERNAL_NOTE}
+        if repo:
+            item["repo"] = repo["url"]
+        for k in ("source_thread", "added"):
+            if raw.get(k):
+                item[k] = str(raw[k])
+        p = external_problems(item, block)
+        if p:
+            probs += [f"external {raw.get('name')!r}: {x}" for x in p]
+            continue
+        out.append(item)
+    return sorted(out, key=lambda e: (e["category"], e["name"].lower(), e["id"])), probs
+
+
+def external_problems(e: dict, block: dict | None = None) -> list[str]:
+    out = []
+    extra = set(e) - EXTERNAL_KEYS
+    if extra:
+        out.append(f"unknown fields {sorted(extra)}")
+    u = urllib.parse.urlsplit(str(e.get("url") or ""))
+    if u.scheme != "https" or not u.hostname or u.username or u.password:
+        out.append("url must be an https page")
+    elif DIRECT_FILE.search(e["url"]):
+        out.append("url must be the pack's own page, never a file or a file host")
+    if e.get("id") != external_id(str(e.get("url") or "")):
+        out.append("id")
+    if e.get("type") != EXTERNAL_TYPE or e.get("external") is not True or e.get("note") != EXTERNAL_NOTE:
+        out.append("type, external flag and note are fixed")
+    if e.get("category") not in H.CATEGORY_IDS:
+        out.append(f"category {e.get('category')!r}")
+    b = e.get("builds")
+    if not isinstance(b, list) or not b or any(x not in H.BUILDS + ["any"] for x in b):
+        out.append(f"builds {b!r}")
+    for k in ("name", "summary"):
+        if not isinstance(e.get(k), str) or not e[k].strip():
+            out.append(f"{k} missing")
+    visible = " ".join(str(e.get(k) or "") for k in ("name", "author", "summary", "note"))
+    if H.banned(visible) or (hasattr(H, "VERSION_RE") and H.VERSION_RE.search(visible)):
+        out.append("a brand word or a client number in its visible text")
+    if "<" in visible or ">" in visible or H.CTRL_RE.search(visible):
+        out.append("markup or control characters")
+    if EXTERNAL_BAD.search(visible + " " + str(e.get("url")) + " " + str(e.get("repo") or "")):
+        out.append("decompiled, leaked, repack or whole-client material (never listed, exception or not)")
+    if "repo" in e:
+        c = H.canonical(e["repo"])
+        if not c or c["url"] != e["repo"]:
+            out.append("repo is not a canonical forge link")
+    if MONEY_RE.search(visible) or PAID_STRONG.search(visible):
+        out.append("paid or selling things")
+    block = block or {}
+    hay = (str(e.get("url")) + " " + str(e.get("repo") or "")).lower()
+    for x in block.get("repos", []):
+        if x["repo"].lower() in hay:
+            out.append("blocklisted: " + x["reason"])
+    for x in block.get("owners", []):
+        c = H.canonical(e.get("repo") or "")
+        if c and c["owner"].lower() == x["owner"].lower():
+            out.append("blocklisted: " + x["reason"])
+    if "thumb" in e or "thumb_credit" in e:
+        out += ["thumb only from the pack's own GitHub repo"] if "repo" not in e else thumb_problems(e)
+    return out
+
+
 # ------------------------------------------------------------------------------------------- build
 SKIP_RECHECK = re.compile(r"(?i)no licence|game-format|client patch files|licence is not open")
 # Reasons that mean "we couldn't look this time", not "it broke a rule": a listed entry is kept as it was.
@@ -858,7 +1006,7 @@ def gather(approved: dict, issues: list[dict], only: list[str]) -> list[dict]:
             add(s["repo"], "seed", skip=skip)
             continue
         add(s["repo"], "seed", category=s.get("category"), type=s.get("type"), name=s.get("name"),
-            description=s.get("description"), needs=s.get("needs"), author=s.get("author"),
+            description=s.get("description"), needs=s.get("needs"), author=s.get("author"), waive=s.get("waive"),
             builds_given=[H.build_tag(b) for b in (s.get("builds") or [s.get("build") or "3.3.5a"])])
     for r in read_json(CANDIDATES, {}).get("candidates", []):
         add(r.get("repo", ""), "discovered", hint_builds=[H.build_tag(b) for b in r.get("builds") or [] if H.build_tag(b)],
@@ -937,6 +1085,8 @@ def build(jobs: int, approved_src: str, issues_repo: str, only: list[str], repor
         if v["verdict"] == "listed":
             if old and "release" not in meta and "release" in old and "release" not in v["entry"]:
                 v["entry"]["release"] = old["release"]          # the API didn't answer for it: keep the last-known release
+            if old and all(k in old for k in THUMB_FIELDS):
+                v["entry"].update({k: old[k] for k in THUMB_FIELDS})   # the thumbs command owns these
             listed.append(v["entry"])
         elif v["verdict"] == "needs_licence":
             holding["needs_licence"].append({"repo": c["url"], "name": v["name"], "builds": v["builds"], "reason": v["reason"]})
@@ -968,12 +1118,26 @@ def build(jobs: int, approved_src: str, issues_repo: str, only: list[str], repor
         probed = {"link:" + c["id"] for c, _, _ in results}
         listed = sorted([e for e in old if e["id"] not in probed] + listed, key=H.entry_order)
         _ = mine
+    ext, ext_probs = external_items(block)
+    old_ext = {x["id"]: x for x in read_json(INDEX, {}).get("external") or [] if isinstance(x, dict)}
+    for x in ext:                                       # the thumbs command owns these
+        if all(k in old_ext.get(x["id"], {}) for k in THUMB_FIELDS) and old_ext[x["id"]].get("repo") == x.get("repo"):
+            x.update({k: old_ext[x["id"]][k] for k in THUMB_FIELDS})
+    for p in ext_probs:
+        log("external pack left out: " + p)
     doc = {"format": 2,
            "policy": ("Link-out only: nothing here is mirrored or hosted. Open licences only; no game data, nothing "
                       "paid, nothing decompiled. Built by tools/hub-index/hub_index.py; a person reviews each update."),
-           "builds": H.BUILDS, "categories": H.CATEGORY_IDS, "entries": listed}
-    problems = H.validate_index(doc)
-    for k in holding:
+           "external_policy": EXTERNAL_POLICY,
+           "builds": H.BUILDS, "categories": H.CATEGORY_IDS, "entries": listed, "external": ext}
+    problems = validate(doc)
+    if only:                                            # the probed repos' places in holding.json, the rest kept
+        probed_urls = {c["url"].lower() for c, _, _ in results} | {c["url"].lower() for c in cands if c.get("skip")}
+        prev_hold = read_json(HOLDING, {"format": 1, "needs_licence": [], "review": [], "excluded": []})
+        for k in ("needs_licence", "review", "excluded"):
+            holding[k] = [r for r in prev_hold.get(k) or [] if str(r.get("repo", "")).lower() not in probed_urls] + holding[k]
+        holding = {**{k: v for k, v in prev_hold.items() if k not in holding}, **holding}
+    for k in ("needs_licence", "review", "excluded"):
         holding[k].sort(key=lambda r: r["repo"].lower())
     text = report_text(doc, holding)
     print(text)
@@ -987,6 +1151,8 @@ def build(jobs: int, approved_src: str, issues_repo: str, only: list[str], repor
     write_json(INDEX, doc)
     if not only:
         write_json(HOLDING, {"format": 1, **holding})
+    else:
+        write_json(HOLDING, {"format": 1, **{k: v for k, v in holding.items() if k != "format"}})
     return 0
 
 
@@ -1061,6 +1227,23 @@ def gate(base: dict, new: dict, holding: dict) -> tuple[dict, dict]:
             wait["new"].append({"repo": e["repo"], "name": e["name"], "builds": e["builds"], "category": e["category"]})
     doc = dict(new)
     doc["entries"] = sorted(out, key=H.entry_order)
+    # External packs are curated by hand (external-packs.json, merged by a person), but their thumbnails are this
+    # run's: those wait for review like any other thumbnail (the image files only travel with the review PR).
+    base_ext = {x.get("id"): x for x in base.get("external") or [] if isinstance(x, dict)}
+    ext = []
+    for x in new.get("external") or []:
+        if not isinstance(x, dict):
+            continue
+        y = {k: v for k, v in x.items() if k not in THUMB_FIELDS}
+        b = base_ext.get(x.get("id")) or {}
+        if all(k in b for k in THUMB_FIELDS) and b.get("repo") == x.get("repo"):
+            y.update({k: b[k] for k in THUMB_FIELDS})
+        if any(y.get(k) != x.get(k) for k in THUMB_FIELDS):
+            wait["changed"].append({"repo": x.get("repo") or x.get("url", ""), "name": x.get("name", ""),
+                                    "fields": sorted(THUMB_FIELDS)})
+        ext.append(y)
+    if "external" in new:
+        doc["external"] = ext
     for k in wait:
         wait[k].sort(key=lambda r: r["repo"].lower())
     return doc, wait
@@ -1113,12 +1296,328 @@ def run_gate(base_path: str, full_out: str, summary: str, report: str) -> int:
     return 0
 
 
+# ------------------------------------------------------------------------------------------- thumbnails
+# Each listed GitHub project's own preview image: the social preview its owner set, or else the card GitHub draws for
+# every repo (its og:image). Nothing else: no README pictures, no post images from Reddit or anywhere else (other
+# people's uploads). Only GitHub's own image hosts are fetched, only real images are kept, and each is made a small
+# WebP served from our site at /wrath/art/hub-thumbs/<owner>__<repo>.webp.
+THUMB_DIR = os.path.join(REPO, "stream", "www-files", "art", "hub-thumbs")
+THUMB_URL = "/wrath/art/hub-thumbs/"
+THUMB_CREDIT = "Preview image from the project's GitHub page"
+THUMB_FIELDS = ("thumb", "thumb_credit")
+THUMBS_CACHE = os.path.join(HERE, ".cache", "thumbs.json")
+PAGE_HOSTS = frozenset({"github.com"})
+IMAGE_HOSTS = frozenset({"opengraph.githubassets.com", "repository-images.githubusercontent.com",
+                         "avatars.githubusercontent.com"})
+GENERATED_CARD_HOST = "opengraph.githubassets.com"   # GitHub draws the repo's name and description on these
+THUMB_MAX_IN = 2_000_000          # bytes read from GitHub at most; a bigger answer is not stored
+THUMB_MAX_OUT = 60_000            # the WebP we keep
+THUMB_SIZE = (640, 320)
+THUMB_PART = re.compile(r"[a-z0-9][a-z0-9._-]{0,99}")
+IMAGE_MAGIC = ((b"\x89PNG\r\n\x1a\n", "png"), (b"\xff\xd8\xff", "jpeg"), (b"GIF87a", "gif"), (b"GIF89a", "gif"))
+
+
+def image_kind(data: bytes) -> str:
+    """"png", "jpeg", "gif" or "webp" from the first bytes, "" for anything else (HTML, SVG, scripts, archives)."""
+    for magic, kind in IMAGE_MAGIC:
+        if data.startswith(magic):
+            return kind
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    return ""
+
+
+def thumb_name(repo_url: str) -> str:
+    """"<owner>__<repo>.webp" for a GitHub repo link, "" when it isn't one or a part is odd."""
+    c = H.canonical(repo_url or "")
+    if not c or c["forge"] != "github":
+        return ""
+    owner, repo = c["owner"].lower(), c["repo"].lower()
+    if "/" in owner or not THUMB_PART.fullmatch(owner) or not THUMB_PART.fullmatch(repo) or ".." in owner + repo:
+        return ""
+    return f"{owner}__{repo}.webp"
+
+
+def hub_accepts_thumbs() -> bool:
+    """stream/hub.py's validate_index rejects fields it doesn't know, and the hub then shows no index at all: thumb
+    fields are written into entries only once ENTRY_KEYS has them."""
+    return set(THUMB_FIELDS) <= set(getattr(H, "ENTRY_KEYS", ()))
+
+
+def thumb_problems(e: dict, thumb_dir: str | None = None) -> list[str]:
+    """Problems with an entry's thumb fields ([] = fine, or none set)."""
+    has = [k for k in THUMB_FIELDS if k in e]
+    if not has:
+        return []
+    if len(has) != len(THUMB_FIELDS):
+        return ["thumb and thumb_credit go together"]
+    out = []
+    name = thumb_name(e.get("repo", ""))
+    if not name or e["thumb"] != THUMB_URL + name:
+        out.append(f"thumb must be {THUMB_URL}<owner>__<repo>.webp for its own repo")
+    if e["thumb_credit"] != THUMB_CREDIT:
+        out.append("thumb_credit")
+    if name and thumb_dir is not None:
+        path = os.path.join(thumb_dir, name)
+        try:
+            with open(path, "rb") as f:
+                data = f.read(THUMB_MAX_OUT + 1)
+        except OSError:
+            return out + [f"thumb file missing: {name}"]
+        if image_kind(data) != "webp" or len(data) > THUMB_MAX_OUT:
+            out.append(f"thumb file is not a WebP of at most {THUMB_MAX_OUT} bytes: {name}")
+    return out
+
+
+def validate(doc: dict, thumb_dir: str | None = None) -> list[str]:
+    """The hub's own rules plus the thumbnail rules."""
+    probs = list(H.validate_index(doc))
+    for i, e in enumerate(doc.get("entries") or [] if isinstance(doc, dict) else []):
+        if isinstance(e, dict):
+            probs += [f"entry {i} ({e.get('name')}): {p}" for p in thumb_problems(e, thumb_dir)]
+    ext = doc.get("external", []) if isinstance(doc, dict) else []
+    if not isinstance(ext, list):
+        return probs + ["external must be a list"]
+    ids = set()
+    for i, x in enumerate(ext):
+        if not isinstance(x, dict):
+            probs.append(f"external {i}: not an object")
+            continue
+        probs += [f"external {i} ({x.get('name')}): {p}" for p in external_problems(x)]
+        if "thumb" in x and "repo" in x:
+            probs += [f"external {i} ({x.get('name')}): {p}" for p in thumb_problems(x, thumb_dir) if "file" in p]
+        if x.get("id") in ids:
+            probs.append(f"external {i}: duplicate")
+        ids.add(x.get("id"))
+    if [x.get("id") for x in ext if isinstance(x, dict)] != [x.get("id") for x in sorted(
+            (x for x in ext if isinstance(x, dict)), key=lambda x: (str(x.get("category")), str(x.get("name")).lower(), str(x.get("id"))))]:
+        probs.append("external is not in the canonical order (category, name, id)")
+    return probs
+
+
+class _Hosts(urllib.request.HTTPRedirectHandler):
+    def __init__(self, hosts, schemes):
+        self.hosts, self.schemes = hosts, schemes
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        u = urllib.parse.urlsplit(newurl)
+        if u.scheme not in self.schemes or (u.hostname or "") not in self.hosts:
+            raise urllib.error.HTTPError(newurl, 403, "redirect to a host that isn't allowed", headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+class Fetcher:
+    """GETs with a host allow-list that also holds across redirects, and a size cap. page_base, hosts and schemes
+    are only changed by the tests (a local fake server)."""
+
+    def __init__(self, page_base="https://github.com", page_hosts=PAGE_HOSTS, image_hosts=IMAGE_HOSTS,
+                 schemes=("https",), timeout=20.0):
+        self.page_base, self.page_hosts, self.image_hosts = page_base.rstrip("/"), page_hosts, image_hosts
+        self.schemes, self.timeout = tuple(schemes), timeout
+
+    def allowed(self, url: str, hosts) -> bool:
+        u = urllib.parse.urlsplit(url)
+        return u.scheme in self.schemes and (u.hostname or "") in hosts and not u.username and not u.password
+
+    def get(self, url: str, hosts, cap: int, headers: dict | None = None) -> tuple[int, bytes, dict]:
+        """(status, body, headers); status 0 for a refused URL or a failed call, 413 when the body is over cap."""
+        if not self.allowed(url, hosts):
+            return 0, b"", {}
+        opener = urllib.request.build_opener(_Hosts(hosts, self.schemes))
+        req = urllib.request.Request(url, headers={"User-Agent": "leyline-hub-index", **(headers or {})})
+        try:
+            with opener.open(req, timeout=self.timeout) as r:
+                if not self.allowed(r.geturl(), hosts):
+                    return 0, b"", {}
+                body = r.read(cap + 1)
+                return (413 if len(body) > cap else r.status), body[:cap], {k.lower(): v for k, v in r.headers.items()}
+        except urllib.error.HTTPError as e:
+            return e.code, b"", {k.lower(): v for k, v in (e.headers or {}).items()}
+        except (urllib.error.URLError, OSError, ValueError):
+            return 0, b"", {}
+
+
+META_TAG = re.compile(r"<meta\s+[^>]*>", re.I)
+
+
+def og_tags(html_text: str) -> dict:
+    """og:* meta tags of a page ({"og:image": ..., ...}), values unescaped."""
+    import html as _html
+    out = {}
+    for tag in META_TAG.findall(html_text[:400_000]):
+        p = re.search(r"""(?:property|name)\s*=\s*["']([^"']+)["']""", tag, re.I)
+        c = re.search(r"""content\s*=\s*["']([^"']*)["']""", tag, re.I)
+        if p and c and p.group(1).lower().startswith("og:"):
+            out.setdefault(p.group(1).lower(), _html.unescape(c.group(1)).strip())
+    return out
+
+
+def to_webp(data: bytes) -> bytes:
+    """The image as a 640x320 WebP (centre crop), at most THUMB_MAX_OUT bytes, b"" when that can't be done. Pillow
+    when it is installed, else ffmpeg."""
+    try:
+        from PIL import Image, ImageOps                                     # noqa: WPS433
+    except ImportError:
+        Image = None
+    if Image is not None:
+        import io
+        Image.MAX_IMAGE_PIXELS = 40_000_000
+        try:
+            with Image.open(io.BytesIO(data)) as im:
+                im.seek(0)
+                im = ImageOps.fit(im.convert("RGB"), THUMB_SIZE, Image.LANCZOS)
+                for q in (80, 72, 64, 56, 48):
+                    buf = io.BytesIO()
+                    im.save(buf, "WEBP", quality=q, method=6)
+                    if buf.tell() <= THUMB_MAX_OUT:
+                        return buf.getvalue()
+        except (OSError, ValueError, SyntaxError, Image.DecompressionBombError):
+            return b""
+        return b""
+    ff = shutil.which("ffmpeg")
+    if not ff:
+        log("thumbs: neither Pillow nor ffmpeg is installed (pip install pillow)")
+        return b""
+    tmp = tempfile.mkdtemp(prefix="hubthumb-")
+    try:
+        src, dst = os.path.join(tmp, "in"), os.path.join(tmp, "out.webp")
+        with open(src, "wb") as f:
+            f.write(data)
+        w, h = THUMB_SIZE
+        for q in (80, 70, 60, 50):
+            r = subprocess.run([ff, "-v", "error", "-y", "-i", src, "-frames:v", "1", "-vf",
+                                f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}",
+                                "-c:v", "libwebp", "-quality", str(q), dst], capture_output=True, timeout=60)
+            if r.returncode == 0 and os.path.exists(dst) and os.path.getsize(dst) <= THUMB_MAX_OUT:
+                with open(dst, "rb") as f:
+                    return f.read()
+        return b""
+    except (OSError, subprocess.TimeoutExpired):
+        return b""
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def fetch_thumb(e: dict, fetcher: Fetcher, cache: dict, thumb_dir: str) -> tuple[str, str]:
+    """(status, detail) for one entry: written | unchanged | skipped. Writes <thumb_dir>/<owner>__<repo>.webp."""
+    name = thumb_name(e.get("repo", ""))
+    if not name:
+        return "skipped", "not a GitHub repo"
+    c = H.canonical(e["repo"])
+    st, body, _ = fetcher.get(f"{fetcher.page_base}/{c['owner']}/{c['repo']}", fetcher.page_hosts, THUMB_MAX_IN)
+    if st != 200:
+        return "skipped", f"repo page: HTTP {st}"
+    og = og_tags(body.decode("utf-8", "replace"))
+    img = og.get("og:image", "")
+    if not fetcher.allowed(img, fetcher.image_hosts):
+        return "skipped", "og:image is not on one of GitHub's image hosts: " + (urllib.parse.urlsplit(img).hostname or "none")
+    if urllib.parse.urlsplit(img).hostname == GENERATED_CARD_HOST:
+        # GitHub's own card prints the repo's name and description: the site never shows brand words or client numbers
+        drawn = " ".join([c["owner"], c["repo"], og.get("og:title", ""), og.get("og:description", "")])
+        if H.banned(drawn) or (hasattr(H, "VERSION_RE") and H.VERSION_RE.search(drawn)):
+            return "skipped", "GitHub's generated card would show a brand word or a client number"
+    key = c["key"]
+    old = cache.get(key) or {}
+    hdr = {"If-None-Match": old["etag"]} if old.get("etag") and old.get("image") == img else {}
+    path = os.path.join(thumb_dir, name)
+    if hdr and not os.path.exists(path):
+        hdr = {}
+    st, data, h = fetcher.get(img, fetcher.image_hosts, THUMB_MAX_IN, hdr)
+    if st == 304:
+        return "unchanged", "not modified (ETag)"
+    if st == 413:
+        return "skipped", f"image over {THUMB_MAX_IN} bytes"
+    if st != 200 or not data:
+        return "skipped", f"image: HTTP {st}"
+    kind = image_kind(data)
+    if not kind:
+        return "skipped", "not an image (magic bytes)"
+    out = to_webp(data)
+    if not out or image_kind(out) != "webp" or len(out) > THUMB_MAX_OUT:
+        return "skipped", "could not make a small WebP of it"
+    cache[key] = {"image": img, "etag": h.get("etag", ""), "kind": kind}
+    try:
+        with open(path, "rb") as f:
+            if f.read() == out:
+                return "unchanged", "same image"
+    except OSError:
+        pass
+    os.makedirs(thumb_dir, exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(out)
+    os.replace(tmp, path)
+    return "written", f"{kind} -> {len(out)} bytes WebP"
+
+
+def thumbs(top: int, only: list[str], refresh: bool = False, fetcher: Fetcher | None = None,
+           thumb_dir: str | None = None, new: bool = False) -> int:
+    """Fetch preview images for index entries: the top `top` by score and the `only` repos, and with new=True every
+    GitHub entry that has no thumb yet and was never tried (the thumbs cache remembers a skip, so a repo without a
+    usable image isn't asked again every run). An entry that already has its thumb is left alone unless refresh
+    (GitHub's card changes with every star, and each change is a review)."""
+    fetcher = fetcher or Fetcher()
+    thumb_dir = thumb_dir or THUMB_DIR
+    doc = read_json(INDEX, None)
+    if not isinstance(doc, dict) or not isinstance(doc.get("entries"), list):
+        log(f"thumbs: cannot read {INDEX}")
+        return 1
+    want = {o.lower().strip("/") for o in only}
+    es = [e for e in doc["entries"] if e.get("forge") == "github"]
+    ranked = sorted(es, key=lambda e: (-(e.get("score") or 0), e["id"]))[:max(0, top)]
+    pick = {e["id"] for e in ranked} | {e["id"] for e in es
+                                       if H.canonical(e["repo"])["key"].split("/", 3)[-1] in want or e["repo"].lower() in want}
+    cache = read_json(THUMBS_CACHE, {})
+    if new:
+        pick |= {e["id"] for e in es if "thumb" not in e and H.canonical(e["repo"])["key"] not in cache}
+    record = hub_accepts_thumbs()
+    if not record:
+        log("thumbs: stream/hub.py doesn't accept thumb fields yet (ENTRY_KEYS): images are written, entries left as "
+            "they are until it does")
+    counts: dict[str, int] = {}
+    changed = False
+    ext_pick = [x for x in doc.get("external") or [] if isinstance(x, dict) and x.get("repo")
+                and (H.canonical(x["repo"]) or {}).get("forge") == "github"]
+    for x in ext_pick:
+        pick.add(x["id"])
+    for e in doc["entries"] + ext_pick:
+        if e["id"] not in pick:
+            continue
+        name = thumb_name(e["repo"])
+        have = bool(name) and e.get("thumb") == THUMB_URL + name and os.path.exists(os.path.join(thumb_dir, name))
+        if have and not refresh:
+            status, detail = "unchanged", "has its thumb"
+        else:
+            status, detail = fetch_thumb(e, fetcher, cache, thumb_dir)
+            key = (H.canonical(e["repo"]) or {}).get("key")
+            if status == "skipped" and key and not (cache.get(key) or {}).get("image"):
+                cache[key] = {"skipped": detail[:120]}        # remembered for --new; --only / top still retry it
+        counts[status] = counts.get(status, 0) + 1
+        print(f"  {status:9} {e['repo']}: {detail}")
+        ok_file = bool(name) and os.path.exists(os.path.join(thumb_dir, name))
+        if (record or e in ext_pick) and status in ("written", "unchanged") and ok_file:
+            new = {"thumb": THUMB_URL + name, "thumb_credit": THUMB_CREDIT}
+            if any(e.get(k) != v for k, v in new.items()):
+                e.update(new)
+                changed = True
+    print("thumbs: " + ", ".join(f"{n} {k}" for k, n in sorted(counts.items())) if counts else "thumbs: nothing to do")
+    write_json(THUMBS_CACHE, {k: cache[k] for k in sorted(cache)})
+    if changed:
+        problems = validate(doc, thumb_dir)
+        if problems:
+            for p in problems:
+                log("PROBLEM  " + p)
+            return 1
+        write_json(INDEX, doc)
+    return 0
+
+
 def check() -> int:
     doc = read_json(INDEX, None)
     if doc is None:
         print(f"cannot read {INDEX}")
         return 1
-    problems = H.validate_index(doc)
+    problems = validate(doc, THUMB_DIR)
     for p in problems:
         print("PROBLEM  " + p)
     print(f"{len(doc.get('entries', []))} entries, {len(problems)} problems")
@@ -1137,6 +1636,14 @@ def main(argv: list[str]) -> int:
     b.add_argument("--only", nargs="*", default=[])
     b.add_argument("--report", default="")
     b.add_argument("--allow-shrink", action="store_true")
+    b.add_argument("--thumbs", type=int, default=0, metavar="N",
+                   help="after a good build, fetch preview images for the top N entries, every new one (never "
+                        "tried) and the --only ones")
+    t = sub.add_parser("thumbs")
+    t.add_argument("--top", type=int, default=30)
+    t.add_argument("--only", nargs="*", default=[])
+    t.add_argument("--refresh", action="store_true")
+    t.add_argument("--new", action="store_true", help="also every GitHub entry without a thumb that was never tried")
     g = sub.add_parser("gate")
     g.add_argument("--base", required=True)
     g.add_argument("--full-out", default="")
@@ -1151,7 +1658,12 @@ def main(argv: list[str]) -> int:
             return 0
         return discover(api, a.max_pages)
     if a.cmd == "build":
-        return build(a.jobs, a.approved, a.issues, a.only, a.report, allow_shrink=a.allow_shrink)
+        rc = build(a.jobs, a.approved, a.issues, a.only, a.report, allow_shrink=a.allow_shrink)
+        if rc == 0 and a.thumbs > 0:
+            thumbs(a.thumbs, a.only, new=True)          # a thumbnail that can't be fetched never fails the build
+        return rc
+    if a.cmd == "thumbs":
+        return thumbs(a.top, a.only, a.refresh, new=a.new)
     if a.cmd == "gate":
         return run_gate(a.base, a.full_out, a.summary, a.report)
     return check()

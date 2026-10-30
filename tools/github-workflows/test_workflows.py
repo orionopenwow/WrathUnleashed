@@ -31,7 +31,7 @@ def steps(doc, job):
 class Workflows(unittest.TestCase):
     def test_all_parse(self):
         names = sorted(p.name for p in HERE.glob("*.yml"))
-        self.assertEqual(names, ["hub-index.yml", "leyline-launcher.yml", "realm-scripts.yml", "wu-hosting.yml",
+        self.assertEqual(names, ["hub-index.yml", "leyline-launcher.yml", "realm-scripts.yml", "scout.yml", "wu-hosting.yml",
                                  "wu-images.yml"])
         for n in names:
             text, doc = load(n)
@@ -45,7 +45,8 @@ class Workflows(unittest.TestCase):
             self.assertNotIn("\t", text, n)
 
     def test_hub_index(self):
-        """Weekly and on demand; the built-in token only; a PR from a refresh branch, never a push to main."""
+        """Daily and on demand; the built-in token only; PRs from the daily and review branches, never a push to main;
+        only the daily refresh is merged by the workflow; new thumbnails travel in the review PR."""
         text, doc = load("hub-index.yml")
         self.assertIn("schedule", doc["on"])
         self.assertIn("workflow_dispatch", doc["on"])
@@ -53,21 +54,44 @@ class Workflows(unittest.TestCase):
         self.assertEqual(doc["permissions"], {"contents": "write", "pull-requests": "write", "issues": "read"})
         self.assertEqual(set(re.findall(r"secrets\.([A-Za-z_]+)", text)), {"GITHUB_TOKEN"})
         job = doc["jobs"]["refresh"]
-        self.assertEqual(job["env"]["BRANCH"], "hub-index/refresh")
+        self.assertEqual((job["env"]["DAILY"], job["env"]["REVIEW"]), ("hub-index/daily", "hub-index/review"))
         run = "\n".join(s.get("run", "") for s in job["steps"])
         self.assertIn("hub_index.py discover", run)
         self.assertIn("hub_index.py build", run)
+        self.assertIn("--thumbs 30", run)
+        self.assertIn("pip install", run)
+        self.assertIn("hub_index.py gate", run)
         self.assertIn("hub_index.py check", run)
-        self.assertIn('git push -q -f origin "$BRANCH"', run)
+        self.assertIn('git push -q -f origin "$DAILY"', run)
+        self.assertIn('git push -q -f origin "$REVIEW"', run)
         self.assertIn("gh pr create --base main", run)
         self.assertNotRegex(run, r"push[^\n]*\bmain\b")
-        self.assertNotIn("gh pr merge", run)
+        self.assertEqual(re.findall(r"gh pr merge (\S+)", run), ['"$DAILY"'])
+        self.assertIn("stream/www-files/art/hub-thumbs", run.split("Review PR")[-1] if "Review PR" in run else run[run.index('"$REVIEW"'):])
         form = yaml.safe_load((HERE / "ISSUE_TEMPLATE" / "submit-mod.yml").read_text(encoding="utf-8"))
         self.assertEqual(form["labels"], ["mod-submission"])
         labels = [b["attributes"]["label"] for b in form["body"] if b["type"] != "markdown"]
         self.assertEqual(labels[:3], ["Repo link", "Client build", "Category"])
         builds = next(b for b in form["body"] if b.get("id") == "build")["attributes"]["options"]
         self.assertEqual(builds, ["1.12.1", "2.4.3", "3.3.5a", "4.3.4", "5.4.8", "any"])
+
+    def test_scout(self):
+        """Daily and on demand; the built-in token only; one PR from the scout branch, never merged, never main."""
+        text, doc = load("scout.yml")
+        self.assertIn("schedule", doc["on"])
+        self.assertIn("workflow_dispatch", doc["on"])
+        self.assertNotIn("push", doc["on"])
+        self.assertEqual(doc["permissions"], {"contents": "write", "pull-requests": "write"})
+        self.assertEqual(set(re.findall(r"secrets\.([A-Za-z_]+)", text)), {"GITHUB_TOKEN"})
+        job = doc["jobs"]["scout"]
+        self.assertEqual(job["env"]["BRANCH"], "scout/digest")
+        run = "\n".join(s.get("run", "") for s in job["steps"])
+        self.assertIn("scout.py run", run)
+        self.assertIn("test_scout.py", run)
+        self.assertIn('git push -q -f origin "$BRANCH"', run)
+        self.assertNotRegex(run, r"push[^\n]*\bmain\b")
+        self.assertNotIn("gh pr merge", run)
+        self.assertEqual((REPO / ".github" / "workflows" / "scout.yml").read_text(encoding="utf-8"), text)
 
     def test_images(self):
         text, doc = load("wu-images.yml")

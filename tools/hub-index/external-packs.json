@@ -1,0 +1,18 @@
+{
+ "format": 1,
+ "note": "Link-only external packs: the owner's exception of 2026-10-30 ('keep the ultraHD links for now and other similar'). HD graphics packs ship client patch files, so they are never index entries; each is a link to its authors' own page (repo, official page or announcement thread), with our own words. Never mirrored, never installable. url must be a page, never a file or a file host; repo (optional) is its GitHub repo, the only place a preview image may come from. hub_index.py build writes them to the index's top-level \"external\" list.",
+ "packs": [
+  {
+   "name": "UltraHD Graphics Modpack",
+   "author": "",
+   "url": "https://www.reddit.com/r/wowservers/comments/1xiqhdg/conquest_of_azeroth_ultrahd_graphics_modpack/",
+   "category": "graphics",
+   "builds": [
+    "3.3.5a"
+   ],
+   "summary": "A high-resolution texture and model pack announced for the Conquest community client. Downloaded from its authors' own page.",
+   "source_thread": "https://www.reddit.com/r/wowservers/comments/1xiqhdg/conquest_of_azeroth_ultrahd_graphics_modpack/",
+   "added": "2026-10-30"
+  }
+ ]
+}

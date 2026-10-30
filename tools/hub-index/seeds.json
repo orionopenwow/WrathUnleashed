@@ -1436,6 +1436,99 @@
    "type": "addon",
    "name": "ShaguPlates",
    "description": "Nameplates with health, cast bars and debuffs."
+  },
+  {
+   "repo": "https://github.com/tswow/tswow",
+   "category": "tools",
+   "type": "tool",
+   "name": "tswow",
+   "needs": "TrinityCore",
+   "description": "A modding framework with its own editor setup: write server scripts and content changes in TypeScript and build them into a TrinityCore realm.",
+   "found": "GitHub topic pages, 2026-10-30"
+  },
+  {
+   "repo": "https://github.com/DMCK96/azeroth-world-editor",
+   "category": "tools",
+   "type": "tool",
+   "name": "Azeroth World Editor",
+   "needs": "AzerothCore",
+   "description": "A desktop world editor for AzerothCore realms: build quests, NPCs, objects, spawns and patrols in a 3D view, then export it all as SQL.",
+   "found": "GitHub topic page wotlk (updated), 2026-10-30",
+   "waive": [
+    {
+     "file": "site/src/content/docs/getting-started/first-quest.mdx",
+     "why": "an MDX documentation page (Markdown with components), not a model file"
+    },
+    {
+     "file": "site/src/content/docs/index.mdx",
+     "why": "an MDX documentation page (Markdown with components), not a model file"
+    },
+    {
+     "file": "src/core/scripts/decompile.ts",
+     "why": "turns the realm database's SmartAI script rows into readable steps; nothing to do with client code"
+    },
+    {
+     "file": "tests/core/scripts-decompile.test.ts",
+     "why": "the test for that SmartAI script reader"
+    }
+   ]
+  },
+  {
+   "repo": "https://github.com/r-o-b-o-t-o/mod-i-found-your-sword",
+   "category": "sandbox",
+   "type": "module",
+   "name": "Archipelago Randomizer Link",
+   "needs": "AzerothCore",
+   "description": "Connects a realm to Archipelago, the multi-game randomizer: quests, items and progress become checks shared with players of other games.",
+   "found": "GitHub topic page azerothcore-module, 2026-10-30"
+  },
+  {
+   "repo": "https://github.com/LonelyIceProject/lonelyice",
+   "category": "presets",
+   "type": "preset",
+   "name": "LonelyIce",
+   "description": "A one-window single-player setup: it builds a local realm with bots from the client you already own, runs it in the background and starts the game.",
+   "found": "GitHub topic page azerothcore-tools, 2026-10-30"
+  },
+  {
+   "repo": "https://github.com/Yuof/mod-rndbot-sync",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Random Bot Sync",
+   "needs": "AzerothCore",
+   "description": "Keeps the realm's random playerbots at the level and gear of the strongest real player online.",
+   "found": "GitHub topic page playerbots, 2026-10-30"
+  },
+  {
+   "repo": "https://github.com/kasperfriend/friends-graphics",
+   "category": "graphics",
+   "type": "tool",
+   "name": "Modern Renderer",
+   "description": "A Direct3D 9 proxy for the classic client that adds modern lighting, fog, water, weather and post-processing.",
+   "found": "web search for the graphics upgrade; likely the subject of r/wowservers 1wols90 (volumetric lighting and fog), 2026-10-30"
+  },
+  {
+   "repo": "https://github.com/kasperfriend/azerothcore-oneclick-compiler",
+   "category": "presets",
+   "type": "preset",
+   "name": "One-Click Realm Compiler",
+   "needs": "AzerothCore",
+   "description": "A Windows script that installs the build tools, compiles AzerothCore with playerbots from pinned revisions and sets up a portable database.",
+   "found": "https://www.reddit.com/r/wowservers/comments/1wdbedw/ (2026-10-30)"
+  },
+  {
+   "repo": "https://github.com/cmangos/playerbots",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "CMaNGOS Playerbots",
+   "needs": "CMaNGOS",
+   "builds": [
+    "1.12",
+    "2.4.3",
+    "3.3.5a"
+   ],
+   "description": "The playerbot system for CMaNGOS realms: bots that fill the world, battlegrounds and dungeons, or play your own alts.",
+   "found": "celguar/mangosbot-bots README (moved here), 2026-10-30"
   }
  ]
 }

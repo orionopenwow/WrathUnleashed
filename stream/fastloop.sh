@@ -163,8 +163,14 @@ fi
 if [ -f hub_rank.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' hub_rank.py && install -m 644 hub_rank.py "$WU/portal/hub_rank.py"; fi
 if [ -d www-files/art ] && [ -f www-files/art/wu-theme.css ]; then
   install -d -m 755 "$WU/portal/art"
-  install -m 644 www-files/art/* "$WU/portal/art/"
-  echo "  art: $(ls www-files/art | wc -l) files -> $WU/portal/art"
+  find www-files/art -maxdepth 1 -type f -exec install -m 644 {} "$WU/portal/art/" \;
+  echo "  art: $(find www-files/art -maxdepth 1 -type f | wc -l) files -> $WU/portal/art"
+  # the hub's preview thumbnails (tools/hub-index/hub_index.py thumbs): WebP only, replaced as a set
+  if [ -d www-files/art/hub-thumbs ]; then
+    rm -rf "$WU/portal/art/hub-thumbs"; install -d -m 755 "$WU/portal/art/hub-thumbs"
+    find www-files/art/hub-thumbs -maxdepth 1 -type f -name '*.webp' -exec install -m 644 {} "$WU/portal/art/hub-thumbs/" \;
+    echo "  hub thumbnails: $(find www-files/art/hub-thumbs -maxdepth 1 -type f -name '*.webp' | wc -l) -> $WU/portal/art/hub-thumbs"
+  fi
 else
   echo "  WARNING: no www-files/art in the upload: the pages keep the art they had (or plain CSS without it)"
 fi

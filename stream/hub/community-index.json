@@ -1,6 +1,7 @@
 {
  "format": 2,
  "policy": "Link-out only: nothing here is mirrored or hosted. Open licences only; no game data, nothing paid, nothing decompiled. Built by tools/hub-index/hub_index.py; a person reviews each update.",
+ "external_policy": "External packs (owner's decision, 2026-10-30): HD graphics packs are client patch files, so they are never index entries; they are listed here as links to their authors' own pages, flagged external, never mirrored, hosted or installable by Leyline.",
  "builds": [
   "1.12",
   "2.4.3",
@@ -834,6 +835,27 @@
    "source": "seed",
    "needs": "mod-ale or Eluna",
    "score": 8.0
+  },
+  {
+   "id": "link:6d7cafdc3769",
+   "name": "LonelyIce",
+   "author": "LonelyIceProject",
+   "owner": "LonelyIceProject",
+   "repo": "https://github.com/LonelyIceProject/lonelyice",
+   "forge": "github",
+   "licence": "GPL-2.0",
+   "category": "presets",
+   "type": "preset",
+   "builds": [
+    "3.3.5a"
+   ],
+   "summary": "A one-window single-player setup: it builds a local realm with bots from the client you already own, runs it in the background and starts the game.",
+   "description": "",
+   "stars": 3,
+   "updated": "2026-10-27",
+   "archived": false,
+   "source": "seed",
+   "score": 17.0
   },
   {
    "id": "link:508eec2c28e9",
@@ -2342,6 +2364,28 @@
    "score": 8.0
   },
   {
+   "id": "link:fea662d2975b",
+   "name": "Random Bot Sync",
+   "author": "Yuof",
+   "owner": "Yuof",
+   "repo": "https://github.com/Yuof/mod-rndbot-sync",
+   "forge": "github",
+   "licence": "AGPL-3.0",
+   "category": "realm-scripts",
+   "type": "module",
+   "builds": [
+    "3.3.5a"
+   ],
+   "summary": "Keeps the realm's random playerbots at the level and gear of the strongest real player online.",
+   "description": "",
+   "stars": 14,
+   "updated": "2026-10-20",
+   "archived": false,
+   "source": "seed",
+   "needs": "AzerothCore",
+   "score": 22.8
+  },
+  {
    "id": "link:90bf445fb64e",
    "name": "Random Item Enchants (Lua)",
    "author": "Brytenwally",
@@ -2826,6 +2870,28 @@
    "score": 11.0
   },
   {
+   "id": "link:a49421bd6182",
+   "name": "Archipelago Randomizer Link",
+   "author": "r-o-b-o-t-o",
+   "owner": "r-o-b-o-t-o",
+   "repo": "https://github.com/r-o-b-o-t-o/mod-i-found-your-sword",
+   "forge": "github",
+   "licence": "MIT",
+   "category": "sandbox",
+   "type": "module",
+   "builds": [
+    "3.3.5a"
+   ],
+   "summary": "Connects a realm to Archipelago, the multi-game randomizer: quests, items and progress become checks shared with players of other games.",
+   "description": "",
+   "stars": 2,
+   "updated": "2026-10-25",
+   "archived": false,
+   "source": "seed",
+   "needs": "AzerothCore",
+   "score": 15.8
+  },
+  {
    "id": "link:40a0aa9f1e98",
    "name": "Crime and Bounty",
    "author": "zyggy123",
@@ -3019,6 +3085,28 @@
    "archived": false,
    "source": "seed",
    "score": 11.0
+  },
+  {
+   "id": "link:57ce413c5697",
+   "name": "Azeroth World Editor",
+   "author": "DMCK96",
+   "owner": "DMCK96",
+   "repo": "https://github.com/DMCK96/azeroth-world-editor",
+   "forge": "github",
+   "licence": "GPL-3.0",
+   "category": "tools",
+   "type": "tool",
+   "builds": [
+    "3.3.5a"
+   ],
+   "summary": "A desktop world editor for AzerothCore realms: build quests, NPCs, objects, spawns and patrols in a 3D view, then export it all as SQL.",
+   "description": "",
+   "stars": 16,
+   "updated": "2026-10-29",
+   "archived": false,
+   "source": "seed",
+   "needs": "AzerothCore",
+   "score": 23.3
   },
   {
    "id": "link:e43457e58669",
@@ -3720,6 +3808,28 @@
    "score": 15.8
   },
   {
+   "id": "link:c6a3ca93db91",
+   "name": "tswow",
+   "author": "tswow",
+   "owner": "tswow",
+   "repo": "https://github.com/tswow/tswow",
+   "forge": "github",
+   "licence": "GPL-3.0",
+   "category": "tools",
+   "type": "tool",
+   "builds": [
+    "3.3.5a"
+   ],
+   "summary": "A modding framework with its own editor setup: write server scripts and content changes in TypeScript and build them into a TrinityCore realm.",
+   "description": "",
+   "stars": 125,
+   "updated": "2026-08-02",
+   "archived": false,
+   "source": "seed",
+   "needs": "TrinityCore",
+   "score": 32.0
+  },
+  {
    "id": "link:a966e0c86e2e",
    "name": "wrath-of-the-vanilla-v2",
    "author": "Hextv",
@@ -3739,6 +3849,24 @@
    "archived": false,
    "source": "discovered",
    "score": 18.5
+  }
+ ],
+ "external": [
+  {
+   "id": "ext:994b561c9db9",
+   "name": "UltraHD Graphics Modpack",
+   "author": "",
+   "url": "https://www.reddit.com/r/wowservers/comments/1xiqhdg/conquest_of_azeroth_ultrahd_graphics_modpack/",
+   "category": "graphics",
+   "type": "external-pack",
+   "builds": [
+    "3.3.5a"
+   ],
+   "summary": "A high-resolution texture and model pack announced for the Conquest community client. Downloaded from its authors' own page.",
+   "external": true,
+   "note": "External download, made and hosted by its authors; not checked or hosted by Leyline",
+   "source_thread": "https://www.reddit.com/r/wowservers/comments/1xiqhdg/conquest_of_azeroth_ultrahd_graphics_modpack/",
+   "added": "2026-10-30"
   }
  ]
 }

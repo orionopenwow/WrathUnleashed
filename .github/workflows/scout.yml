@@ -1,0 +1,85 @@
+# The scout (tools/hub-index/scout.py, docs/HUB-INDEX.md "The scout"): every day, and on demand, look for new and
+# rising open projects (GitHub, Codeberg, GitLab, and links in r/wowservers' public feeds), vet them with the index's
+# rules and lure checks, and propose a digest as ONE pull request, "Scout digest <date>": docs/scout/<date>.md,
+# tools/hub-index/scout-state.json and the finds that passed in tools/hub-index/candidates.json (the daily index
+# build and its review gate then look at them). It never merges, never pushes to main and never posts anywhere else.
+# Only the built-in GITHUB_TOKEN is used (without one it still runs, with fewer results).
+# Source copy: tools/github-workflows/scout.yml (installed as .github/workflows/scout.yml in WrathUnleashed).
+name: Scout
+
+on:
+  schedule:
+    - cron: "43 5 * * *"          # every day, 05:43 UTC (before the hub index's run)
+  workflow_dispatch:
+
+permissions:
+  contents: write                  # push the scout branch (never main)
+  pull-requests: write             # open or update the digest PR
+
+concurrency:
+  group: scout
+  cancel-in-progress: false
+
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      BRANCH: scout/digest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Probe cache
+        uses: actions/cache@v4
+        with:
+          path: tools/hub-index/.cache
+          key: scout-${{ github.run_id }}
+          restore-keys: |
+            scout-
+            hub-index-
+      - name: Carry over an open digest (earlier digests and the star history)
+        run: |
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            git fetch -q origin "$BRANCH"
+            git checkout "origin/$BRANCH" -- docs/scout tools/hub-index/scout-state.json 2>/dev/null || true
+          fi
+      - name: Tests
+        run: python3 -I tools/hub-index/test_scout.py
+      - name: Scout
+        run: |
+          echo "DATE=$(date -u +%F)" >> "$GITHUB_ENV"
+          python3 -I tools/hub-index/scout.py run --date "$(date -u +%F)" --probe 40 --report "$RUNNER_TEMP/scout.txt"
+      - name: Open or update the digest PR (never merged here)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          paths="docs/scout tools/hub-index/scout-state.json tools/hub-index/candidates.json"
+          git add -A -- $paths
+          if git diff --cached --quiet; then
+            echo "Nothing new from the scout today."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git commit -q -m "Scout digest $DATE"
+          git push -q -f origin "$BRANCH"
+          {
+            echo "The scout's daily digest: docs/scout/$DATE.md. Nothing here goes live: finds that passed join"
+            echo "tools/hub-index/candidates.json, and the hub index's own review gate decides on each of them."
+            echo "Suspected lures are listed for a person to blocklist; nothing is posted anywhere."
+            echo
+            echo '```'
+            head -c 60000 "$RUNNER_TEMP/scout.txt"
+            echo '```'
+          } > "$RUNNER_TEMP/pr-body.md"
+          if gh pr view "$BRANCH" --json state -q .state 2>/dev/null | grep -q OPEN; then
+            gh pr edit "$BRANCH" --title "Scout digest $DATE" --body-file "$RUNNER_TEMP/pr-body.md"
+          else
+            gh pr create --base main --head "$BRANCH" --title "Scout digest $DATE" --body-file "$RUNNER_TEMP/pr-body.md"
+          fi
