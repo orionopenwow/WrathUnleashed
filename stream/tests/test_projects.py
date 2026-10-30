@@ -189,11 +189,11 @@ st, _, lp = req("GET", "/wrath/mods")
 check("listed at once beside the packaged mods", comm_cards(lp) == [r["id"]]
       and re.findall(r'<a class="wk-card" href="/wrath/mods/([a-z0-9-]+)"', lp) == ["dalaran-dice", "emote-wheel", "pings"])
 check("a Credits line under every card", lp.count('class="wk-item"') == 4 and lp.count('<p class="wk-credit">Credits: ') == 4)
-check("packaged credit: author, licence, repo", "Credits: WrathUnleashed &middot; MIT &middot; <a href=\"https://github.com/orionopenwow/WrathUnleashed/tree/main/mods/catalog/pings\"" in lp)
+check("packaged credit: author, licence, repo", "Credits: WrathUnleashed &middot; MIT &middot; <a href=\"https://github.com/orionopenwow/Leyline/blob/main/mods/SPEC.md#pings\"" in lp)
 check("community credit: author link, licence, repo", 'Credits: <a href="https://github.com/alice" rel="noopener noreferrer nofollow ugc">alice</a> &middot; MIT &middot; <a href="https://github.com/alice/frame-kit"' in lp)
 st, _, dp = req("GET", "/wrath/mods/pings")
 check("packaged detail page: author, licence, repo", "<dt>Author</dt><dd>WrathUnleashed</dd>" in dp and "<dt>Licence</dt><dd>MIT</dd>" in dp
-      and "<dt>Repo</dt>" in dp and "mods/catalog/pings" in dp)
+      and "<dt>Repo</dt>" in dp and "mods/SPEC.md#pings" in dp)
 check("lists the add and credits links", 'href="/wrath/mods/submit"' in lp and 'href="/wrath/mods/credits"' in lp)
 
 # ---------------------------------------------------------------- validation

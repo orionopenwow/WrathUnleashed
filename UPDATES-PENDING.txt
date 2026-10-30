@@ -326,3 +326,6 @@
 1106a signin Front page: Forge and Agents sections and pages, Minigolf leads Game modes, Server hosting software
 1106b ovsite openvanilla.app: its home opens the Leyline front page (and the repo cleanup lands on Leyline-Launcher main)
 1106c ship Save to GitHub: Forge and Agents on the front page, the ovsite step
+1107a signin The Leyline front door is the main site: every hub page at /wrath/leyline, old addresses redirect, the backdrop
+1107b ovsite openvanilla.app: the remaining old pages forward to their Leyline pages
+1107c ship Save to GitHub: the main site, the backdrop, the export keeps the backdrop private

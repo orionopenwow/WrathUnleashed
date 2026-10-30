@@ -111,11 +111,17 @@ class Refused(Exception):
     pass
 
 
+# Pictures the site shows but the public repo doesn't carry: the owner's backdrop (its source isn't ours to republish).
+PRIVATE_ART = {"leyline-shot-backdrop.webp"}
+
+
 def refusal(rel: str, data: bytes) -> str | None:
     """Why this file must not be exported, or None."""
     name = rel.rsplit("/", 1)[-1]
     if GAME_DATA.search(name):
         return "game data"
+    if name in PRIVATE_ART:
+        return "site-only art (not ours to publish)"
     if LOG_NAME.search(rel):
         return "log"
     if DECOMP_NAME.search(rel) or DECOMP_TEXT.search(data):

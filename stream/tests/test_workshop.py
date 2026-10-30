@@ -218,7 +218,7 @@ check("category chips stay in the category", 'href="/wrath/mods/c/addons?kind=ui
 st, ep, _, _ = page("/wrath/mods/c/maps")
 check("empty category: 200, its line, no cards", st == 200 and cards(ep) == [] and "New zones, arenas, dungeons and housing plots." in ep)
 check("empty category: Publish the first one, linking the modder guide", "Publish the first one" in ep
-      and 'href="https://github.com/orionopenwow/WrathUnleashed/blob/main/mods/README-modders.md"' in ep)
+      and 'href="https://github.com/orionopenwow/Leyline/blob/main/mods/SPEC.md"' in ep)
 check("empty category: no fake entries", "class=\"wk-card\"" not in ep and "0 mods here" in ep)
 empties = [i for i in CAT_IDS if i not in ("addons", "sandbox")]
 check("every empty category says so", all("Publish the first one" in page("/wrath/mods/c/" + i)[1] for i in empties))

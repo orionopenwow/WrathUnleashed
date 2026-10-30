@@ -150,7 +150,7 @@ hrefs = dict(re.findall(r'<a class="hb-ni[^"]*" href="([^"]+)"[^>]*><svg.*?</svg
 check("header: each item goes to the launcher page's web twin", hrefs == {
       "Play": "/wrath", "Realms": "/wrath/leyline-preview/realms", "Mods": "/wrath/leyline-preview/catalog",
       "Addons": "/wrath/leyline-preview/catalog?cat=addons", "Modes": "/wrath/leyline-preview/modes", "Host": "/wrath/host",
-      "Community": "/wrath/workshop"} and "addons" in HB.CATEGORY_IDS, hrefs)
+      "Community": "/wrath/leyline-preview#community"} and "addons" in HB.CATEGORY_IDS, hrefs)
 more = re.search(r'<details class="hb-more-d"><summary class="hb-ni[^"]*">.*?<span>More</span></summary><div class="hb-more-m">(.*?)</div></details>', nav, re.S)
 check("header: More is a details dropdown (no script needed) with Forge, Agents, Gallery, Docs, News, Creators, Status",
       more and re.findall(r"<span>([^<]+)</span>", more.group(1)) == ["Forge", "Agents", "Gallery", "Docs", "News", "Creators", "Status"]
@@ -202,7 +202,7 @@ check("feature sections: a heading, a lede, points and a first link each", all(f
 hrefs = [re.findall(r'href="([^"]+)"', f[6]) for f in fs]
 check("feature sections: links to pages that exist, nothing paid", [h[0] for h in hrefs][1:] == [
       "/wrath/host", "/wrath/leyline-preview/realms", "/wrath?go=mode:minigolf", "/wrath/leyline-preview/catalog?sort=hot",
-      "/wrath/leyline-preview/forge", "/wrath/leyline-preview/agents", "/wrath/workshop"] and hrefs[0][0].startswith("https://github.com/orionopenwow/Leyline/releases")
+      "/wrath/leyline-preview/forge", "/wrath/leyline-preview/agents", "/wrath/leyline-preview/catalog"] and hrefs[0][0].startswith("https://github.com/orionopenwow/Leyline/releases")
       and not re.search(r"(?i)support|donat|\bvip\b|\bshop\b", " ".join(f[6] for f in fs)))
 check("feature sections: a TODO(owner) to reorder them", "TODO(owner): the order of the products" in open(HB.__file__).read())
 check("feature sections: the game modes line from playmodes.json, Hero Key as coming", "Minigolf" in fs[3][4]
@@ -955,7 +955,32 @@ st, h, b = req("/wrath/leyline/gallery")
 check("switch on: /wrath/leyline/gallery is the gallery, indexable, linked from More and the front page's filters",
       st == 200 and "<h1>Gallery</h1>" in b.decode() and "x-robots-tag" not in h and 'content="noindex"' not in b.decode()
       and 'href="/wrath/leyline/gallery"' in s and 'href="/wrath/leyline/gallery?f=game"' in s)
+# the front door is the main site (owner 2026-10-30: "make this our main one"): every hub page at /wrath/leyline/<page>
+check("switch on: no link on the front page says leyline-preview", "leyline-preview" not in s)
+for pg in ("/realms", "/catalog?cat=addons", "/modes", "/news", "/creators", "/beacon", "/submit", "/forge", "/agents",
+           "/p/theme-night-sky"):
+    st, h, b = req("/wrath/leyline" + pg)
+    t = b.decode()
+    check(f"switch on: /wrath/leyline{pg} is served, indexable, no preview flag or links",
+          st == 200 and 'class="hb-top"' in t and "leyline-preview" not in t and "Preview:" not in t
+          and 'class="hb-sub"' not in t and "x-robots-tag" not in h,
+          (st, "leyline-preview" in t, "Preview:" in t, 'class="hb-sub"' in t, h.get("x-robots-tag"), re.findall(r".{60}leyline-preview.{40}", t)[:2]))
+st, h, _ = req("/wrath/leyline-preview/catalog?cat=addons&q=bags")
+check("switch on: an old preview address sends a 301 to the front door, with its query",
+      st == 301 and h.get("location") == "/wrath/leyline/catalog?cat=addons&q=bags", (st, h.get("location")))
+check("switch on: the preview's own front page too", req("/wrath/leyline-preview")[1].get("location") == "/wrath/leyline")
+check("switch on: the catalog feed stays where launchers read it", req("/wrath/leyline/catalog.json")[0] == 200)
+for old_p, to in (("/wrath/realms?client=own", "/wrath/leyline/realms?client=own"), ("/wrath/mods", "/wrath/leyline/catalog"),
+                  ("/wrath/workshop?q=bags&x=1", "/wrath/leyline/catalog?q=bags"),
+                  ("/wrath/mods/c/addons", "/wrath/leyline/catalog?cat=addons")):
+    st, h, _ = req(old_p)
+    check(f"switch on: the older page {old_p} sends a 301 to its twin", st == 301 and h.get("location") == to, (st, h.get("location")))
+check("switch on: a Workshop item page stays", req("/wrath/mods/pings")[0] != 301)
+st, h, _ = req("/wrath/leyline/submit", "POST", "repo=https%3A%2F%2Fgithub.com%2Fa%2Fb&build=3.3.5a&category=tools", ip="10.4.4.9")
+check("switch on: Submit a mod posts at the front door and lands there", st in (303, 400)
+      and (st == 400 or h.get("location") == "/wrath/leyline/submit?done=1"), (st, h.get("location")))
 os.environ.pop("WU_HUB_FRONT")
+check("switch off: the older pages stay themselves", req("/wrath/realms")[0] == 200 and req("/wrath/mods")[0] == 200)
 os.environ["WU_HUB"] = "0"
 check("WU_HUB=0: the preview is off", req("/wrath/leyline-preview")[0] == 404 and req("/wrath/leyline/catalog.json")[0] == 404)
 os.environ.pop("WU_HUB")

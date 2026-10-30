@@ -898,6 +898,7 @@ ART_TYPES = {
     # the front page's Forge and Agents sections: the owner's own app screenshots (Forge's map of its own island;
     # the Agents inn), game pictures, so behind the killswitch like the other leyline-shot- files
     "leyline-shot-forge.webp": "image/webp", "leyline-shot-agents.webp": "image/webp",
+    "leyline-shot-backdrop.webp": "image/webp",   # the hub's backdrop (the owner's picture), faint behind every page
     "leyline-display.woff2": "font/woff2", "leyline-display-OFL.txt": "text/plain; charset=utf-8",   # Big Shoulders Display 600 (SIL OFL 1.1, leyline-display-OFL.txt)
     "leyline-corner-tl.webp": "image/webp", "leyline-corner-tr.webp": "image/webp",   # our gold frame art, hued blue
     "leyline-corner-bl.webp": "image/webp", "leyline-corner-br.webp": "image/webp", "leyline-divider.webp": "image/webp",
@@ -1527,7 +1528,7 @@ def realms_page(query: dict | None = None) -> bytes:
                   current="realms", next_step="host")
 
 
-LEYLINE_REPO = "https://github.com/orionopenwow/WrathUnleashed"
+LEYLINE_REPO = "https://github.com/orionopenwow/Leyline"   # the public repo (the workspace repo is private)
 
 
 LEYLINE_CSS = """
@@ -2848,6 +2849,14 @@ class PageHandler(BaseHTTPRequestHandler):
             return
         if path.startswith("/wrath/art/"):
             self.art(urllib.parse.unquote(path[len("/wrath/art/"):]))
+            return
+        twin = hub_mod.twin(path, query) if hub_mod is not None and hasattr(hub_mod, "twin") else None
+        if twin:   # an older page with a twin on the Leyline front door (stream/hub.py TWINS): one site, one page each
+            self.send_response(301)
+            self.send_header("Location", twin)
+            self.send_header("Content-Length", "0")
+            self.send_header("Cache-Control", "public, max-age=3600")
+            self.end_headers()
             return
         if path == "/wrath/leyline/herokey.json":   # the Hero Key sign-in public key (only with herokey_sso on)
             got = herokey_public()
