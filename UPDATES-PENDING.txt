@@ -206,3 +206,6 @@
 1063b ship  Save to GitHub (orionopenwow/WrathUnleashed): Companions talent specs and dismiss fix
 1064a scripts  Companions hotfix: .dismiss no longer crashes the world server (bots leave the group themselves, then log out)
 1064b ship  Save to GitHub (orionopenwow/WrathUnleashed): Companions dismiss hotfix
+1065a scripts  Modes: creator script editor checks (blocked names refused with the line), Play Here test lobbies, .modes check
+1065b foreverui  Modes script editor: line numbers, error console, Play / Play Here / Stop, hot reload, creator API v2, examples Coin Collect and King of the Hill
+1065c ship  Save to GitHub (orionopenwow/WrathUnleashed): creator scripting (M6)

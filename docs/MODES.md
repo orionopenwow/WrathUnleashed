@@ -4,14 +4,15 @@ A **mode** is one Lua file. Open `/modes` in game:
 - **Play solo** runs a mode on your own.
 - **Host here** opens a game where you stand and invites your party.
 - **Bumper Balls** and **Coin Dash** ship as built-in examples, and **Pressure Plates** is made only of devices.
-- **Mode editor** (or `/modes edit`) writes modes in game. It has a template, the two built-ins to start from, **Run solo**, **Save** and **Publish**.
+- **Mode editor** (or `/modes edit`) writes modes in game: line numbers, a monospace face, keyword colours and an error console. See [The script editor](#the-script-editor) below.
+- **Coin Collect** and **King of the Hill** are two short examples written only against the public API (`/modes collect`, `/modes hill`).
 - **Device editor** (or `/modes devices`) builds a mode from parts with no code. See [Devices](#devices) below.
 
 ## How it runs
 
 - **The host's client runs the script.** It runs in a sandbox: the safe parts of `string`, `math` and `table`, plus the API below. The sandbox has no game UI, no chat, no network and no way to load more code.
 - **Everyone else only draws what the host sends** and sends back the keys the mode asked for. Joining a mode never runs its code on your client.
-- **Each callback has a 30 ms budget.** A script that loops forever is stopped with an error.
+- **Each call into the script has a 30 ms budget** (loading it, each callback, each timer). A script that loops forever is stopped, only that mode ends, and the editor shows the line.
 - **Limits:** 300 entities at most, and 14 KB of script.
 - **Publishing:** published modes are reviewed by a GM before others can see them, but you can always host your own.
 
@@ -33,6 +34,8 @@ Allowed keys: W A S D Q E F R SPACE UP DOWN LEFT RIGHT 1 2 3 4.
 
 ## The API
 
+The full, versioned list is **[CREATOR-API.md](CREATOR-API.md)** (also as a web page, `creator-api.html`). Both are made by `lua5.1 tools/creator-api/gen.lua` from `ModeAPI.lua`, the one table the sandbox is built from; the tests fail when they drift apart. The short version:
+
 | Call | What it does |
 |---|---|
 | `Ent.Spawn{ shape = "box"\|"ball"\|"cyl", x, y, z, sx, sy, sz, yaw, color = "ff8800" }` → id | Adds a shape. Sizes are full widths in yards, and yaw is in degrees. |
@@ -50,6 +53,18 @@ Allowed keys: W A S D Q E F R SPACE UP DOWN LEFT RIGHT 1 2 3 4.
 
 **Coordinates:** yards, in a frame placed where the host stood. +x is right, +y is up and +z is forward, so build around `0, 0, 0`.
 
+Version 2 added `Ent.Clear`/`Ent.Count`, `Players.Has`, `HUD.Tell`/`HUD.Text`, `Score.Top`/`Score.Reset`, `Timer.Every`/`Timer.Cancel`, `State` (values with change events) and `Vec` (ground-plane helpers). Set `Mode.Api = 2` in a script that needs them; an older client then says so instead of running it.
+
+## The script editor
+
+`/modes edit` opens it.
+- **Play** runs a copy of the script here, alone. **Play Here** asks the realm to host a copy where you stand and invite your party nearby. The realm checks it first and never lists or stores it. **Stop** ends either and brings the editor back. A test never changes your text or your saved draft.
+- **Save** keeps the script in this browser and on your account (the realm's `mod_mode_drafts`). **Save while a test runs hot-reloads it**: the new script takes over in place, keeping `State` values and scores; the old shapes go and `OnStart` runs again. If the new script has an error, the old one keeps running.
+- **The console** lists errors with their line (click one to jump there) and `print` output. **Check** looks for problems without running anything.
+- **Publish** saves, then sends the script for GM review.
+
+**Before anything runs**, the editor, the sandbox and the realm all read the script as text and refuse one that names a blocked global (`loadstring`, `setfenv`, `debug`, `os` and the rest), `string.dump`, or holds a compiled chunk, with the line. The realm never compiles or runs a script.
+
 ## Example
 
 `Modes.lua` → `M.BUILTIN` is Bumper Balls, about 120 lines. It has:
@@ -65,7 +80,7 @@ Allowed keys: W A S D Q E F R SPACE UP DOWN LEFT RIGHT 1 2 3 4.
 2. Publish from `/modes`. It stays "in review" until a GM runs `.modes approve <key>`.
 3. Once approved, it appears for everyone on the realm.
 
-**GM commands:** `.modes pending`, `.modes approve <key>`, `.modes reject <key>`.
+**GM commands:** `.modes pending`, `.modes check <key>` (the realm's check, the size and which parts of the API it uses), `.modes approve <key>`, `.modes reject <key>`.
 
 ## Devices
 

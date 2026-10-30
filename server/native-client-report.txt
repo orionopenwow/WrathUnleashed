@@ -1,0 +1,105 @@
+==== from this PC (what a player's Wow.exe sees) 
+play.openvanilla.app port 3724: OPEN
+play.openvanilla.app port 8085: OPEN
+
+==== containers
+ov-ac-worldserver  Up 32 hours (healthy)  127.0.0.1:7878->7878/tcp, 0.0.0.0:8085->8085/tcp
+wu-play  Up 18 hours  
+wu-portal  Up 34 hours  
+wu-hangout-agent  Up 2 days  
+wu-hangout-auth  Up 2 days  
+wu-relay  Up 2 days (healthy)  
+wu-gmconsole  Up 2 days  
+ov-ac-authserver  Up 3 days (healthy)  0.0.0.0:3724->3724/tcp
+ov-ac-database  Up 3 days (healthy)  3306/tcp, 33060/tcp
+wenilla-realm-mangosd-1  Exited (0) 3 days ago  
+owduels-mangosd-1  Exited (0) 3 days ago  
+owduels-realmd-1  Exited (0) 3 days ago  
+openvanilla-support-mangosd  Up 6 days  127.0.0.1:17878->7878/tcp
+wenilla-realm-caddy-1  Up 3 days  0.0.0.0:80->80/tcp, [::]:80->80/tcp, 0.0.0.0:443->443/tcp, [::]:443->443/tcp, 0.0.0.0:443->443/udp, [::]:443->443/udp, 2019/tcp
+wenilla-realm-realmd-1  Exited (0) 3 days ago  
+
+==== listening on the game ports
+LISTEN 0      4096       127.0.0.1:7878       0.0.0.0:*    users:(("docker-proxy",pid=3464805,fd=8))                 
+LISTEN 0      4096         0.0.0.0:8085       0.0.0.0:*    users:(("docker-proxy",pid=3464817,fd=8))                 
+LISTEN 0      4096         0.0.0.0:3724       0.0.0.0:*    users:(("docker-proxy",pid=1207824,fd=8))                 
+
+==== ufw
+Status: active
+
+To                         Action      From
+--                         ------      ----
+22/tcp                     LIMIT       Anywhere                  
+80/tcp                     ALLOW       Anywhere                  
+443/tcp                    ALLOW       Anywhere                  
+443/udp                    ALLOW       Anywhere                  
+3724/tcp                   ALLOW       Anywhere                  
+8085/tcp                   ALLOW       Anywhere                  
+40000:40999/tcp            ALLOW       Anywhere                  
+172.18.0.1 8100/tcp        ALLOW       172.18.0.0/16             
+22/tcp (v6)                LIMIT       Anywhere (v6)             
+80/tcp (v6)                ALLOW       Anywhere (v6)             
+443/tcp (v6)               ALLOW       Anywhere (v6)             
+443/udp (v6)               ALLOW       Anywhere (v6)             
+3724/tcp (v6)              ALLOW       Anywhere (v6)             
+8085/tcp (v6)              ALLOW       Anywhere (v6)             
+40000:40999/tcp (v6)       ALLOW       Anywhere (v6)             
+
+
+==== realm list
++----+----------------+----------------------+----------------------+------+-----------+------+
+| id | name           | address              | localAddress         | port | gamebuild | flag |
++----+----------------+----------------------+----------------------+------+-----------+------+
+|  1 | WrathUnleashed | play.openvanilla.app | play.openvanilla.app | 8085 |     12340 |    0 |
++----+----------------+----------------------+----------------------+------+-----------+------+
++----------+--------------+---------------------+---------------+-----+
+| username | last_ip      | last_login          | failed_logins | os  |
++----------+--------------+---------------------+---------------+-----+
+| WR000223 | 172.20.0.1   | 2026-10-28 05:32:24 |             0 | Win |
+| WR001697 | 172.20.0.1   | 2026-10-28 02:43:07 |             0 | Win |
+| WR001391 | 172.20.0.1   | 2026-10-28 01:29:27 |             0 | Win |
+| WR001570 | 172.20.0.1   | 2026-10-28 00:54:33 |             0 | Win |
+| WR001825 | 172.20.0.1   | 2026-10-27 22:12:26 |             0 | Win |
+| WR001475 | 73.22.30.249 | 2026-10-27 20:55:55 |             0 | Win |
+| WR001824 | 172.20.0.1   | 2026-10-27 20:26:26 |             0 | Win |
+| WR001823 | 172.20.0.1   | 2026-10-27 18:57:20 |             0 | Win |
++----------+--------------+---------------------+---------------+-----+
+
+==== what the address resolves to
+167.233.140.242 STREAM play.openvanilla.app
+167.233.140.242 DGRAM  
+this box: 167.233.140.242
+
+==== settings
+OV_PROFILE=main
+WU_WARDEN=0
+WU_PLAYER_LIMIT=100
+
+==== last auth log lines
+[0m[36m                                ╚██████╗╚██████╔╝██║  ██║███████╗
+[0m[36m                                 ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝
+
+[0m[36m     AzerothCore 3.3.5a  -  www.azerothcore.org
+
+[0m[36m> Using configuration file       /azerothcore/env/dist/etc/authserver.conf
+[0m[36m> Using SSL version:             OpenSSL 3.0.13 30 Jan 2024 (library: OpenSSL 3.0.13 30 Jan 2024)
+[0m[36m> Using Boost version:           1.83.0
+[0m[36m 
+[0m[36m> Config: Found config value 'Updates.EnableDatabases' from environment variable 'AC_UPDATES_ENABLE_DATABASES'.
+[0m[33m> AUTOUPDATER: Automatic database updates are disabled for all databases in the config! This is not recommended!
+[0m[36m> Config: Found config value 'LoginDatabaseInfo' from environment variable 'AC_LOGIN_DATABASE_INFO'.
+[0m[36mOpening DatabasePool 'acore_auth'. Asynchronous connections: 1, synchronous connections: 1.
+[0m[36mMySQL client library: 8.0.46
+[0m[36mMySQL server ver: 8.4.13 
+[0m[36mConnected to MySQL database at ac-database
+[0m[36mMySQL client library: 8.0.46
+[0m[36mMySQL server ver: 8.4.13 
+[0m[36mConnected to MySQL database at ac-database
+[0m[36mDatabasePool 'acore_auth' opened successfully. 2 total connections running.
+[0m[36m 
+[0m[36mStarted auth database connection pool.
+[0m[36mLoading IP Location Database...
+[0m[36m 
+[0m[36mAdded realm "WrathUnleashed" at play.openvanilla.app:8085.
+
+==== last world log lines about logins

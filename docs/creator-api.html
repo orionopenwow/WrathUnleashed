@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Creator API</title>
+<meta name="description" content="Leyline Modes: everything a mode script can use, version 2.">
+<style>:root { --bg: #f7f6fb; --fg: #1d1b26; --muted: #5d5a6e; --card: #ffffff; --line: #dcd8ea; --accent: #6b4fd8; --code: #efecf8; --new: #1f7a4d; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #12111a; --fg: #e9e6f5; --muted: #a29fb6; --card: #1b1a26; --line: #2f2c40; --accent: #b39cff; --code: #24223a; --new: #6fd3a0; } }
+:root[data-theme="dark"] { --bg: #12111a; --fg: #e9e6f5; --muted: #a29fb6; --card: #1b1a26; --line: #2f2c40; --accent: #b39cff; --code: #24223a; --new: #6fd3a0; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 900px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 1.9rem; margin: 0 0 8px; }
+h2 { font-size: 1.35rem; margin: 40px 0 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+h3 { font-size: 1.1rem; margin: 28px 0 8px; color: var(--accent); }
+p, li { color: var(--fg); }
+a { color: var(--accent); }
+nav { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 16px 0 8px; font-size: .92rem; }
+code { font: .88em/1.4 ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, monospace; background: var(--code); padding: 1px 5px; border-radius: 4px; }
+pre { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px; overflow-x: auto; }
+pre code { background: none; padding: 0; font-size: .84rem; }
+.table { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 8px; font-size: .94rem; }
+th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 600; font-size: .85rem; }
+td code { white-space: nowrap; }
+.new { color: var(--new); font-style: normal; font-size: .85em; }
+.muted { color: var(--muted); font-size: .9rem; }
+</style>
+</head>
+<body>
+<main>
+<h1 id="top">Leyline Modes: the creator API</h1>
+<p class="muted">Made from ModeAPI.lua by tools/creator-api/gen.lua.</p>
+<nav><a href="#how">How a script runs</a><a href="#editor">The script editor</a><a href="#settings">Settings</a><a href="#callbacks">Callbacks</a><a href="#functions">Functions</a><a href="#stdlib">The standard library</a><a href="#limits">Limits</a><a href="#blocked">Not available</a><a href="#examples">Examples</a></nav>
+<p>Version 2. A <strong>mode</strong> is one Lua script: a small game that a host plays with their party. Write one in game with <code>/modes edit</code>. This page lists everything a script can use.</p>
+<h2 id="how">How a script runs</h2>
+<ul>
+<li><strong>The host's client runs the script</strong>, in a sandbox. It has the safe parts of <code>string</code>, <code>math</code> and <code>table</code> and the API below. It has no game UI, no chat, no network and no way to load more code.</li>
+<li><strong>Everyone else only draws what the host sends</strong>, and sends back the keys the mode asked for. Joining a mode never runs its code on your client.</li>
+<li><strong>Every call into the script has a time budget</strong> of 30 ms: loading it, each callback and each timer. A script that runs too long, such as an endless loop, is stopped. Only that mode stops, and the editor shows the line it was on.</li>
+<li><strong>Coordinates</strong> are yards, in a frame placed where the host stood: +x is right, +y is up and +z is forward. Build around <code>0, 0, 0</code>.</li>
+<li><strong>Publishing:</strong> a GM reviews every published mode before others can see it. You can always play and host your own.</li>
+</ul>
+<h2 id="editor">The script editor</h2>
+<ul>
+<li><code>/modes edit</code> opens it. It has line numbers and keyword colours (<strong>Colours</strong> turns them off).</li>
+<li><strong>Play</strong> runs a copy of the script here, on your own. <strong>Play Here</strong> hosts a copy where you stand and invites your party nearby. The realm checks it first.</li>
+<li><strong>Stop</strong> ends the test and brings the editor back. A test never changes your text or your saved draft.</li>
+<li><strong>Save</strong> keeps the script in this browser and on your account. <strong>Save while a test runs to hot-reload it</strong>: the new script takes over, and State values and scores are kept. The old shapes go, and <code>OnStart</code> runs again. If the new script has an error, the old one keeps running.</li>
+<li><strong>The console</strong> lists errors with their line. Click one to jump to that line. <code>print</code> output shows there too.</li>
+<li><strong>Check</strong> looks for problems without running anything. <strong>Publish</strong> saves, then sends the script for GM review.</li>
+<li><strong>Start from</strong> opens the template, the built-in modes or the two examples below. <strong>API</strong> lists the functions in the console.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<div class="table"><table>
+<thead><tr><th>Setting</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>Mode.Title = &quot;My Mode&quot;</code></td><td>Shown in /modes and on the banner (40 characters).</td></tr>
+<tr><td><code>Mode.Keys = { &quot;W&quot;, &quot;A&quot;, &quot;S&quot;, &quot;D&quot; }</code></td><td>The keys captured from every player while they play. Esc lets go.</td></tr>
+<tr><td><code>Mode.Players = { 1, 8 }</code></td><td>The fewest and most players.</td></tr>
+<tr><td><code>Mode.Api = 2</code></td><td>The API version the script needs. An older client says so instead of running it. <span class="new">(new in 2)</span></td></tr>
+</tbody></table></div>
+<p>Keys a mode can ask for: <code>W</code> <code>A</code> <code>S</code> <code>D</code> <code>Q</code> <code>E</code> <code>F</code> <code>R</code> <code>SPACE</code> <code>UP</code> <code>DOWN</code> <code>LEFT</code> <code>RIGHT</code> <code>1</code> <code>2</code> <code>3</code> <code>4</code>.</p>
+<h2 id="callbacks">Callbacks</h2>
+<p>Define these as globals. The host calls them, each under the time budget.</p>
+<div class="table"><table>
+<thead><tr><th>Callback</th><th>When</th></tr></thead>
+<tbody>
+<tr><td><code>function OnStart(players)</code></td><td>The game starts. players is a list of names, like { &quot;Ann&quot;, &quot;Bo&quot; }. Build the arena here.</td></tr>
+<tr><td><code>function OnTick(dt)</code></td><td>20 times a second; dt is 0.05.</td></tr>
+<tr><td><code>function OnKey(player, key, down)</code></td><td>A player pressed (down = true) or let go of one of Mode.Keys.</td></tr>
+<tr><td><code>function OnJoin(player)</code></td><td>Someone joined a game that was already running.</td></tr>
+<tr><td><code>function OnLeave(player)</code></td><td>Someone left.</td></tr>
+</tbody></table></div>
+<h2 id="functions">Functions</h2>
+<h3 id="ent">Ent</h3>
+<p>Shapes in the arena. Every player sees them; moves are eased smoothly.</p>
+<div class="table"><table>
+<thead><tr><th>Call</th><th>Returns</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>Ent.Spawn{ shape, x, y, z, sx, sy, sz, yaw, color }</code></td><td><code>id</code></td><td>Adds a shape: &quot;box&quot;, &quot;ball&quot; or &quot;cyl&quot;. Sizes are full widths in yards, yaw is degrees, color is &quot;rrggbb&quot;.</td></tr>
+<tr><td><code>Ent.Move(id, x, y, z [, yaw])</code></td><td></td><td>Moves a shape.</td></tr>
+<tr><td><code>Ent.Set(id, { field = value, ... })</code></td><td></td><td>Changes any field: x y z sx sy sz yaw color shape.</td></tr>
+<tr><td><code>Ent.Remove(id)</code></td><td></td><td>Removes a shape.</td></tr>
+<tr><td><code>Ent.Get(id)</code></td><td><code>table or nil</code></td><td>A copy of a shape's fields.</td></tr>
+<tr><td><code>Ent.Clear()</code></td><td></td><td>Removes every shape. <span class="new">(new in 2)</span></td></tr>
+<tr><td><code>Ent.Count()</code></td><td><code>n</code></td><td>How many shapes there are. <span class="new">(new in 2)</span></td></tr>
+</tbody></table></div>
+<h3 id="players">Players</h3>
+<p>The players in the game, by name.</p>
+<div class="table"><table>
+<thead><tr><th>Call</th><th>Returns</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>Players.List()</code></td><td><code>{ names }</code></td><td>A copy of the list.</td></tr>
+<tr><td><code>Players.Count()</code></td><td><code>n</code></td><td>How many.</td></tr>
+<tr><td><code>Players.Has(player)</code></td><td><code>true/false</code></td><td>Whether that player is in the game. <span class="new">(new in 2)</span></td></tr>
+</tbody></table></div>
+<h3 id="hud">HUD</h3>
+<p>Text on the players' screens. Text is one line, 120 characters at most.</p>
+<div class="table"><table>
+<thead><tr><th>Call</th><th>Returns</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>HUD.Banner(text)</code></td><td></td><td>Sets the banner at the top, for everyone.</td></tr>
+<tr><td><code>HUD.Say(text)</code></td><td></td><td>Posts a line under the banner, for everyone (a broadcast).</td></tr>
+<tr><td><code>HUD.Tell(player, text)</code></td><td></td><td>Posts a line under the banner for one player only. <span class="new">(new in 2)</span></td></tr>
+<tr><td><code>HUD.Text(slot, text [, player])</code></td><td></td><td>Your own HUD: a named line in the panel on the left (8 slots). With a player, only they see it. Empty text clears it. <span class="new">(new in 2)</span></td></tr>
+</tbody></table></div>
+<h3 id="score">Score</h3>
+<p>The scoreboard on everyone's screen, one number per player.</p>
+<div class="table"><table>
+<thead><tr><th>Call</th><th>Returns</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>Score.Set(player, n)</code></td><td></td><td>Sets a score.</td></tr>
+<tr><td><code>Score.Add(player, n)</code></td><td></td><td>Adds to a score (n can be negative).</td></tr>
+<tr><td><code>Score.Get(player)</code></td><td><code>n</code></td><td>Reads a score (0 if none).</td></tr>
+<tr><td><code>Score.Top()</code></td><td><code>{ { name, score }, ... }</code></td><td>Every score, highest first. <span class="new">(new in 2)</span></td></tr>
+<tr><td><code>Score.Reset()</code></td><td></td><td>Sets every score to 0. <span class="new">(new in 2)</span></td></tr>
+</tbody></table></div>
+<h3 id="camera">Camera</h3>
+<p>Each player's camera.</p>
+<div class="table"><table>
+<thead><tr><th>Call</th><th>Returns</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>Camera.Follow(player, id [, distance, height])</code></td><td></td><td>That player's camera follows a shape.</td></tr>
+<tr><td><code>Camera.Top([height])</code></td><td></td><td>A top-down view for everyone.</td></tr>
+</tbody></table></div>
+<h3 id="timer">Timer</h3>
+<p>Run code later. Each timer runs under the time guard, like a callback.</p>
+<div class="table"><table>
+<thead><tr><th>Call</th><th>Returns</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>Timer.After(seconds, fn)</code></td><td><code>id</code></td><td>Runs fn once, later.</td></tr>
+<tr><td><code>Timer.Every(seconds, fn)</code></td><td><code>id</code></td><td>Runs fn again and again (0.05 s at the shortest). <span class="new">(new in 2)</span></td></tr>
+<tr><td><code>Timer.Cancel(id)</code></td><td></td><td>Stops a timer. <span class="new">(new in 2)</span></td></tr>
+</tbody></table></div>
+<h3 id="state">State</h3>
+<p>Named values with change events. They survive a hot reload; handlers do not.</p>
+<div class="table"><table>
+<thead><tr><th>Call</th><th>Returns</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>State.Set(key, value)</code></td><td></td><td>Sets a value (a number, text, true/false or nil). Handlers run only if it changed. <span class="new">(new in 2)</span></td></tr>
+<tr><td><code>State.Get(key [, default])</code></td><td><code>value</code></td><td>Reads a value. <span class="new">(new in 2)</span></td></tr>
+<tr><td><code>State.On(key, fn(value, old, key))</code></td><td></td><td>Runs fn when key changes. Use &quot;*&quot; for every key. <span class="new">(new in 2)</span></td></tr>
+</tbody></table></div>
+<h3 id="vec">Vec</h3>
+<p>Small helpers for positions on the ground (x, z) and angles in degrees.</p>
+<div class="table"><table>
+<thead><tr><th>Call</th><th>Returns</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>Vec.Len(x, z)</code></td><td><code>length</code></td><td>The length of (x, z). <span class="new">(new in 2)</span></td></tr>
+<tr><td><code>Vec.Dist(x1, z1, x2, z2)</code></td><td><code>distance</code></td><td>The distance between two points on the ground. <span class="new">(new in 2)</span></td></tr>
+<tr><td><code>Vec.Dist3(x1, y1, z1, x2, y2, z2)</code></td><td><code>distance</code></td><td>The distance in 3D. <span class="new">(new in 2)</span></td></tr>
+<tr><td><code>Vec.Norm(x, z)</code></td><td><code>x, z, length</code></td><td>(x, z) scaled to length 1 (0, 0 stays 0, 0). <span class="new">(new in 2)</span></td></tr>
+<tr><td><code>Vec.Angle(x, z)</code></td><td><code>degrees</code></td><td>The yaw that faces along (x, z), as Ent.Move takes it. <span class="new">(new in 2)</span></td></tr>
+<tr><td><code>Vec.Dir(degrees)</code></td><td><code>x, z</code></td><td>The unit step for a yaw. <span class="new">(new in 2)</span></td></tr>
+<tr><td><code>Vec.Rotate(x, z, degrees)</code></td><td><code>x, z</code></td><td>(x, z) turned by a yaw. <span class="new">(new in 2)</span></td></tr>
+<tr><td><code>Vec.Lerp(a, b, t)</code></td><td><code>number</code></td><td>From a to b by t (0 to 1). <span class="new">(new in 2)</span></td></tr>
+<tr><td><code>Vec.Clamp(v, low, high)</code></td><td><code>number</code></td><td>v kept between low and high. <span class="new">(new in 2)</span></td></tr>
+</tbody></table></div>
+<h3 id="mode">Mode</h3>
+<p>The mode itself (see the settings above).</p>
+<div class="table"><table>
+<thead><tr><th>Call</th><th>Returns</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>Mode.End(text)</code></td><td></td><td>Ends the game and shows everyone the text.</td></tr>
+</tbody></table></div>
+<h3 id="globals">Other globals</h3>
+<div class="table"><table>
+<thead><tr><th>Call</th><th>Returns</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>Random(n)</code></td><td><code>1..n</code></td><td>A whole number from 1 to n, from a seed shared by the game.</td></tr>
+<tr><td><code>print(...)</code></td><td></td><td>Writes to the host's screen and the editor's console, for debugging.</td></tr>
+</tbody></table></div>
+<h3 id="devices">Devices (device modes only)</h3>
+<p>A mode that uses <code>Devices.Run</code> gets this table too. See MODES.md for the devices and wires.</p>
+<div class="table"><table>
+<thead><tr><th>Call</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>Devices.Run[=[ layout ]=]</code></td><td>Builds the mode from devices and wires (see MODES.md).</td></tr>
+<tr><td><code>Devices.On(id, event, fn(player))</code></td><td>Runs fn on a device's event.</td></tr>
+<tr><td><code>Devices.Call(id, function, argument, player)</code></td><td>Calls a device's function.</td></tr>
+</tbody></table></div>
+<h2 id="stdlib">The standard library</h2>
+<ul>
+<li>Base functions: <code>pairs</code> <code>ipairs</code> <code>next</code> <code>select</code> <code>type</code> <code>tostring</code> <code>tonumber</code> <code>unpack</code> <code>pcall</code> <code>error</code> <code>assert</code>. <code>pcall</code> can't catch the time budget: a script that catches it is stopped anyway.</li>
+<li><code>string</code>: Lua's string library without string.dump. string.rep's result is capped at 64 KB.</li>
+<li><code>math</code>: Lua's math library without math.random and math.randomseed (use Random).</li>
+<li><code>table</code>: Lua's table library.</li>
+</ul>
+<h2 id="limits">Limits</h2>
+<div class="table"><table>
+<thead><tr><th>Limit</th><th>What</th></tr></thead>
+<tbody>
+<tr><td>14336</td><td>bytes of script (about 14 KB)</td></tr>
+<tr><td>30</td><td>milliseconds each call into your script may run; then the mode stops with the line it was on</td></tr>
+<tr><td>300</td><td>shapes at once</td></tr>
+<tr><td>64</td><td>timers waiting at once</td></tr>
+<tr><td>16</td><td>timers that fire in one tick (the rest fire next tick)</td></tr>
+<tr><td>128</td><td>State keys</td></tr>
+<tr><td>8</td><td>change events inside change events</td></tr>
+<tr><td>8</td><td>HUD.Text slots</td></tr>
+<tr><td>120</td><td>characters in one HUD line</td></tr>
+</tbody></table></div>
+<p>The realm also limits how often you can save (one draft every 2 s), test with Play Here (one every 5 s) and publish (one every 10 s).</p>
+<h2 id="blocked">Not available</h2>
+<p>A script that names one of these is refused before it runs, with the line: <code>getfenv</code> <code>setfenv</code> <code>loadstring</code> <code>loadfile</code> <code>dofile</code> <code>require</code> <code>getmetatable</code> <code>setmetatable</code> <code>rawget</code> <code>rawset</code> <code>rawequal</code> <code>newproxy</code> <code>collectgarbage</code> <code>gcinfo</code> <code>debug</code> <code>coroutine</code> <code>os</code> <code>io</code> <code>LeylineMode</code> <code>LeylineGuard</code>. So is <code>string.dump</code>, and <code>s:rep(n)</code> (write <code>string.rep(s, n)</code>, which is capped). Nothing else from the game is in the sandbox either.</p>
+<h2 id="examples">Examples</h2>
+<p>Both use only the API on this page. Open them in the editor with <strong>Start from</strong>, or play them with <code>/modes collect</code> and <code>/modes hill</code>.</p>
+<h3 id="coin-collect">Coin Collect</h3>
+<pre><code>-- Coin Collect: grab gold for 45 seconds. Your own count and the leader show on the left.
+Mode.Title = &quot;Coin Collect&quot;
+Mode.Keys = { &quot;W&quot;, &quot;A&quot;, &quot;S&quot;, &quot;D&quot; }
+Mode.Players = { 1, 8 }
+Mode.Api = 2
+
+local R, SPEED, GAME = 11, 7, 45
+local COLORS = { &quot;ff5a3c&quot;, &quot;3cb4ff&quot;, &quot;ffd23c&quot;, &quot;8cff5a&quot;, &quot;c878ff&quot;, &quot;ff78c8&quot;, &quot;ffffff&quot;, &quot;ff9628&quot; }
+local runners, coins, joined = {}, {}, 0
+
+local function spawnCoin()
+    local x, z = Vec.Dir(Random(360))
+    local d = Random(100) / 100 * (R - 1.5)
+    local id = Ent.Spawn{ shape = &quot;cyl&quot;, x = x * d, y = 0.8, z = z * d, sx = 0.8, sy = 0.15, sz = 0.8, color = &quot;ffd700&quot; }
+    coins[id] = { x = x * d, z = z * d }
+end
+
+local function showHud()
+    local top = Score.Top()[1]
+    HUD.Text(&quot;lead&quot;, top and top.score &gt; 0 and (&quot;Leader: &quot; .. top.name .. &quot; (&quot; .. top.score .. &quot;)&quot;) or &quot;Leader: nobody yet&quot;)
+    for p in pairs(runners) do HUD.Text(&quot;mine&quot;, &quot;Your coins: &quot; .. Score.Get(p), p) end
+end
+
+local function addRunner(p)
+    joined = joined + 1
+    local x, z = Vec.Dir(joined * 137)
+    local r = { x = x * 4, z = z * 4, keys = {} }
+    r.id = Ent.Spawn{ shape = &quot;ball&quot;, x = r.x, y = 0.6, z = r.z, sx = 1.2, sy = 1.2, sz = 1.2, color = COLORS[(joined - 1) % #COLORS + 1] }
+    runners[p] = r
+    Camera.Follow(p, r.id, 10, 9)
+end
+
+-- The clock is State, so a hot reload keeps the time left. Its change event drives the HUD and the end.
+State.On(&quot;left&quot;, function(left)
+    HUD.Text(&quot;time&quot;, &quot;Time: &quot; .. left)
+    if left == 10 then HUD.Say(&quot;10 seconds left!&quot;) end
+    if left &lt;= 0 then
+        local top = Score.Top()[1]
+        Mode.End(top and (top.name .. &quot; wins Coin Collect with &quot; .. top.score .. &quot;!&quot;) or &quot;Nobody wins.&quot;)
+    end
+end)
+
+function OnStart(players)
+    Ent.Spawn{ shape = &quot;cyl&quot;, x = 0, y = -0.25, z = 0, sx = R * 2, sy = 0.5, sz = R * 2, color = &quot;2d4a6a&quot; }
+    for _, p in ipairs(players) do addRunner(p); Score.Add(p, 0) end
+    for i = 1, 10 do spawnCoin() end
+    HUD.Banner(&quot;Coin Collect&quot;)
+    HUD.Say(&quot;WASD to run. Grab the gold!&quot;)
+    State.Set(&quot;left&quot;, State.Get(&quot;left&quot;, GAME))
+    HUD.Text(&quot;time&quot;, &quot;Time: &quot; .. State.Get(&quot;left&quot;))
+    Timer.Every(1, function() State.Set(&quot;left&quot;, State.Get(&quot;left&quot;) - 1) end)
+    Timer.Every(3, function() if Ent.Count() &lt; 40 then spawnCoin() end end)
+    showHud()
+end
+
+function OnJoin(player) addRunner(player); Score.Add(player, 0); showHud() end
+
+function OnLeave(player)
+    local r = runners[player]
+    if r then Ent.Remove(r.id) end
+    runners[player] = nil
+end
+
+function OnKey(player, key, down)
+    local r = runners[player]
+    if r then r.keys[key] = down or nil end
+end
+
+function OnTick(dt)
+    for p, r in pairs(runners) do
+        local ax = (r.keys.D and 1 or 0) - (r.keys.A and 1 or 0)
+        local az = (r.keys.W and 1 or 0) - (r.keys.S and 1 or 0)
+        ax, az = Vec.Norm(ax, az)
+        r.x, r.z = r.x + ax * SPEED * dt, r.z + az * SPEED * dt
+        local nx, nz, d = Vec.Norm(r.x, r.z)
+        if d &gt; R - 0.6 then r.x, r.z = nx * (R - 0.6), nz * (R - 0.6) end
+        Ent.Move(r.id, r.x, 0.6, r.z)
+        for id, c in pairs(coins) do
+            if Vec.Dist(r.x, r.z, c.x, c.z) &lt; 1 then
+                Ent.Remove(id)
+                coins[id] = nil
+                Score.Add(p, 1)
+                if Score.Get(p) % 5 == 0 then HUD.Tell(p, Score.Get(p) .. &quot; coins!&quot;) end
+                spawnCoin()
+                showHud()
+            end
+        end
+    end
+end</code></pre>
+<h3 id="king-of-the-hill">King of the Hill</h3>
+<pre><code>-- King of the Hill: stand alone on the hill in the middle to score a point a second. First to 20 wins.
+Mode.Title = &quot;King of the Hill&quot;
+Mode.Keys = { &quot;W&quot;, &quot;A&quot;, &quot;S&quot;, &quot;D&quot;, &quot;SPACE&quot; }
+Mode.Players = { 1, 8 }
+Mode.Api = 2
+
+local R, HILL, WIN = 12, 2.5, 20
+local COLORS = { &quot;ff5a3c&quot;, &quot;3cb4ff&quot;, &quot;ffd23c&quot;, &quot;8cff5a&quot;, &quot;c878ff&quot;, &quot;ff78c8&quot;, &quot;ffffff&quot;, &quot;ff9628&quot; }
+local balls, hill, joined = {}, nil, 0
+
+local function addBall(p)
+    joined = joined + 1
+    local x, z = Vec.Dir(joined * 360 / 8)
+    local b = { x = x * (R - 2), z = z * (R - 2), vx = 0, vz = 0, keys = {}, dash = 0 }
+    b.id = Ent.Spawn{ shape = &quot;ball&quot;, x = b.x, y = 0.7, z = b.z, sx = 1.4, sy = 1.4, sz = 1.4, color = COLORS[(joined - 1) % #COLORS + 1] }
+    balls[p] = b
+    Camera.Follow(p, b.id, 11, 8)
+end
+
+-- Who holds the hill is State: &quot;&quot; (nobody), &quot;*&quot; (contested) or a name. The change event recolours it.
+local function showHill(who)
+    if not hill then return end
+    if who == &quot;&quot; then Ent.Set(hill, { color = &quot;8a8aa0&quot; }); HUD.Text(&quot;hill&quot;, &quot;The hill is free&quot;)
+    elseif who == &quot;*&quot; then Ent.Set(hill, { color = &quot;ff5050&quot; }); HUD.Text(&quot;hill&quot;, &quot;The hill is contested!&quot;)
+    else Ent.Set(hill, { color = &quot;ffd24a&quot; }); HUD.Text(&quot;hill&quot;, who .. &quot; holds the hill&quot;); HUD.Say(who .. &quot; takes the hill!&quot;) end
+end
+State.On(&quot;holder&quot;, showHill)
+
+function OnStart(players)
+    Ent.Spawn{ shape = &quot;cyl&quot;, x = 0, y = -0.25, z = 0, sx = R * 2, sy = 0.5, sz = R * 2, color = &quot;3a3550&quot; }
+    hill = Ent.Spawn{ shape = &quot;cyl&quot;, x = 0, y = 0.05, z = 0, sx = HILL * 2, sy = 0.1, sz = HILL * 2, color = &quot;8a8aa0&quot; }
+    for _, p in ipairs(players) do addBall(p); Score.Add(p, 0) end
+    HUD.Banner(&quot;King of the Hill - first to &quot; .. WIN)
+    HUD.Say(&quot;WASD to roll, Space to dash. Hold the hill alone!&quot;)
+    showHill(State.Get(&quot;holder&quot;, &quot;&quot;))
+    Timer.Every(1, function()
+        local who = State.Get(&quot;holder&quot;, &quot;&quot;)
+        if who == &quot;&quot; or who == &quot;*&quot; then return end
+        Score.Add(who, 1)
+        HUD.Text(&quot;you&quot;, &quot;Your points: &quot; .. Score.Get(who) .. &quot; / &quot; .. WIN, who)
+        if Score.Get(who) &gt;= WIN then Mode.End(who .. &quot; is King of the Hill!&quot;) end
+    end)
+end
+
+function OnJoin(player) addBall(player); Score.Add(player, 0) end
+
+function OnLeave(player)
+    local b = balls[player]
+    if b then Ent.Remove(b.id) end
+    balls[player] = nil
+end
+
+function OnKey(player, key, down)
+    local b = balls[player]
+    if not b then return end
+    b.keys[key] = down or nil
+    if key == &quot;SPACE&quot; and down and b.dash &lt;= 0 then
+        local nx, nz = Vec.Norm(b.vx, b.vz)
+        b.vx, b.vz, b.dash = nx * 12, nz * 12, 2
+    end
+end
+
+function OnTick(dt)
+    local on, who = 0, &quot;&quot;
+    for p, b in pairs(balls) do
+        local ax = (b.keys.D and 1 or 0) - (b.keys.A and 1 or 0)
+        local az = (b.keys.W and 1 or 0) - (b.keys.S and 1 or 0)
+        b.vx, b.vz = (b.vx + ax * 16 * dt) * 0.92, (b.vz + az * 16 * dt) * 0.92
+        b.dash = Vec.Clamp(b.dash - dt, 0, 2)
+        for q, o in pairs(balls) do
+            local d = Vec.Dist(b.x, b.z, o.x, o.z)
+            if q ~= p and d &lt; 1.4 then
+                local nx, nz = Vec.Norm(b.x - o.x, b.z - o.z)
+                b.vx, b.vz = b.vx + nx * 4, b.vz + nz * 4
+            end
+        end
+        b.x, b.z = b.x + b.vx * dt, b.z + b.vz * dt
+        local nx, nz, d = Vec.Norm(b.x, b.z)
+        if d &gt; R - 0.7 then b.x, b.z, b.vx, b.vz = nx * (R - 0.7), nz * (R - 0.7), -b.vx * 0.5, -b.vz * 0.5 end
+        Ent.Move(b.id, b.x, 0.7, b.z)
+        if Vec.Len(b.x, b.z) &lt; HILL then on, who = on + 1, p end
+    end
+    State.Set(&quot;holder&quot;, on == 0 and &quot;&quot; or (on == 1 and who or &quot;*&quot;))
+end</code></pre>
+</main>
+</body>
+</html>

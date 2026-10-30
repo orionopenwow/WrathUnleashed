@@ -6,33 +6,25 @@
 -- else's mode never runs their code on your client. The realm (realm/custom/lua_scripts/ov_modes.lua, OVMOD
 -- mod "wumodes") makes the sessions and relays: host -> everyone "st" (state), players -> host "in" (keys).
 --
--- The creator API (see docs/MODES.md):
---   Mode.Title, Mode.Keys = { "W", "A", "S", "D", "SPACE" }       keys captured from every player while playing
---   function OnStart(players) end                                  players = { "Ann", "Bo" }
---   function OnTick(dt) end                                        20 times a second, dt = 0.05
---   function OnKey(player, key, down) end                          a player pressed or released one of Mode.Keys
---   function OnLeave(player) end
---   function OnJoin(player) end                                    someone joined a game already running
---   Ent.Spawn{ shape = "box"|"ball"|"cyl", x, y, z, sx, sy, sz, yaw, color = "ff8800" } -> id
---   Ent.Move(id, x, y, z [, yaw]), Ent.Set(id, { color = "...", sx = ... }), Ent.Remove(id), Ent.Get(id) -> table
---   Players.List() -> names, Players.Count()
---   HUD.Say(text)                     a line under everyone's banner;  HUD.Banner(text)
---   Score.Set(player, n), Score.Add(player, n), Score.Get(player)
---   Camera.Follow(player, id [, distance, height]), Camera.Top([height])
---   Timer.After(seconds, fn)          Random(n) -> 1..n (seeded per session)
---   Mode.End(text)                    finish: everyone sees the result
---   Devices.Run[=[ ... ]=]            a mode made of devices and wires, no code (ModeDevices.lua)
+-- The creator API is listed in ModeAPI.lua (the one source of truth; docs/CREATOR-API.md is made from it):
+-- callbacks OnStart/OnTick/OnKey/OnJoin/OnLeave, and Ent, Players, HUD, Score, Camera, Timer, State, Vec, Mode,
+-- Random, print, plus Devices for device modes (ModeDevices.lua). newEnv below builds exactly that, and the
+-- tests check the two match. Every call into the script (loading it, each callback, each timer) runs under the
+-- client's time guard (LeylineGuard); an error or a hang stops only that mode, with the line, into M.console
+-- (the script editor's console, ModeScript.lua). Host.Reload swaps in a new script while it runs (hot reload).
 -- Arena coordinates are yards in a frame placed where the host stood: x right, y up, z forward.
 
 local W = WrathUnleashedUI
+local API = W.ModeAPI   -- ModeAPI.lua, before this file in the .toc
+if not API then return end
 local PREFIX, MOD = "OVMOD", "wumodes"
 local TICK = 0.05
 local SEND_EVERY = 0.1
-local GUARD_MS = 30
-local KEYS_OK = { W = 1, A = 1, S = 1, D = 1, Q = 1, E = 1, SPACE = 1, UP = 1, DOWN = 1, LEFT = 1, RIGHT = 1, F = 1, R = 1,
-    ["1"] = 1, ["2"] = 1, ["3"] = 1, ["4"] = 1, BUTTON1 = 1 }
+local GUARD_MS = API.GUARD_MS
+local KEYS_OK = { BUTTON1 = 1 }
+for _, k in ipairs(API.KEYS) do KEYS_OK[k] = 1 end
 
-local M = { modes = {}, parts = {}, state = "idle", players = {}, score = {}, notes = {} }
+local M = { modes = {}, parts = {}, state = "idle", players = {}, score = {}, notes = {}, texts = {}, textOrder = {} }
 W.Modes = M
 
 local win, hud, keyFrame
@@ -111,8 +103,19 @@ local function refreshScore()
     hud.card:SetText(table.concat(lines, "\n"))
 end
 
+local function refreshTexts()
+    if not hud then return end
+    local lines = {}
+    for _, slot in ipairs(M.textOrder) do
+        local x = M.texts[slot]
+        if x and (x.who == "*" or x.who == me()) then lines[#lines + 1] = x.text end
+    end
+    hud.texts:SetText(table.concat(lines, "\n"))
+end
+
 -- One state item, as the host sends it (and applies to itself):
 --   e,id,shape,x,y,z,sx,sy,sz,yaw,color   m,id,x,y,z,yaw   d,id   h,text   b,text   s,name,score   c,name,follow,id,dist,height | c,name,top,height
+--   p,name,text (a line for one player)   t,slot,who,text (a HUD.Text line; who is * or a name; empty text clears)
 local function apply(item)
     local kind, rest = item:match("^(%a),(.*)$")
     if kind == "e" then
@@ -125,6 +128,20 @@ local function apply(item)
         draw("del " .. (tonumber(rest) or 0))
     elseif kind == "h" then
         noteLine(tidy(rest))
+    elseif kind == "p" then
+        local name, text = rest:match("^([^,]*),(.*)$")
+        if name and name == me() then noteLine(tidy(text)) end
+    elseif kind == "t" then
+        local slot, who, text = rest:match("^([%w_]+),([^,]*),(.*)$")
+        if slot then
+            if not M.texts[slot] then M.textOrder[#M.textOrder + 1] = slot end
+            M.texts[slot] = { who = tidy(who), text = tidy(text) }
+            if text == "" then
+                M.texts[slot] = nil
+                for i, x in ipairs(M.textOrder) do if x == slot then table.remove(M.textOrder, i) break end end
+            end
+            refreshTexts()
+        end
     elseif kind == "b" then
         M.banner = tidy(rest)
         if hud then hud.banner:SetText(M.banner) end
@@ -150,24 +167,61 @@ end
 local Host = {}
 M.Host = Host
 
+-- The creator log: errors (with the script's line), print output and notes, newest last. The script editor's
+-- console shows it (ModeScript.lua); M.onLog hears each new entry.
+M.console = {}
+function M.Log(kind, text, line)
+    local e = { kind = kind, text = tidy(text):sub(1, 240), line = tonumber(line), at = now() }
+    M.console[#M.console + 1] = e
+    if #M.console > 60 then table.remove(M.console, 1) end
+    if M.onLog then pcall(M.onLog, e) end
+    return e
+end
+
+-- "mode:12: attempt to ..." -> 12, "attempt to ..."
+local function lineOf(msg)
+    local l, rest = tostring(msg or ""):match("mode:(%d+): ?(.*)$")
+    return tonumber(l), rest
+end
+M.LineOf = lineOf
+
+local function guardTrip(err) return tostring(err or ""):find("ran too long", 1, true) ~= nil end
+
 local function newEnv(H)
     local env = {}
     -- The safe standard library: no string.dump, no loading code, no access to the game's globals.
     local s = {}
     for k, v in pairs(string) do if k ~= "dump" and k ~= "rep" then s[k] = v end end
-    s.rep = function(str, n) n = math.min(tonumber(n) or 0, 1000) return string.rep(str, n) end
+    s.rep = function(str, n)
+        str = tostring(str or "")
+        n = math.min(math.floor(tonumber(n) or 0), 1000, math.floor(API.MAX_REP / math.max(1, #str)))
+        return string.rep(str, math.max(0, n))
+    end
     local m, t = {}, {}
     for k, v in pairs(math) do m[k] = v end
     m.random, m.randomseed = nil, nil
     for k, v in pairs(table) do t[k] = v end
     env.string, env.math, env.table = s, m, t
-    for _, k in ipairs({ "pairs", "ipairs", "next", "select", "type", "tostring", "tonumber", "unpack", "pcall", "error", "assert" }) do
-        env[k] = _G[k]
+    -- A private copy for the string metatable while the script runs (call below), so ("x"):rep and ("x").dump
+    -- reach the capped rep and no dump. The script never sees this table, so it can't change it.
+    local priv = {}
+    for k, v in pairs(s) do priv[k] = v end
+    H.strlib = priv
+    for _, k in ipairs(API.BASE) do env[k] = _G[k] end
+    -- pcall can't swallow the time guard: a script that catches it gets it again, so a loop of pcalls still stops.
+    env.pcall = function(fn, ...)
+        local r = { n = 0 }
+        local function pack(...) r.n = select("#", ...); for i = 1, r.n do r[i] = (select(i, ...)) end end
+        pack(pcall(fn, ...))
+        if not r[1] and guardTrip(r[2]) then error(r[2], 0) end
+        return unpack(r, 1, r.n)
     end
     env.print = function(...)
         local parts = {}
         for i = 1, select("#", ...) do parts[#parts + 1] = tostring((select(i, ...))) end
-        noteLine("|cff9fd6ff[mode]|r " .. tidy(table.concat(parts, " ")):sub(1, 120))
+        local text = tidy(table.concat(parts, " ")):sub(1, 120)
+        noteLine("|cff9fd6ff[mode]|r " .. text)
+        M.Log("print", text)
     end
     local seed = H.seed
     env.Random = function(n)
@@ -184,10 +238,17 @@ local function newEnv(H)
     local function full(e)
         return string.format("e,%d,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.1f,%s", e.id, e.shape, e.x, e.y, e.z, e.sx, e.sy, e.sz, e.yaw, e.color)
     end
+    local function remove(id)
+        if not ents[id] then return end
+        ents[id] = nil
+        H.entCount = H.entCount - 1
+        H.moved[id] = nil
+        H.queue("d," .. id)
+    end
     env.Ent = {
         Spawn = function(o)
             o = type(o) == "table" and o or {}
-            if H.entCount >= 300 then error("too many entities (300 at most)", 2) end
+            if H.entCount >= API.MAX_ENTS then error("too many entities (" .. API.MAX_ENTS .. " at most)", 2) end
             local shape = (o.shape == "ball" or o.shape == "cyl") and o.shape or "box"
             local e = { id = nextId, shape = shape, x = num(o.x, 0), y = num(o.y, 0), z = num(o.z, 0),
                 sx = num(o.sx, 1), sy = num(o.sy, 1), sz = num(o.sz, 1), yaw = num(o.yaw, 0), color = col(o.color) }
@@ -212,70 +273,218 @@ local function newEnv(H)
             H.moved[id] = nil
             H.queue(full(e))
         end,
-        Remove = function(id)
-            if not ents[id] then return end
-            ents[id] = nil
-            H.entCount = H.entCount - 1
-            H.moved[id] = nil
-            H.queue("d," .. id)
-        end,
+        Remove = remove,
         Get = function(id)
             local e = ents[id]
             if not e then return nil end
             return { x = e.x, y = e.y, z = e.z, sx = e.sx, sy = e.sy, sz = e.sz, yaw = e.yaw, color = e.color, shape = e.shape }
         end,
+        Clear = function() local ids = {} for id in pairs(ents) do ids[#ids + 1] = id end for _, id in ipairs(ids) do remove(id) end end,
+        Count = function() return H.entCount end,
     }
     H.ents, H.full = ents, full
     env.Players = {
         List = function() local l = {} for i, n in ipairs(H.players) do l[i] = n end return l end,
         Count = function() return #H.players end,
+        Has = function(p) p = tostring(p) for _, n in ipairs(H.players) do if n == p then return true end end return false end,
     }
-    local function clean(text) return tidy(tostring(text or "")):gsub("[;\n]", " "):sub(1, 120) end
+    local function clean(text) return (tidy(tostring(text or "")):gsub("[;\n]", " "):sub(1, API.MAX_TEXT)) end
+    local texts, textOrder = {}, {}
+    H.texts = texts
     env.HUD = {
         Say = function(text) H.queue("h," .. clean(text)) end,
-        Banner = function(text) H.queue("b," .. clean(text)) end,
+        Banner = function(text) H.banner = clean(text); H.queue("b," .. H.banner) end,
+        Tell = function(p, text) H.queue("p," .. (clean(p):gsub(",", "")) .. "," .. clean(text)) end,
+        Text = function(slot, text, p)
+            slot = (tostring(slot or ""):gsub("[^%w_]", "")):sub(1, 16)
+            if slot == "" then return end
+            local who = p and (clean(p):gsub(",", "")) or "*"
+            text = text and clean(text) or ""
+            if not texts[slot] then
+                local n = 0
+                for _ in pairs(texts) do n = n + 1 end
+                if n >= API.MAX_TEXT_SLOTS then error("too many HUD.Text slots (" .. API.MAX_TEXT_SLOTS .. " at most)", 2) end
+            end
+            texts[slot] = text ~= "" and { who = who, text = text } or nil
+            H.queue("t," .. slot .. "," .. who .. "," .. text)
+        end,
     }
     local scores = {}
+    local function setScore(p, v) scores[p] = v; H.queue("s," .. clean(p) .. "," .. v) end
     env.Score = {
-        Set = function(p, v) p = tostring(p); scores[p] = math.floor(num(v, 0)); H.queue("s," .. clean(p) .. "," .. scores[p]) end,
-        Add = function(p, v) p = tostring(p); scores[p] = (scores[p] or 0) + math.floor(num(v, 0)); H.queue("s," .. clean(p) .. "," .. scores[p]) end,
+        Set = function(p, v) setScore(tostring(p), math.floor(num(v, 0))) end,
+        Add = function(p, v) p = tostring(p); setScore(p, (scores[p] or 0) + math.floor(num(v, 0))) end,
         Get = function(p) return scores[tostring(p)] or 0 end,
+        Top = function()
+            local l = {}
+            for p, v in pairs(scores) do l[#l + 1] = { name = p, score = v } end
+            table.sort(l, function(a, b) if a.score ~= b.score then return a.score > b.score end return a.name < b.name end)
+            return l
+        end,
+        Reset = function() for p in pairs(scores) do setScore(p, 0) end end,
     }
     H.scores = scores
     env.Camera = {
         Follow = function(p, id, dist, height) H.queue(string.format("c,%s,follow,%d,%.1f,%.1f", clean(p), tonumber(id) or 0, num(dist, 7), num(height, 4))) end,
         Top = function(height) for _, p in ipairs(H.players) do H.queue(string.format("c,%s,top,%.1f", p, num(height, 30))) end end,
     }
+    local function addTimer(sec, fn, every)
+        if type(fn) ~= "function" then return nil end
+        if #H.timers >= API.MAX_TIMERS then error("too many timers (" .. API.MAX_TIMERS .. " at most)", 3) end
+        H.timerId = H.timerId + 1
+        local tm = { id = H.timerId, at = H.clock + math.max(every and API.MIN_EVERY or 0, num(sec, 0)), fn = fn }
+        if every then tm.every = math.max(API.MIN_EVERY, num(sec, 1)) end
+        H.timers[#H.timers + 1] = tm
+        return tm.id
+    end
     env.Timer = {
-        After = function(sec, fn)
-            if type(fn) ~= "function" then return end
-            H.timers[#H.timers + 1] = { at = H.clock + math.max(0, num(sec, 0)), fn = fn }
+        After = function(sec, fn) return addTimer(sec, fn, false) end,
+        Every = function(sec, fn) return addTimer(sec, fn, true) end,
+        Cancel = function(id)
+            for i, tm in ipairs(H.timers) do if tm.id == id then table.remove(H.timers, i) return end end
+            if H.firing and H.firing.id == id then H.firing.cancelled = true end
         end,
+    }
+    -- State: values with change events. The values survive a hot reload (Host.Reload); the handlers don't.
+    local state, handlers, depth = H.state or {}, {}, 0
+    H.state = state
+    local nKeys, nHandlers = 0, 0
+    for _ in pairs(state) do nKeys = nKeys + 1 end
+    local function fire(list, key, value, old)
+        for _, fn in ipairs(list or {}) do fn(value, old, key) end
+    end
+    env.State = {
+        Set = function(key, value)
+            key = tostring(key)
+            if #key > 32 then error("State keys are 32 characters at most", 2) end
+            local tv = type(value)
+            if tv ~= "nil" and tv ~= "number" and tv ~= "string" and tv ~= "boolean" then error("State values are numbers, text or true/false", 2) end
+            if tv == "string" then value = value:sub(1, 200) end
+            local old = state[key]
+            if old == value then return end
+            if depth >= API.MAX_STATE_DEPTH then error("State change events went " .. API.MAX_STATE_DEPTH .. " deep (a loop?)", 2) end
+            if old == nil then
+                if nKeys >= API.MAX_STATE_KEYS then error("too many State keys (" .. API.MAX_STATE_KEYS .. " at most)", 2) end
+                nKeys = nKeys + 1
+            elseif value == nil then
+                nKeys = nKeys - 1
+            end
+            state[key] = value
+            depth = depth + 1
+            local ok, err = pcall(function() fire(handlers[key], key, value, old); fire(handlers["*"], key, value, old) end)
+            depth = depth - 1
+            if not ok then error(err, 0) end
+        end,
+        Get = function(key, default)
+            local v = state[tostring(key)]
+            if v == nil then return default end
+            return v
+        end,
+        On = function(key, fn)
+            if type(fn) ~= "function" then return end
+            if nHandlers >= API.MAX_STATE_HANDLERS then error("too many State handlers (" .. API.MAX_STATE_HANDLERS .. " at most)", 2) end
+            key = tostring(key)
+            handlers[key] = handlers[key] or {}
+            table.insert(handlers[key], fn)
+            nHandlers = nHandlers + 1
+        end,
+    }
+    local sqrt, atan2, deg, rad, sin, cos = math.sqrt, math.atan2, math.deg, math.rad, math.sin, math.cos
+    local function n0(v) v = tonumber(v) or 0 if v ~= v then return 0 end return v end
+    env.Vec = {
+        Len = function(x, z) x, z = n0(x), n0(z) return sqrt(x * x + z * z) end,
+        Dist = function(x1, z1, x2, z2) local dx, dz = n0(x2) - n0(x1), n0(z2) - n0(z1) return sqrt(dx * dx + dz * dz) end,
+        Dist3 = function(x1, y1, z1, x2, y2, z2)
+            local dx, dy, dz = n0(x2) - n0(x1), n0(y2) - n0(y1), n0(z2) - n0(z1)
+            return sqrt(dx * dx + dy * dy + dz * dz)
+        end,
+        Norm = function(x, z)
+            x, z = n0(x), n0(z)
+            local l = sqrt(x * x + z * z)
+            if l < 1e-9 then return 0, 0, 0 end
+            return x / l, z / l, l
+        end,
+        Angle = function(x, z) return deg(atan2(n0(x), n0(z))) end,
+        Dir = function(a) a = rad(n0(a)) return sin(a), cos(a) end,
+        Rotate = function(x, z, a)
+            x, z, a = n0(x), n0(z), rad(n0(a))
+            local c, s2 = cos(a), sin(a)
+            return x * c + z * s2, z * c - x * s2
+        end,
+        Lerp = function(a, b, t) a, b = n0(a), n0(b) return a + (b - a) * n0(t) end,
+        Clamp = function(v, lo, hi) return math.max(n0(lo), math.min(n0(hi), n0(v))) end,
     }
     env._G = env
     return env
 end
 
--- Runs a creator function under the time guard; an error or a hang ends the mode with the message.
+-- The line a stopped script was on: the error's own "mode:N:", else the first "mode:N:" frame on the stack
+-- (an endless loop stopped by the guard has no position of its own).
+local function stackLine()
+    local tb = (debugstack and debugstack(1, 30, 0)) or (debug and debug.traceback and debug.traceback()) or ""
+    return tonumber(tostring(tb):match("mode:(%d+):"))
+end
+
+-- Strings share one metatable with the game's UI code. While a creator function runs, its __index is the mode's
+-- private string table (no dump, the capped rep); it goes back right after. Returns the old one (nil: unchanged).
+local smt = getmetatable and getmetatable("")
+local function swapStrings(lib)
+    if type(smt) ~= "table" or not lib then return nil end
+    local old = smt.__index
+    if not pcall(function() smt.__index = lib end) then return nil end
+    return old
+end
+local function restoreStrings(old) if old ~= nil then pcall(function() smt.__index = old end) end end
+
+-- Runs a creator function under the time guard; an error or a hang ends the mode with the message and the line.
+-- Only this H fails: its state says why (H.failed, H.failedLine); nothing else is touched.
 local function call(H, fn, ...)
     if type(fn) ~= "function" then return true end
+    local n, args = select("#", ...), { ... }
+    local line
+    local oldStrings = swapStrings(H.strlib)
     LeylineGuard(GUARD_MS)
-    local ok, err = pcall(fn, ...)
+    local ok, err = xpcall(function() return fn(unpack(args, 1, n)) end, function(e)
+        LeylineGuard(0)
+        line = lineOf(e) or stackLine()
+        return e
+    end)
     LeylineGuard(0)
+    restoreStrings(oldStrings)
     if not ok then
-        H.failed = tidy(tostring(err)):sub(1, 200)
+        local l, rest = lineOf(err)
+        local msg
+        if guardTrip(err) then msg = "mode script ran too long (an endless loop?)"
+        else msg = (tidy(tostring(rest or err)):match("^[^\n]*") or ""):sub(1, 200) end
+        H.failedLine = l or line
+        H.failed = (H.failedLine and ("line " .. H.failedLine .. ": ") or "") .. msg
+        M.Log("error", msg, H.failedLine)
         return false
     end
     return true
 end
+M.call = call
 
-function Host.Load(text, players, seed)
+-- opts.state: State values to start with (a hot reload keeps them).
+function Host.Load(text, players, seed, opts)
     if not has() then return nil, "Modes need the Leyline browser client (20261025k or newer)." end
-    if type(text) ~= "string" or #text > 14 * 1024 then return nil, "That mode is too big (14 KB at most)." end
-    if text:find("\27", 1, true) then return nil, "Compiled chunks aren't allowed." end
+    if type(text) ~= "string" or #text > API.MAX_SCRIPT then return nil, "That mode is too big (14 KB at most)." end
+    -- The creator API's check first (blocked names, compiled chunks), on every path: Play, Play Here, a hosted
+    -- mode from the realm, and a hot reload. Then the text compiles into the sandbox and nowhere else.
+    local bad, why = API.Check(text)
+    if bad then
+        M.Log("error", why, bad > 0 and bad or nil)
+        return nil, why, bad > 0 and bad or nil
+    end
     local chunk, err = loadstring(text, "=mode")
-    if not chunk then return nil, "The mode has an error: " .. tidy(err) end
-    local H = { players = players, seed = seed or 1, entCount = 0, moved = {}, buffer = {}, timers = {}, clock = 0, acc = 0, sendAcc = 0 }
+    if not chunk then
+        local l, rest = lineOf(err)
+        M.Log("error", rest or err, l)
+        return nil, "The mode has an error" .. (l and (" on line " .. l) or "") .. ": " .. tidy(rest or err), l
+    end
+    local H = { players = players, seed = seed or 1, entCount = 0, moved = {}, buffer = {}, timers = {}, timerId = 0, clock = 0, acc = 0, sendAcc = 0 }
+    H.state = {}
+    for k, v in pairs((opts and opts.state) or {}) do H.state[k] = v end
     H.queue = function(item) H.buffer[#H.buffer + 1] = item end
     local env = newEnv(H)
     setfenv(chunk, env)
@@ -285,10 +494,16 @@ function Host.Load(text, players, seed)
         local lib = loadstring(M.DEVICES_LIB, "=devices")
         if lib then
             setfenv(lib, env)
-            if not call(H, lib) then return nil, "The devices failed to load: " .. H.failed end
+            if not call(H, lib) then return nil, "The devices failed to load: " .. H.failed, H.failedLine end
         end
     end
-    if not call(H, chunk) then return nil, "The mode failed to load: " .. H.failed end
+    if not call(H, chunk) then return nil, "The mode failed to load: " .. H.failed, H.failedLine end
+    local want = tonumber(env.Mode.Api)
+    if want and want > API.VERSION then
+        local why = "This mode needs creator API " .. want .. "; this client has " .. API.VERSION .. "."
+        M.Log("error", why)
+        return nil, why
+    end
     local keys = {}
     for _, k in ipairs(type(env.Mode.Keys) == "table" and env.Mode.Keys or {}) do
         k = tostring(k):upper()
@@ -305,6 +520,21 @@ end
 
 function Host.copy(t) local c = {} for i, v in ipairs(t) do c[i] = v end return c end
 
+-- Hot reload: the new script in a fresh sandbox, with the same players, seed, State values and scores. The old
+-- shapes and HUD lines go, then the new OnStart builds the arena again. If the new script doesn't load, the old
+-- one keeps running and this returns nil and the error.
+function Host.Reload(H, text)
+    local N, err, line = Host.Load(text, H.players, H.seed, { state = H.state })
+    if not N then return nil, err, line end
+    for id in pairs(H.ents) do N.queue("d," .. id) end
+    for slot in pairs(H.texts or {}) do N.queue("t," .. slot .. ",*,") end
+    for p, v in pairs(H.scores) do N.scores[p] = v; N.queue("s," .. p .. "," .. v) end
+    N.reloaded = (H.reloaded or 0) + 1
+    Host.Start(N)
+    N.sendAcc = SEND_EVERY
+    return N
+end
+
 -- One frame of the host: fixed ticks, timers, then the state out (to itself and, on a realm, to everyone).
 function Host.Update(H, elapsed, out)
     if H.failed or H.endText then return end
@@ -313,11 +543,23 @@ function Host.Update(H, elapsed, out)
         H.acc = H.acc - TICK
         H.clock = H.clock + TICK
         call(H, H.env.OnTick, TICK)
+        -- Due timers, oldest first, at most TIMERS_PER_TICK of them; the rest wait for the next tick.
         local due = {}
-        for i = #H.timers, 1, -1 do
-            if H.timers[i].at <= H.clock then due[#due + 1] = table.remove(H.timers, i) end
+        for _, tm in ipairs(H.timers) do if tm.at <= H.clock then due[#due + 1] = tm end end
+        table.sort(due, function(a, b) if a.at ~= b.at then return a.at < b.at end return a.id < b.id end)
+        for j = 1, math.min(#due, API.TIMERS_PER_TICK) do
+            if H.failed or H.endText then break end
+            local tm = due[j]
+            for i, x in ipairs(H.timers) do if x == tm then table.remove(H.timers, i) break end end
+            H.firing = tm
+            local ok = call(H, tm.fn)
+            H.firing = nil
+            if ok and tm.every and not tm.cancelled and #H.timers < API.MAX_TIMERS then
+                tm.at = tm.at + tm.every
+                if tm.at <= H.clock then tm.at = H.clock + tm.every end
+                H.timers[#H.timers + 1] = tm
+            end
         end
-        for j = #due, 1, -1 do call(H, due[j].fn) end
     end
     H.sendAcc = H.sendAcc + elapsed
     if H.sendAcc < SEND_EVERY and not H.failed and not H.endText then return end
@@ -335,11 +577,13 @@ function Host.Key(H, player, key, down)
     call(H, H.env.OnKey, player, key, down and true or false)
 end
 
--- Everything the host has spawned so far, for a player who joins late.
+-- Everything the host has so far, for a player who joins late.
 function Host.Snapshot(H)
     local items = {}
     for _, e in pairs(H.ents) do items[#items + 1] = H.full(e) end
     for p, v in pairs(H.scores) do items[#items + 1] = "s," .. p .. "," .. v end
+    for slot, x in pairs(H.texts or {}) do items[#items + 1] = "t," .. slot .. "," .. x.who .. "," .. x.text end
+    if H.banner then items[#items + 1] = "b," .. H.banner end
     return table.concat(items, ";")
 end
 
@@ -361,6 +605,7 @@ local function setHud(show)
         hud.banner = top:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         hud.banner:SetPoint("CENTER")
         hud.note = label(hud, "", "GameFontNormal", "TOP", 0, -58)
+        hud.texts = label(hud, "", "GameFontHighlight", "TOPLEFT", 24, -150)   -- HUD.Text lines
         hud.note:SetJustifyH("CENTER")
         local card = CreateFrame("Frame", nil, hud)
         card:SetWidth(200); card:SetHeight(140)
@@ -414,7 +659,7 @@ function M.ReleaseAll()
 end
 
 local function begin(title, keys, origin)
-    M.score, M.notes, M.banner = {}, {}, title
+    M.score, M.notes, M.banner, M.texts, M.textOrder = {}, {}, title, {}, {}
     setHud(true)
     hud.banner:SetText(title)
     M.keySet = {}
@@ -424,6 +669,7 @@ local function begin(title, keys, origin)
     draw("origin " .. origin)
     if #keys > 0 then keyFrame:Show() end
     refreshScore()
+    refreshTexts()
 end
 
 -- Host a mode: on the realm (others join) or solo (nothing leaves this client).
@@ -453,6 +699,27 @@ function M.Update(elapsed)
     elseif H.endText then
         M.Finish(H.endText)
     end
+end
+
+-- Hot reload: swap the running script for new text (the script editor's Save while you test). The game keeps
+-- its players, State values and scores; the old shapes go and the new OnStart builds again. If the new text
+-- doesn't load, the old script keeps running.
+function M.Reload(text)
+    local H = M.host
+    if not H then return nil, "Nothing is running." end
+    local N, err, line = Host.Reload(H, text)
+    if not N then
+        noteLine("|cffff6060Reload failed; the old script keeps running.|r")
+        return nil, err, line
+    end
+    M.host = N
+    M.keySet = {}
+    for _, k in ipairs(N.keys) do M.keySet[k] = true end
+    if hud then hud.keys:SetText(#N.keys > 0 and ("|cffffd100" .. table.concat(N.keys, " ") .. "|r  play   |cffffd100Esc|r  look around") or "") end
+    if M.state == "play" then send("keys", table.concat(N.keys, " ")) end
+    noteLine("|cff9fd6ffReloaded.|r")
+    M.Log("info", "Reloaded: " .. N.title)
+    return N
 end
 
 function M.Finish(text)
@@ -492,7 +759,8 @@ function M.Solo(text, origin)
     M.Stop()
     M.state = "solo"
     if win then win:Hide() end
-    M.HostRun(text, { me() }, math.floor(now() * 1000) % 100000 + 1, origin or "here", nil)
+    if not M.HostRun(text, { me() }, math.floor(now() * 1000) % 100000 + 1, origin or "here", nil) then M.state = "idle"; return false end
+    return true
 end
 
 -- ---------------------------------------------------------------- messages from the realm
@@ -512,6 +780,10 @@ local function dispatch(name, data)
         if id then M.invite = { id = tonumber(id), host = tidy(host), title = tidy(title) }; sound("igPlayerInvite"); M.Refresh(); if not win or not win:IsShown() then M.Toggle() end end
     elseif name == "lobby" then
         local id, host, names, title = data:match("^(%d+) (%S+) (%S+) (.+)$")
+        if id and M.dropLobbyUntil and M.state == "idle" and now() < M.dropLobbyUntil then
+            M.dropLobbyUntil = nil   -- a Play Here test stopped before the realm answered (ModeScript.lua)
+            return
+        end
         if id then
             M.lobby = { id = tonumber(id), host = tidy(host), title = tidy(title), names = {} }
             for n in names:gmatch("[^,]+") do M.lobby.names[#M.lobby.names + 1] = tidy(n) end
@@ -575,6 +847,13 @@ local function dispatch(name, data)
         end
     elseif name == "script" then
         M.Solo(data)
+    elseif name == "invalid" then
+        -- The realm refused a script (Publish or Play Here): <line>\n<why>
+        local l, why = data:match("^(%d*)\n(.*)$")
+        why = tidy(why or data)
+        M.Log("error", why, tonumber(l))
+        status(why)
+        if M.OnInvalid then M.OnInvalid(why, tonumber(l)) end
     elseif name == "published" then
         status("Sent for review: " .. tidy(data) .. ". A GM approves new modes before others see them.")
     elseif name == "drafts" or name == "draft" or name == "dsaved" then
@@ -847,83 +1126,7 @@ function OnTick(dt)
 end
 ]==]
 
--- ---------------------------------------------------------------- the mode editor: write, run, save, publish
-
-local ed
-local function buildEditor()
-    ed = CreateFrame("Frame", "LeylineModesEditor", UIParent)
-    ed:SetWidth(640); ed:SetHeight(520)
-    ed:SetPoint("CENTER")
-    ed:SetFrameStrata("DIALOG")
-    ed:EnableMouse(true)
-    ed:SetMovable(true)
-    ed:RegisterForDrag("LeftButton")
-    ed:SetScript("OnDragStart", ed.StartMoving)
-    ed:SetScript("OnDragStop", ed.StopMovingOrSizing)
-    ed:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32,
-        insets = { left = 11, right = 12, top = 12, bottom = 11 } })
-    ed:SetBackdropColor(0.05, 0.06, 0.08, 0.95)   -- solid: the dialog texture draws see-through in the browser client
-    do   -- a colour fill the engine draws itself (no texture file; the backdrop fill needs one)
-        local bg = ed:CreateTexture(nil, "BACKGROUND")
-        bg:SetTexture(0.05, 0.06, 0.08, 0.95)
-        bg:SetPoint("TOPLEFT", 10, -10); bg:SetPoint("BOTTOMRIGHT", -10, 10)
-    end
-    label(ed, "Mode editor", "GameFontNormalLarge", "TOP", 0, -18)
-    local close = CreateFrame("Button", nil, ed, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -6, -6)
-    tinsert(UISpecialFrames, "LeylineModesEditor")
-    local sf = CreateFrame("ScrollFrame", "LeylineModesEditorScroll", ed, "UIPanelScrollFrameTemplate")
-    sf:SetPoint("TOPLEFT", 22, -46)
-    sf:SetPoint("BOTTOMRIGHT", -40, 84)
-    local box = CreateFrame("EditBox", "LeylineModesEditorBox", sf)
-    box:SetMultiLine(true)
-    box:SetAutoFocus(false)
-    box:SetFontObject(ChatFontNormal or GameFontHighlight)
-    box:SetWidth(570)
-    box:SetMaxLetters(14 * 1024)
-    box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    box:SetScript("OnTextChanged", function(self) sf:UpdateScrollChildRect() ed.count:SetText(#(self:GetText() or "") .. " / 14336") end)
-    sf:SetScrollChild(box)
-    ed.box = box
-    ed.count = label(ed, "", "GameFontHighlightSmall", "BOTTOMRIGHT", -40, 66)
-    ed.count:SetJustifyH("RIGHT")
-    button(ed, "Run solo", 90, function()
-        local text = box:GetText() or ""
-        M.SaveMode(text:match('Mode%.Title%s*=%s*"([^"\n]+)"') or "My Mode", text)
-        ed:Hide()
-        M.Solo(text)
-    end, "BOTTOMLEFT", 22, 40)
-    button(ed, "Save", 70, function()
-        local text = box:GetText() or ""
-        local title = text:match('Mode%.Title%s*=%s*"([^"\n]+)"') or "My Mode"
-        M.SaveMode(title, text)
-        ed.info:SetText("Saved \"" .. tidy(title) .. "\".")
-    end, "BOTTOMLEFT", 116, 40)
-    button(ed, "Publish", 80, function() M.Publish(box:GetText() or ""); ed.info:SetText("Sent for review.") end, "BOTTOMLEFT", 190, 40)
-    button(ed, "Template", 80, function() box:SetText(M.TEMPLATE) end, "BOTTOMLEFT", 274, 40)
-    button(ed, "Bumper Balls", 100, function() box:SetText(M.BUILTIN) end, "BOTTOMLEFT", 358, 40)
-    button(ed, "Coin Dash", 86, function() box:SetText(M.COINDASH) end, "BOTTOMLEFT", 462, 40)
-    button(ed, "Device editor", 106, function() local t = box:GetText() or ""; ed:Hide(); if M.DeviceEditor then M.DeviceEditor(t) end end,
-        "BOTTOMLEFT", 166, 14)
-    ed.mine = button(ed, "Mine: -", 140, function()
-        local mine = M.MyModes()
-        if #mine == 0 then ed.info:SetText("Nothing saved yet."); return end
-        M.myPick = (M.myPick or 0) % #mine + 1
-        local pick = mine[M.myPick]
-        box:SetText(pick.text)
-        ed.mine:SetText(("Mine: " .. pick.title):sub(1, 22))
-    end, "BOTTOMLEFT", 22, 14)
-    ed.info = label(ed, "Docs: docs/MODES.md. Run solo tests it here; Publish sends it to a GM for review.", "GameFontHighlightSmall", "BOTTOMLEFT", 278, 20)
-    ed.info:SetWidth(330)
-    ed:Hide()
-end
-
-function M.Editor(text)
-    if not ed then buildEditor() end
-    if text then ed.box:SetText(text) elseif (ed.box:GetText() or "") == "" then ed.box:SetText(M.TEMPLATE) end
-    ed:Show()
-end
+-- The mode editor (write, Play, Play Here, Stop, Save, Publish, the error console) is ModeScript.lua: M.Editor.
 
 -- ---------------------------------------------------------------- the window
 
@@ -1052,5 +1255,6 @@ SlashCmdList["LEYLINEMODES"] = function(arg)
     if arg == "edit" or arg == "editor" then return M.Editor() end
     if (arg == "devices" or arg == "device") and M.DeviceEditor then return M.DeviceEditor() end
     if (arg == "plates" or arg == "pads") and M.PLATES then return M.Solo(M.PLATES) end
+    for _, ex in ipairs(W.ModeExamples or {}) do if arg == ex.key then return M.Solo(ex.text) end end   -- ModeExamples.lua
     M.Toggle()
 end

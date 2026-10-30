@@ -13,16 +13,22 @@
 --                      keys <KEY ...>             the host's mode keys, relayed to the other players
 --                      snap <name>\n<state>       the host's catch-up for a late joiner
 --                      end <text>                 the host finishes the game
---                      publish <script>           (in parts) a mode for review
+--                      publish <script>           (in parts) a mode for review (checked first, one each 10 s)
+--                      test <script>              Play Here from the script editor: host a copy of an unpublished
+--                                                 script where you stand and invite your party (checked first, one
+--                                                 each 5 s; never listed, never stored, ends with the session)
 --                      dsave <title>\n<script>     save a draft to your account | dlist | dload <title> | ddel <title>
 --   server -> client   modes key,title,author,min,max;...  | invite <id> <host> <title> | lobby <id> <host> <names> <title>
 --                      start <id> <host> <x> <y> <z> <o> <seed> <names>\n<script, for the host only>
 --                      script <script> (solo) | st | keys | in <name> <KEY> <0|1> | joined <name> | left <name>
 --                      msg <text> | end <text> | published <key>
 --                      drafts <title;title...> | draft <title>\n<script> | dsaved <title>
+--                      invalid <line>\n<why>     a script this realm refused (Publish, Play Here), for the editor's console
+-- The check (checkScript) never runs or compiles the script: it reads it as text (size, compiled chunks, the
+-- names the sandbox blocks). It is a copy of ModeAPI.lua's API.Check; stream/tests/test_ov_modes.lua keeps them equal.
 -- Device modes (Modes.lua / ModeDevices.lua) are ordinary modes whose script is one Devices.Run[=[ ... ]=] block of
 -- data; they publish, host and relay like any other. Review lists them as "(devices)" when that's all they are.
--- GM: .modes pending | approve <key> | reject <key> | unlist <key>
+-- GM: .modes pending | check <key> | approve <key> | reject <key> | unlist <key>
 -- mod-ale events: 4 ON_LOGOUT, 28 ON_MAP_CHANGE, 42 ON_COMMAND.
 
 local OVMod
@@ -43,6 +49,74 @@ local MAX_SCRIPT = 14 * 1024
 local ST_PER_SEC = 25
 local IN_PER_SEC = 30
 local MAX_ST = 4000
+local PUBLISH_GAP = 10       -- seconds between one player's publishes
+local TEST_GAP = 5           -- seconds between one player's Play Here tests
+
+-- A copy of ModeAPI.lua's API.BLOCKED and API.Check (the realm never loads addon files). Reads the script as
+-- text; nothing is compiled or run. Returns nil, or line, why.
+local BLOCKED = {
+    "getfenv", "setfenv", "loadstring", "loadfile", "dofile", "require", "getmetatable", "setmetatable",
+    "rawget", "rawset", "rawequal", "newproxy", "collectgarbage", "gcinfo", "debug", "coroutine", "os", "io",
+    "LeylineMode", "LeylineGuard",
+}
+local function checkScript(text)
+    if type(text) ~= "string" then return 0, "No script." end
+    if #text > MAX_SCRIPT then return 0, "The script is too big (" .. MAX_SCRIPT .. " bytes at most)." end
+    if text:find("\27", 1, true) then return 0, "Compiled chunks aren't allowed." end
+    local blocked = {}
+    for _, n in ipairs(BLOCKED) do blocked[n] = true end
+    local i, n, line = 1, #text, 1
+    local prev, prev2 = "", ""
+    local function longEnd(at)
+        local eq = text:match("^%[(=*)%[", at)
+        if not eq then return nil end
+        local close = "]" .. eq .. "]"
+        local s, e = text:find(close, at + #eq + 2, true)
+        e = e or n
+        return e
+    end
+    while i <= n do
+        local c = text:sub(i, i)
+        if c == "\n" then
+            line = line + 1; i = i + 1
+        elseif c:match("%s") then
+            i = i + 1
+        elseif text:sub(i, i + 1) == "--" then
+            local e = longEnd(i + 2)
+            if not e then e = (text:find("\n", i, true) or (n + 1)) - 1 end
+            local _, nl = text:sub(i, e):gsub("\n", "")
+            line = line + nl; i = e + 1
+        elseif c == "[" and text:match("^%[=*%[", i) then
+            local e = longEnd(i)
+            local _, nl = text:sub(i, e):gsub("\n", "")
+            line = line + nl; i = e + 1; prev2, prev = prev, "]"
+        elseif c == '"' or c == "'" then
+            local j = i + 1
+            while j <= n do
+                local d = text:sub(j, j)
+                if d == "\\" then j = j + 2
+                elseif d == c or d == "\n" then break
+                else j = j + 1 end
+            end
+            i = j + 1; prev2, prev = prev, '"'
+        elseif c:match("[%a_]") then
+            local name = text:match("^[%a_][%w_]*", i)
+            local field = (prev == "." and prev2 ~= ".") or prev == ":"
+            if field and name == "dump" then return line, "Line " .. line .. ": string.dump isn't available in modes." end
+            if field and name == "rep" and prev == ":" then
+                return line, "Line " .. line .. ": use string.rep(s, n), not s:rep(n) (string.rep is the capped one)."
+            end
+            if not field and blocked[name] then return line, "Line " .. line .. ": " .. name .. " isn't available in modes." end
+            i = i + #name; prev2, prev = prev, "a"
+        elseif c:match("%d") then
+            local num = text:match("^0[xX]%x+", i) or text:match("^%d+%.?%d*[eE][%+%-]?%d+", i) or text:match("^%d+%.?%d*", i)
+            i = i + #num; prev2, prev = prev, "0"
+        else
+            i = i + 1; prev2, prev = prev, c
+        end
+    end
+    return nil
+end
 
 -- The built-in modes. Copies of Modes.lua's M.BUILTIN and M.COINDASH and ModeDevices.lua's M.PLATES
 -- (stream/tests/test_ov_modes.lua checks they match).
@@ -389,9 +463,9 @@ local function seat(player)
     return { guid = player:GetGUIDLow(), name = player:GetName(), player = player, st = { sec = 0, n = 0 } }
 end
 
-local function hostCommand(player, key)
-    local m = modes[(key or ""):lower()]
-    if not m or (not m.approved and m.guid ~= player:GetGUIDLow()) then return say(player, "No mode called '" .. tostring(key) .. "'.") end
+local goCommand
+
+local function openSession(player, m)
     if bySeat[player:GetGUIDLow()] then leave(player) end
     if try(player, "IsInCombat") then return say(player, "Not in combat.") end
     local s = { id = nextId, mode = m, state = "lobby", t0 = now(), players = { seat(player) },
@@ -412,7 +486,37 @@ local function hostCommand(player, key)
         end
     end
     send(player, "lobby", lobbyText(s))
+    if m.test and invited == 0 then return goCommand(player) end   -- a test with nobody to wait for starts at once
     say(player, m.title .. (invited > 0 and (": invited " .. invited .. ". Press Start when everyone's in.") or ": press Start (join a party first to play together)."))
+end
+
+local function hostCommand(player, key)
+    local m = modes[(key or ""):lower()]
+    if not m or (not m.approved and m.guid ~= player:GetGUIDLow()) then return say(player, "No mode called '" .. tostring(key) .. "'.") end
+    openSession(player, m)
+end
+
+-- The script editor's refusals go to its console with the line: invalid <line>\n<why>.
+local function refuse(player, line, why)
+    send(player, "invalid", tostring(line or 0) .. "\n" .. why)
+    say(player, why)
+end
+
+local testAt, publishAt = {}, {}
+
+-- Play Here: a copy of the editor's script, hosted like any mode but never listed, stored or reviewed. Only the
+-- host's client runs it (in its sandbox); the others only draw what the host sends, as with every mode.
+local function testCommand(player, text)
+    local g = player:GetGUIDLow()
+    if testAt[g] and now() - testAt[g] < TEST_GAP then return say(player, "Testing too fast; try again in a moment.") end
+    if #text < 20 then return refuse(player, 0, "Write a little more first.") end
+    local line, why = checkScript(text)
+    if line then return refuse(player, line, why) end
+    if try(player, "IsInCombat") then return say(player, "Not in combat.") end
+    testAt[g] = now()
+    local title, _, mx = meta(text)
+    openSession(player, { key = "test", title = (title .. " (test)"):sub(1, 40), author = player:GetName(), guid = g,
+        min = 1, max = mx, text = text, approved = false, test = true })
 end
 
 local function startFor(s, pl, p)
@@ -439,7 +543,7 @@ local function joinCommand(player, id)
     end
 end
 
-local function goCommand(player)
+function goCommand(player)
     local s = sessions[bySeat[player:GetGUIDLow()] or -1]
     if not s or s.players[1].guid ~= player:GetGUIDLow() or s.state ~= "lobby" then return end
     if #s.players < s.mode.min then return say(player, s.mode.title .. " needs at least " .. s.mode.min .. " players.") end
@@ -505,8 +609,12 @@ local function endCommand(player, text)
 end
 
 local function publishCommand(player, text)
-    if #text < 20 or #text > MAX_SCRIPT then return say(player, "A mode must be between 20 bytes and 14 KB.") end
-    if text:find("\27", 1, true) then return say(player, "Compiled chunks aren't allowed.") end
+    if #text < 20 or #text > MAX_SCRIPT then return refuse(player, 0, "A mode must be between 20 bytes and 14 KB.") end
+    local line, why = checkScript(text)
+    if line then return refuse(player, line, why) end
+    local g = player:GetGUIDLow()
+    if publishAt[g] and now() - publishAt[g] < PUBLISH_GAP then return say(player, "Publishing too fast; try again in a moment.") end
+    publishAt[g] = now()
     local title = meta(text)
     local slug = function(x) return ((x or ""):lower():gsub("[^%w]", "")):sub(1, 14) end
     local key = slug(player:GetName()) .. "_" .. slug(title)
@@ -597,6 +705,19 @@ local function gmCommand(player, word, key)
         return say(player, #l > 0 and ("Waiting: " .. table.concat(l, ", ")) or "Nothing waiting for review.")
     end
     local m = modes[key or ""]
+    if word == "check" then
+        -- A reviewer's summary: the realm's check, the size, and which parts of the API the script uses.
+        if not m then return say(player, "No such mode: " .. tostring(key)) end
+        local line, why = checkScript(m.text)
+        local _, lines = m.text:gsub("\n", "")
+        local used = {}
+        for _, ns in ipairs({ "Ent", "Players", "HUD", "Score", "Camera", "Timer", "State", "Vec", "Devices", "Random", "print" }) do
+            if m.text:find("%f[%w_]" .. ns .. "%f[^%w_]") then used[#used + 1] = ns end
+        end
+        say(player, string.format("%s (%s by %s): %d bytes, %d lines%s. Uses: %s.", key, m.title, m.author, #m.text, lines + 1,
+            isDevices(m.text) and ", devices only" or "", #used > 0 and table.concat(used, " ") or "nothing"))
+        return say(player, line and ("Check: " .. why) or "Check: no problems found.")
+    end
     if not m or BUILTIN[key] then return say(player, "No such mode: " .. tostring(key)) end
     if word == "approve" then
         m.approved = true
@@ -627,7 +748,7 @@ local handlers = {
     host = hostCommand, solo = soloCommand, join = joinCommand, go = goCommand,
     leave = function(p) leave(p) end,
     ["in"] = inCommand, st = stCommand, keys = keysCommand, snap = snapCommand, ["end"] = endCommand,
-    publish = publishCommand,
+    publish = publishCommand, test = testCommand,
     dsave = dsaveCommand, dlist = function(p) dlistCommand(p) end, dload = dloadCommand, ddel = ddelCommand,
 }
 for name, fn in pairs(handlers) do OVMod.On(MOD, name, function(player, data) fn(player, data or "") end) end
@@ -636,12 +757,13 @@ RegisterPlayerEvent(42, function(event, player, command)
     local rest = (command or ""):match("^modes%s*(.*)$")
     if not rest then return end
     local word, key = rest:match("^(%S*)%s*(%S*)")
-    if word == "pending" or word == "approve" or word == "reject" or word == "unlist" then gmCommand(player, word, key)
-    else say(player, "Open /modes in the browser client. GMs: .modes pending | approve <key> | reject <key>") end
+    if word == "pending" or word == "check" or word == "approve" or word == "reject" or word == "unlist" then gmCommand(player, word, key)
+    else say(player, "Open /modes in the browser client. GMs: .modes pending | check <key> | approve <key> | reject <key>") end
     return false
 end)
 RegisterPlayerEvent(4, function(event, player) leave(player) end)
 RegisterPlayerEvent(28, function(event, player) leave(player) end)
 
 OVWorkshopHooks = rawget(_G, "OVWorkshopHooks") or {}; OVWorkshopHooks.mode = modes   -- ov_workshop.lua reviews modes too
-return { sessions = sessions, modes = modes, drafts = drafts, BUMPER = BUMPER, COINDASH = COINDASH, PLATES = PLATES, isDevices = isDevices }
+return { sessions = sessions, modes = modes, drafts = drafts, BUMPER = BUMPER, COINDASH = COINDASH, PLATES = PLATES, isDevices = isDevices,
+    checkScript = checkScript, BLOCKED = BLOCKED }
