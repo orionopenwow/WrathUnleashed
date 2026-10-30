@@ -54,6 +54,15 @@ REGIONS = [("na-east", "North America east"), ("na-west", "North America west"),
 REGION_LABEL = dict(REGIONS)
 BUILDS = {5875: "1.12.1", 8606: "2.4.3", 12340: "3.3.5a", 15595: "4.3.4", 18414: "5.4.8"}
 BUILD_OF = {v: k for k, v in BUILDS.items()}
+# The newest client build offered. Hidden by the owner on 2026-10-30 ("3.3.5 at max until I research"): realms on
+# 4.3.4 and 5.4.8 are left out of the lists, the counts and the filters (the relay may still list them). Set this
+# back to 18414 (or set LEYLINE_ALL_CLIENTS=1) to show them again.
+MAX_OFFERED_BUILD = 12340
+
+
+def offered(build, env=None) -> bool:
+    v = (os.environ if env is None else env).get("LEYLINE_ALL_CLIENTS", "").strip().lower()
+    return v in ("1", "true", "yes", "on") or (build or 12340) <= MAX_OFFERED_BUILD
 CORES = {"azerothcore": "AzerothCore", "trinitycore": "TrinityCore", "cmangos": "CMaNGOS", "vmangos": "vMaNGOS",
          "mangos": "MaNGOS", "other": "Other"}
 LANGS = {"en": "English", "de": "Deutsch", "fr": "Français", "es": "Español", "pt": "Português", "pt-BR": "Português (BR)",
@@ -146,6 +155,8 @@ def order(realms: list[dict]) -> list[dict]:
     """Sets r["group"] (featured, sample, community, offline) and sorts; see the module docstring."""
     out = []
     for r in realms:
+        if not offered(r.get("build")):   # 4.3.4 / 5.4.8: not offered for now (MAX_OFFERED_BUILD)
+            continue
         r = dict(r)
         r["sample"] = bool(r.get("hangout"))
         if not r.get("live"):
@@ -188,7 +199,7 @@ def filters_from(query: dict) -> dict:
         return v[:n] if isinstance(v, str) else ""
     f = {}
     b = one("build")
-    if b in BUILD_OF:
+    if b in BUILD_OF and offered(BUILD_OF[b]):
         f["build"] = BUILD_OF[b]
     t = one("tag")
     if t in TAG_LABEL:

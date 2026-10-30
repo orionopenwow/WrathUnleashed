@@ -107,9 +107,18 @@ BUILD_ALIASES = {"1.12": "1.12", "1.12.1": "1.12", "5875": "1.12", "2.4.3": "2.4
                  "5.4.8": "5.4.8", "18414": "5.4.8"}
 
 
+# Not offered for now: hidden by the owner on 2026-10-30 ("3.3.5 at max until I research"). A 4.3.4 / 5.4.8 client
+# is read as no client (hub.py HIDDEN_BUILDS hides their items). Empty this (or set LEYLINE_ALL_CLIENTS=1) to count
+# and filter them again.
+HIDDEN_CLIENTS = ("4.3.4", "5.4.8")
+
+
 def client_tag(v) -> str:
-    """A client build as the catalog tags it, or "" (unknown or none)."""
-    return BUILD_ALIASES.get(str(v or "").strip().lower(), "")
+    """A client build as the catalog tags it, or "" (unknown, none, or not offered now)."""
+    t = BUILD_ALIASES.get(str(v or "").strip().lower(), "")
+    if t in HIDDEN_CLIENTS and os.environ.get("LEYLINE_ALL_CLIENTS", "").strip().lower() not in ("1", "true", "yes", "on"):
+        return ""
+    return t
 
 
 def kind_of(i: dict) -> str:

@@ -37,6 +37,10 @@ SAFE = set(b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _.,'
 TAGS = ("blizzlike", "boosted", "custom", "pvp", "rp", "hangout", "bots")
 REGIONS = {"na-east", "na-west", "sa", "eu", "africa", "me", "asia", "oce"}
 BUILDS = {5875, 8606, 12340, 15595, 18414}
+# The newest client build offered. Hidden by the owner on 2026-10-30 ("3.3.5 at max until I research"): realms on
+# 4.3.4 and 5.4.8 are left out of the in-game list. Set this back to 18414 (or LEYLINE_ALL_CLIENTS=1) to list them.
+MAX_OFFERED_BUILD = 12340
+ALL_CLIENTS = os.environ.get("LEYLINE_ALL_CLIENTS", "").strip().lower() in ("1", "true", "yes", "on")
 LANG = re.compile(r"^[a-z]{2,3}(-[A-Z]{2})?$")
 
 
@@ -56,6 +60,8 @@ def clean(rec):
     if not isinstance(rid, str) or not REALM_ID.match(rid):
         return None
     prof = rec.get("profile") if isinstance(rec.get("profile"), dict) else {}
+    if prof.get("build") in BUILDS and prof["build"] > MAX_OFFERED_BUILD and not ALL_CLIENTS:
+        return None   # 4.3.4 / 5.4.8: not offered for now
     hb = com.get("lastHeartbeat") if isinstance(com.get("lastHeartbeat"), dict) else {}
     name = rec.get("name") if isinstance(rec.get("name"), str) else ""
     name = "".join(c for c in name if c.isprintable() and c not in "|:")
