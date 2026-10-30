@@ -1,5 +1,5 @@
 @echo off
-rem Test build with the smooth-frames changes (..\SMOOTH-FRAMES.md): same page and Data, served from
+rem Test build with the smooth-frames changes (..\client\patches\SMOOTH-FRAMES.md): same page and Data, served from
 rem dist-smooth instead of dist. Close the regular "Play 3.3.5a in browser" window first (same port).
 cd /d "%~dp0"
 if not exist "dist-smooth.tgz" if exist "dist-smooth.tgz.part00" copy /b "dist-smooth.tgz.part00"+"dist-smooth.tgz.part01" "dist-smooth.tgz" >nul

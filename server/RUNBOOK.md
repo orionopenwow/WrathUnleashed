@@ -47,7 +47,7 @@ All of this uses the realm that already runs locally. Make one folder for everyt
 ```powershell
 $UP = "$env:USERPROFILE\Desktop\wu-upload"
 New-Item -ItemType Directory -Force $UP | Out-Null
-cd C:\Users\campw\Desktop\WrathUnleashed\realm
+cd C:\Users\campw\Desktop\Leyline\realm
 ```
 
 **0a. Client data** (dbc, maps, Cameras; vmaps/mmaps if you ran `3-extract-pathing.bat`).

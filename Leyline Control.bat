@@ -1,5 +1,5 @@
 @echo off
-title WrathUnleashed Control
+title Leyline Control
 rem Opens the control window (http://127.0.0.1:8097 on this PC only). Close this window to stop it.
 rem Any older copy still holding the port is closed first, so the newest version always runs.
 cd /d "%~dp0"

@@ -315,3 +315,5 @@
 1102d signin  Website host flow: filled in from the game, More settings
 1102e hostkit  Host pack: applies the host options (type, rates, start, bots)
 1102f ship  Save to GitHub (orionopenwow/WrathUnleashed): in-game Realm List, Leyline look, hosting from the game
+1103a remove-files  Tidy the workspace: old root patches, scratch and the 1.12 tools moved (the copies at the old places removed)
+1103b ship  Save to GitHub: the workspace says Leyline (labs/, client/patches, docs map, Leyline Control, Move to Leyline)

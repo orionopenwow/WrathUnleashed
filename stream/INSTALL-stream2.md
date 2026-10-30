@@ -1,6 +1,6 @@
 # Installing stream2 over WrathUnleashed\stream
 
-Copy these from `stream2\` into `C:\Users\campw\Desktop\WrathUnleashed\stream\` (same relative path).
+Copy these from `stream2\` into `C:\Users\campw\Desktop\Leyline\stream\` (same relative path).
 
 **Replace**
 

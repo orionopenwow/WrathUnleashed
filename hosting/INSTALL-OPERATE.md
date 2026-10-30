@@ -7,7 +7,7 @@ which steps need your OK), and how to run it afterwards. Design: `README.md`.
 
 | Folder | Goes to | What |
 |---|---|---|
-| `kit/` | `Desktop\WrathUnleashed\host\` (and, zipped, to players) | the host kit: `Host a Wrath realm.bat`, `Check my realm.bat`, `Realm tools.bat`, `Stop my realm.bat`, `host-wrath-realm.sh`, the compose file, the agent/tools image |
+| `kit/` | `Desktop\Leyline\host\` (and, zipped, to players) | the host kit: `Host a Wrath realm.bat`, `Check my realm.bat`, `Realm tools.bat`, `Stop my realm.bat`, `host-wrath-realm.sh`, the compose file, the agent/tools image |
 | `relay/` + `kit/tools/wunet/` | the relay VM (`/opt/wu-relay`) | the relay server, its Docker/systemd/Caddy setup, the join page |
 | `site/` | the website repo (`www/`) | `join/index.html`, a snippet for `404.html`, the community-record schema for the Beacons page |
 | `server/set-realm-address.sh` | `WrathUnleashed\server\` (replaces the old one) | same as before, plus a world port and `--relay STATE_DIR` |
@@ -29,7 +29,7 @@ public from a fresh "IP":
 
 ```
 # WSL (Ubuntu) with Docker Desktop's WSL integration on, from the folder that holds hosting/
-WU_REALM_DIR=/c/Users/campw/Desktop/WrathUnleashed/realm bash hosting/tests/e2e/run-e2e.sh --real
+WU_REALM_DIR=/c/Users/campw/Desktop/Leyline/realm bash hosting/tests/e2e/run-e2e.sh --real
 ```
 
 It uses the `ov-client-data` volume you already have and the `ov/ac-wotlk-*:custom` images

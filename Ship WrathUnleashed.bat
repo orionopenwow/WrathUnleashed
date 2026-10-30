@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
-title WrathUnleashed - save work to GitHub (private repo)
+title Leyline workspace - save work to GitHub (private repo)
 rem Saves the whole WrathUnleashed folder (our scripts, realm Lua/SQL, server kit, GM console, hosting kit,
 rem the client patch, docs) to your PRIVATE GitHub repo. Never: game data, slices, Forever UI art, builds,
 rem secrets (.gitignore). Shows what changes, scans for secrets, asks yes, commits, pushes.
@@ -10,15 +10,14 @@ rem A cancel exits with code 2, so the panel never marks a cancelled save as don
 cd /d "%~dp0"
 set GIT_TERMINAL_PROMPT=1
 where git >nul 2>&1 || (echo Git is not installed: https://git-scm.com/download/win & pause & exit /b 1)
-if not exist .gitignore copy /y gitignore-template .gitignore >nul
 if not exist .git (
   git init -q -b main || (echo git init failed. & pause & exit /b 1)
   echo New local repo made here.
 )
 git remote get-url origin >nul 2>&1 || (
   echo.
-  echo Paste the URL of your EMPTY PRIVATE GitHub repo, e.g. https://github.com/orionopenwow/WrathUnleashed.git
-  set "URL=https://github.com/orionopenwow/WrathUnleashed.git"
+  echo Paste the URL of your EMPTY PRIVATE GitHub repo, e.g. https://github.com/orionopenwow/leyline-workspace.git
+  set "URL=https://github.com/orionopenwow/leyline-workspace.git"
   echo Using !URL!  ^(press Enter to accept, or paste another^)
   set /p URL=Repo URL: 
   git remote add origin "!URL!" || (echo Could not set the remote. & pause & exit /b 1)

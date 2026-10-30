@@ -262,7 +262,8 @@ check("toc off: byte for byte back", fom.brand_toc_text(on, False) == toc)
 mo = importlib.util.spec_from_file_location("mo", os.path.join(STREAM, "server", "mods-overlay.py"))
 mom = importlib.util.module_from_spec(mo); mo.loader.exec_module(mom)
 check("mods-overlay.py: the same swap", mom.BRAND_SWAPS == fom.BRAND_SWAPS)
-for wm in (os.path.join(STREAM, "wu-mod.py"), os.path.join(REPO, "mods", "wu-mod.py")):
+# stream/wu-mod.py is only the copy the signin step makes beside the portal (not in git): check it when it is there.
+for wm in [p for p in (os.path.join(STREAM, "wu-mod.py"), os.path.join(REPO, "mods", "wu-mod.py")) if os.path.isfile(p)]:
     out = os.path.join(TMP, "cat-" + str(abs(hash(wm))))
     s = importlib.util.spec_from_file_location("wm", wm); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
     os.environ["LEYLINE_BRAND"] = "1"

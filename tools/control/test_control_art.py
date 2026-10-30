@@ -56,7 +56,7 @@ page = b.decode()
 check("page: 200, themed", st == 200 and '<body class="wu">' in page and re.search(r'/art/wu-theme\.css\?v=[0-9a-f]{10}"', page))
 ids = ["health", "auto", "gmc", "check", "game", "you", "now", "cupd", "fin", "pending", "msg", "go", "run", "con", "hist"]
 check("page: every id the script uses is there once", all(page.count(f'id="{i}"') == 1 for i in ids))
-check("page: the header says WrathUnleashed Control with the dragons", 'class="brand wu-brand"><h1>WrathUnleashed Control</h1>' in page)
+check("page: the header says Leyline Control with the dragons", 'class="brand wu-brand"><h1>Leyline Control</h1>' in page)
 check("page: Launch all is the gold one", 'class="primary" id="go">Launch all' in page)
 check("page: Autopilot ON turns gold (the script sets .primary)", 'a.className=s.autopilot?"primary":""' in page)
 check("page: CSP keeps everything on this PC", "default-src 'self'" in h.get("content-security-policy", ""))
