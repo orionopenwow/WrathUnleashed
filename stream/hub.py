@@ -1106,12 +1106,118 @@ class Hub:
                 '<ol class="hb-how hb-rv" aria-label="How it works">'
                 + "".join(f"<li><b>{e(a)}</b><span>{e(b)}</span></li>" for a, b in steps) + "</ol>")
 
-    def features(self) -> str:
+    @staticmethod
+    def _crest(size: int = 44) -> str:
+        """A small crest of our own: the Leyline crystal inside a ring of eight studs (no shield, no game emblem)."""
+        studs = "".join(f'<circle cx="{24 + 19.5 * math.cos(k * math.pi / 4):.2f}" cy="{24 + 19.5 * math.sin(k * math.pi / 4):.2f}" r="1.3"/>'
+                        for k in range(8))
+        return (f'<svg class="hb-crest" viewBox="0 0 48 48" width="{size}" height="{size}" aria-hidden="true" focusable="false">'
+                '<circle cx="24" cy="24" r="22" class="r1"/><circle cx="24" cy="24" r="17" class="r2"/>'
+                f'<g class="st">{studs}</g><g transform="translate(13.6 9.6) scale(.65)">'
+                '<polygon points="16,1.5 9,11 16,30.5" fill="#c9b2ff"/><polygon points="16,1.5 23,11 16,30.5" fill="#8b6cf0"/>'
+                '<polygon points="9,11 16,30.5 5.5,13" fill="#5b3fc4"/><polygon points="23,11 16,30.5 26.5,13" fill="#4a2fa8"/>'
+                '<polygon points="16,1.5 9,11 5.5,13" fill="#b9d0ff"/><polygon points="16,1.5 23,11 26.5,13" fill="#7aa3f5"/></g></svg>')
+
+    @staticmethod
+    def _rune_rule() -> str:
+        """The ornamental divider: a line, small diamonds and dots, our own shapes (an SVG, no picture)."""
+        return ('<div class="hb-rune" aria-hidden="true"><svg viewBox="0 0 64 14" width="64" height="14" focusable="false">'
+                '<circle cx="3" cy="7" r="1.6" class="dt"/><path d="M14 7l3-3 3 3-3 3z" class="dm s"/><path d="M32 1l6 6-6 6-6-6z" class="dm"/>'
+                '<path d="M44 7l3-3 3 3-3 3z" class="dm s"/><circle cx="61" cy="7" r="1.6" class="dt"/></svg></div>')
+
+    def host_showcase(self) -> str:
+        """The "Host a server" picture: the server software the host pack runs (HOST_CORES), one card each with what it is
+        good for, its scripting, bots and the eras it covers (words, never client numbers), One click to host or Coming,
+        "Your own" for any core on the relay, and the realm console's status strip. Slate cards, a rune rule, torch gold
+        used sparingly, our crest from the Leyline crystal. Purely our own shapes and colours."""
+        e = html.escape
+        cards = []
+        for cid, name, status, eras, line, script, bots in HOST_CORES:
+            live = status == "live"
+            chip = ('<span class="hb-sw-chip go">One click to host</span>' if live else '<span class="hb-sw-chip soon">Coming</span>')
+            cards.append(f'<li class="hb-sw-c{"" if live else " soon"}" data-core="{cid}" data-status="{status}">'
+                         f'<p class="hb-sw-h"><b>{e(name)}</b>{chip}</p><p class="hb-sw-l">{e(line)}</p>'
+                         f'<p class="hb-sw-eras">{"".join(f"<span>{e(x)}</span>" for x in eras)}</p>'
+                         f'<dl><dt>Scripting</dt><dd>{e(script)}</dd><dt>Bots</dt><dd>{e(bots)}</dd></dl></li>')
+        cards.append(f'<li class="hb-sw-c own" data-core="own" data-status="own"><p class="hb-sw-h"><b>{e(HOST_OWN[0])}</b>'
+                     f'<span class="hb-sw-chip">List it on the relay</span></p><p class="hb-sw-l">{e(HOST_OWN[1])}</p></li>')
+        svc = "".join(f'<li><i></i>{e(x)}<span>{e(y)}</span></li>' for x, y in HOST_SERVICES)
+        return ('<div class="hb-sw" role="group" aria-label="Server software Leyline hosts">'
+                f'<div class="hb-sw-top">{self._crest()}<div><p class="hb-sw-k">The host pack</p><p class="hb-sw-t">Server software</p></div>'
+                '<p class="hb-sw-run"><span aria-hidden="true"></span>Your realm · running</p></div>'
+                f'{self._rune_rule()}<ul class="hb-sw-list">{"".join(cards)}</ul>{self._rune_rule()}'
+                f'<ul class="hb-sw-svc" aria-label="The realm console">{svc}</ul></div>')
+
+    def realm_list_art(self, got) -> str:
+        """The "Realms & hopping" picture: a realm list in our own fantasy panel, from the live rows (realm_rows: ours
+        first, then featured and the rest by players): Realm, Type (from its tags), Characters, Population (words from
+        players online). Ours is selected and Recommended. Each row is a link to play it, as on the realm list; a dimmed
+        "Your realm here" row invites hosting when the list is short."""
+        e = html.escape
+        rows = (got[0] if got else [])[:REALM_LIST_MAX]
+        out = []
+        for r in rows:
+            name = neutral(r.get("name")) or "A realm"
+            live = bool(r.get("live"))
+            players = r.get("players") if isinstance(r.get("players"), int) else None
+            typ, tcls = realm_type(r.get("tags"))
+            pop, pcls = population(live, players)
+            home = bool(r.get("home"))
+            if home and live:
+                pop, pcls = "Recommended", "rec"
+            client = client_of(r)
+            if live and client == "browser":
+                href, how = ("/wrath" if home else f'/wrath?go=r:{r["id"]}'), "Play in your browser"
+            elif REALM_DEEPLINK and (home or r.get("id")):
+                href, how = REALM_DEEPLINK.format(id="official" if home else r["id"]), "Open in the launcher"
+            else:
+                href, how = BASE + "/realms", "See it on the realm list"
+            chars = '<span class="hb-rlx-ch" title="Your characters show once you sign in">–</span>'
+            out.append(f'<li><a class="hb-rlx-r{" sel" if home else ""}{"" if live else " off"}" href="{e(href)}"'
+                       + (' aria-current="true"' if home else "")
+                       + f' aria-label="{e(name)}: {e(typ)}, population {e(pop)}. {e(how)}" data-type="{tcls}" data-pop="{pcls}">'
+                       f'<span class="hb-rlx-n">{e(name)}</span><span class="hb-rlx-t {tcls}">{e(typ)}</span>{chars}'
+                       f'<span class="hb-rlx-p {pcls}">{e(pop)}</span></a></li>')
+        if len(rows) < REALM_LIST_MAX:
+            out.append('<li><a class="hb-rlx-r you" href="/wrath/host" data-type="pve" data-pop="none">'
+                       '<span class="hb-rlx-n">Your realm here</span><span class="hb-rlx-t">Host one</span>'
+                       '<span class="hb-rlx-ch">–</span><span class="hb-rlx-p">Open</span></a></li>')
+        return ('<div class="hb-rlx" role="group" aria-labelledby="hb-rlx-h">'
+                f'<div class="hb-rlx-top">{self._crest(34)}<p class="hb-rlx-h" id="hb-rlx-h">Realm list</p></div>{self._rune_rule()}'
+                '<p class="hb-rlx-cols" aria-hidden="true"><span>Realm</span><span>Type</span><span>Characters</span>'
+                f'<span>Population</span></p><ul class="hb-rlx-l">{"".join(out)}</ul>'
+                f'<p class="hb-rlx-f"><a href="{BASE}/realms">Every realm, with filters</a><a href="/wrath">Play ours now</a></p></div>')
+
+    def modes_art(self, shot) -> str:
+        """The "Game modes" picture: the owner's Minigolf recording (our mode on our realm) as a muted loop that HUB_JS
+        plays only while it is on screen (the poster alone with reduced motion or Save-Data; without script the poster
+        and a Play link). With the game data killswitch on: the launcher's Modes page instead."""
+        e = html.escape
+        have = self.portal("art_present")
+
+        def ok(n):
+            try:
+                return have is None or bool(have(n))
+            except Exception:   # noqa: BLE001
+                return False
+        names = ("leyline-shot-minigolf.webp", "leyline-shot-minigolf.webm", "leyline-shot-minigolf.mp4")
+        if not self.game_shots_on() or not all(ok(n) for n in names):
+            return shot("modes", "The launcher's Modes page: minigames and game modes with one PLAY button each.")
+        poster, webm, mp4 = ("/wrath/art/" + n for n in names)
+        return ('<figure class="hb-shot hb-vid">'
+                f'<video muted loop playsinline preload="none" poster="{poster}" width="820" height="596" data-hb-vid '
+                'aria-label="Minigolf on our own realm: a ball rolls down a green fairway toward the flag, in a red desert canyon.">'
+                f'<source src="{webm}" type="video/webm"><source src="{mp4}" type="video/mp4"></video>'
+                f'<figcaption><span>Minigolf, on our own realm</span><a class="hb-vid-play" href="{e("/wrath?go=mode:minigolf")}">'
+                'Play</a></figcaption></figure>')
+
+    def features(self, got=None) -> str:
         """The feature sections, one per part of Leyline, in the recommended order (after the original site's big
         alternating showcases: #server-software, #desktop-launcher, #forge, #agents): words on one side, a picture on
         the other, the sides flipping each time, stacked on a phone. Pictures are launcher screenshots (tools/art/
         leyline-ui-shots.cjs: the launcher's own pages with sample data, no client numbers) or small CSS drawings."""
         e = html.escape
+        got = self.realm_rows() if got is None else got
         pm = self.portal("playmodes")
         try:
             live = [neutral(m["title"]) for m in (pm.entries() if pm is not None else []) if m["status"] == "live"][:3]
@@ -1125,12 +1231,7 @@ class Hub:
         def shot(name, alt):
             return (f'<figure class="hb-shot"><img src="/wrath/art/leyline-ui-{name}.webp" alt="{e(alt)}" width="1240" '
                     'height="760" loading="lazy" decoding="async"></figure>')
-        host_art = ('<div class="hb-draw hb-console" aria-hidden="true"><p class="hb-dt"><b>Your realm</b><em>Running</em></p>'
-                    + "".join(f'<p class="hb-svc"><i></i>{x}<span>{y}</span></p>' for x, y in (
-                        ("Database", "ready"), ("Login server", "ready"), ("World server", "ready"), ("Relay agent", "listed")))
-                    + '<p class="hb-cores">' + "".join(f"<span>{x}</span>" for x in ("AzerothCore", "TrinityCore", "CMaNGOS",
-                                                                                         "vMaNGOS", "Your own"))
-                    + '</p><p class="hb-dbtn"><span>Start</span><span>Invite link</span></p></div>')
+        host_art = self.host_showcase()
         community_art = ('<div class="hb-draw hb-people" aria-hidden="true">'
                          + "".join(f'<p class="hb-pp"><i style="--h:{h}">{c}</i><b>{t}</b><span>{s}</span></p>' for h, c, t, s in (
                              (220, "Q", "Quest Lens", "New in the Workshop"), (265, "L", "Lantern Isle", "A realm opened tonight"),
@@ -1160,13 +1261,12 @@ class Hub:
              "picks. Nothing can be bought. Hop from one realm to the next in a click.",
              ["Plays in your browser, or with your own client", "Filters for rules, region and language",
               "Hero Key sign-in across realms (coming)"],
-             [(BASE + "/realms", "See the realms", False)],
-             shot("realms", "The launcher's Realms page: every realm on the network with its players, uptime and badges.")),
+             [(BASE + "/realms", "See the realms", False)], (self.realm_list_art(got) if got else
+                                                            shot("realms", "The launcher's Realms page: every realm on the network with its players, uptime and badges."))),
             ("modes", "Game modes", "Minigames and modes, one click",
              modes_line + ". PLAY signs you in and starts the game once your character is in the world.",
              ["Made by players, checked by a GM", "Host a mode as a whole realm type", "The same list in the launcher"],
-             [(BASE + "/modes", "Play a mode", False)],
-             shot("modes", "The launcher's Modes page: minigames and game modes with one PLAY button each.")),
+             [(BASE + "/modes", "Play a mode", False)], self.modes_art(shot)),
             ("mods", "Mods & the Workshop", "Hot, rising and top picks",
              "Addons, realm scripts, tools and themes, sorted by what players install and rate. Install in one click with "
              "the launcher; open projects from anywhere are linked with credit to their authors.",
@@ -1230,6 +1330,37 @@ class Hub:
         return ('<section class="hb-tick" aria-labelledby="hb-tick-h"><h2 id="hb-tick-h" class="hb-vh">Live on the network</h2>'
                 f'<div class="hb-tick-run"><ul class="hb-tick-l">{items}</ul>'
                 f'<ul class="hb-tick-l dup" aria-hidden="true">{items}</ul></div></section>')
+
+    def featured_mod_ok(self) -> bool:
+        """The featured modpack's screenshot may show: game pictures are on (the killswitch is off) and the file is there."""
+        if not self.game_shots_on():
+            return False
+        have = self.portal("art_present")
+        try:
+            return have is None or bool(have(f"leyline-shot-{FEATURED_MOD['key']}.webp"))
+        except Exception:   # noqa: BLE001
+            return False
+
+    def featured_mod(self) -> str:
+        """The wide featured-mod showcase under the numbers: the modpack's screenshot full-bleed under a soft vignette, the
+        words on a panel over it (under it on a phone), a link out (its authors host it; no Install: we neither host nor
+        check it). Hidden with the game data killswitch. HUB_JS eases the picture as it scrolls by (never with reduced
+        motion)."""
+        if not self.featured_mod_ok():
+            return ""
+        e = html.escape
+        f = FEATURED_MOD
+        src = f"/wrath/art/leyline-shot-{f['key']}.webp"
+        return ('<section class="hb-coa hb-rv" id="featured-mod" aria-labelledby="hb-coa-h">'
+                f'<div class="hb-coa-pic"><img src="{src}" alt="{e(f["alt"])}" width="{f["w"]}" height="{f["h"]}" loading="lazy" '
+                'decoding="async"></div><div class="hb-coa-in"><div class="hb-coa-t">'
+                f'<p class="hb-coa-k"><span aria-hidden="true"></span>{e(f["label"])}</p><h2 id="hb-coa-h">{e(f["title"])}</h2>'
+                '<!-- TODO(owner): the featured modpack\'s final copy -->'
+                f'<p class="hb-coa-l">{e(f["line"])}</p>'
+                f'<p class="hb-coa-a"><a class="hb-cta sm" href="{e(f["url"])}" rel="{FEATURED_REL}" target="_blank">{e(f["button"])}'
+                '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8M17 14v5H5V7h5"/></svg></a></p>'
+                f'<p class="hb-coa-n">{e(f["note"])}</p></div>'
+                f'<p class="hb-coa-cr">{e(f["credit"])}</p></div></section>')
 
     def counters(self, got, items: list) -> str:
         """Realms, players and mods: the final numbers in the page (no script, reduced motion: just these); HUB_JS counts
@@ -1441,6 +1572,12 @@ class Hub:
         dl = self._download()
         game = []
         have = self.portal("art_present")
+        if self.featured_mod_ok():   # the featured modpack first, with its authors' credit and a link out (no Install)
+            f = FEATURED_MOD
+            src = f"/wrath/art/leyline-shot-{f['key']}.webp"
+            game.append({"k": "game", "id": "g-" + f["key"], "title": f["title"], "line": f["short"], "credit": f["credit"],
+                         "label": f["label"], "img": (src, f["w"], f["h"], f["alt"]), "art": "", "href": src, "ext": True,
+                         "acts": [(f["url"], f["button"], True)]})
         if self.game_shots_on():
             for key, (w, h, title, line, alt) in GAME_SHOTS.items():
                 name = f"leyline-shot-{key}.webp"
@@ -1542,15 +1679,15 @@ class Hub:
             pic = f'<img src="{e(src)}" alt="{e(alt)}" width="{int(w)}" height="{int(h)}" loading="lazy" decoding="async">'
         else:
             pic = t["art"]
-        off = ' rel="noopener nofollow ugc" target="_blank"' if t.get("ext") else ' rel="noopener noreferrer"'
+        ext = (f' rel="{FEATURED_REL}" target="_blank"' if t.get("ext") else ' rel="noopener noreferrer"')
         acts = "".join(f'<a class="{"hb-gt-i" if primary else "hb-gt-v"}" href="{e(h)}"'
-                       + (off if h.startswith("http") else "") + f">{e(label)}</a>" for h, label, primary in t["acts"])
+                       + (ext if h.startswith("http") else "") + f">{e(label)}</a>" for h, label, primary in t["acts"])
         cap = (f'<small>{e(t["label"])}</small><b>{e(t["title"])}</b>'
                + (f'<span class="hb-gt-l">{e(t["line"])}</span>' if t["line"] else "") + f'<i>{e(t["credit"])}</i>')
         aria = "" if t["img"] else f' aria-label="{e(t["title"])}: {e(t["label"])}"'
         return (f'<figure class="hb-gt{" " + size if size else ""}{" flat" if t.get("flat") else ""}" data-k="{t["k"]}" id="{e(t["id"])}">'
                 f'<a class="hb-gt-a" href="{e(t["href"])}"' + (" data-lb" if lightbox else "") + f'{aria}>{pic}</a>'
-                f'<figcaption class="hb-gt-c">{cap}<span class="hb-gt-x"' + ("" if t["k"] == "mods" else " hidden") + f'>{acts}</span>'
+                f'<figcaption class="hb-gt-c">{cap}<span class="hb-gt-x"' + ("" if t["k"] == "mods" or t.get("ext") else " hidden") + f'>{acts}</span>'
                 '</figcaption></figure>')
 
     def gallery_grid(self, tiles: list[dict], whole: bool = True) -> str:
@@ -1591,8 +1728,8 @@ class Hub:
                 f'<div class="hb-gal-hd page">{self.gallery_chips(f)}</div>{self.gallery_grid(tiles, not f)}'
                 '<p class="hb-fine">Every picture here is served from our own site: taken on our realm, in our launcher, uploaded to '
                 'our Workshop by the mod\'s authors, or a project\'s own preview image from its GitHub page (credited on the '
-                'picture). Each mod belongs to its authors, under the licence they chose. External packs are made and hosted by '
-                'their authors, not checked or hosted by Leyline.</p>')
+                'picture); the featured modpack\'s screenshot is its authors\', credited on it. Each mod belongs to its authors, under '
+                'the licence they chose. External packs are made and hosted by their authors, not checked or hosted by Leyline.</p>')
         return self._shell("Gallery · Leyline", body, path, nonce, active="gallery")
 
     def featured_strip(self, items: list) -> str:
@@ -1620,7 +1757,7 @@ class Hub:
             f'<p class="hb-hero-a"><a class="hb-cta" href="{e(self._download())}" rel="noopener noreferrer">Download Now</a>'
             '<a class="hb-ghost lg" href="/wrath">Play in your browser</a></p>'
             '<p class="hb-note">Free and open source, for Windows, macOS and Linux. Nothing to buy.</p></section>'
-            + self.ticker(got) + self.realm_section(got) + self.how_strip() + self.counters(got, items) + self.features()
+            + self.ticker(got) + self.realm_section(got) + self.how_strip() + self.counters(got, items) + self.featured_mod() + self.features(got)
             + self.gallery_section(items) + self.posters(got)
             + f'<div class="hb-pair">{self.mod_of_week(items)}{self.herokey_teaser(got)}</div>'
             + self.creator_spotlight(items) + self.news_strip()
@@ -1735,7 +1872,15 @@ class Hub:
             c = m.get("credit") or {}
             credit = (f'<p class="hb-meta">By {e(neutral(c["by"]))} · {e(c.get("license", ""))} · '
                       f'<a href="{e(c["source"])}" rel="noopener noreferrer">Source</a></p>') if c.get("by") and c.get("source") else ""
-            cards.append(f'<article class="hb-mode" id="mode-{e(m["id"])}"><h2>{e(neutral(m["title"]))}</h2><p>{e(neutral(m["line"]))}</p>'
+            art = MODE_ART.get(m["id"])
+            have = self.portal("art_present")
+            try:
+                art_ok = bool(art) and (have is None or bool(have(art[0])))
+            except Exception:   # noqa: BLE001
+                art_ok = False
+            pic = (f'<img class="hb-mode-art" src="/wrath/art/{e(art[0])}" alt="{e(art[3])}" width="{art[1]}" height="{art[2]}" '
+                   'loading="lazy" decoding="async">') if art_ok else ""
+            cards.append(f'<article class="hb-mode{" art" if pic else ""}" id="mode-{e(m["id"])}">{pic}<h2>{e(neutral(m["title"]))}</h2><p>{e(neutral(m["line"]))}</p>'
                          f'<p>{"".join(f"<span class=hb-tag>{e(x)}</span>" for x in tags if x)}</p>{credit}{act}</article>')
         body = ('<section class="hb-head"><h1>Modes</h1><p>Minigames and game modes. Play signs you in and starts the game '
                 'in your browser once your character is in the world. The launcher lists the same games on its Modes page.</p></section>'
@@ -2628,6 +2773,92 @@ background:rgba(16,18,24,.78);color:#fff;cursor:pointer;font:600 20px/1 var(--lk
 .hb-lb button[hidden]{display:none}
 @media (max-width:760px){.hb-lb{padding:0;place-items:stretch}.hb-lb-in{grid-template-columns:1fr;grid-template-rows:auto 1fr;border-radius:0;overflow:auto;width:100%}
 .hb-lb-pic img{max-height:62vh}.hb-lb-cap{padding:16px}.hb-lb-x{top:8px;right:8px}}
+/* the featured modpack (Hub.featured_mod): full-bleed picture, soft vignette, the words on a glass panel; eases on scroll */
+body.hb{overflow-x:clip}
+.hb-coa{position:relative;width:100vw;margin:34px 0 16px calc(50% - 50vw);min-height:clamp(440px,50vw,620px);display:flex;align-items:center;
+overflow:hidden;isolation:isolate;background:#0b0d12;scroll-margin-top:72px}
+.hb-coa-pic{position:absolute;inset:0;z-index:-1;overflow:hidden}
+.hb-coa-pic img{display:block;width:100%;height:100%;object-fit:cover;object-position:62% 42%;
+transform:scale(calc(1.1 - var(--coa,.5) * .06)) translateY(calc((var(--coa,.5) - .5) * -36px))}
+.hb-coa-pic::after{content:"";position:absolute;inset:0;pointer-events:none;background:
+radial-gradient(130% 95% at 68% 45%,transparent 42%,rgba(8,10,15,.72) 100%),
+linear-gradient(90deg,rgba(12,14,20,.9) 0%,rgba(12,14,20,.55) 34%,rgba(12,14,20,0) 62%),
+linear-gradient(0deg,var(--lk-bg) 0%,transparent 20%),linear-gradient(180deg,var(--lk-bg) 0%,transparent 16%)}
+.hb-coa-in{position:relative;width:100%;max-width:1040px;margin:0 auto;padding:56px 16px}
+.hb-coa-t{max-width:450px;padding:26px 28px 22px;border-radius:var(--lk-r);background:rgba(16,19,27,.6);-webkit-backdrop-filter:blur(12px) saturate(1.15);
+backdrop-filter:blur(12px) saturate(1.15);border:1px solid rgba(255,255,255,.09);box-shadow:0 24px 70px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06)}
+.hb-coa-k{display:flex;align-items:center;gap:9px;margin:0 0 8px;color:#e6bb5f;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase}
+.hb-coa-k span{width:24px;height:2px;border-radius:2px;background:linear-gradient(90deg,#d9a441,rgba(217,164,65,0))}
+.hb-coa h2{margin:0 0 10px;font-size:clamp(26px,3.5vw,38px);line-height:1.1;font-weight:800;letter-spacing:-.015em}
+.hb-coa-l{margin:0 0 18px;color:var(--lk-text-2);font-size:15.5px}
+.hb-coa-a{margin:0 0 14px}.hb-coa-a .hb-cta{display:inline-flex;align-items:center;gap:9px}
+.hb-coa-a svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.hb-coa-n{margin:0;padding-top:12px;border-top:1px solid rgba(255,255,255,.08);color:var(--lk-muted);font-size:12.5px;line-height:1.45}
+.hb-coa-cr{position:absolute;right:16px;bottom:16px;margin:0;font-size:11.5px;color:rgba(255,255,255,.72);text-shadow:0 1px 3px #000}
+@media (max-width:720px){.hb-coa{display:block;min-height:0;margin-top:26px}.hb-coa-pic{position:relative;aspect-ratio:845/577}
+.hb-coa-pic::after{background:radial-gradient(120% 90% at 50% 40%,transparent 50%,rgba(8,10,15,.6) 100%),linear-gradient(0deg,var(--lk-bg) 0%,transparent 35%)}
+.hb-coa-in{margin-top:-64px;padding:0 16px 8px}.hb-coa-t{max-width:none;padding:20px 18px 16px}.hb-coa-cr{position:static;margin:8px 2px 0;text-align:right;color:var(--lk-muted);text-shadow:none}}
+/* the fantasy panels (server software, the realm list): carved slate, a rune rule, torch gold used sparingly, our crest */
+.hb-sw,.hb-rlx{position:relative;padding:20px;border-radius:var(--lk-r);color:var(--lk-text);background:
+radial-gradient(120% 80% at 0% 0%,rgba(91,141,239,.11),transparent 55%),radial-gradient(100% 70% at 100% 100%,rgba(139,108,240,.11),transparent 60%),
+repeating-linear-gradient(135deg,rgba(255,255,255,.014) 0 2px,transparent 2px 7px),linear-gradient(180deg,#1d212a,#14171e);
+border:1px solid #373c48;box-shadow:inset 0 0 0 1px rgba(217,164,65,.13),inset 0 1px 0 rgba(255,255,255,.05),0 18px 50px rgba(0,0,0,.45),0 0 60px rgba(91,141,239,.08)}
+.hb-sw p,.hb-rlx p{margin:0}
+.hb-crest{flex:none;display:block}.hb-crest .r1{fill:#12141b;stroke:rgba(217,164,65,.75);stroke-width:1.3}
+.hb-crest .r2{fill:none;stroke:rgba(122,163,245,.4);stroke-width:1}.hb-crest .st circle{fill:#d9a441}
+.hb-rune{display:flex;align-items:center;gap:8px;margin:14px 0}.hb-rune::before,.hb-rune::after{content:"";flex:1;height:1px}
+.hb-rune::before{background:linear-gradient(90deg,transparent,rgba(217,164,65,.45))}.hb-rune::after{background:linear-gradient(90deg,rgba(217,164,65,.45),transparent)}
+.hb-rune svg{flex:none}.hb-rune .dm{fill:none;stroke:#d9a441;stroke-width:1.3}.hb-rune .dm.s{stroke:rgba(139,108,240,.9)}.hb-rune .dt{fill:rgba(122,163,245,.85)}
+.hb-sw-top,.hb-rlx-top{display:flex;align-items:center;gap:12px}
+.hb-sw-k{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#d9a441}
+.hb-sw-t{font-size:19px;font-weight:800;letter-spacing:-.01em}
+.hb-sw-run{margin-left:auto!important;display:flex;align-items:center;gap:7px;padding:3px 10px;border-radius:999px;border:1px solid rgba(79,209,139,.5);
+color:var(--lk-ok);font-size:12px;font-weight:700;white-space:nowrap}
+.hb-sw-run span{width:7px;height:7px;border-radius:50%;background:var(--lk-ok);box-shadow:0 0 0 3px rgba(79,209,139,.18)}
+.hb-sw-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0;padding:0;list-style:none}
+.hb-sw-c{position:relative;padding:12px 13px;border-radius:10px;border:1px solid #30353f;
+background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,0) 60%),#181b23;box-shadow:inset 0 1px 0 rgba(255,255,255,.04),inset 0 -2px 0 rgba(0,0,0,.25)}
+.hb-sw-c::before{content:"";position:absolute;left:12px;right:12px;top:-1px;height:1px;background:linear-gradient(90deg,transparent,rgba(217,164,65,.5),transparent)}
+.hb-sw-c.soon{background:#16181f}.hb-sw-c.soon::before{background:linear-gradient(90deg,transparent,rgba(139,108,240,.4),transparent)}
+.hb-sw-c.soon :is(b,.hb-sw-l,dd){opacity:.8}
+.hb-sw-c.own{grid-column:1/-1;border-style:dashed;border-color:#3d4352;background:rgba(24,27,35,.6)}.hb-sw-c.own::before{display:none}
+.hb-sw-h{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px!important}.hb-sw-h b{font-size:15px}
+.hb-sw-chip{flex:none;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;border:1px solid var(--lk-border-strong);color:var(--lk-text-2)}
+.hb-sw-chip.go{color:#f1cf86;border-color:rgba(217,164,65,.55);background:rgba(217,164,65,.1)}.hb-sw-chip.soon{color:var(--lk-muted)}
+.hb-sw-l{margin-bottom:8px!important;color:var(--lk-text-2);font-size:12.5px;line-height:1.45}
+.hb-sw-eras{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px!important}
+.hb-sw-eras span{font-size:11px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--lk-accent-soft);color:var(--lk-accent-strong)}
+.hb-sw dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;margin:0;font-size:12px}.hb-sw dt{color:var(--lk-muted)}.hb-sw dd{margin:0;color:var(--lk-text-2)}
+.hb-sw-svc{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:0;padding:0;list-style:none}
+.hb-sw-svc li{position:relative;display:grid;padding:6px 8px 6px 22px;border-radius:8px;background:rgba(0,0,0,.24);border:1px solid #2a2e39;font-size:12px;font-weight:600}
+.hb-sw-svc i{position:absolute;left:9px;top:12px;width:7px;height:7px;border-radius:50%;background:var(--lk-ok);box-shadow:0 0 0 3px rgba(79,209,139,.16)}
+.hb-sw-svc span{color:var(--lk-muted);font-weight:500;font-size:11px}
+.hb-rlx-h{font-size:19px;font-weight:800;letter-spacing:.02em}
+.hb-rlx-cols,.hb-rlx-r{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,.8fr) minmax(0,.8fr) minmax(0,1fr);align-items:center;gap:8px}
+.hb-rlx-cols{padding:0 12px 6px;color:#d9a441;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.hb-rlx-l{display:grid;gap:4px;margin:0;padding:0;list-style:none}
+.hb-rlx-r{padding:9px 12px;border-radius:8px;border:1px solid transparent;text-decoration:none;color:var(--lk-text)!important;font-size:14px;
+background:rgba(0,0,0,.16);transition:background .15s,border-color .15s}
+.hb-rlx-r:hover,.hb-rlx-r:focus-visible{background:rgba(122,163,245,.09);border-color:rgba(122,163,245,.3)}
+.hb-rlx-r.sel{background:linear-gradient(90deg,rgba(217,164,65,.17),rgba(217,164,65,.04));border-color:rgba(217,164,65,.5);box-shadow:inset 3px 0 0 #d9a441}
+.hb-rlx-r.off{opacity:.62}.hb-rlx-r.you{opacity:.6;border:1px dashed #3d4352;background:transparent}.hb-rlx-r.you:hover{opacity:1}
+.hb-rlx-n{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hb-rlx-t,.hb-rlx-ch,.hb-rlx-p{font-size:13px;color:var(--lk-text-2)}
+.hb-rlx-t.pvp{color:#ff8a80}.hb-rlx-t.rp{color:#5fd896}.hb-rlx-t.rppvp{color:#f2a654}
+.hb-rlx-p{font-weight:700}.hb-rlx-p.low{color:#5fd896}.hb-rlx-p.med{color:#e9c45c}.hb-rlx-p.high{color:#f2a654}.hb-rlx-p.full{color:#ff8a80}
+.hb-rlx-p.rec{color:#8fb2ff}.hb-rlx-p.off{color:var(--lk-muted);font-weight:500}
+.hb-rlx-f{display:flex;justify-content:space-between;gap:10px;margin-top:12px!important;font-size:13px}
+@media (max-width:560px){.hb-sw,.hb-rlx{padding:16px}.hb-sw-list{grid-template-columns:minmax(0,1fr)}.hb-sw-svc{grid-template-columns:repeat(2,minmax(0,1fr))}
+.hb-sw-run{display:none!important}.hb-rlx-cols{display:none}
+.hb-rlx-r{grid-template-columns:minmax(0,1fr) auto;gap:2px 10px}.hb-rlx-n{grid-column:1}.hb-rlx-p{grid-column:2;grid-row:1;text-align:right}
+.hb-rlx-t{grid-column:1;grid-row:2;font-size:12px}.hb-rlx-ch{display:none}}
+/* the Minigolf loop in Game modes: poster first, played on screen by HUB_JS */
+.hb-vid{position:relative}.hb-vid video{display:block;width:100%;height:auto;background:#0b0d12}
+.hb-vid figcaption{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:26px 14px 12px;
+background:linear-gradient(0deg,rgba(6,8,12,.78),transparent);color:#fff;font-size:13.5px;font-weight:600}
+.hb-vid-play{padding:5px 14px;border-radius:999px;background:var(--lk-accent);color:#fff!important;text-decoration:none;font-weight:700}
+.hb-mode.art{overflow:hidden}.hb-mode-art{display:block;width:calc(100% + 32px);max-width:none;height:auto;aspect-ratio:483/298;object-fit:cover;
+margin:-16px -16px 6px;border-bottom:1px solid var(--lk-border)}
 /* reduced motion: nothing moves (the ticker stands still and wraps, the key stays put, the thread is drawn, no tilt) */
 @media (prefers-reduced-motion:reduce){.hb *{transition:none!important;animation:none!important}
 :is(a.hb-stat,.hb-spot,.hb-box,.hb-mode,.hb-cr,.hb-nw):hover{transform:none}
@@ -2635,6 +2866,7 @@ background:rgba(16,18,24,.78);color:#fff;cursor:pointer;font:600 20px/1 var(--lk
 .hb-tick{-webkit-mask-image:none;mask-image:none}.hb-tick-run{width:auto}.hb-tick-l{flex-wrap:wrap;justify-content:center;min-width:0;width:100%}
 .hb-tick-l li{padding:6px 14px}.hb-tick-l.dup{display:none}
 .hb-shot{transform:none!important}.hb-thread path{stroke-dasharray:none!important}
+.hb-coa-pic img{transform:scale(1.03)!important}.hb-rlx-r{transition:none}
 .hb-gt :is(img,.hb-gt-art),.hb-lb-in{transform:none!important}.hb-gt-c{transform:none}.hb-lb{-webkit-backdrop-filter:none;backdrop-filter:none}}
 """
 
@@ -2671,6 +2903,17 @@ if(th&&feats&&!still){th.classList.add("draw");var pend=0;
   var draw=function(){pend=0;var r=feats.getBoundingClientRect(),k=(innerHeight*.75-r.top)/Math.max(1,r.height);
     th.style.setProperty("--hb-draw",String(1-Math.max(0,Math.min(1,k))));};
   draw();addEventListener("scroll",function(){if(!pend){pend=1;requestAnimationFrame(draw);}},{passive:true});addEventListener("resize",draw);}
+// the featured modpack's picture eases as it scrolls by (a slow zoom and drift); still with reduced motion
+var coa=d.querySelector(".hb-coa");
+if(coa&&!still){var cpend=0;var par=function(){cpend=0;var r=coa.getBoundingClientRect(),k=(innerHeight-r.top)/(innerHeight+r.height);
+    coa.style.setProperty("--coa",Math.max(0,Math.min(1,k)).toFixed(3));};
+  par();addEventListener("scroll",function(){if(!cpend){cpend=1;requestAnimationFrame(par);}},{passive:true});addEventListener("resize",par);}
+// the Minigolf loop plays only while it is on screen; never with reduced motion or Save-Data (the poster stays)
+var vids=d.querySelectorAll("video[data-hb-vid]"),save=!!(navigator.connection&&navigator.connection.saveData);
+if(vids.length&&!still&&!save&&"IntersectionObserver" in window){
+  var vio=new IntersectionObserver(function(es){es.forEach(function(x){var v=x.target;
+    if(x.isIntersecting){var pr=v.play();if(pr&&pr.catch)pr.catch(function(){});}else if(!v.paused)v.pause();});},{threshold:.35});
+  vids.forEach(function(v){vio.observe(v);});}
 // the screenshots lean toward the cursor, with a soft glow (fine pointers only)
 if(!still&&window.matchMedia&&matchMedia("(pointer:fine)").matches){d.querySelectorAll(".hb-shot").forEach(function(f){
   f.addEventListener("pointermove",function(ev){var r=f.getBoundingClientRect(),x=(ev.clientX-r.left)/r.width,y=(ev.clientY-r.top)/r.height;
@@ -2838,6 +3081,81 @@ LAUNCHER_SHOTS = {
 KIND_WORDS = {"addon": ("Addon", "an addon", "addons"), "mod": ("Mod", "a mod", "mods"), "mode": ("Game mode", "a game mode", "modes"),
               "theme": ("Theme", "a theme", "creators")}
 GALLERY_FILTERS = (("", "All"), ("game", "In game"), ("mods", "Mods"), ("launcher", "Launcher"))
+
+# The front page's featured mod (owner 2026-10-30: "under this show a screenshot ... the CoA ultra hd modpack feature"): a
+# community graphics modpack, linked out only (never hosted or checked by us). Its screenshot is the authors' (banner
+# cropped, a player name removed), a game picture: behind the game data killswitch like the other leyline-shot- files.
+# The link is only an href; the words on the page never name the game.
+FEATURED_MOD = {
+    "key": "coa-ultrahd", "w": 845, "h": 577, "label": "Featured mod", "title": "Conquest of Azeroth: UltraHD",
+    # TODO(owner): the final wording for the featured modpack
+    "line": "A community graphics modpack for the classic client: higher-resolution textures, richer lighting and "
+            "denser foliage, from the same game folder you already play with.",
+    "short": "Higher-resolution textures, lighting and foliage for the classic client.",
+    "alt": "Screenshot from the Conquest of Azeroth UltraHD modpack: characters on a flowered lawn in front of a stone "
+           "chapel, under tall trees in warm light.",
+    "note": "External download, made and hosted by its authors; not checked or hosted by Leyline",
+    "credit": "Screenshot: the modpack's authors",
+    "url": "https://www.reddit.com/r/wowservers/comments/1xiqhdg/conquest_of_azeroth_ultrahd_graphics_modpack/",
+    "button": "See the modpack",
+}
+FEATURED_REL = "noopener nofollow ugc"
+
+# The server cores the host pack can run (owner 2026-10-30: "we should have server software in this area"), in the
+# words of hosting/kit/tools/wuhost/cores.py and docs/HOST-ANY-CLIENT.md: "live" only for what the kit hosts today
+# (AzerothCore: the kit's own profiles; CMaNGOS: cmangos-1.12.1 and cmangos-2.4.3), the rest "coming". Eras are words,
+# never client numbers. The hosting tests check this against cores.py (stream/tests/test_hub.py).
+# (id, name, status, eras, line, scripting, bots)
+HOST_CORES = (
+    ("azerothcore", "AzerothCore", "live", ("Third era",),
+     "The kit's default and the core our own realms run on: modules, events and the Dungeon Finder.",
+     "C++ modules and Lua scripts", "Player bots built in"),
+    ("cmangos", "CMaNGOS", "live", ("Classic era", "Second era"),
+     "A long-running core with its whole world database kept in the open; one recipe for both eras.",
+     "C++ scripts (ScriptDev2)", "No bots in the kit's build"),
+    ("trinitycore", "TrinityCore", "coming", ("Fourth era",),
+     "A preservation fork is already in the kit, ready to be switched on for the next era.",
+     "C++ scripts", "No bots"),
+    ("vmangos", "vMaNGOS", "coming", ("Classic era",),
+     "The strongest classic core for content and progression; a profile is a small follow-up.",
+     "C++ scripts", "No bots"),
+)
+HOST_OWN = ("Your own", "Already run a server? Put it on the Leyline list with the relay agent and keep your own core.")
+# The realm console strip under the cores (what the host pack's Check shows).
+HOST_SERVICES = (("Database", "ready"), ("Login server", "ready"), ("World server", "ready"), ("Relay agent", "listed"))
+
+# The realm list picture in "Realms & hopping" (owner 2026-10-30: "the actual looking realm list thing but ... our featured
+# server names"): our own panel built from the live rows. Population in words from players online; the type from tags.
+REALM_LIST_MAX = 6
+POP_WORDS = ((0, "Offline", "off"), (20, "Low", "low"), (80, "Medium", "med"), (200, "High", "high"), (10 ** 9, "Full", "full"))
+# The modes' key art (the owner's, for the mode's authors): mode id -> (art file, width, height, alt). Missing: no picture.
+MODE_ART = {
+    "azeroth-survivors": ("leyline-mode-azeroth-survivors.webp", 483, 298,
+                          "Azeroth Survivors key art: the title over a band of heroes and a moonlit castle."),
+}
+
+
+def realm_type(tags) -> tuple[str, str]:
+    """(word, colour class) for a realm's rules from its tags: RP-PvP, PvP, RP, else Normal."""
+    t = set(tags or [])
+    if "pvp" in t and "rp" in t:
+        return "RP-PvP", "rppvp"
+    if "pvp" in t:
+        return "PvP", "pvp"
+    if "rp" in t:
+        return "RP", "rp"
+    return "Normal", "pve"
+
+
+def population(live: bool, players) -> tuple[str, str]:
+    """(word, colour class) from players online: Offline when it is down, else Low / Medium / High / Full."""
+    if not live:
+        return "Offline", "off"
+    n = players if isinstance(players, int) and players > 0 else 0
+    for top, word, cls in POP_WORDS[1:]:
+        if n < top:
+            return word, cls
+    return "Full", "full"
 # The header item each hub page highlights (the catalog: Addons when filtered to them, else Mods; an item page: Mods).
 ACTIVE = {BASE + "/realms": "realms", BASE + "/catalog": "mods", BASE + "/submit": "mods", BASE + "/modes": "modes",
           BASE + "/beacon": "host", BASE + "/news": "news", BASE + "/creators": "creators", BASE + "/gallery": "gallery",

@@ -20,6 +20,22 @@
   };
   const KIND = { realm: "On our realm", offline: "No server", "realm-type": "Its own realm type" };
   const OFFICIAL = "play.openvanilla.app";
+  // Key art shipped with the launcher (art/modes/), by mode id: on the mode's card and, for the featured mode, as a
+  // banner on Home. A mode without art, or art that fails to load, simply has none (the card and Home as before).
+  const ART = {
+    "azeroth-survivors": { src: "art/modes/azeroth-survivors.webp", src2: "art/modes/azeroth-survivors@1.5x.webp", w: 483, h: 298,
+      title: "Azeroth Survivors", alt: "Azeroth Survivors key art: the title over a band of heroes and a moonlit castle." },
+  };
+  const FEATURED = "azeroth-survivors";   // TODO(owner): the mode featured on Home
+  function artImg(id, cls) {
+    const a = ART[id];
+    if (!a) return null;
+    const img = el("img", cls);
+    img.src = a.src;
+    if (a.src2) img.srcset = `${a.src} 1x, ${a.src2} 1.5x`;
+    img.width = a.w; img.height = a.h; img.alt = a.alt; img.decoding = "async";
+    return img;
+  }
 
   // ---------------------------------------------------------------- the nav button and the page
   const nav = document.querySelector("aside nav");
@@ -90,6 +106,12 @@
   function card(m) {
     const c = el("div", "realm-card md-card");
     c.dataset.mode = m.id;
+    const art = artImg(m.id, "md-art");
+    if (art) {
+      c.classList.add("has-art");
+      art.addEventListener("error", () => { art.remove(); c.classList.remove("has-art"); });
+      c.append(art);
+    }
     const top = el("div", "top");
     top.append(el("span", "name", m.title));
     if (m.status === "coming") top.append(el("span", "tag warn", "Coming soon"));
@@ -168,11 +190,47 @@
     }
   }
 
+  // ---------------------------------------------------------------- the featured mode on Home: its key art as a banner in
+  // the hero card, one click to its card on this page. Removed if the art doesn't load (Home stays as it was).
+  function show(id) {
+    navBtn.click();
+    const go = () => {
+      const c = document.querySelector(`#md-list .md-card[data-mode="${id}"]`);
+      if (!c) return false;
+      c.scrollIntoView({ block: "nearest" });
+      c.classList.remove("md-flash"); void c.offsetWidth; c.classList.add("md-flash");
+      return true;
+    };
+    if (!go()) {
+      const mo = new MutationObserver(() => { if (go()) mo.disconnect(); });
+      mo.observe($("md-list"), { childList: true });
+      setTimeout(() => mo.disconnect(), 10000);
+    }
+  }
+  function featureBanner() {
+    const news = document.querySelector("#page-play .news");
+    const a = ART[FEATURED];
+    const img = artImg(FEATURED, "fm-art");
+    if (!news || !a || !img) return;
+    img.alt = "";
+    const b = el("button", "feat-mode");
+    b.type = "button"; b.id = "feat-mode"; b.dataset.mode = FEATURED;
+    b.setAttribute("aria-label", `Featured mode: ${a.title}. See it on the Modes page`);
+    const txt = el("span", "fm-txt");
+    txt.append(el("small", "", "FEATURED MODE"), el("b", "", a.title), el("i", "", "See it in Modes ›"));
+    b.append(img, txt);
+    img.addEventListener("error", () => b.remove());
+    b.addEventListener("click", () => show(FEATURED));
+    const h1 = news.querySelector("h1");
+    news.insertBefore(b, h1 || null);
+  }
+  featureBanner();
+
   // ---------------------------------------------------------------- start
   $("md-refresh").addEventListener("click", load);
   navBtn.addEventListener("click", () => { if (!loaded) load(); else renderHow(); });
   // app.js may open this page itself (the page remembered from last time)
   new MutationObserver(() => { if (page.classList.contains("on") && !loaded) load(); }).observe(page, { attributes: true, attributeFilter: ["class"] });
 
-  window.LeylineModes = { load, modes: () => modes };
+  window.LeylineModes = { load, modes: () => modes, show, ART };
 })();

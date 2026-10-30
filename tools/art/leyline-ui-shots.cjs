@@ -1,10 +1,11 @@
 // The hub's feature-section pictures (stream/www-files/art/leyline-ui-*.webp): the launcher's own pages (launcher/ui)
-// in Chromium with a fake Tauri core and sample data, Dark theme, 1240 x 760. No game art, no client build numbers:
-// text that is only a build number is hidden, and numbers are taken out of the rest, before the shot.
+// in Chromium with a fake Tauri core and sample data, Dark theme, 1240 x 760 at 2x pixels (2480 x 1520, crisp on
+// high-density screens; the page shows them at 1240 x 760). No game art, no client build numbers, no game name: text
+// that is only a build number is hidden, numbers and the game's name are taken out of the rest, before the shot.
 //
-//   node tools/art/leyline-ui-shots.cjs OUTDIR [play realms discover modes]
-//   then, per page (play -> home, discover -> workshop):
-//   python3 -c "from PIL import Image; Image.open('OUTDIR/play.png').convert('RGB').save('stream/www-files/art/leyline-ui-home.webp', 'WEBP', quality=80, method=6)"
+//   node tools/art/leyline-ui-shots.cjs OUTDIR [play realms discover modes]      (LEYLINE_SHOT_SCALE=1 for 1x)
+//   then, per page (play -> home, discover -> workshop), webp q85, about 180 KB at most:
+//   python3 -c "from PIL import Image; Image.open('OUTDIR/play.png').convert('RGB').save('stream/www-files/art/leyline-ui-home.webp', 'WEBP', quality=85, method=6)"
 'use strict';
 const { chromium } = require(require.resolve("playwright", { paths: [process.cwd(), "/usr/lib/node_modules", "/usr/local/lib/node_modules"] }));
 const path = require("path"), fs = require("fs");
@@ -21,7 +22,7 @@ const FAKE = ({ page, modes }) => {
     tagline: "", summary: "", join_url: null, discord: null, relay: "relay.openvanilla.app" };
   const R = (o) => Object.assign({}, base, o, { report_url: o.official ? null : "https://play.openvanilla.app/wrath/realms/report?realm=" + o.realm_id });
   const realms = [
-    R({ slug: "official", name: "Leyline Sample Hangout", official: true, tagline: "Our own realm: drop in and say hello.", address: "play.openvanilla.app", group: "official", players: 4, bots: 10 }),
+    R({ slug: "official", name: "Dalaran Hangout", official: true, tagline: "Our own realm: drop in and say hello.", address: "play.openvanilla.app", group: "official", players: 4, bots: 10 }),
     R({ slug: "c-dddddddddddddddd", realm_id: "dddddddddddddddd", name: "Old Days", featured: true, verified: true, core: "vmangos",
         tags: ["pvp", "rp"], region: "eu", language: "en", uptime_7d: 97, players: 12, address: "relay.openvanilla.app:40020", group: "featured" }),
     R({ slug: "c-bbbbbbbbbbbbbbbb", realm_id: "bbbbbbbbbbbbbbbb", name: "Busy Den", tags: ["bots"], region: "na-east", is_new: true,
@@ -74,7 +75,7 @@ const FAKE = ({ page, modes }) => {
 (async () => {
   const b = await chromium.launch();
   for (const page of process.argv.slice(3).length ? process.argv.slice(3) : ["play", "realms", "discover", "modes"]) {
-    const ctx = await b.newContext({ viewport: { width: 1240, height: 760 }, colorScheme: "dark", deviceScaleFactor: 1 });
+    const ctx = await b.newContext({ viewport: { width: 1240, height: 760 }, colorScheme: "dark", deviceScaleFactor: +(process.env.LEYLINE_SHOT_SCALE || 2) });
     const p = await ctx.newPage();
     p.on("pageerror", (e) => console.log(page, "pageerror", String(e).slice(0, 200)));
     await p.addInitScript(FAKE, { page, modes: MODES });
@@ -89,10 +90,18 @@ const FAKE = ({ page, modes }) => {
       while (w.nextNode()) if (/\b(?:1\.12|2\.4\.3|3\.3\.5|4\.3\.4|5\.4\.8|5875|8606|12340|15595|18414)|launcher 0\.|Leyline v/i.test(w.currentNode.nodeValue)) hit.push(w.currentNode);
       hit.forEach((t) => {
         const el = t.parentElement;
-        const left = t.nodeValue.replace(V, "").replace(/Leyline launcher 0\.\d+|Leyline v\S*/i, "").trim();
+        const left = t.nodeValue.replace(V, "").replace(/Leyline launcher 0\.\d+|Leyline v\S*/i, "").replace(/^\s*·\s*/, "").trim();
         if (!left || /^[·\s]*$/.test(left) || /runs|needs|add your own/i.test(left)) { el.style.display = "none"; } else t.nodeValue = left;
       });
       document.querySelectorAll("select option").forEach((o) => { o.textContent = o.textContent.replace(V, "").replace(/\s*·\s*$/, ""); });
+      // no game name either: "WRATH · ON THE LEYLINE NETWORK" -> "ON THE LEYLINE NETWORK", "BACK TO WRATH" -> "BACK TO OUR REALM"
+      const w2 = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      const named = [];
+      while (w2.nextNode()) if (/\bwrath\b|wotlk|wrathunleashed/i.test(w2.currentNode.nodeValue)) named.push(w2.currentNode);
+      named.forEach((t) => {
+        t.nodeValue = t.nodeValue.replace(/^\s*WRATH\s*·\s*/i, "").replace(/BACK TO WRATH/i, "BACK TO OUR REALM")
+          .replace(/\b(?:wrath ?unleashed|wotlk|wrath)\b/gi, "Leyline");
+      });
     });
     await p.waitForTimeout(200);
     await p.screenshot({ path: OUT + page + ".png" });
