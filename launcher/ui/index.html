@@ -160,6 +160,18 @@
         <input id="cat-q" type="search" placeholder="Search the Workshop" autocomplete="off" spellcheck="false">
         <label class="check"><input type="checkbox" id="cat-fit" checked> Only mods for this client</label>
       </div>
+      <div class="chips cat-sorts" id="cat-sorts" role="tablist" aria-label="Sort">
+        <button type="button" class="chip-btn" role="tab" data-sort="hot">Hot</button>
+        <button type="button" class="chip-btn" role="tab" data-sort="rising">Rising</button>
+        <button type="button" class="chip-btn" role="tab" data-sort="top">Top rated</button>
+        <button type="button" class="chip-btn" role="tab" data-sort="installs">Most installed</button>
+        <button type="button" class="chip-btn" role="tab" data-sort="installs30">This month</button>
+        <button type="button" class="chip-btn" role="tab" data-sort="new">New</button>
+        <button type="button" class="chip-btn" role="tab" data-sort="updated">Updated</button>
+        <label class="inline cat-kind">Kind <select id="cat-kind">
+          <option value="">everything</option><option value="addon">Addons</option><option value="mod">Realm mods and tools</option>
+          <option value="mode">Game modes</option><option value="theme">Themes</option></select></label>
+      </div>
       <div class="chips" id="cat-chips" role="group" aria-label="Categories"></div>
       <p class="status" id="cat-status" role="status"></p>
       <div class="mod-grid" id="cat-grid"></div>
@@ -325,8 +337,12 @@
       <p class="status" id="upd-status" role="status"></p>
       <h3>Privacy</h3>
       <p class="lede">No telemetry and no accounts in the launcher. It fetches the Workshop catalog and the mods you install,
-        the realm list and realm status, and GitHub's release list and Leyline's own updates; it keeps copies of the lists so it works offline, and opens
+        the mod rankings, the realm list and realm status, and GitHub's release list and Leyline's own updates; it keeps copies of the lists so it works offline, and opens
         only pages it listed itself in your browser. Each request gives up after 8 seconds.</p>
+      <label class="check"><input type="checkbox" id="set-count"> Count my installs: after a Workshop install, tell the hub
+        "one more install" (the mod, your client's build and a random one-time number; no account, nothing about you or your PC).
+        It helps good mods rise in Hot and Most installed.</label>
+      <p class="status" id="count-status" role="status"></p>
       <h3>Your data</h3>
       <p class="lede">Settings and caches live in <code id="data-dir"></code>.</p>
     </div>

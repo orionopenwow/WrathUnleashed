@@ -6,7 +6,7 @@ copy (compute()).
     GET  /wrath/leyline/mods.json   the ranked list, public (CORS *):
                                     ?sort=hot|rising|top|installs|installs30|new|updated  (default hot)
                                     &client=<build>  (1.12, 1.12.1, 5875, 2.4.3, 3.3.5a, 12340, ...: fits that client)
-                                    &kind=addon|mod|mode|theme  &q=<text>  &limit=1..200 (50)  &offset=N
+                                    &kind=addon|mod|mode|theme  &q=<text>  &limit=1..1000 (50)  &offset=N
     POST /wrath/api/hub/install     {id, iid, build?, via?}: one anonymous install, from the launcher (or the site).
                                     iid is a random id the launcher makes per install (22-64 of [A-Za-z0-9_-]); a
                                     retry with the same iid on the same day counts once. Content-Type must be JSON.
@@ -497,7 +497,7 @@ def feed_doc(query: dict, host: str) -> dict:
     kind = one("kind") if one("kind") in KINDS else ""
     q = re.sub(r"[^\w .'-]", " ", one("q"))[:60]
     try:
-        limit = max(1, min(200, int(one("limit") or 50)))
+        limit = max(1, min(1000, int(one("limit") or 50)))
     except ValueError:
         limit = 50
     try:

@@ -4,13 +4,16 @@
 //! Everything here is plain Rust with no webview, so `cargo test --no-default-features` runs it anywhere.
 //! The desktop app (`app` feature) wraps these modules in Tauri commands; see `app.rs`.
 //!
-//! Leyline never downloads game files: a client is the player's own folder. It sends no telemetry. Its network
-//! calls: the Workshop catalog and mod zips (`catalog`, `mods`), the relay's realm list, realm lookup and
+//! Leyline never downloads game files: a client is the player's own folder. It sends no telemetry: the one count
+//! it sends is an anonymous "this mod was installed" (a mod id, a build and a fresh random id per install, never
+//! an account or machine id; Settings turns it off: `rankings`). Its network
+//! calls: the Workshop catalog and mod zips (`catalog`, `mods`), the hub's rankings (`rankings`), the relay's realm list, realm lookup and
 //! invite knock (`realms`, `host`), the official realm's status file (`status`) and GitHub's release list
 //! (`update`). Each has an 8 second timeout; the listings fall back to a cached copy.
 
 pub mod catalog;
 pub mod clients;
+pub mod deeplink; // leyline://install/<id> (hub rankings agent)
 pub mod host;
 pub mod launch;
 pub mod modes; // the Modes page: game modes one click away (modes agent)
@@ -18,6 +21,7 @@ pub mod mods;
 pub mod net;
 pub mod p2p;
 pub mod pe_version;
+pub mod rankings; // Discover's sort tabs, install counts and ratings (hub rankings agent)
 pub mod realms;
 pub mod settings;
 pub mod social;
