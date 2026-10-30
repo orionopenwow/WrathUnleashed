@@ -83,7 +83,7 @@ class StepPaths(unittest.TestCase):
     def test_root_is_only_what_gets_clicked(self):
         out = subprocess.run(["git", "-C", ROOT, "ls-files"], capture_output=True, text=True, check=True).stdout
         top = sorted({p for p in out.splitlines() if "/" not in p})
-        self.assertEqual(top, sorted([".gitignore", "Leyline Control.bat", "README.md", "Ship the Leyline launcher.bat",
+        self.assertEqual(top, sorted([".gitignore", "Leyline Control.bat", "Open Leyline Launcher.bat", "README.md", "Ship the Leyline launcher.bat",
                                       "Ship to GitHub.bat", "UPDATE.bat", "UPDATES-DONE.txt", "UPDATES-PENDING.txt"]))
 
     def test_setup_files_run_from_the_workspace(self):
