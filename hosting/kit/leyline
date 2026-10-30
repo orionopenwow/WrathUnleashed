@@ -12,8 +12,8 @@
 #   leyline check | stop | logs [service] | new-invite | claim TOKEN | signup invite|open|off
 #
 # Questions can be answered from the environment (no prompts): LEYLINE_NAME, LEYLINE_RULESET
-# (dalaran | main | brawl | progression, or a profile for another client in profiles/: cmangos-1.12.1, cmangos-2.4.3,
-# tcpp-4.3.4; default dalaran; WU_CLIENT_DIR = that client's game folder), LEYLINE_VISIBILITY (public | private;
+# (dalaran | main | brawl | progression, or a profile for another client in profiles/: cmangos-1.12.1, cmangos-2.4.3;
+# default dalaran; WU_CLIENT_DIR = that client's game folder), LEYLINE_VISIBILITY (public | private;
 # default public), LEYLINE_GM (your account name), LEYLINE_TAGLINE, LEYLINE_RULES_FILE (one rule per line).
 #
 # This command never makes game accounts and never sets passwords. You make your own account on
@@ -119,7 +119,8 @@ cmd_host() {
 
   step "Your Beacon"
   ask LEYLINE_NAME "Realm name" "Dalaran Hangout"
-  local others; others="$(for f in "$KIT"/profiles/*/profile.lock; do [ -f "$f" ] && basename "$(dirname "$f")"; done | tr '\n' ' ' || true)"
+  # the profiles offered now (profiles/host-profile.sh profile_list: 4.3.4 is not offered for now)
+  local others; others="$( (. "$KIT/profiles/host-profile.sh" && profile_list) 2>/dev/null | tr '\n' ' ' || true)"
   ask LEYLINE_RULESET "Ruleset: dalaran (light hangout, boost to 80, no bots), main, brawl, progression${others:+, or for another client: $others}" "dalaran" dalaran main brawl progression $others
   ask LEYLINE_VISIBILITY "public (listed on the Leyline realm list) or private (only people with your invite link)" "public" public private
   if [ "$first" = 1 ] && [ -z "${LEYLINE_TAGLINE:-}" ] && interactive; then

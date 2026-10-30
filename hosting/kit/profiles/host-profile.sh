@@ -13,13 +13,29 @@
 
 profile_dir() { printf '%s' "$KIT/profiles/$1"; }
 
+# The newest client build the kit offers (tools/wuhost/cores.py MAX_OFFERED_BUILD). Hidden by the owner on
+# 2026-10-30: tcpp-4.3.4 keeps its files but is not offered. Set this back to 18414 (or LEYLINE_ALL_CLIENTS=1)
+# to offer it again.
+LL_MAX_OFFERED_BUILD=12340
+
+profile_offered() {  # $1 = id: its client build is offered now (the lock's LL_BUILD), or the override is on
+  case "${LEYLINE_ALL_CLIENTS:-}" in 1|true|yes|on) return 0 ;; esac
+  local b
+  b="$(sed 's/\r$//' "$KIT/profiles/$1/profile.lock" 2>/dev/null | grep -E '^LL_BUILD=[0-9]+$' | head -n 1 | cut -d= -f2)"
+  [ -n "$b" ] && [ "$b" -le "$LL_MAX_OFFERED_BUILD" ]
+}
+
 profile_known() {  # a profile folder of this kit (letters, digits, dots and dashes only: never a path)
   [[ "$1" =~ ^[a-z0-9][a-z0-9.-]{1,31}$ ]] && [ -f "$KIT/profiles/$1/profile.lock" ]
 }
 
-profile_list() {  # the profile ids of this kit, one per line
-  local d
-  for d in "$KIT"/profiles/*/profile.lock; do [ -f "$d" ] && basename "$(dirname "$d")"; done
+profile_list() {  # the profile ids of this kit that are offered now, one per line
+  local d id
+  for d in "$KIT"/profiles/*/profile.lock; do
+    [ -f "$d" ] || continue
+    id="$(basename "$(dirname "$d")")"
+    profile_offered "$id" && printf '%s\n' "$id"
+  done
   return 0
 }
 
@@ -31,6 +47,7 @@ profile_lock() {  # $1 = id: the pinned sources as LL_* shell variables (KEY=VAL
     case "$k" in LL_[A-Z0-9_]*) printf -v "$k" '%s' "$v" ;; esac
   done < <(sed 's/\r$//' "$f" | grep -E '^LL_[A-Z0-9_]+=.+$')
   [ "${LL_PROFILE:-}" = "$1" ] || die "profiles/$1/profile.lock is damaged (download the full kit again)."
+  profile_offered "$1" || die "The ${LL_VERSION:-$1} client is not offered yet: Leyline hosts 1.12.1, 2.4.3 and 3.3.5a realms for now. Pick another profile."
   [[ "${LL_CORE_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]] || die "profiles/$1/profile.lock is damaged (download the full kit again)."
   if [ -n "${LL_DB_COMMIT:-}" ]; then
     [[ "$LL_DB_COMMIT" =~ ^[0-9a-f]{40}$ ]] || die "profiles/$1/profile.lock is damaged (download the full kit again)."

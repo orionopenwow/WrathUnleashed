@@ -106,17 +106,26 @@
     return { status: r.status, doc: doc || {} };
   }
 
-  // Which client the realm needs (the host kit runs realms for 1.12.1, 2.4.3, 3.3.5a and 4.3.4 clients), and
+  // Which client the realm needs (the host kit runs realms for 1.12.1, 2.4.3 and 3.3.5a clients for now), and
   // where that client keeps its realm address.
+  // The newest build offered. Hidden by the owner on 2026-10-30: 4.3.4 and 5.4.8 are not offered for now. Set this
+  // back to 18414 (or window.LEYLINE_ALL_CLIENTS = true) to name them again.
+  const MAX_OFFERED_BUILD = 12340;
   const CLIENTS = {
-    "1.12.1": ["the 1.12 client", "<code>realmlist.wtf</code> in the game folder"],
-    "2.4.3": ["the 2.4.3 client", "<code>Data\\enUS\\realmlist.wtf</code> (or your language's folder)"],
-    "4.3.4": ["the 4.3.4 client", "<code>WTF\\Config.wtf</code> (the line starting with SET realmlist)"],
-    "5.4.8": ["the 5.4.8 client", "<code>WTF\\Config.wtf</code> (the line starting with SET realmlist)"],
+    "1.12.1": [5875, "the 1.12 client", "<code>realmlist.wtf</code> in the game folder"],
+    "2.4.3": [8606, "the 2.4.3 client", "<code>Data\\enUS\\realmlist.wtf</code> (or your language's folder)"],
+    "4.3.4": [15595, "the 4.3.4 client", "<code>WTF\\Config.wtf</code> (the line starting with SET realmlist)"],
+    "5.4.8": [18414, "the 5.4.8 client", "<code>WTF\\Config.wtf</code> (the line starting with SET realmlist)"],
   };
   function forClient(build) {
-    const c = CLIENTS[build];
-    if (!c) return;   // 3.3.5a: the page as written
+    const all = CLIENTS[build];
+    if (!all) return;   // 3.3.5a: the page as written
+    if (all[0] > MAX_OFFERED_BUILD && window.LEYLINE_ALL_CLIENTS !== true) {
+      $("sub").textContent = "A Beacon: a realm hosted by a player, reached through the Leyline relay.";
+      $("client-note").textContent = "This realm runs a client Leyline does not offer yet.";
+      return;
+    }
+    const c = all.slice(1);
     $("sub").textContent = `A Beacon: a ${build} realm hosted by a player, reached through the Leyline relay. You need ${c[0]}.`;
     $("client-note").innerHTML = `This realm needs ${c[0]}: use your own ${build} game files. Open ${c[1]} and make it this one line:`;
   }
