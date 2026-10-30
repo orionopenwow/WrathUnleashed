@@ -7,7 +7,7 @@ and runs without it.
 
     GET  /wrath/leyline-preview               the front page: builds, categories, picks, creators, Host a Beacon
     GET  /wrath/leyline-preview/catalog       everything, filtered by plain links and a GET form (no script):
-                                              ?build=1.12|2.4.3|3.3.5a|4.3.4|5.4.8 &cat=<category>|themes
+                                              ?build=1.12|2.4.3|3.3.5a &cat=<category>|themes (4.3.4, 5.4.8 hidden: HIDDEN_BUILDS)
                                               &source=workshop|index|theme &q=<text> &sort=score|name|updated &page=N
     GET  /wrath/leyline-preview/p/<id>        one item (id: link-<12 hex>, mod-<mod id>, theme-<id>)
     GET  /wrath/leyline-preview/creators      for creators: the docs, how the index works, how to submit
@@ -55,6 +55,24 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BUILDS = ["1.12", "2.4.3", "3.3.5a", "4.3.4", "5.4.8"]           # the client builds the launcher supports
 BUILD_LABEL = {"1.12": "1.12.1", "2.4.3": "2.4.3", "3.3.5a": "3.3.5a", "4.3.4": "4.3.4", "5.4.8": "5.4.8", "any": "Any build"}
 BUILD_ERA = {"1.12": "Classic", "2.4.3": "Outland", "3.3.5a": "Wrath", "4.3.4": "Cataclysm", "5.4.8": "Pandaria"}
+# The builds offered now. Hidden by the owner on 2026-10-30 ("3.3.5 at max until I research"): 4.3.4 and 5.4.8 stay
+# in BUILDS (the index keeps their entries) but the hub does not show them, their chips or their items. Empty this
+# tuple (or set LEYLINE_ALL_CLIENTS=1) to show them again.
+HIDDEN_BUILDS = ("4.3.4", "5.4.8")
+
+
+def offered_builds(env=None) -> list:
+    v = (os.environ if env is None else env).get("LEYLINE_ALL_CLIENTS", "").strip().lower()
+    return list(BUILDS) if v in ("1", "true", "yes", "on") else [b for b in BUILDS if b not in HIDDEN_BUILDS]
+
+
+def offered_only(item: dict, offered=None):
+    """The item with only the offered builds, or None when it is made only for builds not offered now."""
+    offered = (offered_builds() if offered is None else offered) + ["any"]
+    b = [x for x in (item.get("builds") or ["any"]) if x in offered]
+    return {**item, "builds": b} if b else None
+
+
 # The addon TOC "## Interface:" numbers of those builds.
 INTERFACE = {"11200": "1.12", "20400": "2.4.3", "30300": "3.3.5a", "40300": "4.3.4", "50400": "5.4.8"}
 CATEGORIES = [
@@ -189,6 +207,12 @@ def build_tag(v) -> str:
     v = {"1.12.1": "1.12", "3.3.5": "3.3.5a", "vanilla": "1.12", "classic": "1.12", "tbc": "2.4.3", "wotlk": "3.3.5a",
          "wrath": "3.3.5a", "cata": "4.3.4", "cataclysm": "4.3.4", "mop": "5.4.8", "pandaria": "5.4.8"}.get(v, v)
     return v if v in BUILDS or v == "any" else ""
+
+
+def offered_tag(v) -> str:
+    """build_tag, but "" for a build not offered now (HIDDEN_BUILDS): what pages and the submit form take."""
+    t = build_tag(v)
+    return t if t == "any" or t in offered_builds() else ""
 
 
 ENTRY_KEYS = {"id", "name", "author", "owner", "repo", "forge", "licence", "category", "type", "builds", "summary",
@@ -473,7 +497,8 @@ class Hub:
                 continue
             out.append({**e, "source": "index", "page": "", "download": None, "sha256": None, "packaged": False})
         out += self.themes()
-        return out
+        offered = offered_builds()
+        return [x for x in (offered_only(i, offered) for i in out) if x is not None]
 
     def get_item(self, slug: str) -> dict | None:
         m = re.fullmatch(r"(link|mod|theme)-([a-z0-9][a-z0-9-]{1,40})", slug or "")
@@ -518,7 +543,7 @@ class Hub:
                "categories": cats + ([] if any(c["id"] == THEMES[0] for c in cats) else
                                      [{"id": THEMES[0], "name": THEMES[1], "line": "Looks for the Leyline launcher.",
                                        "icon": "palette"}]),
-               "builds": BUILDS + ["any"], "projects": projects}
+               "builds": offered_builds() + ["any"], "projects": projects}
         return (json.dumps(doc, indent=1, ensure_ascii=False) + "\n").encode("utf-8")
 
     def categories(self) -> list[dict]:
@@ -551,18 +576,19 @@ class Hub:
     def front_page(self, path: str = BASE) -> bytes:
         e = html.escape
         items = self.items()
-        by_build = {b: sum(1 for i in items if b in i["builds"]) for b in BUILDS}
+        shown = offered_builds()
+        by_build = {b: sum(1 for i in items if b in i["builds"]) for b in shown}
         by_cat = {c: sum(1 for i in items if i["category"] == c) for c in CATEGORY_IDS + ["themes"]}
         n_index = sum(1 for i in items if i["source"] == "index")
         n_ws = sum(1 for i in items if i["source"] == "workshop")
         builds = "".join(
             f'<a class="hb-build" href="{BASE}/catalog?build={b}"><b>{e(BUILD_LABEL[b])}</b>'
-            f'<span>{e(BUILD_ERA[b])}</span><small>{by_build[b]} items</small></a>' for b in BUILDS)
+            f'<span>{e(BUILD_ERA[b])}</span><small>{by_build[b]} items</small></a>' for b in shown)
         cats = "".join(
             f'<a class="hb-cat" href="{BASE}/catalog?cat={c}"><b>{e(n)}</b><small>{by_cat[c]}</small></a>'
             for c, n in CATEGORIES + [THEMES])
         picks = []
-        for b in BUILDS:
+        for b in shown:
             best = sorted((i for i in items if b in i["builds"] and i["source"] != "theme"),
                           key=lambda i: (-float(i.get("score") or 0), i["name"].lower()))[:2]
             picks += [i for i in best if i not in picks]
@@ -664,7 +690,7 @@ class Hub:
     def catalog_page(self, query: dict) -> bytes:
         e = html.escape
         q1 = lambda k: (query.get(k) or [""])[0][:80]   # noqa: E731
-        build, cat, source, text, sort = build_tag(q1("build")), q1("cat"), q1("source"), clean_line(q1("q"), 60), q1("sort") or "score"
+        build, cat, source, text, sort = offered_tag(q1("build")), q1("cat"), q1("source"), clean_line(q1("q"), 60), q1("sort") or "score"
         cat = cat if cat in CATEGORY_IDS + ["themes"] else ""
         source = source if source in ("workshop", "index", "theme") else ""
         rk = self.portal("hub_rank")
@@ -712,7 +738,7 @@ class Hub:
         def chips(key, opts, cur):
             return "".join(f'<a class="hb-chip{" on" if v == cur else ""}" href="{e(link(**{key: v, "page": ""}))}"'
                            + (' aria-current="true"' if v == cur else "") + f">{e(label)}</a>" for v, label in opts)
-        f_build = chips("build", [("", "All builds")] + [(b, BUILD_LABEL[b]) for b in BUILDS], build)
+        f_build = chips("build", [("", "All builds")] + [(b, BUILD_LABEL[b]) for b in offered_builds()], build)
         f_cat = chips("cat", [("", "All")] + CATEGORIES + [THEMES], cat)
         f_src = chips("source", [("", "Everything"), ("workshop", "Workshop"), ("index", "Community"), ("theme", "Themes")], source)
         if rk:
@@ -806,8 +832,8 @@ class Hub:
                 '<li><a href="/wrath/mods">The Workshop</a>: what is packaged today.</li>'
                 f'<li><a href="{BASE}/submit">Submit a mod</a>: add your repo to the index.</li></ul></section>'
                 '<section class="ly-panel"><h2>How the index works</h2>'
-                '<p>Every day a script checks the forges for open projects for each client build (1.12.1, 2.4.3, '
-                '3.3.5a, 4.3.4, 5.4.8), reads each repo\'s licence, files and addon TOC, and refreshes the stars and '
+                '<p>Every day a script checks the forges for open projects for each client build (1.12.1, 2.4.3 '
+                'and 3.3.5a for now), reads each repo\'s licence, files and addon TOC, and refreshes the stars and '
                 'latest releases of what is listed. New projects wait until a person has looked at them. The short description is written from the repo\'s own one-line '
                 'description and facts.</p>'
                 f'<h3>What gets listed</h3><ul class="hb-list">{rules}</ul>'
@@ -845,7 +871,7 @@ class Hub:
                     f'<p><a href="{BASE}/catalog">Back to the catalog</a></p></section>')
             return self._shell("Submitted · Leyline", body, BASE + "/submit")
         opt = lambda v, label, cur: f'<option value="{e(v)}"{" selected" if v == cur else ""}>{e(label)}</option>'  # noqa: E731
-        builds = "".join(opt(b, BUILD_LABEL[b], form.get("build", "")) for b in BUILDS + ["any"])
+        builds = "".join(opt(b, BUILD_LABEL[b], form.get("build", "")) for b in offered_builds() + ["any"])
         cats = "".join(opt(c, n, form.get("category", "")) for c, n in CATEGORIES)
         err = f'<p class="hb-err" role="alert">{e(msg)}</p>' if msg else ""
         body = ('<section class="ly-panel"><h1>Submit a mod</h1>'
@@ -892,7 +918,7 @@ class Hub:
         c = canonical(form.get("repo", ""))
         if not c:
             return False, "Paste the repo's own link, like https://github.com/owner/repo (GitHub, GitLab or Codeberg)."
-        build = build_tag(form.get("build"))
+        build = offered_tag(form.get("build"))
         if not build:
             return False, "Pick the client build it is for."
         cat = form.get("category") if form.get("category") in CATEGORY_IDS else ""

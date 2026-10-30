@@ -95,13 +95,26 @@ for p in ("/wrath/leyline-preview/p/link-000000000000", "/wrath/leyline-preview/
     check(f"GET {p}: 404, still noindex", st == 404 and h.get("x-robots-tag") == "noindex, nofollow", st)
 
 front = req("/wrath/leyline-preview")[2].decode()
-check("front page: every build with a count", all(f"/wrath/leyline-preview/catalog?build={b}" in front for b in HB.BUILDS))
+check("front page: every offered build with a count", all(f"/wrath/leyline-preview/catalog?build={b}" in front for b in HB.offered_builds()))
+# 4.3.4 and 5.4.8 are not offered for now (the owner, 2026-10-30): no chips, no items made only for them
+check("offered builds: capped at 3.3.5a", HB.offered_builds({}) == ["1.12", "2.4.3", "3.3.5a"]
+      and HB.offered_builds({"LEYLINE_ALL_CLIENTS": "1"}) == HB.BUILDS)
+check("front page: no 4.3.4 / 5.4.8 chips", all(f"catalog?build={b}" not in front for b in ("4.3.4", "5.4.8")))
+check("offered_only: hidden-only items go, mixed ones keep the offered builds",
+      HB.offered_only({"builds": ["4.3.4", "5.4.8"]}, HB.offered_builds({})) is None
+      and HB.offered_only({"builds": ["3.3.5a", "4.3.4"]}, HB.offered_builds({}))["builds"] == ["3.3.5a"]
+      and HB.offered_only({"builds": ["4.3.4"]}, HB.offered_builds({"LEYLINE_ALL_CLIENTS": "1"})) is not None)
+check("offered_tag: a hidden build is no filter", HB.offered_tag("5.4.8") == "" and HB.offered_tag("cata") == ""
+      and HB.offered_tag("1.12.1") == "1.12" and HB.build_tag("5.4.8") == "5.4.8")
 check("front page: the 12 categories and themes", all(f"catalog?cat={c}" in front for c in HB.CATEGORY_IDS + ["themes"]))
 check("front page: creators and Host a Beacon", "/wrath/leyline-preview/creators" in front and "/wrath/leyline-preview/beacon" in front)
 check("front page: a TODO(owner) for the tagline, no words in the owner's voice", "TODO(owner)" in front)
-cat = req("/wrath/leyline-preview/catalog?build=5.4.8")[2].decode()
-check("catalog: filtered by build", all(("5.4.8" in e["builds"] or "any" in e["builds"]) for e in INDEX["entries"]
-                                      if f'/p/{e["id"].replace(":", "-")}"' in cat) and "5.4.8" in cat)
+cat = req("/wrath/leyline-preview/catalog?build=2.4.3")[2].decode()
+check("catalog: filtered by build", all(("2.4.3" in e["builds"] or "any" in e["builds"]) for e in INDEX["entries"]
+                                      if f'/p/{e["id"].replace(":", "-")}"' in cat) and "2.4.3" in cat)
+cata = req("/wrath/leyline-preview/catalog?build=5.4.8")[2].decode()
+check("catalog: no item made only for 4.3.4 / 5.4.8", not any(
+    f'/p/{e["id"].replace(":", "-")}"' in cata for e in INDEX["entries"] if not set(e["builds"]) & {"1.12", "2.4.3", "3.3.5a", "any"}))
 junk = req("/wrath/leyline-preview/catalog?q=%3Cscript%3E")[2].decode()
 check("catalog: the query is escaped", "<script>" not in junk and "&lt;script&gt;" in junk)
 item = req("/wrath/leyline-preview/p/" + first["id"].replace(":", "-"))[2].decode()
@@ -165,7 +178,8 @@ check("a delisted repo can't be submitted again", st == 400 and "reviewed" in b.
 st, h, b = req("/wrath/leyline/catalog.json")
 feed = json.loads(b)
 check("feed: 200 json, CORS *", st == 200 and h.get("access-control-allow-origin") == "*" and h["content-type"].startswith("application/json"))
-check("feed: the all.json shape", feed["format"] == 1 and isinstance(feed["projects"], list) and feed["builds"] == HB.BUILDS + ["any"]
+check("feed: the all.json shape", feed["format"] == 1 and isinstance(feed["projects"], list) and feed["builds"] == ["1.12", "2.4.3", "3.3.5a", "any"]
+      and not any(set(p.get("builds") or []) & {"4.3.4", "5.4.8"} for p in feed["projects"])
       and [c["id"] for c in feed["categories"]][-1] == "themes" and len(feed["categories"]) == 13)
 ids = [p["id"] for p in feed["projects"]]
 check("feed: ids in the launcher's forms", all(re.fullmatch(r"link:[0-9a-f]{12}|mod:[a-z][a-z0-9-]{2,31}|theme:[a-z][a-z0-9-]{1,31}", i) for i in ids))

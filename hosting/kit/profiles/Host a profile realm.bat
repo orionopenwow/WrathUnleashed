@@ -24,6 +24,9 @@ for /f "usebackq eol=# tokens=1,* delims==" %%A in ("%PD%profile.lock") do (
 )
 if not "%LL_PROFILE%"=="%WU_PROFILE%" (echo profiles\%WU_PROFILE%\profile.lock is damaged. Download the full kit again. & pause & exit /b 1)
 if not defined LL_CORE_COMMIT (echo profiles\%WU_PROFILE%\profile.lock is damaged. Download the full kit again. & pause & exit /b 1)
+rem Not offered for now (LL_MAX_OFFERED_BUILD: "Host a Wrath realm.bat", tools\wuhost\cores.py): 4.3.4. LEYLINE_ALL_CLIENTS=1 offers it.
+if not defined LL_MAX_OFFERED_BUILD set "LL_MAX_OFFERED_BUILD=12340"
+if not "%LEYLINE_ALL_CLIENTS%"=="1" if %LL_BUILD% GTR %LL_MAX_OFFERED_BUILD% (echo The %LL_VERSION% client is not offered yet: Leyline hosts 1.12.1, 2.4.3 and 3.3.5a realms for now. Pick another profile. & pause & exit /b 1)
 if not defined LL_DB_COMMIT (
   echo %LL_DB_SHA256%| findstr /r "^[0-9a-f][0-9a-f]*$" >nul || (echo The %LL_VERSION% profile is not ready yet: its database file has no pinned checksum. Pick another profile. & pause & exit /b 1)
 )

@@ -124,6 +124,11 @@ check("sort top: rated first by the Bayesian score, unrated after", order("top")
 check("sort rising: only risers first (the flood rises too, damped)", order("rising")[:3] == ["aa", "dd", "cc"], order("rising"))
 check("sort installs: all time", order("installs")[0] == "aa" and order("installs")[1] == "dd", order("installs"))
 check("sort new: newest first seen first, unknown dates last", order("new")[:2] == ["99", "aa"], order("new"))
+check("4.3.4 / 5.4.8 not offered for now: read as no client", RK.client_tag("4.3.4") == "" and RK.client_tag("18414") == ""
+      and RK.HIDDEN_CLIENTS == ("4.3.4", "5.4.8"))
+os.environ["LEYLINE_ALL_CLIENTS"] = "1"
+check("the override counts them again", RK.client_tag("15595") == "4.3.4")
+del os.environ["LEYLINE_ALL_CLIENTS"]
 check("build/kind helpers", RK.client_tag("12340") == "3.3.5a" and RK.client_tag("1.12.1") == "1.12" and RK.client_tag("9.9") == ""
       and RK.kind_of({"source": "theme"}) == "theme" and RK.kind_of({"category": "sandbox"}) == "mode"
       and RK.kind_of({"type": "addon"}) == "addon" and RK.kind_of({"type": "module", "category": "tools"}) == "mod")

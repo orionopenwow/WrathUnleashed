@@ -9,7 +9,7 @@ Version 0.3 adds every client build, every server type and self-updates. See [Ge
 | Page | What you can do |
 |---|---|
 | **Home** | Pick a client and a realm, then PLAY. Or play Wrath in the browser. |
-| **Game clients** | Add a client folder you already have: 1.12.1 (5875), 2.4.3 (8606), 3.3.5a (12340), 4.3.4 (15595) or 5.4.8 (18414). Leyline reads the build from the game's .exe and checks the install is complete. Any other build shows as "other": it can play realms, but gets no mods. Leyline never downloads a client. |
+| **Game clients** | Add a client folder you already have: 1.12.1 (5875), 2.4.3 (8606) or 3.3.5a (12340) for now. Leyline reads the build from the game's .exe and checks the install is complete. Any other build shows as "other": it can play realms, but gets no mods. Leyline never downloads a client. |
 | **Discover** | Browse the Workshop: categories, search, credits, links to each project's page, source and author. Install a mod into the client you pick. |
 | **My Mods** | See what is installed in each client. One click to update or remove; turn mods off and on; UPDATE ALL. Drop a .zip, an addon folder, a .MPQ patch or a native mod (.dll, .asi, after a one-time OK) to add your own. |
 | **Realms** | The official realm and every community Beacon, with their server (AzerothCore, TrinityCore, CMaNGOS, vMaNGOS, MaNGOS), build, status and player counts. PLAY picks one of your clients of the right build, sets its realm address and starts the game, or says which client is missing. Join a private realm with its invite link. |

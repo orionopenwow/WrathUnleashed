@@ -42,6 +42,38 @@ PROFILES = {
     },
 }
 
+# The newest client build the kit offers. Hidden by the owner on 2026-10-30 ("3.3.5 at max until I research"):
+# tcpp-4.3.4 keeps its files in profiles/ but is not offered. Set this back to 18414 (or set LEYLINE_ALL_CLIENTS=1)
+# to offer 4.3.4 (and 5.4.8, once it has a profile) again. The shell side reads the same number:
+# profiles/host-profile.sh LL_MAX_OFFERED_BUILD, "Host a Wrath realm.bat" LL_MAX_OFFERED_BUILD.
+MAX_OFFERED_BUILD = 12340
+ALL_CLIENTS_ENV = "LEYLINE_ALL_CLIENTS"
+
+
+def all_clients(env=None):
+    """The override is on: LEYLINE_ALL_CLIENTS=1 offers every profile."""
+    import os
+    v = (os.environ if env is None else env).get(ALL_CLIENTS_ENV, "")
+    return v.strip().lower() in ("1", "true", "yes", "on")
+
+
+def offered(profile, env=None):
+    """The profile is offered now (the kit's own 3.3.5a profiles always are)."""
+    p = PROFILES.get(profile)
+    return p is None or p["build"] <= MAX_OFFERED_BUILD or all_clients(env)
+
+
+def offered_profiles(env=None):
+    return {k: p for k, p in PROFILES.items() if offered(k, env)}
+
+
+def not_offered(profile):
+    """The plain words when a profile is not offered yet."""
+    v = PROFILES.get(profile, {}).get("version", "that")
+    return (f"The {v} client is not offered yet: Leyline hosts 1.12.1, 2.4.3 and 3.3.5a realms for now. "
+            "Pick another profile.")
+
+
 # The client builds the kit's login probe knows (wunet/wire335.VERSIONS has the version bytes).
 BUILDS = {5875: "1.12.1", 8606: "2.4.3", 12340: "3.3.5a", 15595: "4.3.4", 18414: "5.4.8"}
 

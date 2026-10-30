@@ -25,7 +25,7 @@ const invoke = window.__TAURI__ && window.__TAURI__.core
 // What's new, shown on Home and on the News page. Newest first.
 const NEWS = [
   { tag: "LEYLINE LAUNCHER 0.3", title: "EVERY CLIENT, EVERY SERVER", items: [
-    "Finds your own 1.12.1, 2.4.3, 3.3.5a, 4.3.4 and 5.4.8 clients, and lists other builds too",
+    "Finds your own 1.12.1, 2.4.3 and 3.3.5a clients, and lists other builds too",
     "Realms show their server and build; PLAY picks a client that fits",
     "Updates itself in the background: restart when you are ready, never mid-game",
   ] },
@@ -342,7 +342,7 @@ function renderClients() {
     const top = el("div", "top");
     top.append(el("span", "name", c.name), el("span", "build", buildLabel(c.build)));
     const tags = el("div", "tags");
-    if (c.build === "other") tags.append(el("span", "tag warn", `Other build${c.exe_version ? " " + c.exe_version : ""}: realms only, no mods`));
+    if (buildTag(c.build) === "other") tags.append(el("span", "tag warn", `Other build${c.exe_version ? " " + c.exe_version : ""}: realms only, no mods`));
     else tags.append(el("span", "tag", `Addons: Interface ${{"1.12.1": "11200", "2.4.3": "20400", "3.3.5a": "30300", "4.3.4": "40300", "5.4.8": "50400"}[c.build]}`));
     if (BUILDS[c.build]) tags.append(el("span", "tag", `Realm address: ${BUILDS[c.build].file}`));
     const meta = el("div", "meta");
@@ -502,9 +502,14 @@ const BUILDS = {
   "4.3.4": { num: 15595, tag: "4.3.4", file: "WTF\\Config.wtf" },
   "5.4.8": { num: 18414, tag: "5.4.8", file: "WTF\\Config.wtf" },
 };
-const buildLabel = (b) => (BUILDS[b] ? `${b} · ${BUILDS[b].num}` : "other build");
-const buildTag = (b) => (BUILDS[b] ? BUILDS[b].tag : "other");
-const fitsClient = (p, c) => !c || (c.build !== "other" && (!p.builds.length || p.builds.includes("any") || p.builds.includes(buildTag(c.build))));
+// The newest build offered (clients.rs MAX_OFFERED_BUILD). Hidden by the owner on 2026-10-30: 4.3.4 and 5.4.8 are
+// not shown for now. Set this back to 18414 (or window.LEYLINE_ALL_CLIENTS = true) to show them again.
+const MAX_OFFERED_BUILD = 12340;
+const offeredBuild = (b) => !!BUILDS[b] && (window.LEYLINE_ALL_CLIENTS === true || BUILDS[b].num <= MAX_OFFERED_BUILD);
+const hiddenBuild = (b) => !!BUILDS[b] && !offeredBuild(b);
+const buildLabel = (b) => (offeredBuild(b) ? `${b} · ${BUILDS[b].num}` : "other build");
+const buildTag = (b) => (offeredBuild(b) ? BUILDS[b].tag : "other");
+const fitsClient = (p, c) => !c || (buildTag(c.build) !== "other" && (!p.builds.length || p.builds.includes("any") || p.builds.includes(buildTag(c.build))));
 // The listed realm at this address, if any (its build and server).
 const realmAt = (addr) => realmsCache.find((x) => x.address === addr) || null;
 const clientFits = (r, c) => !r || !r.build || (c && c.build === r.build);
@@ -864,7 +869,7 @@ function renderInstalled() {
   $("mods-update-all").hidden = ups.length < 2;
   $("mods-update-all").textContent = `UPDATE ALL (${ups.length})`;
   if (!c) { list.append(el("p", "hint", "Add your game client first.")); return; }
-  if (c.build === "other" && !installed.length) { list.append(el("p", "hint", "Leyline does not know this client's build, so it installs no mods here. Realms work.")); return; }
+  if (buildTag(c.build) === "other" && !installed.length) { list.append(el("p", "hint", "Leyline does not know this client's build, so it installs no mods here. Realms work.")); return; }
   if (!installed.length) { list.append(el("p", "hint", "No mods in this client yet. Install from Discover, or drop one above.")); return; }
   for (const m of installed) {
     const card = el("div", "card" + (m.enabled ? "" : " off") + (m.update ? " has-update" : ""));
@@ -1025,7 +1030,7 @@ const TAG_LABELS = { blizzlike: "Blizzlike", boosted: "Boosted", custom: "Custom
 const REGION_LABELS = { "na-east": "North America east", "na-west": "North America west", sa: "South America", eu: "Europe",
   africa: "Africa", me: "Middle East", asia: "Asia", oce: "Oceania" };
 const RL_FILTERS = [
-  ["rl-f-build", (r) => (r.build ? [r.build] : []), (v) => v],
+  ["rl-f-build", (r) => (r.build && offeredBuild(r.build) ? [r.build] : []), (v) => v],
   ["rl-f-tag", (r) => r.tags || [], (v) => TAG_LABELS[v] || v],
   ["rl-f-region", (r) => (r.region ? [r.region] : []), (v) => REGION_LABELS[v] || v],
   ["rl-f-lang", (r) => (r.language ? [r.language.split("-")[0]] : []), (v) => v],
@@ -1043,6 +1048,7 @@ function fillRealmFilters() {
 }
 function realmMatches(r) {
   if (r.official) return true;   // the sample stays pinned
+  if (hiddenBuild(r.build)) return false;   // 4.3.4 / 5.4.8 realms are not offered for now (MAX_OFFERED_BUILD)
   for (const [id, values] of RL_FILTERS) {
     const v = $(id) && $(id).value;
     if (v && !values(r).includes(v)) return false;

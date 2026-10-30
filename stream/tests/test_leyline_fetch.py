@@ -71,5 +71,14 @@ check("network listing: featured, the sample, then by score (not players), offli
 dat = open(os.path.join(tmp, "out.dat")).read()
 check("network fields written, checked", 'tags = "pvp"' in dat and 'lang = "de"' in dat and "featured = true" in dat
       and "verified = true" in dat and "up = 97" in dat and "sample = true" in dat and "nope" not in dat)
+# 4.3.4 / 5.4.8 not offered for now (the owner, 2026-10-30): their realms are left out unless LEYLINE_ALL_CLIENTS=1
+cata = dict(rec("catacatacatacata", "Cata Den", True, 5), profile={"ruleset": "custom", "build": 15595})
+tbc = dict(rec("tbctbctbctbctbc2", "Outland", True, 4), profile={"ruleset": "custom", "build": 8606})
+with open(listing, "w") as f:
+    json.dump({"realms": [cata, tbc]}, f)
+rc, ids = run(LEYLINE_ALL_CLIENTS="")
+check("a 4.3.4 realm is not listed in game", rc == 0 and ids == ["tbctbctbctbctbc2"], ids)
+rc, ids = run(LEYLINE_ALL_CLIENTS="1")
+check("the override lists it", rc == 0 and ids == ["catacatacatacata", "tbctbctbctbctbc2"], ids)
 print(f"\n{count - fails}/{count} passed")
 sys.exit(1 if fails else 0)

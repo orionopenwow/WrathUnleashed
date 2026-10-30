@@ -319,7 +319,9 @@ def cmd_init(a):
         sys.exit("Realm name: 1-32 letters, digits, spaces, _ ' or -")
     profile = a.profile or cfg.get("profile", "main")
     if profile not in PROFILES:
-        sys.exit("Profile must be " + ", ".join(sorted(PROFILES)))
+        sys.exit("Profile must be " + ", ".join(sorted(k for k in PROFILES if cores.offered(k))))
+    if not cores.offered(profile):   # 4.3.4: not offered for now (cores.MAX_OFFERED_BUILD)
+        sys.exit(cores.not_offered(profile))
     vis = a.visibility or cfg.get("visibility", "private")
     if vis not in ("public", "private"):
         sys.exit("Choose private or public")

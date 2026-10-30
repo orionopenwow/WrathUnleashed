@@ -261,6 +261,12 @@ fn s(v: &Value, k: &str, n: usize) -> String {
 
 /// The community records of a realms.json document (schema 1). Records that are not real Beacons are dropped.
 pub fn parse_community(v: &Value) -> Vec<Realm> {
+    parse_community_in(v, crate::clients::all_clients())
+}
+
+/// `parse_community`; a realm on a build that is not offered now (4.3.4, 5.4.8: `clients::MAX_OFFERED_BUILD`)
+/// is left out unless `all`.
+pub fn parse_community_in(v: &Value, all: bool) -> Vec<Realm> {
     let Some(items) = v.get("realms").and_then(Value::as_array) else { return vec![] };
     items
         .iter()
@@ -273,6 +279,9 @@ pub fn parse_community(v: &Value) -> Vec<Realm> {
             }
             let rid = c.get("realmId").and_then(Value::as_str).filter(|x| realm_id_ok(x))?.to_string();
             let profile = r.get("profile").cloned().unwrap_or(Value::Null);
+            if listing_build(&profile).is_some_and(|b| !b.offered_in(all)) {
+                return None;
+            }
             let relay = c.get("relay").and_then(Value::as_str).or_else(|| profile.get("address").and_then(Value::as_str))
                 .filter(|h| relay_ok(h))?
                 .to_string();
@@ -568,7 +577,9 @@ mod tests {
         let doc: Value = serde_json::from_str(r#"{"realms":[{"name":"Old Days","profile":{"version":"1.12.1","core":"vMaNGOS","address":"relay.openvanilla.app","port":40020},
             "community":{"realmId":"cccccccccccccccc","relay":"relay.openvanilla.app"}},
             {"name":"Cata","profile":{"build":15595,"core":"TrinityCore"},"community":{"realmId":"dddddddddddddddd","relay":"relay.openvanilla.app"}}]}"#).unwrap();
-        let r = parse_community(&doc);
+        // 4.3.4 is not offered for now (owner, 2026-10-30): its realm is left out unless the override is on.
+        assert_eq!(parse_community_in(&doc, false).len(), 1);
+        let r = parse_community_in(&doc, true);
         assert_eq!((r[0].core.as_str(), r[0].build), ("vmangos", Some(Build::V1121)));
         assert_eq!((r[1].core.as_str(), r[1].build), ("trinitycore", Some(Build::V434)));
         let w = official();

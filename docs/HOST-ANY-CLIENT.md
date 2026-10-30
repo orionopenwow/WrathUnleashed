@@ -1,7 +1,9 @@
 # Host any client
 
-Leyline's host kit hosts a realm for any client the launcher finds on the host's PC: 1.12.1, 2.4.3, 3.3.5a and
-4.3.4 today, 5.4.8 not yet (see below). One click on the launcher's Host page (or `leyline host`, or
+Leyline's host kit hosts a realm for the client the launcher finds on the host's PC: 1.12.1, 2.4.3 and 3.3.5a
+for now.
+4.3.4 and 5.4.8 are not offered yet (the owner's call, 2026-10-30): the `tcpp-4.3.4` files stay in the kit, but
+the kit, the launcher and the site do not offer them. `LEYLINE_ALL_CLIENTS=1` brings them back for testing. One click on the launcher's Host page (or `leyline host`, or
 "Host a Wrath realm.bat"), and the realm shows on the Leyline realm list with the client it needs.
 
 How every profile works, whatever the client:
@@ -24,8 +26,8 @@ No core here is built from leaked or decompiled code, and none that ships client
 | 1.12.1 (5875) | `cmangos-1.12.1` | [CMaNGOS Classic](https://github.com/cmangos/mangos-classic) (GPL-2.0) | `5731249195520323cb5fb9aa29761d4f033272ce` (2026-10-28) | [classic-db](https://github.com/cmangos/classic-db) in git, `603ece10…` (2026-10-25), the project's `InstallFullDB.sh` | the core's `ad`, `vmap_extractor`, `vmap_assembler`, `MoveMapGen` | **implemented** |
 | 2.4.3 (8606) | `cmangos-2.4.3` | [CMaNGOS TBC](https://github.com/cmangos/mangos-tbc) (GPL-2.0) | `37767e954241e346453260b8bc8c1fb2e2afdf7d` (2026-10-28) | [tbc-db](https://github.com/cmangos/tbc-db) in git, `1c54acd2…` (2026-10-26), `InstallFullDB.sh` | the same tools | **implemented** |
 | 3.3.5a (12340) | `main`, `brawl`, `progression`, `dalaran` | [AzerothCore](https://github.com/azerothcore/azerothcore-wotlk) (its own licence) | `realm/custom/sources.lock` | AzerothCore's own | AzerothCore's `map_extractor` | live (the kit's default) |
-| 4.3.4 (15595) | `tcpp-4.3.4` | [TrinityCore 4.3.4, The Cataclysm Preservation Project](https://github.com/The-Cataclysm-Preservation-Project/TrinityCore) (GPL-2.0) | `b061f46ef86f84f713ea3956b2318383e0b71278` (2026-10-25) | TDB 434.22011 release file, sha256 **TODO(owner)**; the world server's own updater (`--update-databases-only`) | the core's `mapextractor`, `vmap4extractor`, `vmap4assembler`, `mmaps_generator` | **implemented, gated** on the owner pinning the database file's sha256 |
-| 5.4.8 (18414) | none yet | candidate: [SkyFire 5.4.8](https://github.com/ProjectSkyfire/SkyFire_548) (GPL-3.0) | — | SFDB release 26 (GitHub lists its sha256: `d12ba9ecad381f3b5460612af2a172cd373afdd796c289e2ccc11315db21dd5f`) | the core's TrinityCore-style tools | **documented only** |
+| 4.3.4 (15595) | `tcpp-4.3.4` | [TrinityCore 4.3.4, The Cataclysm Preservation Project](https://github.com/The-Cataclysm-Preservation-Project/TrinityCore) (GPL-2.0) | `b061f46ef86f84f713ea3956b2318383e0b71278` (2026-10-25) | TDB 434.22011 release file, sha256 **TODO(owner)**; the world server's own updater (`--update-databases-only`) | the core's `mapextractor`, `vmap4extractor`, `vmap4assembler`, `mmaps_generator` | **not offered yet** (hidden 2026-10-30); implemented, gated on the owner pinning the database file's sha256 |
+| 5.4.8 (18414) | none yet | candidate: [SkyFire 5.4.8](https://github.com/ProjectSkyfire/SkyFire_548) (GPL-3.0) | — | SFDB release 26 (GitHub lists its sha256: `d12ba9ecad381f3b5460612af2a172cd373afdd796c289e2ccc11315db21dd5f`) | the core's TrinityCore-style tools | **not offered yet**; documented only |
 
 Each was checked in its own repository on 2026-10-29: active (commits this week), licence file present, the
 database is the project's community SQL, and the extractors read a local client folder.

@@ -74,8 +74,15 @@ pub struct Offer {
 
 /// The kit's profiles for these clients: the ones a client on this PC can play first, then the rest (with a note).
 pub fn offers(kit: Option<&Path>, clients: &[ClientProfile]) -> Vec<Offer> {
+    offers_in(kit, clients, crate::clients::all_clients())
+}
+
+/// `offers`; a profile on a build that is not offered now (tcpp-4.3.4: `clients::MAX_OFFERED_BUILD`) is left out
+/// unless `all`.
+pub fn offers_in(kit: Option<&Path>, clients: &[ClientProfile], all: bool) -> Vec<Offer> {
     let mut out: Vec<Offer> = PROFILES
         .iter()
+        .filter(|p| p.build.offered_in(all))
         .map(|p| {
             let in_kit = !p.own_folder || kit.is_some_and(|k| k.join("profiles").join(p.id).join("profile.lock").is_file());
             let picks: Vec<ClientPick> = clients
@@ -119,7 +126,7 @@ fn choice_path(kit: &Path) -> PathBuf {
 
 pub fn read_choice(kit: &Path) -> Option<Choice> {
     let c: Choice = serde_json::from_str(&fs::read_to_string(choice_path(kit)).ok()?).ok()?;
-    (id_ok(&c.profile) && find(&c.profile).is_some()).then_some(c)
+    (id_ok(&c.profile) && find(&c.profile).is_some_and(|p| p.build.offered())).then_some(c)
 }
 
 /// Keep the choice: a known profile and, when given, one of the player's own clients of its build.
@@ -130,6 +137,9 @@ pub fn choose(kit: &Path, profile: &str, client: Option<&ClientProfile>) -> Resu
         return Ok(Choice::default());
     }
     let p = find(profile).ok_or("That is not a realm profile Leyline knows.")?;
+    if !p.build.offered() {
+        return Err(format!("{} realms are not offered yet.", p.build.version()));
+    }
     if p.own_folder && !kit.join("profiles").join(p.id).join("profile.lock").is_file() {
         return Err("Your host kit is older than this profile: update the Host pack first.".into());
     }
@@ -202,7 +212,11 @@ mod tests {
     fn the_profiles_that_fit_my_clients_come_first() {
         let k = kit("offers", &["cmangos-1.12.1", "cmangos-2.4.3"]);
         let mine = [client("a", Build::V243, "/games/243"), client("b", Build::V335a, "/games/335")];
-        let o = offers(Some(&k), &mine);
+        // 4.3.4 is not offered for now (owner, 2026-10-30): tcpp-4.3.4 is left out unless the override is on.
+        let capped = offers_in(Some(&k), &mine, false);
+        assert_eq!(capped.len(), PROFILES.len() - 1);
+        assert!(capped.iter().all(|x| x.id != "tcpp-4.3.4"));
+        let o = offers_in(Some(&k), &mine, true);
         assert_eq!(o.len(), PROFILES.len());
         let ready: Vec<&str> = o.iter().filter(|x| x.note.is_none()).map(|x| x.id.as_str()).collect();
         assert_eq!(ready, ["dalaran", "main", "brawl", "progression", "cmangos-2.4.3"]);
@@ -224,7 +238,8 @@ mod tests {
         let wrath = client("b", Build::V335a, games.to_str().unwrap());
         assert!(env_for(&k).is_empty(), "nothing chosen: the script asks");
         assert!(choose(&k, "cmangos-2.4.3", Some(&wrath)).unwrap_err().contains("needs a 2.4.3 client"));
-        assert!(choose(&k, "tcpp-4.3.4", None).unwrap_err().contains("older"));
+        let e = choose(&k, "tcpp-4.3.4", None).unwrap_err();
+        assert!(e.contains(if crate::clients::all_clients() { "older" } else { "not offered yet" }), "{e}");
         assert!(choose(&k, "../../x", None).is_err());
         choose(&k, "cmangos-2.4.3", Some(&tbc)).unwrap();
         let env = env_for(&k);

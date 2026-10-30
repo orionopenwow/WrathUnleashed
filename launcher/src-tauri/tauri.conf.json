@@ -28,7 +28,7 @@
     "targets": "all",
     "category": "Game",
     "shortDescription": "Play, mod and host community realms",
-    "longDescription": "Leyline finds your own installed game clients (1.12.1, 2.4.3, 3.3.5a, 4.3.4, 5.4.8 and other builds), installs and manages Workshop mods in them, points them at the official realm or any listed realm (AzerothCore, TrinityCore, CMaNGOS, vMaNGOS, MaNGOS) and starts them, and walks you through hosting your own realm with the host kit. It never downloads a game client.",
+    "longDescription": "Leyline finds your own installed game clients (1.12.1, 2.4.3 and 3.3.5a for now, and other builds), installs and manages Workshop mods in them, points them at the official realm or any listed realm (AzerothCore, TrinityCore, CMaNGOS, vMaNGOS, MaNGOS) and starts them, and walks you through hosting your own realm with the host kit. It never downloads a game client.",
     "copyright": "MIT, WrathUnleashed contributors",
     "license": "MIT",
     "icon": [

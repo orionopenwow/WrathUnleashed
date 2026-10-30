@@ -7,7 +7,7 @@ rem sees your home IP address. Safe to run again: it keeps your realm, character
 rem
 rem It asks three things the first time: the realm's name, its profile, private or public.
 rem Answers can also come from the environment: WU_NAME, WU_PROFILE (main, brawl, progression, dalaran, or a
-rem profile for another client in profiles\: cmangos-1.12.1, cmangos-2.4.3, tcpp-4.3.4; WU_CLIENT_DIR is its game folder),
+rem profile for another client in profiles\: cmangos-1.12.1, cmangos-2.4.3; WU_CLIENT_DIR is its game folder),
 rem WU_VISIBILITY, WU_WOW_DIR, WU_BUILD (1: build the realm images here if they are not published, 0: stock).
 cd /d "%~dp0"
 
@@ -43,6 +43,9 @@ if not defined WU_NAME (
   set "WU_NAME=!D!"
   set /p "WU_NAME=Realm name [!D!]: "
 )
+rem The newest client build offered (tools\wuhost\cores.py MAX_OFFERED_BUILD). Hidden by the owner on 2026-10-30:
+rem the 4.3.4 profile keeps its files but is not offered. Set this back to 18414 (or LEYLINE_ALL_CLIENTS=1) to offer it again.
+if not defined LL_MAX_OFFERED_BUILD set "LL_MAX_OFFERED_BUILD=12340"
 :askprofile
 if not defined WU_PROFILE (
   set "D=main"
@@ -51,7 +54,12 @@ if not defined WU_PROFILE (
   echo   brawl        everyone starts at 80 in Dalaran, everything unlocked
   echo   progression  blizzlike, Vanilla then TBC then Wrath per character
   echo   dalaran      a light Dalaran hangout: no bots, boost to 80 straight to Dalaran, your own rules
-  for /d %%P in ("%~dp0profiles\*") do if exist "%%P\profile.lock" echo   %%~nxP   a realm for another client ^(profiles\%%~nxP\NOTICE.md^)
+  for /d %%P in ("%~dp0profiles\*") do if exist "%%P\profile.lock" (
+    set "PB=99999"
+    for /f "usebackq tokens=2 delims==" %%B in (`findstr /b "LL_BUILD=" "%%P\profile.lock"`) do set "PB=%%B"
+    if "%LEYLINE_ALL_CLIENTS%"=="1" set "PB=0"
+    if !PB! LEQ %LL_MAX_OFFERED_BUILD% echo   %%~nxP   a realm for another client ^(profiles\%%~nxP\NOTICE.md^)
+  )
   set "WU_PROFILE=!D!"
   set /p "WU_PROFILE=Profile [!D!]: "
 )

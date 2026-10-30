@@ -7,8 +7,8 @@ they need Docker.
 The Host pack is **our code only**. It holds no game data and no game client. The host's own 3.3.5a game
 files are read on their PC by the kit's extractor, and nothing is ever downloaded from us for that.
 
-**Any client**: the Host page's **WHICH GAME** card hosts a realm for any client Leyline found on the PC (1.12.1,
-2.4.3, 3.3.5a, 4.3.4), each built on the host's PC from its core's own source. See
+**Any client**: the Host page's **WHICH GAME** card hosts a realm for a client Leyline found on the PC (1.12.1,
+2.4.3 and 3.3.5a for now), each built on the host's PC from its core's own source. See
 [HOST-ANY-CLIENT.md](HOST-ANY-CLIENT.md).
 
 ## For hosts

@@ -178,13 +178,32 @@ class HostScript(unittest.TestCase):
     def test_known_and_listed(self):
         r = self.sh('profile_list; profile_known cmangos-1.12.1 && echo yes; profile_known ../x || echo no; '
                     'profile_known dalaran || echo no')
-        self.assertEqual(r.stdout.split(), sorted(cores.PROFILES) + ["yes", "no", "no"])
+        self.assertEqual(r.stdout.split(), sorted(cores.offered_profiles({})) + ["yes", "no", "no"])
+
+    def test_not_offered_yet_unless_the_override(self):
+        # The owner, 2026-10-30: 1.12.1, 2.4.3 and 3.3.5a only for now; tcpp-4.3.4 keeps its files.
+        r = self.sh('unset LEYLINE_ALL_CLIENTS; echo "$LL_MAX_OFFERED_BUILD"; profile_list; profile_lock tcpp-4.3.4; echo built')
+        self.assertEqual(r.stdout.splitlines()[0], str(cores.MAX_OFFERED_BUILD))
+        self.assertNotIn("tcpp-4.3.4", r.stdout.splitlines()[1:-1])
+        self.assertIn("DIE: The 4.3.4 client is not offered yet", r.stdout)
+        self.assertNotIn("built", r.stdout)
+        r = self.sh("LEYLINE_ALL_CLIENTS=1; profile_list")
+        self.assertIn("tcpp-4.3.4", r.stdout.split())
+        bat = read(KIT, "Host a Wrath realm.bat")
+        self.assertIn(f'set "LL_MAX_OFFERED_BUILD={cores.MAX_OFFERED_BUILD}"', bat)
+        self.assertIn("if !PB! LEQ %LL_MAX_OFFERED_BUILD% echo", bat)
+        pbat = read(PROFILES, "Host a profile realm.bat")
+        self.assertIn("if %LL_BUILD% GTR %LL_MAX_OFFERED_BUILD% (echo The %LL_VERSION% client is not offered yet", pbat)
+        self.assertIn(f'set "LL_MAX_OFFERED_BUILD={cores.MAX_OFFERED_BUILD}"', pbat)
+        self.assertIn("profile_list", read(KIT, "leyline"))
+        for f in ("host-wrath-realm.sh", "leyline", "Host a Wrath realm.bat"):
+            self.assertNotIn("tcpp-4.3.4", read(KIT, f), f"{f} does not offer tcpp-4.3.4")
 
     def test_an_unpinned_database_is_refused(self):
         lk = lock("tcpp-4.3.4")
         if re.match(r"^[0-9a-f]{64}$", lk["LL_DB_SHA256"]):
             self.skipTest("pinned")
-        r = self.sh("profile_lock tcpp-4.3.4; echo built")
+        r = self.sh("LEYLINE_ALL_CLIENTS=1; profile_lock tcpp-4.3.4; echo built")
         self.assertIn("DIE: The 4.3.4 profile is not ready yet", r.stdout)
         self.assertNotIn("built", r.stdout)
 
@@ -354,7 +373,23 @@ class Setup(unittest.TestCase):
         self.assertEqual((cfg["auth_service"], cfg["record"]["core"], cfg["record"]["build"]),
                          ("ac-authserver:3724", "azerothcore", 12340))
 
+    def test_offered_is_capped_at_335a(self):
+        self.assertEqual(cores.MAX_OFFERED_BUILD, 12340, "hidden by the owner on 2026-10-30")
+        self.assertEqual(sorted(cores.offered_profiles({})), ["cmangos-1.12.1", "cmangos-2.4.3"])
+        self.assertTrue(cores.offered("dalaran", {}) and cores.offered("main", {}))
+        self.assertFalse(cores.offered("tcpp-4.3.4", {}))
+        for v in ("1", "true", "yes"):
+            self.assertTrue(cores.offered("tcpp-4.3.4", {"LEYLINE_ALL_CLIENTS": v}))
+        self.assertEqual(sorted(cores.offered_profiles({"LEYLINE_ALL_CLIENTS": "1"})), sorted(cores.PROFILES))
+        os.environ.pop("LEYLINE_ALL_CLIENTS", None)
+        with self.assertRaises(SystemExit) as cm:
+            self.run_cmd("init", "--name", "R", "--profile", "tcpp-4.3.4", "--visibility", "private")
+        self.assertIn("not offered yet", str(cm.exception))
+        self.assertFalse(os.path.exists(os.path.join(self.kit, "state", "host.json")))
+
     def test_every_profile_is_accepted(self):
+        os.environ["LEYLINE_ALL_CLIENTS"] = "1"   # every profile, 4.3.4 included (the override)
+        self.addCleanup(os.environ.pop, "LEYLINE_ALL_CLIENTS", None)
         for pid, p in cores.PROFILES.items():
             self.run_cmd("init", "--name", "R", "--profile", pid, "--visibility", "private")
             cfg = json.load(open(os.path.join(self.kit, "state", "host.json")))
@@ -388,6 +423,10 @@ class JoinSide(unittest.IsolatedAsyncioTestCase):
             self.assertIn('forClient(st.doc.build)', page)
             for v in ("1.12.1", "2.4.3", "4.3.4"):
                 self.assertIn(f'"{v}"', page)
+            # 4.3.4 / 5.4.8 not named for now (the owner, 2026-10-30); the code stays for later
+            self.assertIn("const MAX_OFFERED_BUILD = 12340;", page)
+            self.assertIn("all[0] > MAX_OFFERED_BUILD && window.LEYLINE_ALL_CLIENTS !== true", page)
+            self.assertIn("1.12.1, 2.4.3 and 3.3.5a clients for now", page)
             self.assertEqual(export.brand_hits(f, page.encode()), [])
 
 

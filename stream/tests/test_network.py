@@ -127,6 +127,16 @@ check("network line", net.network_line(t) == "2 realms · 5 players online · 6 
 f = net.filters_from({"build": ["1.12.1"], "tag": ["pvp"], "region": ["eu"], "lang": ["de"], "now": ["1"], "x": ["y"]})
 check("filters from the query", f == {"build": 5875, "tag": "pvp", "region": "eu", "lang": "de", "now": True})
 check("junk filters ignored", net.filters_from({"build": ["9"], "tag": ["<x>"], "region": ["mars"], "lang": ["english"]}) == {})
+# 4.3.4 / 5.4.8 not offered for now (the owner, 2026-10-30): not a filter, their realms are not listed or counted
+check("capped at 3.3.5a", net.MAX_OFFERED_BUILD == 12340 and net.offered(12340, {}) and not net.offered(15595, {})
+      and net.offered(18414, {"LEYLINE_ALL_CLIENTS": "1"}))
+check("a 4.3.4 / 5.4.8 build is no filter", net.filters_from({"build": ["4.3.4"]}) == {} and net.filters_from({"build": ["5.4.8"]}) == {})
+_o = net.order([{"id": "a", "name": "A", "live": True, "build": 8606}, {"id": "c", "name": "C", "live": True, "build": 15595},
+                {"id": "m", "name": "M", "live": False, "build": 18414}])
+check("realms on 4.3.4 / 5.4.8 are left out", [r["id"] for r in _o] == ["a"])
+_b = net.page_body([{"id": "cccccccccccccccc", "name": "Cata Den", "live": True, "build": 15595, "players": 3}], True, {"build": ["4.3.4"]},
+                   {}, "https://relay.openvanilla.app/join/", {})
+check("realms page: no 4.3.4 realm, no 4.3.4 chip", "Cata Den" not in _b and "4.3.4" not in _b)
 check("matches", net.matches({"build": 5875, "tags": ["pvp"], "region": "eu", "language": "de-AT", "live": True, "players": 1}, f)
       and not net.matches({"build": 5875, "tags": ["pvp"], "region": "eu", "language": "de", "live": True, "players": 0}, f))
 
