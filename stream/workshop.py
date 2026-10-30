@@ -73,10 +73,10 @@ RESERVED_IDS = {"submit", "credits"}       # Workshop pages: a mod by these name
 SOURCES = ("packaged", "community")
 SOURCE_LABEL = {"packaged": "Packaged", "community": "Community link"}
 BUILD_FILTERS = ("3.3.5a", "1.12")
-REPO_BASE = "https://github.com/orionopenwow/WrathUnleashed/tree/main/mods/catalog/"
+REPO_BASE = "https://github.com/orionopenwow/Leyline/blob/main/mods/SPEC.md#"
 PUBLIC_BASE = "https://" + os.environ.get("PUBLIC_HOST", "play.openvanilla.app")
 EXT_REL = 'rel="noopener noreferrer nofollow ugc"'
-GUIDE_URL = "https://github.com/orionopenwow/WrathUnleashed/blob/main/mods/README-modders.md"
+GUIDE_URL = "https://github.com/orionopenwow/Leyline/blob/main/mods/SPEC.md"
 CATEGORIES_FALLBACK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "mods", "categories.json")
 # Line icons by the "icon" name in categories.json (24x24, stroke currentColor). Unknown names get the initial.
 ICONS = {
@@ -673,7 +673,7 @@ class Workshop:
                    + f'<div class="wk-bar" role="group" aria-label="Permissions"><span class="lbl">Permissions</span>{perms}</div>')
         fine = ('<p class="ly-fine">In the game: Esc &rarr; Mods &amp; Workshop turns the addons on and off. '
                 f'Make your own: <a href="{GUIDE_URL}" rel="noopener noreferrer">the modder guide</a> and '
-                '<a href="https://github.com/orionopenwow/WrathUnleashed/tree/main/mods" '
+                '<a href="https://github.com/orionopenwow/Leyline/blob/main/mods/SPEC.md" '
                 'rel="noopener noreferrer">the mod format and a template</a>. '
                 '<a href="/wrath/mods/credits">Credits</a> thanks every author; tools read '
                 '<a href="/wrath/mods/all.json">all.json</a>.</p>')

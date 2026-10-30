@@ -805,7 +805,7 @@ class Hub:
         main = [("play", "Play", "/wrath", "play"), ("realms", "Realms", BASE + "/realms", "realms"),
                 ("mods", "Mods", BASE + "/catalog", "mods"), ("addons", "Addons", BASE + "/catalog?cat=addons", "addons"),
                 ("modes", "Modes", BASE + "/modes", "modes"), ("host", "Host", "/wrath/host", "host"),
-                ("community", "Community", "/wrath/workshop", "community")]
+                ("community", "Community", home + "#community", "community")]
         more = [("forge", "Forge", BASE + "/forge", "forge"), ("agents", "Agents", BASE + "/agents", "agents"),
                 ("gallery", "Gallery", home + "/gallery", "gallery"), ("docs", "Docs", "/wrath/docs", "docs"), ("news", "News", BASE + "/news", "news"),
                 ("creators", "Creators", BASE + "/creators", "creators"), ("status", "Status", home + "#status", "status")]
@@ -851,7 +851,7 @@ class Hub:
         home = FRONT if front_on() else BASE
         dl = self._download()
         top = self._header(ACTIVE.get(path.split("?")[0], "mods" if path.startswith(BASE + "/p/") else "") if active is None else active)
-        sub = "" if front else (f'<nav class="hb-sub" aria-label="Hub">'
+        sub = "" if (front or front_on()) else (f'<nav class="hb-sub" aria-label="Hub">'
                + "".join(f'<a href="{BASE}{h}"' + (' aria-current="page" class="on"' if path == BASE + h else "") + f">{t}</a>"
                          for h, t in (("", "Hub"), ("/realms", "Realms"), ("/modes", "Modes"), ("/catalog", "Catalog"), ("/gallery", "Gallery"),
                                       ("/news", "News"), ("/creators", "Creators"), ("/beacon", "Host a Beacon"),
@@ -878,13 +878,28 @@ class Hub:
         robots = "" if front_on() else '<meta name="robots" content="noindex">'
         meta = ('<meta name="description" content="Leyline: one launcher for your own game clients and every realm, '
                 'with mods, addons, realm scripts and tools.">')
-        css = (self.portal("LOOK_VARS") or LOOK_FALLBACK) + (self.portal("SPIN_CSS") or "") + HUB_CSS
+        css = (self.portal("LOOK_VARS") or LOOK_FALLBACK) + (self.portal("SPIN_CSS") or "") + HUB_CSS + self._backdrop()
         return (f'<!doctype html><html lang="en" data-look="leyline"><head><meta charset="utf-8">'
                 f'<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">'
                 f'<title>{e(title)}</title>{meta}{robots}<style>{css}</style></head>'
                 f'<body class="hb"><a class="hb-skip" href="#main">Skip to content</a>{top}'
                 f'<main id="main" class="hb-main{" hb-front" if front else ""}">{flag}{sub}{body}</main>{foot}'
                 + (f'<script nonce="{e(nonce)}">{HUB_JS}</script>' if nonce else "") + '</body></html>').encode("utf-8")
+
+    def _backdrop(self) -> str:
+        """The site's backdrop (owner 2026-10-30: "use this as the background of the site but slightly transparent"):
+        his picture of a stone hall under a swirling sky, fixed behind every hub page at low opacity under a dark wash so
+        the text keeps its contrast. A game-style picture: off with the game data killswitch (then the plain colour)."""
+        have = self.portal("art_present")
+        try:
+            ok = self.game_shots_on() and (have is None or bool(have(BACKDROP)))
+        except Exception:   # noqa: BLE001
+            ok = False
+        if not ok:
+            return ""
+        return ('html{background:linear-gradient(180deg,rgba(11,13,20,.32),rgba(11,13,20,.62) 80%) fixed,'
+                f'url(/wrath/art/{BACKDROP}) center top/cover no-repeat fixed,#0b0d14}}body.hb{{background:transparent}}'
+                '@media print{html{background:#fff}}')
 
     def status_cards(self) -> str:
         """Platform Status: live values only, read when the page is made (no script). A source this portal doesn't
@@ -1313,7 +1328,7 @@ class Hub:
              "belongs to its authors, under the licence they chose.",
              ["Community Spotlight, from real rankings", "News from the launcher and the realms"]
              + (["The Discord, linked from everywhere"] if discord else []),
-             [("/wrath/workshop", "Explore", False), (BASE + "/news", "News", False)], community_art),
+             [(BASE + "/catalog", "Explore", False), (BASE + "/news", "News", False)], community_art),
         ]
         out = []
         for n, (icon, eyebrow, title, lede, points, acts, art) in enumerate(secs):
@@ -1851,7 +1866,7 @@ class Hub:
         filters as links (they work without script) and Host your own."""
         got = self.realm_rows(query)
         if got is None:
-            body = '<section class="ly-panel"><h2>Realms</h2><p><a href="/wrath/realms">The realm list</a></p></section>'
+            body = '<section class="ly-panel"><h2>Realms</h2><p>The realm list is not answering. Try again in a minute.</p></section>'
             return self._shell("Realms · Leyline", body, BASE + "/realms")
         e = html.escape
         net = self.portal("network")
@@ -2264,7 +2279,7 @@ class Hub:
             BASE + "/agents")
 
     def beacon_page(self) -> bytes:
-        host_url = self.portal("HOST_URL") or "https://github.com/orionopenwow/WrathUnleashed"
+        host_url = self.portal("HOST_URL") or "https://github.com/orionopenwow/Leyline"
         e = html.escape
         body = ('<section class="ly-panel"><h1>Host a Beacon</h1>'
                 '<p>A Beacon is a realm someone runs on their own PC or server and puts on the Leyline list. Players '
@@ -3127,6 +3142,7 @@ ICONS = {
 
 # Heights of the Forge and Agents screenshots (960 wide), for the <img> size.
 APP_SHOTS = {"forge": 574, "agents": 540}
+BACKDROP = "leyline-shot-backdrop.webp"   # the site backdrop (Hub._backdrop)
 
 
 # The header's line icons (the launcher's sidebar style: 24x24 strokes, currentColor).
@@ -3292,11 +3308,87 @@ def bind(lookup) -> None:
     hub.portal = get
 
 
+# The hub's pages under the front door (owner 2026-10-30: "make this our main one"): with WU_HUB_FRONT on, every hub page
+# lives at /wrath/leyline/<page> and the old /wrath/leyline-preview/<page> addresses send a 301 there. Inside, the code
+# keeps BASE; what goes out (pages, Location headers) says /wrath/leyline (_Live).
+HUB_PAGES = ("catalog", "p", "creators", "beacon", "realms", "modes", "news", "gallery", "submit", "forge", "agents",
+             "approved.json")
+
+
+# Older portal pages that now have a twin here (owner 2026-10-30: "cleanup any stray site pages, make this our main
+# one"): with the front door on they send a 301 to the twin, keeping the filters the twin understands.
+TWINS = {"/wrath/realms": ("/realms", None), "/wrath/mods": ("/catalog", ("q", "cat", "sort")),
+         "/wrath/workshop": ("/catalog", ("q", "cat", "sort"))}
+
+
+def twin(path: str, query: dict) -> str | None:
+    """Where an older page lives now (FRONT/...), or None (front door off, or no twin)."""
+    if not (hub_on() and front_on()):
+        return None
+    if path.startswith("/wrath/mods/c/") and path.count("/") == 4:
+        cat = path.rsplit("/", 1)[1]
+        return FRONT + "/catalog" + ("?cat=" + urllib.parse.quote(cat) if cat in CATEGORY_IDS + ["themes"] else "")
+    if path not in TWINS:
+        return None
+    to, keep = TWINS[path]
+    q = {k: v for k, v in (query or {}).items() if keep is None or k in keep}
+    qs = urllib.parse.urlencode(q, doseq=True)
+    return FRONT + to + ("?" + qs if qs else "")
+
+
+def public_base() -> str:
+    return FRONT if front_on() else BASE
+
+
+def _under_front(path: str) -> bool:
+    return path.startswith(FRONT + "/") and path.split("/")[3] in HUB_PAGES
+
+
 def match(path: str) -> bool:
     if not hub_on():
         return False
     return (path == BASE or path.startswith(BASE + "/") or path == FEED
-            or (path in (FRONT, FRONT + "/gallery") and front_on()))
+            or (front_on() and (path == FRONT or _under_front(path))))
+
+
+class _Live:
+    """The portal's handler, with the preview address swapped for the front door in everything the hub sends."""
+    def __init__(self, h):
+        self._h = h
+
+    def __getattr__(self, name):
+        return getattr(self._h, name)
+
+    def send(self, status, body, ctype="text/html; charset=utf-8", **kw):
+        if isinstance(body, (bytes, bytearray)) and ctype.split(";")[0] in ("text/html", "application/json"):
+            body = bytes(body).replace(BASE.encode(), FRONT.encode()).replace(
+                urllib.parse.quote(BASE, safe="").encode(), urllib.parse.quote(FRONT, safe="").encode())
+        return self._h.send(status, body, ctype, **kw)
+
+    def send_header(self, key, value):
+        if key.lower() == "location" and isinstance(value, str) and value.startswith(BASE):
+            value = FRONT + value[len(BASE):]
+        return self._h.send_header(key, value)
+
+
+def _route(handler, path: str, query: dict):
+    """(handler, internal path), or None once a 301 is sent (an old preview address, with the front door on)."""
+    if not front_on():
+        return handler, path
+    if path == BASE or path.startswith(BASE + "/"):
+        to = FRONT + path[len(BASE):]
+        if path == BASE + "/approved.json":   # the index pipeline reads it: keep answering here too
+            return _Live(handler), path
+        qs = urllib.parse.urlencode(query, doseq=True) if query else ""
+        handler.send_response(301)
+        handler.send_header("Location", to + ("?" + qs if qs else ""))
+        handler.send_header("Content-Length", "0")
+        handler.send_header("Cache-Control", "public, max-age=3600")
+        handler.end_headers()
+        return None
+    if _under_front(path):
+        return _Live(handler), BASE + path[len(FRONT):]
+    return _Live(handler), path
 
 
 def _robots(public: bool = False) -> dict:
@@ -3306,6 +3398,10 @@ def _robots(public: bool = False) -> dict:
 def get(handler, path: str, query: dict) -> None:
     """GET (and HEAD) for every path match() owns. handler: the portal's request handler (send, ip)."""
     _REQ.who = None
+    got = _route(handler, path, query)
+    if got is None:
+        return
+    handler, path = got
     limit = hub.portal("browse_limit")
     if limit is not None and not limit.hit(handler.ip(), 600):
         handler.send(429, b"too many requests\n", "text/plain")
@@ -3366,6 +3462,10 @@ def get(handler, path: str, query: dict) -> None:
 
 def post(handler, path: str) -> None:
     _REQ.who = None
+    if front_on() and _under_front(path):
+        handler, path = _Live(handler), BASE + path[len(FRONT):]
+    elif front_on():
+        handler = _Live(handler)
     if path != BASE + "/submit":
         handler.send(405, b"method not allowed\n", "text/plain")
         return

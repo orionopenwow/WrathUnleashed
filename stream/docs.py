@@ -398,7 +398,7 @@ def page(path: str, css: str = "", card_meta=None, realm_name: str = "WrathUnlea
             except Exception:  # noqa: BLE001: the page works without a preview card
                 meta = ""
         foot = ('<p class="ld-foot">These pages are in the repo at docs/leyline. '
-                '<a href="https://github.com/orionopenwow/WrathUnleashed/tree/main/docs/leyline" '
+                '<a href="https://github.com/orionopenwow/Leyline/tree/main/docs/leyline" '
                 'rel="noopener noreferrer">Source</a></p>')
         return 200, _shell(title, name, heads, body + foot, css, meta)
     except Exception:  # noqa: BLE001: never take the portal down
