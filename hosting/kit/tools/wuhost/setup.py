@@ -600,6 +600,45 @@ def cmd_rules(a):
     sys.stderr.write(f"Realm list text updated: {len(rec.get('rules') or [])} rule(s), tagline: {rec.get('tagline') or '(none)'}\n")
 
 
+VOLUNTEER_ENV = "volunteer-relay.env"
+
+
+def cmd_volunteer_relay(a):
+    """The community relay profile (docs/LEYLINE-MESH.md): writes state/volunteer-relay.env for
+    docker-compose.volunteer-relay.yml. It relays for others only while that compose file runs; --off removes it."""
+    from wuhost import meshpick
+    p = path(VOLUNTEER_ENV)
+    if a.off:
+        if os.path.exists(p):
+            os.remove(p)
+        sys.stderr.write("Community relay settings removed. Stop it with: docker compose -f docker-compose.volunteer-relay.yml down\n")
+        return
+    env = meshpick.volunteer_env(a.host, region=a.region or "", max_realms=a.max_realms, kbps=a.kbps,
+                                 daily_gb=a.daily_gb, bootstrap=a.bootstrap or f"https://{domains.RELAY}")
+    os.makedirs(STATE, exist_ok=True)
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(env)
+    sys.stderr.write(f"Community relay settings saved ({a.host}). Start it with: "
+                     "docker compose -f docker-compose.volunteer-relay.yml up -d\n")
+
+
+def cmd_relay_pick(a):
+    """Choose the relay this realm dials, from the mesh (signed relay records, verified here): our seed relays,
+    or with --volunteers the least loaded community relay that has room. Writes host.json; restart the agent."""
+    from wuhost import meshpick
+    cfg = load() or {}
+    if not cfg.get("realm_id"):
+        sys.exit("Run init first.")
+    host = meshpick.pick_relay(meshpick.fetch_relays(a.bootstrap or f"https://{domains.RELAY}"),
+                               volunteers=a.volunteers, seeds={domains.RELAY})
+    if not host:
+        sys.exit("No relay with room was found: keeping " + cfg.get("relay", domains.RELAY))
+    cfg.update(relay=host, relay_url=f"wss://{host}/agent", listing_url=f"https://{host}/api/listing/heartbeat",
+               join_base=f"https://{host}")
+    save(cfg)
+    sys.stderr.write(f"This realm now uses the relay {host}. Restart the realm's agent.\n")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="WrathUnleashed host setup")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -662,7 +701,22 @@ def main(argv=None):
     p.add_argument("mode", choices=["invite", "open", "off"])
     p.set_defaults(fn=cmd_signup)
     sub.add_parser("rules").set_defaults(fn=cmd_rules)
+    p = sub.add_parser("volunteer-relay", help="relay for others (the Leyline mesh's community relay; off by default)")
+    p.add_argument("--host", help="this PC's public DNS name (needed for TLS)")
+    p.add_argument("--region", choices=["na-east", "na-west", "sa", "eu", "africa", "me", "asia", "oce"])
+    p.add_argument("--max-realms", type=int, default=25)
+    p.add_argument("--kbps", type=int, default=256, help="per realm, both directions")
+    p.add_argument("--daily-gb", type=int, default=5, help="per realm per day")
+    p.add_argument("--bootstrap", help="mesh nodes to start from (comma separated https URLs)")
+    p.add_argument("--off", action="store_true")
+    p.set_defaults(fn=cmd_volunteer_relay)
+    p = sub.add_parser("relay-pick", help="choose this realm's relay from the Leyline mesh")
+    p.add_argument("--volunteers", action="store_true", help="community relays may be chosen too")
+    p.add_argument("--bootstrap")
+    p.set_defaults(fn=cmd_relay_pick)
     a = ap.parse_args(argv)
+    if a.cmd == "volunteer-relay" and not a.off and not a.host:
+        ap.error("volunteer-relay needs --host (or --off)")
     a.fn(a)
     return 0
 
