@@ -93,6 +93,9 @@ try:
           not any(g.endswith(("ModsPanel.lua", "control.py", "WrathUnleashedUI.lua", "Collections.lua")) for g in got))
     check("allow-list: the launcher without its build output (target/, gen/, node_modules/)",
           not any(g.startswith("launcher/") and any(f"/{d}/" in g for d in ("target", "gen", "node_modules")) for g in got))
+    check("allow-list: no labs/, client patches or private ops folders (2026-10-30 repo map)",
+          not any(g.split("/")[0] in ("labs", "client", "server", "tools", "control", "gmconsole", "play", "players")
+                  for g in got) and not any(e.split("/")[0] == "labs" for e in ex.ALLOW))
     check("allow-list: no __pycache__ / .pyc", not any("__pycache__" in g or g.endswith(".pyc") for g in got))
     lic = (out1 / "LICENSE").read_text()
     check("LICENSE: the repo's MIT license", lic.startswith("MIT License") and "WrathUnleashed contributors" in lic)
@@ -200,6 +203,14 @@ try:
     check("a missing allow-list entry stops the export", e is not None and "missing" in e, e)
     e = refused(REPO, REPO / "tools" / "leyline-out")
     check("a target inside the WrathUnleashed folder is refused", e is not None and not (REPO / "tools/leyline-out").exists())
+    src_r = tmp / "src_r"
+    shutil.copytree(out1, src_r)
+    res_r, _ = run(src_r, src_r / ".repos" / "leyline-public")
+    check("the workspace's .repos/leyline-public is a valid target (Move to Leyline)",
+          res_r is not None and (src_r / ".repos/leyline-public/hosting/relay/wurelay/relay.py").is_file()
+          and not any(f.startswith(".repos") for f in res_r["files"]))
+    e = refused(src_r, src_r / ".repos")
+    check("but not .repos itself, nor the workspace", e is not None and refused(src_r, src_r) is not None)
 
     # ------------------------------------------------------------------ banned words
     def banned_case(rel, text):
@@ -270,7 +281,11 @@ try:
     check("control.py: its .bat exists", bat_path is not None and bat_path.is_file(), m and m.group(1))
     bat = bat_path.read_text() if bat_path and bat_path.is_file() else ""
     low = bat.lower()
-    check("bat: exports into Desktop\\Leyline", r'set "LY=%USERPROFILE%\Desktop\Leyline"' in bat and "export.py" in bat)
+    check("bat: exports into .repos\\leyline-public in the workspace", r'set "LY=%WU%\.repos\leyline-public"' in bat
+          and "export.py" in bat)
+    check("bat: the old Desktop\\Leyline clone only before the move, and never the workspace itself",
+          r'if not exist "%LY%\.git" if exist "%USERPROFILE%\Desktop\Leyline\.git" if /i not "%USERPROFILE%\Desktop\Leyline"=="%WU%"' in bat
+          and bat.index(r'set "LY=%WU%\.repos') < bat.index("LEYLINE_REPO_DIR"))
     check("bat: git init -b main when there is no .git", 'if exist ".git"' in bat and "git init -q -b main" in bat)
     check("bat: gh repo view before gh repo create, orionopenwow/Leyline, public",
           'set "SLUG=orionopenwow/Leyline"' in bat and 0 < low.find("gh repo view %slug%") < low.find("gh repo create %slug%")

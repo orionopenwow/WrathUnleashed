@@ -93,12 +93,15 @@ def find_clone(candidates, runner=run):
 
 
 def clone_candidates(wu=None, env=None):
-    """Where the PC's clone usually is: OPENVANILLA_DIR, then beside the WrathUnleashed folder, then the
-    Desktop, Documents\\GitHub, source\\repos and the user folder (both spellings)."""
+    """Where the PC's clone usually is: OPENVANILLA_DIR, then the workspace's .repos\\leyline-launcher (since "Move to
+    Leyline.bat"), then beside the workspace, then the Desktop, Documents\\GitHub, source\\repos and the user folder
+    (both spellings)."""
     env = os.environ if env is None else env
     out = []
     if env.get("OPENVANILLA_DIR"):
         out.append(env["OPENVANILLA_DIR"])
+    if wu:
+        out.append(os.path.join(os.path.abspath(wu), ".repos", "leyline-launcher"))
     home = env.get("USERPROFILE") or env.get("HOME") or os.path.expanduser("~")
     bases = []
     if wu:

@@ -11,7 +11,8 @@ Three ways to change the client. The first two need no build at all.
 ## Engine changes (Rust)
 
 1. `bash get-source.sh` (Git Bash or WSL) clones benilla-wotlk at the pinned commit and applies
-   `..\wotlk-web-port-wip.patch` onto branch `wrathunleashed`.
+   `patches\wotlk-web-port-wip.patch` onto branch `wrathunleashed`; the later
+   client changes are in `patches\` (see `patches/README.md`).
 2. Edit, then either:
    - **build on your PC** (Linux/WSL, ~16 GB RAM): `bash scripts/web-setup.sh` once, then
      `bash scripts/web-build.sh`; copy `web/dist` into `WrathUnleashed\play\dist`; or

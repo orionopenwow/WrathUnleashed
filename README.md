@@ -1,66 +1,57 @@
-# WrathUnleashed
+# leyline-workspace (formerly WrathUnleashed): the private Leyline monorepo
 
-The Wrath of the Lich King (3.3.5a) project, split out of Open Vanilla on 2026-10-24. Private,
-local, nothing pushed or published, no Blizzard data: the page reads game files from your own
-3.3.5a install. The originals stay in `OpenVanilla\_local\wotlk` for now.
+This is the private home of **Leyline**: a mod launcher and a peer-to-peer realm network. Anyone can host a
+realm in one click, from the browser or the desktop launcher, and it is listed for everyone. Players find realms
+and mods in one place and play in the browser or with their own client.
 
-- **Play:** `Play WotLK (one click).bat`. The first run here also assembles the client build
-  from `play\dist\wasm.part.*`.
-- **Realm:** `realm\` (Docker, AzerothCore). The realm's database stays in Docker under the
-  name `ov-wotlk`, so accounts and characters carry over; both folders drive the same realm, so
-  run one at a time.
-- **GM addons:** `addons\fetch-addons.sh` downloads AzerothAdmin again (left out of the copy;
-  MiniGM is included).
-- **Plan:** the WrathUnleashed doc (Brawl, main realm, Armory, progression slices).
+Our own realm is only the temporary **Dalaran Hangout** (3.3.5a, AzerothCore). It is the sample realm, and it
+gets our client additions first. The public repo, github.com/orionopenwow/Leyline, is copied from here by
+`tools/leyline-repo/export.py` (launcher, host kit, relay and their docs only). No game data is in either repo.
 
-# 3.3.5a in the browser: benilla-wotlk web port (private, work in progress)
+Every folder, and what is core, ops or labs: **`docs/REPO-MAP.md`**.
 
-This folder holds the port of wenilla's browser support onto benilla-wotlk
-(github.com/Onixaz/benilla-wotlk, Apache-2.0/MIT). Nothing here is pushed or published.
-It contains no Blizzard data. The page reads game files from your own 3.3.5a install.
+**One folder on the PC: `Desktop\Leyline`.** `Move to Leyline.bat` (once, from the old `Desktop\WrathUnleashed`)
+makes this workspace `Desktop\Leyline`, puts the public repo's copy at `.repos\leyline-public` (the `leyline`
+step) and the Leyline-Launcher clone at `.repos\leyline-launcher` (`ovrename`, `ovland`), and renames this GitHub
+repo to `orionopenwow/leyline-workspace`. `.repos/` is not part of this repo (gitignored).
 
-## Status (2026-10-23)
-- The desktop workspace builds and its tests compile. The 3.3.5a protocol crate passes 335+
-  tests, and the app's 275 `net::` tests pass (login, realm list, character select against fake
-  3.3.5 servers).
-- The browser build (WebGPU) compiles, links and boots in headless Chromium:
-  - the renderer comes up;
-  - the Lua VM starts;
-  - the network parks at the login screen.
-  Every other line is "file not in patch chain", because the smoke test serves no game data.
-- Left to do:
-  - glue music on the async loader;
-  - the page bridge (`webbridge`);
-  - 3.3.5a boot/world prefetch manifests;
-  - character rename;
-  - a run with real data.
+## The parts
 
-## One click
-`Play WotLK (one click).bat` does it all: it starts Docker Desktop, extracts dbc + maps from your
-install the first time, starts the local AzerothCore realm and waits for it, asks for a login
-the first time, starts the page host and opens the browser. The server is in `realm/` and the
-page is in `play/`.
+| Part | Where |
+|---|---|
+| Leyline launcher (Tauri 2: clients, mods, realms, hosting, themes) | `launcher/` |
+| P2P/relay network and one-click hosting: host kit, relay, Discord bridge, mesh, the Hangout as a Beacon | `hosting/` |
+| Website, portal and hub: sign-in, hub and Workshop, `/wrath/host`, realm list, social, docs | `stream/*.py`, `stream/www-files/` |
+| Browser game layer and our client patches for the Hangout | `stream/www-files/`, `stream/fui-web/`, `client/`, `play/` |
+| The Dalaran Hangout realm (AzerothCore 3.3.5a, custom modules and Lua) | `realm/` |
+| Mods and addons | `mods/`, `addons/` |
+| Autopilot, deploys and ops tools | root `.bat` files, `tools/`, `server/`, `gmconsole/`, `control/` |
+| Paused tools and plans, kept for later | `labs/` |
 
-## Try it with your own install
-1. `git clone https://github.com/Onixaz/benilla-wotlk && cd benilla-wotlk && git checkout b9a4942`
-2. `git checkout -b web-port && git apply ../wotlk-web-port-wip.patch`
-3. `scripts/web-setup.sh`: gets the wasm target, wasm-bindgen 0.2.122 and wasi-sdk 27. The C Lua
-   needs wasi-sdk.
-4. `scripts/web-build.sh` builds WebGPU into `web/dist`. `WEB_BACKEND=webgl2` builds WebGL2 instead.
-   The release build wants about 16 GB of RAM. `rebuild.sh` here makes the lighter dev build.
-5. `cargo run -p wenilla-host -- --www web/dist --data "C:/path/to/WoW 3.3.5a/Data"`, then
-   open http://127.0.0.1:8090.
-6. To log in, the host's `/ws` proxy dials a 3.3.5a realm (`--upstream`), for example an
-   AzerothCore test realm.
+## Day to day
 
-`smoke.js` + `smoke-serve.py` are the data-free boot check: serve `dist` with
-`python smoke-serve.py dist`, then run `node smoke.js`.
+- **Updates:** `Leyline Control.bat` (the control window, with Autopilot) or `UPDATE.bat` runs what Claude
+  queued in `UPDATES-PENDING.txt`. The steps are listed in `tools/control/control.py` (`STEPS`).
+- **Save to GitHub:** `Ship WrathUnleashed.bat` (the `ship` step); every ship also refreshes the public Leyline
+  copy (`tools/leyline-repo/Update Leyline repo.bat`).
+- **Release the launcher:** `Ship the Leyline launcher.bat`.
+- **Host a realm:** `hosting/kit/Host a Leyline realm.bat`, or `/wrath/host` on the site. Guide:
+  `hosting/INSTALL-OPERATE.md`.
+- **Play locally:** `Play WotLK (one click).bat` starts Docker, the local realm (`realm/`) and the page host
+  (`play/`). It reads game files from your own 3.3.5a install.
 
-## GM window and client addons
-`addons/` holds AzerothAdmin (`/aa`) and MiniGM (`/mgm`). `addons\install-gm-addons.bat` copies
-them into your client and can add the addon pack (Questie-335, Deadly Boss Mods, Details!, AtlasLoot,
-AdiBags, MultiBot) and the all-races patch. See `addons/README.md`.
+## The browser client
 
-## Custom realm
-`realm\Build custom realm.bat` builds AzerothCore with playerbots, transmog, autobalance, Mythic+,
-1v1 arena, individual progression and more. See `realm/README.md`.
+The client is benilla-wotlk (github.com/Onixaz/benilla-wotlk, Apache-2.0/MIT) with our web port and changes,
+kept as patches in `client/patches/`. `client/README.md` says how to get the source (`client/get-source.sh`),
+build it on your PC or on GitHub, and where the build goes (`play/dist`). Dev helpers (lighter rebuild,
+data-free boot check) are in `client/dev/`.
+
+## Tests
+
+```sh
+for t in stream/tests/test_*.py; do python3 -I "$t"; done        # portal, hub, page, server scripts
+NODE_PATH=$(npm root -g) node stream/tests/<name>.test.cjs        # page and UI (Playwright)
+(cd hosting && python3 -m pytest -q tests)                        # host kit, relay, network
+python3 -I tools/<tool>/test_<tool>.py                            # each ops tool
+```

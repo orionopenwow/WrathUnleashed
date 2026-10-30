@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""WrathUnleashed Control: the owner's one window for launching what Claude has ready.
+"""Leyline Control: the owner's one window for launching what Claude has ready.
 
-    py -3 tools\\control\\control.py          (or double-click "WrathUnleashed Control.bat")
+    py -3 tools\\control\\control.py          (or double-click "Leyline Control.bat")
 
 Serves a page on http://127.0.0.1:8097 (this PC only) and opens it. The page shows:
   * Live: the realm, Play page and game files answering (checked from this PC every 30 s).
@@ -33,7 +33,7 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]          # the WrathUnleashed folder
+ROOT = Path(__file__).resolve().parents[2]          # the workspace folder (Desktop\\Leyline)
 PEND = ROOT / "UPDATES-PENDING.txt"
 DONE = ROOT / "UPDATES-DONE.txt"
 LOGS = ROOT / "logs"
@@ -418,7 +418,7 @@ class H(http.server.BaseHTTPRequestHandler):
             return self._art(path[len("/art/"):])
         if path == "/":
             if f"t={TOKEN}" not in self.path:
-                return self._send(403, "This link is old. Close this tab and double-click 'WrathUnleashed Control.bat'.",
+                return self._send(403, "This link is old. Close this tab and double-click 'Leyline Control.bat'.",
                                   "text/plain")
             return self._send(200, PAGE.replace("__TOKEN__", TOKEN).replace("__THEMEV__", theme_version()),
                               "text/html; charset=utf-8")
@@ -491,7 +491,7 @@ class H(http.server.BaseHTTPRequestHandler):
             if not bat.exists():
                 return self._send(404, '{"error":"gmconsole\\Open GM Console.bat is missing"}')
             # Its own window (it keeps the SSH tunnel open; closing that window closes the console).
-            subprocess.Popen(["cmd", "/c", "start", "WrathUnleashed GM Console", "cmd", "/k", "call", str(bat)],
+            subprocess.Popen(["cmd", "/c", "start", "Leyline GM Console", "cmd", "/k", "call", str(bat)],
                              cwd=str(bat.parent), creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             return self._send(200, '{"ok":true}')
         if self.path == "/api/open-game":
@@ -502,7 +502,7 @@ class H(http.server.BaseHTTPRequestHandler):
 
 PAGE = r"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>WrathUnleashed Control</title>
+<title>Leyline Control</title>
 <style>
 /* The fallback look, readable on its own; the shared theme (/art/wu-theme.css, linked after this) adds the
    starfield, the corner ornaments, the dragons, Cinzel and the red and gold buttons. */
@@ -558,7 +558,7 @@ a{color:var(--gold2)}.hist a{font-family:var(--mono);font-size:12px}
 .brand{width:100%;justify-content:center}.actions{width:100%}.actions button{flex:1 1 calc(50% - 8px)}
 main{padding:16px;gap:16px}.stack{gap:16px}.card{padding:16px}h1{font-size:16px;white-space:normal;text-align:center;min-width:0}.console{height:340px}}
 </style><link rel="stylesheet" href="/art/wu-theme.css?v=__THEMEV__"></head><body class="wu">
-<header><div class="brand wu-brand"><h1>WrathUnleashed Control</h1></div>
+<header><div class="brand wu-brand"><h1>Leyline Control</h1></div>
 <div class="health" id="health"></div>
 <div class="actions"><button id="auto" title="While this window is open, Claude's updates run on their own">Autopilot: …</button>
 <button id="gmc" title="Opens the GM console (bug reports, players, health, logs) in your browser">GM console</button>
@@ -632,13 +632,13 @@ def main() -> int:
                 time.sleep(0.5)
     if srv is None:
         # Already running (another window): just open it.
-        print("WrathUnleashed Control is already running; opening it.")
+        print("Leyline Control is already running; opening it.")
         if not QUIET:
             webbrowser.open(url)
         return 0
     threading.Thread(target=check_health, daemon=True).start()
     threading.Thread(target=autopilot_loop, daemon=True).start()
-    print(f"WrathUnleashed Control: {url}\n(close this window to stop it)")
+    print(f"Leyline Control: {url}\n(close this window to stop it)")
     print("Autopilot is " + ("ON: Claude's updates run on their own." if autopilot_on() else "OFF (switch it on in the window)."))
     if not QUIET:
         webbrowser.open(url)

@@ -1,8 +1,8 @@
 # Leyline
 
-Leyline is an open-source network for community game realms. You can play on its realms, make mods for them, and host your own realm from your own PC. Everything is on GitHub under the MIT licence.
+Leyline is a mod launcher and an open, peer-to-peer network for community game realms. Anyone can host a realm in one click, from the browser or the desktop launcher, and it is listed for everyone. You can find and install mods and addons, and play in the browser or with your own client. Everything is on GitHub under the MIT licence.
 
-Wrath is the flagship realm. It runs the 3.3.5a game on AzerothCore, and you can play it in the browser at [play.openvanilla.app/wrath](https://play.openvanilla.app/wrath).
+Our own realm is the temporary Dalaran Hangout, a sample realm that gets our client additions first. It runs the 3.3.5a game on AzerothCore, and you can play it in the browser at [play.openvanilla.app/wrath](https://play.openvanilla.app/wrath).
 
 ## The aims
 

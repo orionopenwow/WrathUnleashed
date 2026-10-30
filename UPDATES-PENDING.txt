@@ -1,4 +1,4 @@
-# What Claude has ready. "WrathUnleashed Control.bat" (or UPDATE.bat) runs these in order.
+# What Claude has ready. "Leyline Control.bat" (or UPDATE.bat) runs these in order.
 # <id> <step> <what it brings>
 1024r foreverui  URGENT: undo tonight's character-select script; it sent players back to the login screen (about 1 min, no restart)
 1024v scripts  Dungeon Finder fix: queues were refused silently for everyone (live reload, nobody kicked)

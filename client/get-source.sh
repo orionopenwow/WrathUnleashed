@@ -11,8 +11,8 @@ fi
 cd benilla-wotlk
 git fetch origin
 git checkout -B wrathunleashed "$PIN"
-git apply --whitespace=nowarn ../../wotlk-web-port-wip.patch
+git apply --whitespace=nowarn ../patches/wotlk-web-port-wip.patch
 git add -A
 git -c user.name="WrathUnleashed" -c user.email="wrathunleashed@localhost" \
-  commit -qm "WrathUnleashed web port (from wotlk-web-port-wip.patch)"
+  commit -qm "WrathUnleashed web port (from client/patches/wotlk-web-port-wip.patch)"
 echo "Ready: $(pwd) on branch wrathunleashed."

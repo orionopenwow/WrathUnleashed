@@ -8,10 +8,12 @@ rem   3. stores the private half as the GitHub secret WU_DEPLOY_SSH_KEY (plus th
 rem   4. deletes the temp copy. The key never leaves your PC except into GitHub's secret store.
 rem Needs: GitHub CLI signed in (winget install GitHub.cli, then: gh auth login), your usual server key.
 cd /d "%~dp0"
-set "REPO=orionopenwow/WrathUnleashed"
+rem The private repo: leyline-workspace since "Move to Leyline.bat" renamed it (was WrathUnleashed).
+set "REPO=orionopenwow/leyline-workspace"
 set "KEY=%USERPROFILE%\.ssh\openwow"
 where gh >nul 2>&1 || (echo GitHub CLI is missing. Install it: winget install GitHub.cli   then: gh auth login & pause & exit /b 1)
 gh auth status >nul 2>&1 || (echo GitHub CLI is not signed in. Run: gh auth login & pause & exit /b 1)
+gh repo view %REPO% --json name >nul 2>&1 || set "REPO=orionopenwow/WrathUnleashed"
 where ssh-keygen >nul 2>&1 || (echo ssh-keygen is missing (Windows OpenSSH client). & pause & exit /b 1)
 set "T=%TEMP%\wu-deploykey"
 if exist "%T%" rmdir /s /q "%T%"
