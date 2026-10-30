@@ -201,6 +201,7 @@ workshop_mod = _load_module("wu_workshop", "workshop.py")   # /wrath/mods (strea
 docs = _load_module("wu_docs", "docs.py")   # /wrath/docs (stream/docs.py: the Leyline docs, from docs/leyline)
 hostflow = _load_module("wu_hostflow", "hostflow.py")   # /wrath/host: "+ Your server" (stream/hostflow.py)
 creations = _load_module("wu_creations", "creations.py")   # /wrath/workshop: what players made (stream/creations.py)
+leyline_net = _load_module("wu_leyline_net", "leyline_net.py")   # /wrath/leyline/flags.json + the Host pack (stream/leyline_net.py)
 if hostflow is not None:
     hostflow.bind(lambda name: globals()[name])
 
@@ -1010,6 +1011,7 @@ def hangout_id() -> str | None:
 LISTING_TTL = 60          # seconds a good answer is used before it is refreshed (in the background)
 LISTING_RETRY = 30        # after a failure
 LISTING_WAIT = 2.5        # the longest a page request ever waits for the relay
+LISTING_STUCK = 120       # a refresh still running after this long is given up on (a hung connection)
 LISTING_MAX = 200
 LISTING_BYTES = 2_000_000
 REALM_ID_RE = re.compile(r"^[a-z2-7]{16}$")
@@ -1097,21 +1099,24 @@ def fetch_listing() -> list[dict]:
     return out
 
 
-def _refresh_listing() -> None:
+def _refresh_listing(busy=None) -> None:
+    busy = busy or _listing_busy
     try:
-        realms, ok = fetch_listing(), True
-    except Exception as e:  # noqa: BLE001 - any failure: keep the last good list, try again later
-        realms, ok = None, False
-        log.info("community listing unavailable: %s", str(e)[:120])
-    with _listing_lock:
-        _listing["at"] = time.monotonic()
-        _listing["ok"] = ok
-        _listing["fetched"] = True
-        if ok:
-            _listing["realms"] = realms
-            _listing["when"] = time.time()
-    _listing_busy.release()
-    _listing_done.set()
+        try:
+            realms, ok = fetch_listing(), True
+        except Exception as e:  # noqa: BLE001 - any failure: keep the last good list, try again later
+            realms, ok = None, False
+            log.info("community listing unavailable: %s", str(e)[:120])
+        with _listing_lock:
+            _listing["at"] = time.monotonic()
+            _listing["ok"] = ok
+            _listing["fetched"] = True
+            if ok:
+                _listing["realms"] = realms
+                _listing["when"] = time.time()
+    finally:   # always, or no refresh ever runs again and the list freezes
+        busy.release()
+        _listing_done.set()
 
 
 def community_realms() -> tuple[list[dict], bool]:
@@ -1121,9 +1126,15 @@ def community_realms() -> tuple[list[dict], bool]:
         age = time.monotonic() - _listing["at"]
         stale = age > (LISTING_TTL if _listing["ok"] else LISTING_RETRY)
         fetched = _listing["fetched"]
-    if stale and _listing_busy.acquire(blocking=False):
+    global _listing_busy
+    if stale and _listing_busy.locked() and time.monotonic() - _listing.get("busy_at", 0) > LISTING_STUCK:
+        log.info("community listing: a refresh hung for %ss; starting a new one", LISTING_STUCK)
+        _listing_busy = threading.Lock()   # the hung thread releases its own lock, not this one
+    busy = _listing_busy
+    if stale and busy.acquire(blocking=False):
+        _listing["busy_at"] = time.monotonic()
         _listing_done.clear()
-        threading.Thread(target=_refresh_listing, daemon=True).start()
+        threading.Thread(target=_refresh_listing, args=(busy,), daemon=True).start()
     if not fetched:
         _listing_done.wait(LISTING_WAIT)
     with _listing_lock:
@@ -2343,6 +2354,11 @@ class PageHandler(BaseHTTPRequestHandler):
         if path.startswith("/wrath/art/"):
             self.art(urllib.parse.unquote(path[len("/wrath/art/"):]))
             return
+        if leyline_net is not None and path.startswith("/wrath/leyline/"):   # flags.json, hostpack.json
+            got = leyline_net.serve(path)
+            if got:
+                self.send(got[0], got[1], got[2], public=True)
+                return
         if path == "/wrath/leyline":
             if not browse_limit.hit(self.ip(), 600):
                 self.send(429, busy_page(back=path))
@@ -2381,6 +2397,8 @@ class PageHandler(BaseHTTPRequestHandler):
                 self.send(429, busy_page(back=path))
                 return
             status, body, ctype, extra = workshop.serve(path, query, self.mods_req("GET"))
+            if path == "/wrath/mods/all.json" and status == 200 and leyline_net is not None:
+                body = leyline_net.add_hostpack(body)   # the Host pack as a "tools" project (stream/leyline_net.py)
             if ctype.startswith("text/html"):
                 body = site_chrome(body, path)
             self.send(status, body, ctype, headers=extra)

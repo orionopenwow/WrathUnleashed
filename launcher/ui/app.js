@@ -24,6 +24,11 @@ const invoke = window.__TAURI__ && window.__TAURI__.core
 
 // What's new, shown on Home and on the News page. Newest first.
 const NEWS = [
+  { tag: "LEYLINE LAUNCHER 0.3", title: "EVERY CLIENT, EVERY SERVER", items: [
+    "Finds your own 1.12.1, 2.4.3, 3.3.5a, 4.3.4 and 5.4.8 clients, and lists other builds too",
+    "Realms show their server and build; PLAY picks a client that fits",
+    "Updates itself in the background: restart when you are ready, never mid-game",
+  ] },
   { tag: "LATEST NEWS · CLIENT 20261025F", title: "CHARACTER CREATE IS BACK IN COLOUR", items: [
     "Animated race backgrounds at character select and create",
     "No more falling through ground that hasn't loaded yet",
@@ -238,15 +243,23 @@ function renderClientCard() {
   box.replaceChildren();
   const c = currentClient();
   if (!c) return;
-  box.append(el("b", "", c.name), el("span", "", c.build + " · Installed · your own game folder"));
+  box.append(el("b", "", c.name), el("span", "", buildLabel(c.build) + " · Installed · your own game folder"));
+}
+
+// The build the chosen realm needs, when the list says ("3.3.5a" for the official realm).
+function chosenRealmBuild() {
+  if (isOfficial()) return "3.3.5a";
+  const r = realmAt(chosenRealm());
+  return r && r.build ? r.build : null;
 }
 
 function realmChanged() {
   $("play-custom-wrap").hidden = isOfficial();
   const c = currentClient();
+  const need = chosenRealmBuild();
   let hint = "";
-  if (c && c.build === "1.12.1" && isOfficial()) hint = "The official realm runs 3.3.5a. Pick a 3.3.5a client, or another realm for this 1.12.1 client.";
-  else if (c) hint = "PLAY sets this client's realmlist.wtf (your original is kept as a backup) and starts it.";
+  if (c && need && c.build !== need) hint = `This realm runs ${need}. Pick a ${need} client, or another realm for this ${c.build} client.`;
+  else if (c) hint = `PLAY sets this client's realm address (${BUILDS[c.build] ? BUILDS[c.build].file : "its realm file"}; your original is kept as a backup) and starts it.`;
   $("play-hint").textContent = hint;
   renderClientCard();
   renderRealmRows();
@@ -265,9 +278,11 @@ function renderPlayBar() {
   } else if (!c) {
     head = "SET UP YOUR GAME CLIENT"; warn = true;
     detail = "PLAY takes you to your game clients: point Leyline at your game folder";
-  } else if (c.build === "1.12.1" && isOfficial()) {
-    head = "THIS SERVER NEEDS 3.3.5A"; warn = true;
-    detail = "WrathUnleashed runs 3.3.5a: pick a 3.3.5a client or another realm";
+  } else if (chosenRealmBuild() && c.build !== chosenRealmBuild()) {
+    const need = chosenRealmBuild();
+    head = `THIS SERVER NEEDS ${need.toUpperCase()}`; warn = true;
+    const other = state.settings.clients.find((x) => x.build === need);
+    detail = other ? `${realmLabel()} runs ${need}: pick ${other.name}` : `${realmLabel()} runs ${need}: add your own ${need} client under Game clients`;
   } else if (!chosenRealm()) {
     head = "CHOOSE A REALM"; warn = true;
     detail = "Type the realm's address under Realms";
@@ -319,7 +334,11 @@ function renderClients() {
   for (const c of state.settings.clients) {
     const card = el("div", "card");
     const top = el("div", "top");
-    top.append(el("span", "name", c.name), el("span", "build", c.build === "3.3.5a" ? "3.3.5a · 12340" : "1.12.1 · 5875"));
+    top.append(el("span", "name", c.name), el("span", "build", buildLabel(c.build)));
+    const tags = el("div", "tags");
+    if (c.build === "other") tags.append(el("span", "tag warn", `Other build${c.exe_version ? " " + c.exe_version : ""}: realms only, no mods`));
+    else tags.append(el("span", "tag", `Addons: Interface ${{"1.12.1": "11200", "2.4.3": "20400", "3.3.5a": "30300", "4.3.4": "40300", "5.4.8": "50400"}[c.build]}`));
+    if (BUILDS[c.build]) tags.append(el("span", "tag", `Realm address: ${BUILDS[c.build].file}`));
     const meta = el("div", "meta");
     meta.append(el("span", "", "Folder: " + c.path));
     meta.append(el("span", "", "Realm: " + (c.realmlist || "not set")));
@@ -331,7 +350,7 @@ function renderClients() {
     const bRename = el("button", "btn small", "RENAME");
     const bRemove = el("button", "btn small danger", "REMOVE");
     acts.append(bCheck, bRename, bRemove);
-    card.append(top, meta, acts);
+    card.append(top, tags, meta, acts);
     list.append(card);
 
     const runCheck = async () => {
@@ -393,7 +412,9 @@ async function addClient(path) {
     const r = await invoke("add_client", { path });
     const d = r.detection;
     const how = d.detected_by === "exe_version" ? "from the executable" : "from the data files";
-    const msg = `Added ${r.profile.name}, detected ${how}.` + (d.complete ? "" : " Some files are missing: " + d.missing.join(", "));
+    let msg = `Added ${r.profile.name}: ${d.build_label}, detected ${how}.`;
+    if (d.build === "other") msg += " Leyline does not know this build: you can play realms with it, but it offers no mods for it.";
+    if (!d.complete) msg += " Some files are missing: " + d.missing.join(", ");
     await refresh();
     say("cl-status", msg, d.complete ? "ok" : "warn");
     $("cl-path").value = "";
@@ -431,7 +452,7 @@ function renderClientPickers() {
   document.querySelectorAll(".client-pick").forEach((sel) => {
     sel.replaceChildren();
     for (const c of state.settings.clients) {
-      const o = el("option", "", `${c.name}`);
+      const o = el("option", "", `${c.name} · ${c.build}`);
       o.value = c.id;
       sel.append(o);
     }
@@ -458,8 +479,25 @@ function needClient(statusId) {
   if (!c) { say(statusId, "Add your game client first (CHANGE GAME FOLDER on Home).", "bad"); return null; }
   return c;
 }
-const buildTag = (b) => (b === "1.12.1" ? "1.12" : b);
-const fitsClient = (p, c) => !c || !p.builds.length || p.builds.includes("any") || p.builds.includes(buildTag(c.build)) || (c.build === "1.12.1" && p.builds.includes("1.12.1"));
+// The builds Leyline knows (clients.rs). "other" is any build it does not: it plays realms, but takes no mods.
+const BUILDS = {
+  "1.12.1": { num: 5875, tag: "1.12", file: "realmlist.wtf" },
+  "2.4.3": { num: 8606, tag: "2.4.3", file: "Data\\<locale>\\realmlist.wtf" },
+  "3.3.5a": { num: 12340, tag: "3.3.5a", file: "Data\\<locale>\\realmlist.wtf" },
+  "4.3.4": { num: 15595, tag: "4.3.4", file: "WTF\\Config.wtf" },
+  "5.4.8": { num: 18414, tag: "5.4.8", file: "WTF\\Config.wtf" },
+};
+const buildLabel = (b) => (BUILDS[b] ? `${b} · ${BUILDS[b].num}` : "other build");
+const buildTag = (b) => (BUILDS[b] ? BUILDS[b].tag : "other");
+const fitsClient = (p, c) => !c || (c.build !== "other" && (!p.builds.length || p.builds.includes("any") || p.builds.includes(buildTag(c.build))));
+// The listed realm at this address, if any (its build and server).
+const realmAt = (addr) => realmsCache.find((x) => x.address === addr) || null;
+const clientFits = (r, c) => !r || !r.build || (c && c.build === r.build);
+const clientFor = (r) => {
+  const c = pickedClient();
+  if (clientFits(r, c)) return c;
+  return state.settings.clients.find((x) => clientFits(r, x)) || null;
+};
 
 // ------------------------------------------------------------------ opening listed pages
 async function openUrl(url) {
@@ -481,6 +519,7 @@ async function loadCatalog(quiet) {
   if (!quiet) say("cat-status", "Loading the Workshop…");
   try {
     catalog = await invoke("mods_catalog");
+    if (window.LeylineThemes) catalog = window.LeylineThemes.takeThemes(catalog); // themes.js: theme packs go under Discover › Themes
     catalogNames = catalog.projects.map((p) => p.name);
     const when = catalog.saved_at ? new Date(catalog.saved_at * 1000).toLocaleString() : "an earlier visit";
     if (catalog.from_cache) say("cat-status", `Offline: showing the Workshop as it was ${when}.`, "warn");
@@ -567,15 +606,54 @@ function projectCard(p, c) {
   return card;
 }
 
+// ------------------------------------------------------------------ native code: a one-time OK per mod
+// The core refuses a mod with .dll/.asi/.exe files until the player says yes once; its error starts with
+// NATIVE_CONFIRM: and carries {key, name, files}. The OK is kept in the launcher's settings.
+const NATIVE = "NATIVE_CONFIRM:";
+function askNative(info) {
+  return new Promise((resolve) => {
+    const d = $("native-dlg");
+    $("native-name").textContent = info.name || "This mod";
+    $("native-files").replaceChildren(...(info.files || []).slice(0, 30).map((f) => el("li", "", f)));
+    const done = (yes) => { if (d.open) d.close(); resolve(yes); };
+    $("native-yes").onclick = () => done(true);
+    $("native-no").onclick = () => done(false);
+    d.oncancel = (ev) => { ev.preventDefault(); done(false); };
+    if (d.showModal) d.showModal(); else resolve(window.confirm(`${info.name} has native code. Install it?`));
+  });
+}
+async function withNativeOk(run) {
+  try {
+    return await run();
+  } catch (e) {
+    const t = String(e);
+    if (!t.startsWith(NATIVE)) throw e;
+    let info;
+    try { info = JSON.parse(t.slice(NATIVE.length)); } catch (_) { throw "Leyline could not read this mod's native code notice."; }
+    if (!(await askNative(info))) throw `Not installed: you said no to ${info.name || "its"} native code.`;
+    await invoke("mod_native_confirm", { key: info.key });
+    return await run();
+  }
+}
+
+// What an install says afterwards: its notes, and the player's changed files an update kept.
+function installedText(verb, m, c) {
+  let t = `${verb} ${m.name}${m.version ? " v" + m.version : ""} in ${c.name}.`;
+  if (m.kept && m.kept.length) t += " Kept your changes: " + m.kept.join("; ") + ".";
+  if (m.warnings && m.warnings.length) t += " Note: " + m.warnings.join("; ");
+  return t;
+}
+
 async function installProject(p, btn) {
   const c = needClient("cat-status");
   if (!c) return;
   btn.disabled = true;
   btn.textContent = "INSTALLING…";
+  const was = installed.find((m) => m.key === p.id);
   say("cat-status", `Downloading ${p.name}…`);
   try {
-    const m = await invoke("mod_install", { client: c.id, project: p.id });
-    say("cat-status", `Installed ${m.name} into ${c.name}.` + (m.warnings.length ? " Note: " + m.warnings.join("; ") : ""), "ok");
+    const m = await withNativeOk(() => invoke("mod_install", { client: c.id, project: p.id }));
+    say("cat-status", installedText(was ? "Updated" : "Installed", m, c), m.warnings.length ? "warn" : "ok");
   } catch (e) {
     say("cat-status", String(e), "bad");
   }
@@ -586,18 +664,34 @@ async function installProject(p, btn) {
 $("cat-q").addEventListener("input", renderCatalog);
 $("cat-fit").addEventListener("change", renderCatalog);
 
+// The three tiles on Home: the picked client's installed mods (updates first), or Workshop picks when it has none.
 function renderModTiles() {
   const box = $("mod-tiles");
   box.replaceChildren();
-  const picks = catalog.projects.filter((p) => p.source === "packaged").concat(catalog.projects.filter((p) => p.source !== "packaged")).slice(0, 3);
+  const mine = installed.slice().sort((x, y) => (y.update ? 1 : 0) - (x.update ? 1 : 0)).slice(0, 3);
+  const picks = catalog.projects.filter((p) => p.source === "packaged").concat(catalog.projects.filter((p) => p.source !== "packaged"));
   for (let i = 0; i < 3; i++) {
-    const p = picks[i];
-    const t = el("button", "tile");
+    const m = mine[i];
+    const p = m ? null : picks[i - mine.length];
+    const t = el("button", "tile" + (m && m.update ? " has-update" : ""));
     t.type = "button";
     const txt = el("span", "tile-txt");
-    txt.append(el("b", "", p ? p.name : "Mod catalog"), el("i", "", p ? (installed.some((m) => m.key === p.id) ? "Installed" : "In the Workshop") : "Loading…"));
-    t.append(el("span", "tile-ico", (p ? p.name : "M").charAt(0).toUpperCase()), txt);
-    t.addEventListener("click", () => show("discover"));
+    let name = "Mod catalog", line = "Loading…", cls = "";
+    if (m) {
+      name = m.name;
+      if (m.update) { line = `Update to v${m.update}`; cls = "upd"; }
+      else if (!m.enabled) { line = "Turned off"; cls = "off"; }
+      else line = m.version ? `Installed · v${m.version}` : "Installed";
+    } else if (p) {
+      name = p.name;
+      line = "In the Workshop";
+    } else if (catalog.projects.length || installed.length) {
+      continue;
+    }
+    txt.append(el("b", "", name), el("i", cls, line));
+    t.append(el("span", "tile-ico", name.charAt(0).toUpperCase()), txt);
+    t.title = m ? "Open My Mods" : "Open Discover";
+    t.addEventListener("click", () => show(m ? "mods" : "discover"));
     box.append(t);
   }
 }
@@ -617,25 +711,65 @@ async function loadInstalled(quiet) {
   badge.hidden = !installed.length;
   badge.textContent = String(installed.length);
   renderInstalled();
+  renderModTiles();
+  refreshModUpdates();
+}
+
+// The title bar's pill: Workshop updates for mods in any of your clients.
+let modUpdates = [];
+async function refreshModUpdates() {
+  try { modUpdates = await invoke("mods_updates"); } catch (_) { modUpdates = []; }
+  const pill = $("tb-modupd");
+  pill.hidden = !modUpdates.length;
+  pill.textContent = modUpdates.length === 1 ? "1 mod update" : `${modUpdates.length} mod updates`;
+  pill.title = modUpdates.map((u) => `${u.name}: v${u.version || "?"} → v${u.update} (${u.client_name})`).join("\n");
+}
+$("tb-modupd").addEventListener("click", () => {
+  // Open My Mods on a client that has an update, if the picked one has none.
+  const c = pickedClient();
+  const u = modUpdates.find((x) => c && x.client === c.id) || modUpdates[0];
+  if (u && (!c || u.client !== c.id)) {
+    state.settings.selected_client = u.client;
+    $("play-client").value = u.client;
+    renderClientPickers();
+    realmChanged();
+    saveSelection();
+  }
+  show("mods");
+});
+
+async function updateMod(c, m) {
+  const r = await withNativeOk(() => invoke("mod_install", { client: c.id, project: m.key }));
+  return installedText("Updated", r, c);
 }
 
 function renderInstalled() {
   const c = pickedClient();
-  $("mods-client-note").textContent = c ? `${c.build} · ${c.path}` : "";
+  $("mods-client-note").textContent = c ? `${buildLabel(c.build)} · ${c.path}` : "";
   const list = $("mods-list");
   list.replaceChildren();
+  const ups = installed.filter((m) => m.update);
+  $("mods-update-all").hidden = ups.length < 2;
+  $("mods-update-all").textContent = `UPDATE ALL (${ups.length})`;
   if (!c) { list.append(el("p", "hint", "Add your game client first.")); return; }
+  if (c.build === "other" && !installed.length) { list.append(el("p", "hint", "Leyline does not know this client's build, so it installs no mods here. Realms work.")); return; }
   if (!installed.length) { list.append(el("p", "hint", "No mods in this client yet. Install from Discover, or drop one above.")); return; }
   for (const m of installed) {
-    const card = el("div", "card" + (m.enabled ? "" : " off"));
+    const card = el("div", "card" + (m.enabled ? "" : " off") + (m.update ? " has-update" : ""));
     const top = el("div", "top");
     top.append(el("span", "name", m.name), el("span", "build", m.version ? "v" + m.version : (m.source === "catalog" ? "Workshop" : "Local")));
+    const tags = el("div", "tags");
+    tags.append(el("span", "tag", m.source === "catalog" ? "Workshop" : "From your PC"));
+    if (m.update) tags.append(el("span", "tag gold", `v${m.update} ready`));
+    if (m.native_code) tags.append(el("span", "tag warn", "Native code"));
+    if (!m.enabled) tags.append(el("span", "tag", "Turned off"));
     const meta = el("div", "meta");
     const what = [];
     if (m.addons.length) what.push("Addons: " + m.addons.join(", "));
     if (m.patches.length) what.push("Patch: " + m.patches.join(", "));
+    if (m.natives && m.natives.length) what.push("Native: " + m.natives.join(", "));
     meta.append(el("span", "", what.join(" · ")));
-    meta.append(el("span", "", (m.source === "catalog" ? "From the Workshop" : "Added from your PC") + (m.credits ? " · " + m.credits : "")));
+    if (m.credits) meta.append(el("span", "", m.credits));
     if (m.update) meta.append(el("span", "ok", `Update available: v${m.update}`));
     else if (m.source === "catalog" && !m.in_catalog) meta.append(el("span", "warn", "No longer in the Workshop for this client"));
     for (const w of m.warnings || []) meta.append(el("span", "warn", w));
@@ -647,28 +781,33 @@ function renderInstalled() {
       const up = el("button", "btn small", "UPDATE");
       up.addEventListener("click", async () => {
         up.disabled = true;
-        await modAction("mod_install", { client: c.id, project: m.key }, `Updated ${m.name} to v${m.update}.`);
+        up.textContent = "UPDATING…";
+        say("mods-status", `Downloading ${m.name} v${m.update}…`);
+        try { say("mods-status", await updateMod(c, m), "ok"); }
+        catch (e) { say("mods-status", String(e), "bad"); }
+        await loadInstalled();
+        renderCatalog();
       });
       acts.append(up);
     }
+    // One click: removal takes out only the files Leyline put in and you have not changed, so nothing of yours goes.
     const rm = el("button", "btn small danger", "REMOVE");
-    let armed = null;
     rm.addEventListener("click", async () => {
-      if (!armed) {
-        rm.textContent = "CLICK AGAIN TO REMOVE";
-        armed = setTimeout(() => { armed = null; rm.textContent = "REMOVE"; }, 3000);
-        return;
-      }
-      clearTimeout(armed);
+      rm.disabled = true;
+      rm.textContent = "REMOVING…";
       try {
         const r = await invoke("mod_uninstall", { client: c.id, key: m.key });
-        say("mods-status", `Removed ${m.name}: ${r.removed_files} files.` + (r.kept.length ? ` Kept files Leyline did not put there: ${r.kept.join(", ")}` : ""), "ok");
+        let t = `Removed ${m.name}: ${r.removed_files} files.`;
+        if (r.changed && r.changed.length) t += ` Left the files you changed: ${r.changed.join(", ")}.`;
+        if (r.kept.length) t += ` Kept files Leyline did not put there: ${r.kept.join(", ")}.`;
+        if (m.source === "catalog") t += " Install it again any time from Discover.";
+        say("mods-status", t, r.changed && r.changed.length ? "warn" : "ok");
       } catch (e) { say("mods-status", String(e), "bad"); }
       await loadInstalled();
       renderCatalog();
     });
     acts.append(rm);
-    card.append(top, meta, acts);
+    card.append(top, tags, meta, acts);
     list.append(card);
   }
 }
@@ -696,8 +835,8 @@ async function installLocal(paths) {
     const name = path.split(/[\\/]/).pop();
     say("mods-status", `Checking ${name}…`);
     try {
-      const m = await invoke("mod_install_local", { client: c.id, path });
-      say("mods-status", `Installed ${m.name} into ${c.name}.` + (m.warnings.length ? " Note: " + m.warnings.join("; ") : ""), m.warnings.length ? "warn" : "ok");
+      const m = await withNativeOk(() => invoke("mod_install_local", { client: c.id, path }));
+      say("mods-status", installedText("Installed", m, c), m.warnings.length ? "warn" : "ok");
     } catch (e) {
       say("mods-status", `${name}: ` + showProblems(e), "bad");
       break;
@@ -706,6 +845,23 @@ async function installLocal(paths) {
   await loadInstalled();
   renderCatalog();
 }
+$("mods-update-all").addEventListener("click", async () => {
+  const c = needClient("mods-status");
+  if (!c) return;
+  const ups = installed.filter((m) => m.update);
+  const b = $("mods-update-all");
+  b.disabled = true;
+  const done = [];
+  for (const m of ups) {
+    say("mods-status", `Updating ${m.name} (${done.length + 1} of ${ups.length})…`);
+    try { await updateMod(c, m); done.push(m.name); }
+    catch (e) { say("mods-status", `${m.name}: ${e}`, "bad"); break; }
+  }
+  if (done.length === ups.length) say("mods-status", `Updated ${done.join(", ")}.`, "ok");
+  b.disabled = false;
+  await loadInstalled();
+  renderCatalog();
+});
 $("mods-pick-file").addEventListener("click", async () => { const p = await invoke("pick_mod_file").catch(() => null); if (p) installLocal([p]); });
 $("mods-pick-folder").addEventListener("click", async () => { const p = await invoke("pick_mod_folder").catch(() => null); if (p) installLocal([p]); });
 
@@ -750,17 +906,25 @@ async function loadRealms(quiet) {
 function renderRealms() {
   const box = $("rl-list");
   box.replaceChildren();
-  const c = pickedClient();
   const now = state.settings.selected_realm;
+  const mine = $("rl-mine").checked;
+  let shown = 0;
   for (const r of realmsCache) {
+    const fit = clientFor(r);
+    if (mine && !fit) continue;
+    shown++;
     const card = el("article", "realm-card" + (r.address && r.address === now ? " on" : ""));
     const head = el("div", "top");
     const st = el("span", "state " + (r.state === "live" ? "is-online" : "is-offline"));
     st.append(el("span", "dot"), el("span", "", r.state === "live" ? "Online" : "Offline"));
     head.append(el("b", "name", r.name), st);
     const counts = [r.players != null ? `${r.players} players` : "", r.bots ? `${r.bots} bots` : ""].filter(Boolean).join(" · ");
-    const facts = [r.official ? "Official" : "Beacon", r.kind, r.ruleset, r.version, counts].filter(Boolean).join(" · ");
-    card.append(head, el("div", "facts", facts));
+    const facts = [r.official ? "Official" : "Beacon", r.kind, r.ruleset, counts].filter(Boolean).join(" · ");
+    const tags = el("div", "tags");
+    tags.append(el("span", "tag", r.build ? buildLabel(r.build) : (r.version || "Build not listed")));
+    tags.append(el("span", "tag", CORE_LABELS[r.core] || "Other server"));
+    if (r.build && !fit) tags.append(el("span", "tag warn", `Needs your own ${r.build} client`));
+    card.append(head, el("div", "facts", facts), tags);
     if (r.tagline) card.append(el("p", "desc", r.tagline));
     if (r.rules && r.rules.length) {
       const ul = el("ul", "rules");
@@ -770,8 +934,9 @@ function renderRealms() {
     card.append(el("div", "hint", r.address ? `Realmlist: ${r.address}` : "No desktop address yet: PLAY asks the relay"));
     const acts = el("div", "acts");
     const play = el("button", "btn small", "PLAY");
-    const wrongBuild = c && c.build !== "3.3.5a" && (r.version || "").startsWith("3.3.5");
-    if (!c || wrongBuild) { play.disabled = true; play.title = !c ? "Add a game client first" : "This realm runs 3.3.5a"; }
+    if (!state.settings.clients.length) { play.disabled = true; play.title = "Add a game client first"; }
+    else if (!fit) { play.title = `This realm runs ${r.build}: PLAY says what is missing`; }
+    else play.title = `Plays with ${fit.name}`;
     play.addEventListener("click", () => playRealm(r, play));
     acts.append(play);
     if (r.join_url) acts.append(linkBtn("Make an account", r.join_url));
@@ -780,15 +945,19 @@ function renderRealms() {
     box.append(card);
   }
   if (realmsCache.length <= 1) box.append(el("p", "hint", "No community realms listed right now. Host one: see Host."));
+  else if (!shown) box.append(el("p", "hint", "None of the listed realms fits your clients. Untick the box to see them all."));
 }
+const CORE_LABELS = { azerothcore: "AzerothCore", trinitycore: "TrinityCore", cmangos: "CMaNGOS", vmangos: "vMaNGOS", mangos: "MaNGOS", other: "Other server" };
+$("rl-mine").addEventListener("change", () => renderRealms());
 
 async function playRealm(r, btn) {
-  const c = needClient("rl-status");
-  if (!c) return;
+  const picked = needClient("rl-status");
+  if (!picked) return;
+  const c = clientFor(r) || picked;
   btn.disabled = true;
   say("rl-status", `Starting ${c.name} on ${r.name}…`);
   try {
-    const msg = await invoke("play_realm", { client: c.id, slug: r.slug });
+    const msg = await invoke("play_realm", { client: picked.id, slug: r.slug });
     say("rl-status", msg + (r.official ? "" : " First time here? Make your account with Make an account."), "ok");
     await refresh();
     renderRealms();
@@ -920,24 +1089,54 @@ $("host-start").addEventListener("click", () => hostStart(null));
 $("host-refresh").addEventListener("click", () => loadHost());
 
 // ------------------------------------------------------------------ the launcher's own updates
-let updateUrl = null;
-async function checkUpdate(quiet) {
-  if (!quiet) say("upd-status", "Checking…");
-  try {
-    const u = await invoke("check_update");
-    updateUrl = u.newer ? u.url : null;
-    $("tb-update").hidden = !u.newer;
-    $("upd-open").hidden = !u.url;
-    if (u.newer) say("upd-status", `Leyline ${u.latest} is out (you have ${u.current}).`, "ok");
-    else if (u.latest) say("upd-status", `You have the newest Leyline (${u.current}).` + (u.from_cache ? " (offline: from the last check)" : ""), "ok");
-    else say("upd-status", u.error ? "Could not check: " + u.error : "No launcher releases yet.", u.error ? "warn" : "");
-    if (u.url) $("upd-open").onclick = () => openUrl(u.url);
-  } catch (e) {
-    if (!quiet) say("upd-status", String(e), "bad");
-  }
+// The core checks at start and every 6 hours and downloads in the background (app.rs). The UI only shows it:
+// "Update ready, restart" in the title bar, and the channel and state in Settings.
+let upd = null;
+function renderUpdate() {
+  if (!upd) return;
+  const i = upd.info || {};
+  $("upd-channel").value = upd.channel || "stable";
+  $("tb-update").hidden = !(upd.ready || (upd.mode === "link" && i.newer));
+  $("tb-update").textContent = upd.ready ? "Update ready, restart" : `Leyline ${i.latest} is out`;
+  $("tb-update").title = upd.ready
+    ? (upd.game_running ? "Close your game first: Leyline restarts only when no game is open" : `Restart into Leyline ${upd.ready}`)
+    : "Open the release page";
+  $("upd-restart").hidden = !upd.ready;
+  $("upd-open").hidden = !i.url;
+  let text = "", kind = "";
+  if (upd.checking) text = "Checking…";
+  else if (upd.downloading) text = `Downloading Leyline ${i.latest} in the background…`;
+  else if (upd.ready) { text = `Leyline ${upd.ready} is ready (you have ${i.current}). Restart when you like.` + (upd.game_running ? " Your game is open: restart after you close it." : ""); kind = "ok"; }
+  else if (i.newer) { text = `Leyline ${i.latest} is out (you have ${i.current}). ${upd.note || ""}`; kind = "ok"; }
+  else if (i.latest) { text = `You have the newest Leyline on the ${upd.channel} channel (${i.current}).` + (i.from_cache ? " (offline: from the last check)" : ""); kind = "ok"; }
+  else if (upd.checked_at) { text = i.error ? "Could not check: " + i.error : "No launcher releases on this channel yet."; kind = i.error ? "warn" : ""; }
+  if (upd.error && !upd.ready && !upd.downloading) { text += (text ? " " : "") + upd.error; kind = "warn"; }
+  say("upd-status", text, kind);
 }
-$("upd-check").addEventListener("click", () => checkUpdate(false));
-$("tb-update").addEventListener("click", () => { if (updateUrl) openUrl(updateUrl); else show("settings"); });
+async function loadUpdateState() {
+  try { upd = await invoke("launcher_update_state"); renderUpdate(); } catch (_) { /* preview page */ }
+}
+async function checkUpdate() {
+  say("upd-status", "Checking…");
+  try { upd = await invoke("launcher_update_check"); renderUpdate(); }
+  catch (e) { say("upd-status", String(e), "bad"); }
+}
+async function restartToUpdate() {
+  if (!upd) return;
+  if (!upd.ready) { if (upd.info && upd.info.url) openUrl(upd.info.url); return; }
+  try { await invoke("launcher_update_restart"); }
+  catch (e) { say("upd-status", String(e), "bad"); say("play-status", String(e), "bad"); await loadUpdateState(); }
+}
+$("upd-check").addEventListener("click", checkUpdate);
+$("upd-restart").addEventListener("click", restartToUpdate);
+$("upd-open").addEventListener("click", () => { if (upd && upd.info && upd.info.url) openUrl(upd.info.url); });
+$("tb-update").addEventListener("click", restartToUpdate);
+$("upd-channel").addEventListener("change", async () => {
+  say("upd-status", "Saved. Checking the new channel…");
+  try { upd = await invoke("set_update_channel", { channel: $("upd-channel").value }); renderUpdate(); }
+  catch (e) { say("upd-status", String(e), "bad"); }
+});
+setInterval(loadUpdateState, 60000);
 
 // ------------------------------------------------------------------ start
 renderNews();
@@ -946,7 +1145,7 @@ refresh().then(() => {
   setMode(mode);
   loadCatalog(true);
   loadRealms(true);
-  checkUpdate(true);
+  loadUpdateState();
   setupDrop();
   let page = "play";
   try { page = localStorage.getItem("leyline.page") || "play"; } catch (_) { /* fine */ }

@@ -41,6 +41,11 @@ pub struct Settings {
     pub wine: Wine,
     /// The host kit folder chosen on the Host page (empty: none yet).
     pub host_kit: String,
+    /// Mods (manifest keys such as `mod:fps-fix`) whose native code the player OK'd once. Stored here, in the
+    /// launcher's own folder, so the notice is shown once per mod, for every client.
+    pub native_ok: Vec<String>,
+    /// Which Leyline releases to update to: stable (releases) or beta (pre-releases too).
+    pub update_channel: crate::update::Channel,
 }
 
 impl Default for Settings {
@@ -52,6 +57,8 @@ impl Default for Settings {
             selected_realm: crate::OFFICIAL_REALM.into(),
             wine: Wine::default(),
             host_kit: String::new(),
+            native_ok: Vec::new(),
+            update_channel: crate::update::Channel::Stable,
         }
     }
 }
@@ -62,6 +69,10 @@ impl Settings {
     }
     pub fn client_mut(&mut self, id: &str) -> Option<&mut ClientProfile> {
         self.clients.iter_mut().find(|c| c.id == id)
+    }
+    /// The player OK'd native code for this mod.
+    pub fn native_allowed(&self, key: &str) -> bool {
+        self.native_ok.iter().any(|k| k == key)
     }
     pub fn remove_client(&mut self, id: &str) -> bool {
         let n = self.clients.len();
@@ -129,6 +140,8 @@ mod tests {
             build: Build::V335a,
             realmlist: "play.openvanilla.app".into(),
             locale: Some("enUS".into()),
+            exe_version: Some("3.3.5.12340".into()),
+            exe: None,
         }
     }
 
@@ -140,10 +153,13 @@ mod tests {
         s.clients.push(profile());
         s.selected_client = Some("c335a-1".into());
         s.wine.command = "wine64".into();
+        s.native_ok.push("mod:fps-fix".into());
+        s.update_channel = crate::update::Channel::Beta;
         save(d.path(), &s).unwrap();
         assert_eq!(load(d.path()), s);
+        assert!(load(d.path()).native_allowed("mod:fps-fix") && !s.native_allowed("mod:other"));
         let text = fs::read_to_string(d.path().join(FILE_NAME)).unwrap();
-        assert!(text.contains("\"build\": \"3.3.5a\""));
+        assert!(text.contains("\"build\": \"3.3.5a\"") && text.contains("\"update_channel\": \"beta\""));
         // No temp file left behind.
         assert_eq!(fs::read_dir(d.path()).unwrap().count(), 1);
     }

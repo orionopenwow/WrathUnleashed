@@ -51,6 +51,7 @@ The `mods` step sends it in the kit beside wu-mod.py and publishes it next to ca
 | `audio` | Sounds and music | original ambience, music packs and UI sounds |
 | `tools` | Tools | developer HUD plugins, map viewers, log analysers and OBS overlays |
 | `conversions` | Total conversions | whole new games built from the categories above |
+| `themes` | Launcher themes | Leyline launcher theme packs (`theme.json` + CSS + images, see `docs/THEMES.md`); not for `mod.json` packages |
 
 ## Permissions (realm only)
 

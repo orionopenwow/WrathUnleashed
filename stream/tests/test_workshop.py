@@ -191,8 +191,8 @@ check("filter chips are links that keep the other filter", 'href="/wrath/mods?ki
 # categories: one list (mods/categories.json), published beside catalog.json
 CATS = json.load(open(os.path.join(MODS, "categories.json")))
 CAT_IDS = [c["id"] for c in CATS["categories"]]
-check("categories.json: the twelve, in order", CAT_IDS == ["addons", "graphics", "sandbox", "maps", "builds", "encounters",
-      "models", "realm-scripts", "presets", "audio", "tools", "conversions"], CAT_IDS)
+check("categories.json: the thirteen, in order", CAT_IDS == ["addons", "graphics", "sandbox", "maps", "builds", "encounters",
+      "models", "realm-scripts", "presets", "audio", "tools", "conversions", "themes"], CAT_IDS)
 check("categories.json published beside catalog.json", json.loads(read(PUB, "categories.json") or "{}") == CATS)
 check("catalog.json carries each mod's category", {m["id"]: m["category"] for m in cat["mods"]}
       == {"dalaran-dice": "sandbox", "emote-wheel": "addons", "pings": "addons"})
@@ -201,7 +201,7 @@ def tiles(html_):
 t = tiles(lp)
 check("category grid on /wrath/mods: every category in order", [i for i, _ in t] == CAT_IDS, t)
 check("category counts", dict(t) == dict({i: "0" for i in CAT_IDS}, addons="2", sandbox="1"), t)
-check("each tile has its icon and name", lp.count('<span class="wk-ico" aria-hidden="true"><svg') == 12
+check("each tile has its icon and name", lp.count('<span class="wk-ico" aria-hidden="true"><svg') == 13
       and ">Sandbox and game modes</span>" in lp)
 check("cards show the category", '<span class="wk-tag cat">Sandbox and game modes</span>' in lp)
 st, cp, _, _ = page("/wrath/mods/c/addons")
@@ -303,7 +303,7 @@ check("broken catalog: an empty Workshop, no error", W4.serve("/wrath/mods", {})
 W5 = wp.workshop_mod.Workshop(os.path.join(T, "missing"), wp.leyline_css, wp.card_meta, wp.REALM_NAME)
 check("no catalog at all: empty, and mod() is None", W5.mod("pings") is None and W5.serve("/wrath/mods", {})[0] == 200)
 check("no catalog: empty categories still list, each says Publish the first one",
-      len(tiles(W5.serve("/wrath/mods", {})[1].decode())) == 12 and "Publish the first one" in W5.serve("/wrath/mods/c/addons", {})[1].decode())
+      len(tiles(W5.serve("/wrath/mods", {})[1].decode())) == 13 and "Publish the first one" in W5.serve("/wrath/mods/c/addons", {})[1].decode())
 
 # hostile categories.json: escaped, bad entries dropped; a mod's unknown category falls back to its kind's default
 P6 = os.path.join(T, "pub6"); os.makedirs(P6)

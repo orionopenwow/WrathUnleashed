@@ -107,8 +107,27 @@ class Workflows(unittest.TestCase):
         text, doc = load("leyline-launcher.yml")
         self.assertEqual(doc["on"]["push"]["tags"], ["launcher-v*"])
         self.assertEqual(doc["permissions"], {"contents": "read"})
-        self.assertEqual(doc["jobs"]["release"]["permissions"], {"contents": "write"})
-        self.assertEqual(set(re.findall(r"secrets\.([A-Za-z_]+)", text)), {"GITHUB_TOKEN"})
+        jobs = doc["jobs"]
+        for j in ("create-release", "release", "release-macos"):
+            self.assertEqual(jobs[j]["permissions"], {"contents": "write"}, j)
+        # only the built-in token and the updater's signing key ("Turn on launcher updates.bat")
+        self.assertEqual(set(re.findall(r"secrets\.([A-Za-z_]+)", text)),
+                         {"GITHUB_TOKEN", "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"})
+        # macOS never makes a routine run red: its jobs are allowed to fail, and it is not in the main release job
+        self.assertTrue(jobs["release-macos"]["continue-on-error"])
+        self.assertIn("macos", jobs["core-tests"]["continue-on-error"])
+        self.assertFalse(any("macos" in m["platform"] for m in jobs["release"]["strategy"]["matrix"]["include"]))
+        self.assertIn("universal-apple-darwin", text)
+        bundles = " ".join(m["args"] for m in jobs["release"]["strategy"]["matrix"]["include"])
+        for b in ("nsis", "msi", "appimage", "deb"):
+            self.assertIn(b, bundles)
+        # one tag push: the tag must match tauri.conf.json; the updater manifest only with the signing key
+        self.assertIn("tauri.conf.json", jobs["create-release"]["steps"][1]["run"])
+        self.assertIn("includeUpdaterJson", text)
+        self.assertIn("createUpdaterArtifacts", text)
+        for j in ("release", "release-macos"):
+            act = [s for s in jobs[j]["steps"] if s.get("uses", "").startswith("tauri-apps/tauri-action")][0]
+            self.assertEqual(act["with"]["releaseId"], "${{ needs.create-release.outputs.id }}")
         # the update check reads the same (public) repo's releases
         upd = (REPO / "launcher" / "src-tauri" / "src" / "update.rs").read_text()
         self.assertIn('"https://api.github.com/repos/orionopenwow/Leyline/releases', upd)

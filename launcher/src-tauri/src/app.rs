@@ -11,15 +11,18 @@ use crate::mods::{self, Installed, InstalledView, Removed};
 use crate::net::{self, Listing};
 use crate::realms::{self, RealmList};
 use crate::settings::{self, Settings, Wine};
-use crate::update::{self, UpdateInfo};
+use crate::update::{self, Channel, UpdateInfo};
 use crate::{launch, status, BROWSER_PLAY_URL, OFFICIAL_REALM};
 use serde::Serialize;
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::process::Child;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, State};
+use std::time::Duration;
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
+use tauri_plugin_updater::UpdaterExt;
 
 struct Core {
     dir: PathBuf,
@@ -28,6 +31,10 @@ struct Core {
     known_urls: Mutex<HashSet<String>>,
     /// One mod operation at a time.
     mods_lock: Arc<Mutex<()>>,
+    /// Games Leyline started: a launcher update never restarts while one of them runs.
+    games: Mutex<Vec<Child>>,
+    /// The launcher's own update: what the last check said, and a downloaded update waiting for "Restart".
+    upd: Mutex<UpdState>,
 }
 
 impl Core {
@@ -54,6 +61,12 @@ impl Core {
     }
     fn kit(&self) -> Option<PathBuf> {
         Some(self.snapshot().host_kit).filter(|k| !k.is_empty()).map(PathBuf::from)
+    }
+    /// A game Leyline started is still running.
+    fn game_running(&self) -> bool {
+        let Ok(mut g) = self.games.lock() else { return true };
+        g.retain_mut(|c| matches!(c.try_wait(), Ok(None)));
+        !g.is_empty()
     }
 }
 
@@ -92,7 +105,7 @@ async fn pick(app: AppHandle, title: &'static str, file: bool, mods_filter: bool
     tauri::async_runtime::spawn_blocking(move || {
         let d = app.dialog().file().set_title(title);
         if file {
-            let d = if mods_filter { d.add_filter("Mods (.zip, .MPQ)", &["zip", "mpq", "MPQ"]) } else { d };
+            let d = if mods_filter { d.add_filter("Mods (.zip, .MPQ, .dll, .asi)", &["zip", "mpq", "MPQ", "dll", "DLL", "asi"]) } else { d };
             d.blocking_pick_file()
         } else {
             d.blocking_pick_folder()
@@ -173,11 +186,22 @@ fn set_wine(core: State<Core>, wine: Wine) -> Result<(), String> {
     })
 }
 
-/// Point the client at `realm` (realmlist.wtf, and Config.wtf on 3.3.5a), remember it, optionally start it.
+/// Point the client at `realm` (its realm file: realmlist.wtf or Config.wtf, by build), remember it,
+/// optionally start it.
 fn point_and_play(core: &Core, client: &str, realm: &str, start: bool) -> Result<String, String> {
     let realm = realm.trim().to_string();
     if !clients::valid_realm_address(&realm) {
         return Err("That realm address does not look right (a host name, optionally :port).".into());
+    }
+    // A listed realm with a known build takes only clients of that build.
+    if let Some(r) = realms::cached(&core.dir).into_iter().find(|r| r.address.as_deref() == Some(realm.as_str())) {
+        let p = core.client(client)?;
+        if r.build.is_some_and(|b| b != p.build) {
+            let s = core.snapshot();
+            return Err(realms::pick_client(&r, &s.clients, Some(client))
+                .map(|c| format!("{} runs {}: pick {} for it.", r.name, c.build.version(), c.name))
+                .unwrap_or_else(|e| e));
+        }
     }
     let (profile, wine) = core.update(|s| {
         s.selected_client = Some(client.to_string());
@@ -191,7 +215,10 @@ fn point_and_play(core: &Core, client: &str, realm: &str, start: bool) -> Result
         return Ok(format!("{} now points at {realm}.", profile.name));
     }
     let plan = launch::plan(&profile, &wine, launch::Os::current())?;
-    launch::run(&plan)?;
+    let child = launch::run(&plan)?;
+    if let Ok(mut g) = core.games.lock() {
+        g.push(child);
+    }
     Ok(format!("Started {} on {realm}.", profile.name))
 }
 
@@ -201,15 +228,17 @@ fn play(core: State<Core>, client: String, realm: String) -> Result<String, Stri
     point_and_play(&core, &client, &realm, true)
 }
 
-/// Play on a realm from the Realms page: the official realm or a listed Beacon (its relay address).
+/// Play on a realm from the Realms page: the official realm or a listed Beacon (its relay address). `client` is
+/// the player's pick; when its build does not fit the realm, one of their clients that fits is used, or the
+/// reply says which build is missing.
 #[tauri::command]
 async fn play_realm(core: State<'_, Core>, client: String, slug: String) -> Result<String, String> {
-    let profile = core.client(&client)?;
     let dir = core.dir.clone();
     let realm = realms::cached(&dir).into_iter().find(|r| r.slug == slug).ok_or("That realm is not on the list any more.")?;
-    if realm.version.starts_with("3.3.5") && profile.build != clients::Build::V335a {
-        return Err(format!("{} runs 3.3.5a: pick a 3.3.5a client for it.", realm.name));
-    }
+    let client = {
+        let s = core.snapshot();
+        realms::pick_client(&realm, &s.clients, Some(&client))?.id.clone()
+    };
     let r2 = realm.clone();
     let addr = blocking(move || realms::desktop_address(&r2, |relay| format!("https://{relay}"))).await?;
     let mut msg = point_and_play(&core, &client, &addr, true)?;
@@ -362,14 +391,16 @@ async fn mod_install(core: State<'_, Core>, client: String, project: String) -> 
     let proj = cat.into_iter().find(|x| x.id == project).ok_or("That mod is not in the catalog any more.")?;
     let origin = net::origin(catalog::URL).unwrap_or_default();
     let lock = core.mods_lock.clone();
+    let scratch = core.dir.clone();
+    let ok_keys = core.snapshot().native_ok;
     blocking(move || {
         let _g = lock.lock().map_err(|_| "mod lock poisoned")?;
-        mods::install_project(&p.path, p.build, &proj, &origin)
+        mods::install_project(&p.path, p.build, &proj, &origin, &scratch, &|k: &str| ok_keys.iter().any(|x| x == k))
     })
     .await
 }
 
-/// Install a dropped or picked .zip, .MPQ or folder.
+/// Install a dropped or picked .zip, .MPQ, native file or folder.
 #[tauri::command]
 fn mod_install_local(core: State<Core>, client: String, path: String) -> Result<Installed, String> {
     let p = core.client(&client)?;
@@ -377,7 +408,58 @@ fn mod_install_local(core: State<Core>, client: String, path: String) -> Result<
     if src.starts_with(&p.path) {
         return Err("That is already inside this client's folder: drop the zip or folder from somewhere else.".into());
     }
-    with_lock(&core, || mods::install_local(&p.path, p.build, &src))
+    let ok_keys = core.snapshot().native_ok;
+    with_lock(&core, || mods::install_local(&p.path, p.build, &src, &|k: &str| ok_keys.iter().any(|x| x == k)))
+}
+
+/// The player read the native-code notice for this mod and said yes: remembered, so it is asked only once.
+/// Nothing is installed or run here; the UI installs again afterwards.
+#[tauri::command]
+fn mod_native_confirm(core: State<Core>, key: String) -> Result<(), String> {
+    let ok = !key.is_empty() && key.len() <= 80 && key.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, ':' | '.' | '_' | '-'));
+    if !ok {
+        return Err("That is not a mod.".into());
+    }
+    core.update(|s| {
+        if !s.native_allowed(&key) {
+            s.native_ok.push(key);
+        }
+        Ok(())
+    })
+}
+
+#[derive(Serialize)]
+struct ModUpdate {
+    client: String,
+    client_name: String,
+    key: String,
+    name: String,
+    version: String,
+    update: String,
+}
+
+/// Every installed Workshop mod, in every client, that the cached catalog has a newer version of (the title
+/// bar's update pill and UPDATE ALL).
+#[tauri::command]
+fn mods_updates(core: State<Core>) -> Vec<ModUpdate> {
+    let cat = catalog::cached(&core.dir, catalog::URL).unwrap_or_default();
+    let mut out = Vec::new();
+    for c in core.snapshot().clients {
+        let man = mods::load(&c.path);
+        for v in mods::with_updates(&man, &cat, c.build) {
+            if let Some(update) = v.update {
+                out.push(ModUpdate {
+                    client: c.id.clone(),
+                    client_name: c.name.clone(),
+                    key: v.mod_.key,
+                    name: v.mod_.name,
+                    version: v.mod_.version,
+                    update,
+                });
+            }
+        }
+    }
+    out
 }
 
 #[tauri::command]
@@ -394,7 +476,7 @@ fn mod_uninstall(core: State<Core>, client: String, key: String) -> Result<Remov
 
 #[tauri::command]
 async fn pick_mod_file(app: AppHandle) -> Option<String> {
-    pick(app, "Choose a mod (.zip) or a client patch (.MPQ)", true, true).await
+    pick(app, "Choose a mod (.zip), a client patch (.MPQ) or a native mod (.dll, .asi)", true, true).await
 }
 
 #[tauri::command]
@@ -465,12 +547,169 @@ async fn host_status(core: State<'_, Core>, realm_id: String) -> Result<HostStat
 
 // ------------------------------------------------------------------------------------------------ updates
 
-#[tauri::command]
-async fn check_update(core: State<'_, Core>) -> Result<UpdateInfo, String> {
+/// What the title bar and Settings show about Leyline's own updates.
+#[derive(Debug, Clone, Default, Serialize)]
+struct UpdView {
+    /// `auto`: downloads in the background, installs on "Restart". `link`: only a link to the release page.
+    mode: &'static str,
+    /// Why it is `link`, in plain words.
+    note: String,
+    channel: Channel,
+    info: Option<UpdateInfo>,
+    checking: bool,
+    downloading: bool,
+    /// A downloaded, signature-checked version waiting for "Restart".
+    ready: Option<String>,
+    error: Option<String>,
+    game_running: bool,
+    /// Seconds since 1970 of the last check.
+    checked_at: Option<u64>,
+}
+
+#[derive(Default)]
+struct UpdState {
+    view: UpdView,
+    pending: Option<(tauri_plugin_updater::Update, Vec<u8>)>,
+}
+
+/// Whether this build can update itself, and if not, why.
+fn updater_mode(app: &AppHandle) -> (&'static str, String) {
+    if cfg!(debug_assertions) {
+        return ("link", "This is a development build: it does not update itself.".into());
+    }
+    let pk = app.config().plugins.0.get("updater").and_then(|u| u.get("pubkey")).and_then(|v| v.as_str()).unwrap_or("");
+    if !update::pubkey_ok(pk) {
+        return ("link", "Automatic updates are not turned on for this build yet: new versions are on the release page.".into());
+    }
+    ("auto", String::new())
+}
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+fn upd_view(core: &Core) -> UpdView {
+    let mut v = core.upd.lock().map(|u| u.view.clone()).unwrap_or_default();
+    v.game_running = core.game_running();
+    v.channel = core.snapshot().update_channel;
+    v
+}
+
+/// Look for a newer Leyline on the player's channel; in `auto` mode, download it in the background so it is
+/// ready for "Restart". Never installs and never restarts by itself.
+async fn run_update_check(app: AppHandle) -> UpdView {
+    let core = app.state::<Core>();
+    let (mode, note) = updater_mode(&app);
+    let channel = core.snapshot().update_channel;
+    if let Ok(mut u) = core.upd.lock() {
+        if u.view.checking || u.view.downloading {
+            drop(u);
+            return upd_view(&core);
+        }
+        u.view.checking = true;
+        u.view.mode = mode;
+        u.view.note = note;
+    }
     let dir = core.dir.clone();
-    let u = blocking(move || Ok(update::check(&dir, env!("CARGO_PKG_VERSION")))).await?;
-    core.allow(u.url.clone());
-    Ok(u)
+    let info = blocking(move || Ok(update::check(&dir, env!("CARGO_PKG_VERSION"), channel))).await.unwrap_or_else(|e| UpdateInfo {
+        current: env!("CARGO_PKG_VERSION").into(),
+        channel,
+        error: Some(e),
+        ..Default::default()
+    });
+    core.allow(info.url.clone());
+    let want = info.newer.then(|| info.manifest_url.clone()).flatten().filter(|_| mode == "auto");
+    let already = core.upd.lock().ok().and_then(|u| u.pending.as_ref().map(|(p, _)| p.version.clone()));
+    if let Ok(mut u) = core.upd.lock() {
+        u.view.checking = false;
+        u.view.checked_at = Some(now_secs());
+        u.view.error = info.error.clone();
+        u.view.downloading = want.is_some() && already.as_deref() != info.latest.as_deref();
+        u.view.info = Some(info.clone());
+    }
+    if let (Some(url), true) = (want, already.as_deref() != info.latest.as_deref()) {
+        let res: Result<Option<(tauri_plugin_updater::Update, Vec<u8>)>, String> = async {
+            // Leyline's own check of the manifest first: this repo's release downloads only, signed.
+            let mtext = blocking({
+                let url = url.clone();
+                move || net::get(&url, net::TIMEOUT)
+            })
+            .await?;
+            let m = update::parse_manifest(&mtext)?;
+            if update::cmp_versions(&m.version, info.latest.as_deref().unwrap_or("")) != Some(std::cmp::Ordering::Equal) {
+                return Err("The update manifest names another version than its release.".into());
+            }
+            let endpoint: tauri::Url = url.parse().map_err(|e| format!("{e}"))?;
+            let updater = app.updater_builder().endpoints(vec![endpoint]).map_err(|e| e.to_string())?.build().map_err(|e| e.to_string())?;
+            let Some(up) = updater.check().await.map_err(|e| e.to_string())? else { return Ok(None) };
+            let bytes = up.download(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
+            Ok(Some((up, bytes)))
+        }
+        .await;
+        if let Ok(mut u) = core.upd.lock() {
+            u.view.downloading = false;
+            match res {
+                Ok(Some((up, bytes))) => {
+                    u.view.ready = Some(up.version.clone());
+                    u.pending = Some((up, bytes));
+                }
+                Ok(None) => {}
+                Err(e) => u.view.error = Some(format!("Could not get the update: {e}")),
+            }
+        }
+    }
+    upd_view(&core)
+}
+
+#[tauri::command]
+fn launcher_update_state(core: State<Core>) -> UpdView {
+    upd_view(&core)
+}
+
+#[tauri::command]
+async fn launcher_update_check(app: AppHandle) -> Result<UpdView, String> {
+    Ok(run_update_check(app).await)
+}
+
+#[tauri::command]
+async fn set_update_channel(app: AppHandle, channel: Channel) -> Result<UpdView, String> {
+    {
+        let core = app.state::<Core>();
+        core.update(|s| {
+            s.update_channel = channel;
+            Ok(())
+        })?;
+        // A download from the other channel is not wanted any more.
+        if let Ok(mut u) = core.upd.lock() {
+            u.pending = None;
+            u.view.ready = None;
+        };
+    }
+    Ok(run_update_check(app).await)
+}
+
+/// "Update ready, restart": install the downloaded update and start the new Leyline. Refused while a game
+/// Leyline started is running, so a game is never cut off.
+#[tauri::command]
+fn launcher_update_restart(app: AppHandle, core: State<Core>) -> Result<(), String> {
+    if core.game_running() {
+        return Err("Your game is still running. Close it first: Leyline restarts only when no game is open.".into());
+    }
+    let pending = core.upd.lock().map_err(|_| "update lock poisoned")?.pending.take();
+    let Some((up, bytes)) = pending else {
+        return Err("No update is ready yet.".into());
+    };
+    // On Windows the installer takes over and closes Leyline itself; elsewhere Leyline restarts into the new one.
+    up.install(&bytes).map_err(|e| format!("The update could not be installed: {e}"))?;
+    app.restart()
+}
+
+/// Check at start, then every 6 hours, for as long as Leyline runs.
+fn start_update_timer(app: AppHandle) {
+    std::thread::spawn(move || loop {
+        tauri::async_runtime::block_on(run_update_check(app.clone()));
+        std::thread::sleep(Duration::from_secs(update::CHECK_EVERY_SECS));
+    });
 }
 
 pub fn run() {
@@ -479,7 +718,19 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(Core { dir, settings: Mutex::new(s), known_urls: Mutex::new(HashSet::new()), mods_lock: Arc::new(Mutex::new(())) })
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(Core {
+            dir,
+            settings: Mutex::new(s),
+            known_urls: Mutex::new(HashSet::new()),
+            mods_lock: Arc::new(Mutex::new(())),
+            games: Mutex::new(Vec::new()),
+            upd: Mutex::new(UpdState::default()),
+        })
+        .setup(|app| {
+            start_update_timer(app.handle().clone());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_state,
             pick_folder,
@@ -508,6 +759,8 @@ pub fn run() {
             mod_install_local,
             mod_set_enabled,
             mod_uninstall,
+            mod_native_confirm,
+            mods_updates,
             pick_mod_file,
             pick_mod_folder,
             host_info,
@@ -516,7 +769,23 @@ pub fn run() {
             host_copy_seed,
             host_start,
             host_status,
-            check_update
+            launcher_update_state,
+            launcher_update_check,
+            launcher_update_restart,
+            set_update_channel,
+            crate::themes::commands::themes_list, crate::themes::commands::theme_apply, crate::themes::commands::theme_css, crate::themes::commands::theme_install, crate::themes::commands::theme_install_local, crate::themes::commands::theme_remove, crate::themes::commands::pick_theme, // themes.rs
+            // Host pack, Docker, realm stop/logs/invite, P2P and torrent flags (src/p2p/cmds.rs)
+            crate::p2p::cmds::hostpack_info,
+            crate::p2p::cmds::hostpack_install,
+            crate::p2p::cmds::docker_info,
+            crate::p2p::cmds::host_stop,
+            crate::p2p::cmds::host_logs,
+            crate::p2p::cmds::host_invite,
+            crate::p2p::cmds::host_new_invite,
+            crate::p2p::cmds::p2p_flags,
+            crate::p2p::cmds::p2p_set_flag,
+            crate::p2p::cmds::p2p_set_limits,
+            crate::p2p::cmds::p2p_nat_check
         ])
         .run(tauri::generate_context!())
         .expect("error while running Leyline");

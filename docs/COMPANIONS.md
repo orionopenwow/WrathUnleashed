@@ -21,6 +21,24 @@ The fills count what your group already has. Bring a friend who tanks, and `.rec
 
 In party chat you can tell bots: `follow`, `stay`, `attack`, `summon`.
 
+## The Bots window
+
+Type `/comp` (or `/companions`), or click the bots button on the minimap.
+
+- **Your bots:** each bot's role, class, spec, item level, health and mana, and what it is doing: following,
+  staying, passive or dead. Every one is marked as a bot.
+- **Orders:** Follow, Stay, Attack my target, Passive (then Fight), Assist tank (damage bots focus the tank's
+  skull target), Crowd control, a formation, and Prepare for raid (spells, gear and buffs).
+- **Group:** Fill party, Fill raid, My usual party, Dismiss all.
+- **Click a bot** to pick its spec, swap its role (tank, healer or damage), give it fresh gear, or send it home.
+  Your alts keep their own talents and gear.
+
+The window never types in your chat. "Hide bot chatter" (on by default) hides your bots' achievement lines and
+their replies right after an order.
+
+If the realm restarts while you have bots, they come back with you. The realm tells you, and `.dismiss all` or
+the window sends them home.
+
 ## Rules
 
 - Up to 4 bots in a party, 9 in a raid. Your alts count too.

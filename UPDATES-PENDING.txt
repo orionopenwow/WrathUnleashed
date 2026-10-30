@@ -209,3 +209,11 @@
 1065a scripts  Modes: creator script editor checks (blocked names refused with the line), Play Here test lobbies, .modes check
 1065b foreverui  Modes script editor: line numbers, error console, Play / Play Here / Stop, hot reload, creator API v2, examples Coin Collect and King of the Hill
 1065c ship  Save to GitHub (orionopenwow/WrathUnleashed): creator scripting (M6)
+1066a hostkit  Host pack: publish the host kit as a Leyline Host pack (zip, sha256, torrent with web seed)
+1066b signin  Leyline flags file (all off), Host pack in the catalog, realm list refresh can no longer freeze
+1066c relay  Join page: one address line when there is no shared port
+1066d mods  Workshop: new category Launcher themes
+1066e ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline launcher 0.3.0 (every client and server type, one-click mods, self-updates, themes, Host pack, macOS/Linux builds)
+1067a scripts  Companions: the Bots window's realm side, bots come back after a crash, orders without chat lines
+1067b foreverui  Companions window (/comp): roster, orders, formation, prepare, fill, per-bot spec/role/gear, bot chatter filter
+1067c ship  Save to GitHub (orionopenwow/WrathUnleashed): Companions window and the smarter bots plan

@@ -187,7 +187,7 @@ class ManifestRules(Base):
 
     def test_every_listed_category_passes(self):
         ids = [c["id"] for c in json.load(open(os.path.join(ROOT, "categories.json")))["categories"]]
-        self.assertEqual(len(ids), 12)
+        self.assertEqual(len(ids), 13)
         for c in ids:
             self.manifest(category=c)
             r = self.assertPasses()

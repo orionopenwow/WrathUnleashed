@@ -123,3 +123,50 @@ The custom image (`Build custom realm.bat`, `custom/sources.lock`) already has a
 runs the script against a fake mod-ale, mod-playerbots and characters database: composition math, caps,
 cooldown, the instance rules, alts (own account only), save/usual, the loot keys in the profile and
 serverpass, and that players never see a brand name or the word "companion".
+
+## The Bots window (WrathUnleashedUI/Companions.lua)
+
+`/comp`, `/companions` or the minimap button (shown once the realm answers a roster with bots on). It talks to
+`ov_companions.lua` over the OVMOD addon channel (`ov_modapi.lua`), mod `wucomp`; the protocol is in the
+script's header. Every request is checked on the realm: the bot must be in the player's group and the player's
+own, spec / role / gear / prepare wait until nobody in the group fights, prepare has a 60 s cooldown and each
+bot a 10 s one for spec, role and gear, and a player gets at most 4 answered requests a second. Specs offered
+are the realm's own premade pve specs (`AC_PLAYERBOTS_PREMADE_SPEC_NAME_<class>__<n>`); a spec name from the
+client must match one exactly. Alts refuse spec, role and gear changes.
+
+Orders reach the bots through `PlayerbotAI:HandleCommand(CHAT_MSG_WHISPER, text, owner)` (mod-ale with
+MOD_PLAYERBOTS), the same queue a whisper reaches but without the "To <bot>: ..." line in the owner's chat;
+passive, crowd control and assist use `PlayerbotAI:ChangeStrategy` (silent). `Player:Whisper` is the
+fallback on an older mod-ale.
+
+| Window order | What the bots get |
+|---|---|
+| Follow / Stay | `follow` / `stay` |
+| Attack my target | `attack` (the owner's target; refused without one) |
+| Passive / Fight | strategy `+passive` / `-passive`, combat and non-combat |
+| Assist tank | tanks `+mark rti`; damage bots `+dps assist` and `rti skull` |
+| Crowd control | strategy `+cc` / `-cc` (mage, hunter, priest, druid, paladin and the others that have one) |
+| Formation | `formation <near\|melee\|line\|circle\|arrow\|shield\|queue\|chaos>` |
+| Prepare for raid | `maintenance`, `autogear` (not alts), `rebuff` |
+| Spec / role | `talents spec <premade>`, `maintenance`, `autogear` |
+| New gear | `autogear` |
+
+## Crashes and script reloads
+
+After a crash mod-playerbots logs the player's bots back in with their master (seen live 2026-10-26: a full
+10-player raid came back while the script's tables were empty, so `.dismiss all` said "no bots"). Now every
+command first adopts the bots in the player's group whose `PlayerbotAI:GetMaster()` is the player; 15, 30 and
+45 s after login the realm looks once more and says "N bots are back with you". Without `GetBotAI` the table
+`mod_companions_owned` (characters database: bot guid, owner, name, role, spec, kind) decides; rows go on
+dismiss and on a normal logout.
+
+## Bot chatter (achievement lines)
+
+"<bot> has earned the achievement [...]" is the core's `AchievementMgr::SendAchievementEarned`: it tells every
+player in say range (and the guild). Bots earn achievements when mod-playerbots levels them, gives them mounts,
+skills and spells (`init=auto`, `maintenance`), mostly the first time a pool character is brought to a level.
+Neither mod-playerbots (e88cc40: only realm-first achievements are blocked, in `OnPlayerBeforeAchievementComplete`)
+nor mod-ale (only `ON_ACHIEVEMENT_COMPLETE`, after the line is sent) can stop it, and there is no config key. The
+window's addon hides achievement lines from the player's own bots (and the bots' whispers for a few seconds after
+an order). Silencing it for everyone needs one line in the core fork (skip `SendAchievementEarned` chat for
+playerbots), built by CI: an owner decision.

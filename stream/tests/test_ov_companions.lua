@@ -6,6 +6,10 @@ os.time = function() return clock end
 local env = {}
 os.getenv = function(k) return env[k] end
 function RegisterPlayerEvent(id, fn) events[id] = fn end
+-- the OVMOD channel (ov_modapi.lua, next to the script) for the Bots window
+local onServerAddon
+function RegisterServerEvent(id, fn) if id == 30 then onServerAddon = fn end end
+package.path = (arg[1]:match("^(.*/)[^/]+$") or "./") .. "?.lua;" .. package.path
 local realPrint = print
 print = function(s) printed[#printed + 1] = tostring(s) end
 math.randomseed(7)
@@ -14,6 +18,7 @@ math.randomseed(7)
 local sqlLog = {}
 local chars = {}   -- { guid, account, name, level, class, online }
 local usual = {}   -- [account] = { { slot, guid, name } }
+local owned = {}   -- [bot guid] = { owner, name, role, spec, kind }
 local function result(rows)
     if not rows or #rows == 0 then return nil end
     local r = { rows = rows, i = 1 }
@@ -24,6 +29,12 @@ local function result(rows)
 end
 function CharDBExecute(sql)
     sqlLog[#sqlLog + 1] = sql
+    local ob, oo, on, orl, osp, ok = sql:match("^REPLACE INTO mod_companions_owned %(bot, owner, name, role, spec, kind, at%) VALUES %((%d+), (%d+), '([%a\128-\255]+)', '(%a+)', '([%a ]*)', '(%a+)', %d+%)$")
+    if ob then owned[tonumber(ob)] = { owner = tonumber(oo), name = on, role = orl, spec = osp, kind = ok } end
+    local db = sql:match("^DELETE FROM mod_companions_owned WHERE bot = (%d+)$")
+    if db then owned[tonumber(db)] = nil end
+    local dow = sql:match("^DELETE FROM mod_companions_owned WHERE owner = (%d+)$")
+    if dow then for k, v in pairs(owned) do if v.owner == tonumber(dow) then owned[k] = nil end end end
     local acc = sql:match("^DELETE FROM mod_companions_usual WHERE account = (%d+)$")
     if acc then usual[tonumber(acc)] = nil end
     local a, s, g, n = sql:match("^INSERT INTO mod_companions_usual %(account, slot, guid, name, saved_at%) VALUES %((%d+), (%d+), (%d+), '([%a\128-\255]+)', %d+%)$")
@@ -34,6 +45,12 @@ function CharDBExecute(sql)
 end
 function CharDBQuery(sql)
     sqlLog[#sqlLog + 1] = sql
+    local ow = sql:match("^SELECT bot, name, role, spec, kind FROM mod_companions_owned WHERE owner = (%d+)$")
+    if ow then
+        local rows = {}
+        for b, v in pairs(owned) do if v.owner == tonumber(ow) then rows[#rows + 1] = { b, v.name, v.role, v.spec, v.kind } end end
+        return result(rows)
+    end
     local acc, me = sql:match("^SELECT guid, name, level, class FROM characters WHERE account = (%d+) AND online = 0 AND guid <> (%d+)")
     if acc then
         local rows = {}
@@ -73,6 +90,9 @@ end
 
 check("usual-party table made at load, mod_ prefix",
     sqlLog[1] and sqlLog[1]:match("^CREATE TABLE IF NOT EXISTS mod_companions_usual") ~= nil)
+check("ownership table made at load, mod_ prefix",
+    sqlLog[2] and sqlLog[2]:match("^CREATE TABLE IF NOT EXISTS mod_companions_owned") ~= nil)
+check("the window channel is there (ov_modapi.lua loaded through require)", T.window == true and onServerAddon ~= nil)
 
 local BANNED = { "world of warcraft", "wow", "warcraft", "lich king", "blizzard", "openvanilla", "open vanilla", "openwow",
     "leyline", "wrathunleashed", "playerbot", "azerothcore", "mod-ale", "eluna" }
@@ -106,8 +126,37 @@ local function player(over)
     function p:Teleport(...) self.teleports[#self.teleports + 1] = { ... } end
     function p:RegisterEvent(fn, delay, rep) self.queue[#self.queue + 1] = { fn = fn, delay = delay, rep = rep } end
     function p:Whisper(text, lang, to)
-        self.whispers[#self.whispers + 1] = { text = text, to = to }
+        self.whispers[#self.whispers + 1] = { text = text, to = to, via = "whisper" }
         if text == "leave" and to and to.group then to.group:RemoveMember(to.guid) end
+    end
+    function p:SendAddonMessage(prefix, msg, kind, to)
+        self.addon = self.addon or {}
+        self.addon[#self.addon + 1] = { prefix = prefix, msg = msg, kind = kind, to = to }
+    end
+    function p:GetSelection() return self.sel end
+    function p:GetEquippedItemBySlot(slot)
+        if not self.ilvl or slot == 3 or slot == 18 then return nil end
+        local lv = self.ilvl
+        return { GetItemLevel = function() return lv end }
+    end
+    -- mod-playerbots' PlayerbotAI through mod-ale (bots only; noai = an older mod-ale without GetBotAI)
+    do
+        function p:GetBotAI()
+            if not self.bot or self.noai then return nil end
+            local bot = self
+            self.ai = self.ai or {
+                HandleCommand = function(_, kind, text, from)
+                    from.whispers[#from.whispers + 1] = { text = text, to = bot, via = "ai", kind = kind }
+                    if text == "leave" and bot.group then bot.group:RemoveMember(bot.guid) end
+                end,
+                ChangeStrategy = function(_, change, state)
+                    bot.strategies = bot.strategies or {}
+                    bot.strategies[#bot.strategies + 1] = state .. ":" .. change
+                end,
+                GetMaster = function() return bot.master end,
+            }
+            return self.ai
+        end
     end
     if not (over and over.built == false) then
         function p:IsPlayerbot() return self.bot == true end
@@ -164,6 +213,8 @@ local function serve(p, opts)
                     inst = opts.inst or 0, dist = opts.dist })
                 row.online = 1
             end
+            b.master = p
+            if opts.noai then b.noai = true end
             if not p.group then group(p) end
             table.insert(p.group.members, b); b.group = p.group
             if #p.group.members > 5 then p.group.raid = true end   -- the module converts at the 6th member
@@ -581,6 +632,290 @@ if root then
 else
     realPrint("SKIP profile checks (run with the repo path to ov_companions.lua)")
 end
+
+-- bots are told through their PlayerbotAI, not whispered (no "To <bot>:" lines in the owner's chat) ------------
+check("orders go through PlayerbotAI:HandleCommand as whispers (type 7), never Player:Whisper, when mod-ale has it",
+    (function()
+        local n = 0
+        for _, p in ipairs({ a, pf, rd, me }) do
+            for _, w in ipairs(p.whispers) do
+                if w.via ~= "ai" or w.kind ~= 7 then return false end
+                n = n + 1
+            end
+        end
+        return n > 20 end)())
+clock = clock + 31
+local oldai = player({ guid = 150, level = 30 })
+cmd(oldai, "recruit dps")
+local oa = serve(oldai, { noai = true })[1]
+run(oldai)
+check("without GetBotAI: whispers, as before", whispered(oldai, oa, "^follow$") and oldai.whispers[#oldai.whispers].via == "whisper")
+
+-- ownership survives a crash or a script reload ------------------------------------------------------------------
+local function forget(guid) for k in pairs(T.companions[guid] or {}) do T.companions[guid][k] = nil end end
+local function ownedBy(guid) local k = 0; for _, v in pairs(owned) do if v.owner == guid then k = k + 1 end end; return k end
+clock = clock + 31
+local cr = player({ guid = 160, level = 80 })
+cmd(cr, "recruit raid")
+serve(cr); run(cr)
+check("ownership rows saved for every arrival", ownedBy(160) == 9)
+forget(160)   -- the realm crashed and came back: the module logged the 9 bots back into the raid, our table is empty
+cmd(cr, "dismiss all"); run(cr)
+check("after a crash: .dismiss all finds the 9 bots in the raid (their master is you) and sends them home",
+    count(cr, "^playerbots bot remove ") == 9 and last(cr):match("head home") and #cr.group.members == 1)
+check("dismissed: ownership rows gone", ownedBy(160) == 0)
+
+clock = clock + 31
+local nd = player({ guid = 161, level = 40 })
+cmd(nd, "recruit dps 2")
+serve(nd, { noai = true }); run(nd)
+forget(161)
+cmd(nd, "dismiss all"); run(nd)
+check("without GetBotAI: the ownership table brings them back", count(nd, "^playerbots bot remove ") == 2)
+
+local stranger = player({ guid = 162 })
+local outsider = player({ guid = 163, level = 40 })
+group(outsider)
+local theirs = player({ guid = 1990, account = 900, accName = "RNDBOT1990", bot = true, addclass = true, name = "Theirs" })
+theirs.master = stranger
+table.insert(outsider.group.members, theirs); theirs.group = outsider.group
+cmd(outsider, "dismiss all"); run(outsider)
+check("someone else's bot in your group is not yours", last(outsider):match("no bots") and count(outsider, "remove") == 0)
+
+clock = clock + 31
+local lg = player({ guid = 164, level = 40 })
+cmd(lg, "recruit dps")
+serve(lg); run(lg)
+forget(164)
+lg.queue = {}
+events[3](3, lg)
+check("login: a look for your bots is queued (15 s, 3 times)", #lg.queue == 1 and lg.queue[1].delay == 15000 and lg.queue[1].rep == 3)
+run(lg)
+check("login after a crash: 'back with you' once", last(lg):match("1 bot is back with you") and n(T.companions[164]) == 1
+    and (function() local k = 0; for _, m in ipairs(lg.msgs) do if m:match("back with you") then k = k + 1 end end; return k == 1 end)())
+events[4](4, lg)
+check("a normal logout clears the ownership rows", ownedBy(164) == 0)
+local bl2 = player({ guid = 165, bot = true, accName = "RNDBOT165" })
+bl2.queue = {}
+events[3](3, bl2)
+check("bots logging in look for nothing", #bl2.queue == 0)
+
+-- premade specs ---------------------------------------------------------------------------------------------------
+check("specs: the fallback pve list without env", table.concat(T.specsFor(11), ",") == "balance pve,bear pve,resto pve,cat pve")
+env.AC_PLAYERBOTS_PREMADE_SPEC_NAME_8__0 = "arcane pve"; env.AC_PLAYERBOTS_PREMADE_SPEC_NAME_8__1 = "fire pvp"
+env.AC_PLAYERBOTS_PREMADE_SPEC_NAME_8__2 = "frost pve"; env.AC_PLAYERBOTS_PREMADE_SPEC_NAME_8__3 = "bad'; drop pve"
+check("specs: the realm's env, pve only, odd names dropped", table.concat(T.specsFor(8), ",") == "arcane pve,frost pve")
+for i = 0, 3 do env["AC_PLAYERBOTS_PREMADE_SPEC_NAME_8__" .. i] = nil end
+check("spec roles", T.specRole("prot pve") == "tank" and T.specRole("bear pve") == "tank" and T.specRole("blood pve") == "tank"
+    and T.specRole("resto pve") == "healer" and T.specRole("disc pve") == "healer" and T.specRole("double aura blood pve") == "dps"
+    and T.specRole("frost pve") == "dps")
+
+-- the Bots window (OVMOD, mod wucomp) -------------------------------------------------------------------------------
+local function win(p, name, data, sameSecond)
+    if not sameSecond then clock = clock + 1 end
+    return onServerAddon(30, p, 7, "OVMOD", "wucomp\t" .. name .. "\t1/1\t" .. (data or ""), p)
+end
+local winPlayers = {}
+local function replies(p, name)
+    local out, buf = {}, nil
+    for _, x in ipairs(p.addon or {}) do
+        local mod, nm, i, k, data = x.msg:match("^([^\t]+)\t([^\t]+)\t(%d+)/(%d+)\t(.*)$")
+        if x.prefix == "OVMOD" and mod == "wucomp" and nm == name then
+            if i == "1" then buf = { data } else buf[#buf + 1] = data end
+            if i == k then out[#out + 1] = table.concat(buf) end
+        end
+    end
+    return out
+end
+local function said(p) local r = replies(p, "msg"); return r[#r] or "" end
+local function roster(p)
+    local r = { bots = {}, specs = {}, by = {} }
+    local all = replies(p, "roster")
+    for line in (all[#all] or ""):gmatch("[^\n]+") do
+        local f = {}
+        for v in (line .. "\t"):gmatch("([^\t]*)\t") do f[#f + 1] = v end
+        if f[1] == "H" then
+            r.count, r.cap, r.raid, r.formation, r.assist, r.cc, r.state = tonumber(f[2]), tonumber(f[3]), f[4], f[5], f[6], f[7], f[8]
+        elseif f[1] == "B" then
+            local b = { name = f[2], cls = tonumber(f[3]), role = f[4], kind = f[5], spec = f[6], ilvl = tonumber(f[7]),
+                status = f[8], level = tonumber(f[9]) }
+            r.bots[#r.bots + 1] = b; r.by[b.name] = b
+        elseif f[1] == "S" then r.specs[tonumber(f[2])] = f[3] end
+    end
+    return r
+end
+local function told(p, bot, text) for _, w in ipairs(p.whispers) do if w.to == bot and w.text == text then return true end end; return false end
+local function strat(bot, change) for _, x in ipairs(bot.strategies or {}) do if x == change then return true end end; return false end
+
+clock = clock + 31
+local wp = player({ guid = 200, level = 80, spec = "dps" })
+winPlayers[#winPlayers + 1] = wp
+win(wp, "fill", "party")
+check("window: Fill the group answers in the window, not the chat", #wp.msgs == 0 and said(wp):match("Recruiting 4 bots for a 5%-player group"))
+local wbots = serve(wp)
+for _, b in ipairs(wbots) do b.ilvl = 200 end
+run(wp)
+check("window: the arrivals go to the window too", #wp.msgs == 0 and said(wp):match("joins as a %a+ bot"))
+clock = clock + 16
+win(wp, "roster", "")
+local r = roster(wp)
+check("roster: 4 bots, party cap 4, not a raid, bots on", r.count == 4 and #r.bots == 4 and r.cap == 4 and r.raid == "0" and r.state == "on")
+check("roster: tank first, every row a bot with class, spec, item level, level and status", (function()
+    if r.bots[1].role ~= "tank" then return false end
+    for _, b in ipairs(r.bots) do
+        if b.kind ~= "bot" or not b.cls or b.spec == "" or b.ilvl ~= 200 or b.level ~= 80 or b.status ~= "follow" then return false end
+    end
+    return true end)())
+check("roster: the premade specs of every class there", (function()
+    for _, b in ipairs(r.bots) do if not (r.specs[b.cls] or ""):match(" pve=") then return false end end
+    return true end)())
+local tankBot, dmgBot
+for _, b in ipairs(wbots) do
+    local row = r.by[b.name]
+    if row.role == "tank" then tankBot = b elseif row.role == "dps" and not dmgBot then dmgBot = b end
+end
+
+win(wp, "order", "stay all")
+r = roster(wp)
+check("order stay: every bot told 'stay', status staying", (function()
+    for _, b in ipairs(wbots) do if not told(wp, b, "stay") or r.by[b.name].status ~= "stay" then return false end end
+    return said(wp) == "Staying here." end)())
+win(wp, "order", "follow " .. tankBot.name:lower())
+r = roster(wp)
+check("order follow <name>: only that one", r.by[tankBot.name].status == "follow" and r.by[dmgBot.name].status == "stay"
+    and said(wp):match("^" .. tankBot.name .. ": Following you%.$"))
+win(wp, "order", "passive all")
+r = roster(wp)
+check("order passive: silent strategy change in and out of combat", strat(dmgBot, "0:+passive") and strat(dmgBot, "1:+passive")
+    and r.by[dmgBot.name].status == "passive" and r.by[tankBot.name].status == "passive")
+win(wp, "order", "active all")
+check("order active: -passive, back to what they did (staying, following)", strat(dmgBot, "0:-passive")
+    and roster(wp).by[dmgBot.name].status == "stay" and roster(wp).by[tankBot.name].status == "follow")
+win(wp, "order", "attack all")
+check("attack without a target: refused", said(wp) == "Target something first." and not told(wp, dmgBot, "attack"))
+wp.sel = {}
+win(wp, "order", "attack all")
+check("attack my target", told(wp, dmgBot, "attack") and told(wp, tankBot, "attack"))
+win(wp, "order", "dance all")
+check("unknown order refused", said(wp):match("isn't known"))
+win(wp, "order", "follow theirs")
+check("an order to a bot that isn't yours", said(wp):match("None of your bots"))
+win(wp, "order", "assist all")
+r = roster(wp)
+check("assist tank: the tank marks, damage focuses the skull", strat(tankBot, "0:+mark rti") and strat(dmgBot, "0:+dps assist")
+    and told(wp, dmgBot, "rti skull") and not strat(tankBot, "0:+dps assist") and r.assist == "1")
+win(wp, "order", "cc all")
+check("crowd control on", strat(dmgBot, "0:+cc") and strat(tankBot, "1:+cc") and roster(wp).cc == "1")
+win(wp, "order", "nocc all")
+check("crowd control off", strat(dmgBot, "0:-cc") and roster(wp).cc == "0")
+win(wp, "formation", "arrow")
+check("formation: every bot told, the roster says so", told(wp, dmgBot, "formation arrow") and told(wp, tankBot, "formation arrow")
+    and roster(wp).formation == "arrow")
+win(wp, "formation", "pyramid; drop")
+check("formation: only known ones", said(wp):match("isn't known") and roster(wp).formation == "arrow")
+
+wp.combat = true
+win(wp, "prepare", "")
+check("prepare refused in combat", said(wp):match("out of combat") and not told(wp, dmgBot, "rebuff"))
+wp.combat = false
+dmgBot.combat = true
+win(wp, "prepare", "")
+check("prepare refused while a group member fights", said(wp):match("out of combat"))
+dmgBot.combat = false
+local before = #wp.whispers
+win(wp, "prepare", "")
+check("prepare for raid: maintenance, autogear and rebuff for each", (function()
+    local seen = {}
+    for i = before + 1, #wp.whispers do local w = wp.whispers[i]; seen[w.to.name .. ":" .. w.text] = true end
+    for _, b in ipairs(wbots) do
+        if not (seen[b.name .. ":maintenance"] and seen[b.name .. ":autogear"] and seen[b.name .. ":rebuff"]) then return false end
+    end
+    return said(wp):match("Getting ready") ~= nil end)())
+win(wp, "prepare", "")
+check("prepare: a cooldown", said(wp):match("Again in %d+ s"))
+
+-- spec and role on a known class
+clock = clock + 31
+local wd = player({ guid = 210, level = 80 })
+winPlayers[#winPlayers + 1] = wd
+cmd(wd, "recruit tank druid")
+local bear = serve(wd)[1]
+run(wd)
+win(wd, "spec", bear.name .. "\tcat pve")
+check("spec: one of the realm's premade specs", told(wd, bear, "talents spec cat pve") and told(wd, bear, "autogear")
+    and roster(wd).by[bear.name].spec == "cat pve" and roster(wd).by[bear.name].role == "dps" and said(wd):match("learns cat"))
+check("spec change saved for a crash", owned[bear.guid] and owned[bear.guid].spec == "cat pve" and owned[bear.guid].role == "dps")
+win(wd, "spec", bear.name .. "\tresto pve")
+check("spec: one change per bot every 10 s", said(wd):match("still busy") and not told(wd, bear, "talents spec resto pve"))
+clock = clock + 11
+win(wd, "spec", bear.name .. "\tfrost pvp")
+check("spec: not one of the list: refused", said(wd):match("isn't one") and not told(wd, bear, "talents spec frost pvp"))
+win(wd, "spec", bear.name .. "\tcat pve; .server shutdown")
+check("spec: odd text refused", not said(wd):match("learns"))
+win(wd, "role", bear.name:lower() .. " healer")
+check("role swap: healer gives a druid resto", told(wd, bear, "talents spec resto pve") and roster(wd).by[bear.name].role == "healer"
+    and said(wd):match("now a healer"))
+clock = clock + 11
+win(wd, "role", bear.name:lower() .. " tank")
+check("role swap: tank gives bear", told(wd, bear, "talents spec bear pve") and roster(wd).by[bear.name].role == "tank")
+clock = clock + 11
+win(wd, "gear", bear.name)
+check("gear refresh: autogear", said(wd):match("picking better gear"))
+clock = clock + 31
+cmd(wd, "recruit dps mage")
+local mage = serve(wd)[1]
+run(wd)
+clock = clock + 11
+win(wd, "role", mage.name:lower() .. " tank")
+check("role swap: a mage can't tank", said(wd):match("A Mage can't be a tank") and not told(wd, mage, "talents spec prot pve"))
+win(wd, "dismiss", mage.name:lower())
+run(wd)
+check("window dismiss one", count(wd, "^playerbots bot remove " .. mage.name .. "$") == 1 and said(wd):match("heads home"))
+
+-- alts keep their own talents and gear
+winPlayers[#winPlayers + 1] = me
+local tk2
+for _, m in ipairs(me.group.members) do if m.name == "Tanky" then tk2 = m end end
+win(me, "spec", "Tanky\tarms pve")
+check("alts: no spec change", said(me):match("your own character") and not told(me, tk2, "talents spec arms pve"))
+win(me, "gear", "Tanky")
+check("alts: no gear change", said(me):match("your own character"))
+local mb = #me.whispers
+win(me, "prepare", "")
+check("alts: prepare only rebuffs", (function()
+    for i = mb + 1, #me.whispers do local w = me.whispers[i]; if w.to == tk2 and (w.text == "maintenance" or w.text == "autogear") then return false end end
+    return told(me, tk2, "rebuff") end)())
+check("alts: kind alt in the roster", roster(me).by.Tanky and roster(me).by.Tanky.kind == "alt")
+
+-- the realm checks everything
+local fl = 0
+local fz = player({ guid = 220 })
+for i = 1, 6 do win(fz, "roster", "", true) end
+check("window: at most 4 requests a second", #replies(fz, "roster") == 4)
+local wb = player({ guid = 221, bot = true, accName = "RNDBOT221" })
+win(wb, "fill", "party")
+check("window: bots can't drive it", #wb.cmds == 0 and #replies(wb, "msg") == 0)
+local ws = player({ guid = 222, built = false })
+ws.IsPlayerbot, ws.RunCommand = nil, nil
+win(ws, "roster", "")
+check("window on a realm without bots: roster says coming soon", roster(ws).state == "soon")
+win(ws, "fill", "party")
+check("window on a realm without bots: the answer says so", said(ws):match("coming soon"))
+env.OV_COMPANIONS = "0"
+win(wp, "roster", "")
+check("window with bots off: roster says off", roster(wp).state == "off")
+env.OV_COMPANIONS = nil
+local chatBefore = #wp.msgs
+cmd(wp, "companions")
+check("a typed command answers in the chat again", #wp.msgs > chatBefore and #replies(wp, "msg") > 0)
+win(wp, "dismiss", "all"); run(wp)
+check("window dismiss all", count(wp, "^playerbots bot remove ") == 4 and roster(wp).count == 0)
+check("window answers never go to the chat while the window drives", (function()
+    for _, p in ipairs(winPlayers) do
+        for _, x in ipairs(replies(p, "msg")) do if x:find("|cff66ccff[Bots]", 1, true) then return false end end
+    end
+    return true end)())
+for _, p in ipairs({ wp, wd, me, ws }) do for _, x in ipairs(replies(p, "msg")) do allMsgs[#allMsgs + 1] = x end end
 
 -- names: no brand names, and companions are called bots
 check("no brand names in anything players saw", (function()

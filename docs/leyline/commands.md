@@ -34,6 +34,7 @@ Bots are party members for dungeons and 10-player raids. They are always labelle
 | `.companions save` | remembers the alts with you. `.recruit usual` brings them back. |
 | `.buddy [class]` | one levelling buddy who keeps your level and follows you. `.buddy` shows it once you have one. `.buddy off` dismisses it. |
 | `.dismiss [name\|all]` | sends bots home |
+| `/comp` (or `/companions`) | the Bots window: your bots, their health and status, orders, specs and roles, all without chat |
 | `.summon` | brings the bots in your group to you (open world) |
 
 Up to 4 bots in a party and 9 in a raid. Not in battlegrounds or arenas, in combat or while dead. Inside a dungeon or raid you can refill a slot between pulls. `.companions` shows the rest in game.

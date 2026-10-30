@@ -94,6 +94,11 @@ if [ -f hostflow.py ] && [ -f ed25519_pure.py ]; then
 fi
 # its community links (stream/projects.py): stored in $WU/portal-data (wu-portal's /data, mounted by stream-lib.sh/deploy.sh)
 if [ -f projects.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' projects.py && install -m 644 projects.py "$WU/portal/projects.py"; fi
+# Leyline's flags.json and the Host pack listing (stream/leyline_net.py): flags live in $WU/portal-data/leyline (/data)
+if [ -f leyline_net.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' leyline_net.py && install -m 644 leyline_net.py "$WU/portal/leyline_net.py"
+  install -d -m 755 "$WU/portal-data/leyline"
+  if [ -f hostpack.json ]; then python3 -I -c 'import json,sys;json.load(open(sys.argv[1]))' hostpack.json && install -m 644 hostpack.json "$WU/portal/hostpack.json"; fi
+fi
 if [ -d www-files/art ] && [ -f www-files/art/wu-theme.css ]; then
   install -d -m 755 "$WU/portal/art"
   install -m 644 www-files/art/* "$WU/portal/art/"

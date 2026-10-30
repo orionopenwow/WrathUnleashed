@@ -15,10 +15,12 @@ pub mod host;
 pub mod launch;
 pub mod mods;
 pub mod net;
+pub mod p2p;
 pub mod pe_version;
 pub mod realms;
 pub mod settings;
 pub mod status;
+pub mod themes; // theme packs (themes agent)
 pub mod update;
 
 #[cfg(feature = "app")]
@@ -43,8 +45,11 @@ pub const LINKS: &[(&str, &str)] = &[
     ("github", "https://github.com/orionopenwow/Leyline"),
     ("host", host::HOST_PAGE),
     ("hostguide", "https://github.com/orionopenwow/WrathUnleashed/blob/main/hosting/INSTALL-OPERATE.md"),
+    ("themes", "https://github.com/orionopenwow/WrathUnleashed/blob/main/docs/THEMES.md"), // themes agent
     ("modders", "https://github.com/orionopenwow/WrathUnleashed/blob/main/mods/README-modders.md"),
     ("releases", update::RELEASES_PAGE),
+    ("docker", host::docker::DESKTOP_URL),
+    ("dockerengine", host::docker::ENGINE_URL),
 ];
 
 /// The address for a named link, if it is one of `LINKS`.

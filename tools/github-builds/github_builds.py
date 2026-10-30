@@ -385,6 +385,10 @@ def main(argv=None, gh: GitHub | None = None, sleep=time.sleep, now=time.time, o
             else:
                 _, ly_rev = put_workflows(gh, ly, LY_REPO, LY_FILES, "Launcher builds: installers on launcher-v* tags")
                 ly_ok = True
+                rc, out = gh.run(["gh", "secret", "list", "-R", LY_REPO, "--json", "name"])
+                if rc == 0 and '"TAURI_SIGNING_PRIVATE_KEY"' not in out:
+                    todo.append("Launcher self-updates are off until you run 'Turn on launcher updates.bat' once "
+                                "(then Ship, the Leyline step, and this again for the next launcher-v tag).")
 
         say("[4/5] Builds")
         images = start_images(gh, "wu-images.yml" in changed, sleep=sleep)

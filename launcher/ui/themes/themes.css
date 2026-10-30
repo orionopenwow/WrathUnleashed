@@ -1,0 +1,73 @@
+/* Leyline themes: the Themes section (Settings › Themes, Discover › Themes) and the preview bar.
+   Reads the classic variables (--text, --muted, --gold, --bronze), which the Rounded looks point at their
+   tokens, so it fits every theme. */
+
+.themes-box { margin-top: 6px; }
+.themes-group h3 { margin-top: 14px; }
+.theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.theme-card {
+  display: grid; gap: 6px; align-content: start; padding: 10px 12px 12px; border-radius: 6px;
+  background: #121418; border: 1px solid var(--bronze); user-select: text;
+}
+.theme-card.on { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+.theme-card .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.theme-card .name { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.theme-card .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 2px; }
+.theme-card .desc { font-size: 12.5px; }
+
+/* A preview: the pack's image, or a small drawing of the look. */
+.theme-swatch {
+  position: relative; height: 92px; border-radius: 5px; overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08); background: #0e1014;
+}
+.theme-swatch img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.theme-swatch i { position: absolute; display: block; }
+.theme-swatch .sw-side { left: 0; top: 0; bottom: 0; width: 28%; }
+.theme-swatch .sw-main { left: 34%; right: 6%; top: 12%; height: 46%; }
+.theme-swatch .sw-btn { right: 6%; bottom: 10%; width: 30%; height: 18%; }
+.theme-swatch.k-classic { background: radial-gradient(120% 90% at 55% 40%, #24282e, #101215); }
+.theme-swatch.k-classic .sw-side { background: url("../art/kit/stone-panel-tall.png") center / 100% 100% no-repeat, #2a2f37; }
+.theme-swatch.k-classic .sw-main { border: 6px solid transparent; border-image: url("../art/kit/parchment-news.png") 40 fill / 6px stretch; }
+.theme-swatch.k-classic .sw-btn { background: url("../art/kit/play.png") center / contain no-repeat; }
+.theme-swatch.k-rounded-dark { background: #0e1014; }
+.theme-swatch.k-rounded-dark .sw-side { background: #161920; border-right: 1px solid #2c323d; }
+.theme-swatch.k-rounded-dark .sw-main { background: #161920; border: 1px solid #2c323d; border-radius: 6px; }
+.theme-swatch.k-rounded-dark .sw-btn { background: #7ea6ff; border-radius: 5px; }
+.theme-swatch.k-rounded-light { background: #eef0f4; }
+.theme-swatch.k-rounded-light .sw-side { background: #ffffff; border-right: 1px solid #d6dae2; }
+.theme-swatch.k-rounded-light .sw-main { background: #ffffff; border: 1px solid #d6dae2; border-radius: 6px; }
+.theme-swatch.k-rounded-light .sw-btn { background: #2f5bd3; border-radius: 5px; }
+.theme-swatch.k-rounded-system { background: linear-gradient(110deg, #0e1014 50%, #eef0f4 50%); }
+.theme-swatch.k-rounded-system .sw-side { background: #161920; border-right: 1px solid #2c323d; }
+.theme-swatch.k-rounded-system .sw-main { background: linear-gradient(110deg, #161920 42%, #ffffff 42%); border: 1px solid #8a93a3; border-radius: 6px; }
+.theme-swatch.k-rounded-system .sw-btn { background: linear-gradient(110deg, #7ea6ff 50%, #2f5bd3 50%); border-radius: 5px; }
+.theme-swatch.k-unknown { background: repeating-linear-gradient(135deg, #1a1d22 0 10px, #15171b 10px 20px); }
+
+/* Discover: Mods | Themes */
+.ly-tabs { display: flex; gap: 4px; margin: 0 0 10px; border-bottom: 1px solid var(--bronze); }
+.ly-tab {
+  height: 32px; padding: 0 14px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  background: none; color: var(--muted); font: 600 13px Inter, sans-serif; cursor: pointer;
+}
+.ly-tab:hover { color: var(--text); }
+.ly-tab[aria-selected="true"] { color: var(--gold-hi); border-bottom-color: var(--gold); }
+#page-discover .panel[data-tab="themes"] > :not(h2):not(.ly-tabs):not(#themes-discover) { display: none !important; }
+
+/* Previewing: KEEP / UNDO */
+.theme-preview-bar {
+  position: fixed; left: 50%; bottom: 112px; transform: translateX(-50%); z-index: 50;
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 16px; border-radius: 8px;
+  background: #121418; border: 1px solid var(--gold); color: var(--text); font-weight: 600; font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* The same pieces in the Rounded looks. */
+html[data-skin="rounded"] .theme-card { border-radius: var(--t-radius); background: var(--t-surface-2); border: var(--t-border-w) solid var(--t-border); }
+html[data-skin="rounded"] .theme-card.on { border-color: var(--t-accent); box-shadow: 0 0 0 1px var(--t-accent); }
+html[data-skin="rounded"] .theme-swatch { border-radius: var(--t-radius-sm); border-color: var(--t-border); }
+html[data-skin="rounded"] .ly-tabs { border-bottom-color: var(--t-border); }
+html[data-skin="rounded"] .ly-tab { font-family: var(--t-font); color: var(--t-muted); }
+html[data-skin="rounded"] .ly-tab:hover { color: var(--t-text); }
+html[data-skin="rounded"] .ly-tab[aria-selected="true"] { color: var(--t-accent); border-bottom-color: var(--t-accent); }
+html[data-skin="rounded"] .theme-preview-bar { border-radius: var(--t-radius); background: var(--t-surface); border-color: var(--t-accent); box-shadow: var(--t-shadow); }
+html[data-skin="rounded"] .theme-swatch.k-unknown { background: repeating-linear-gradient(135deg, var(--t-surface-2) 0 10px, var(--t-raised) 10px 20px); }

@@ -54,7 +54,7 @@ https://play.openvanilla.app/wrath/mods. It is public, `Access-Control-Allow-Ori
 | --- | --- |
 | `id` | stable: `mod:<mod id>` or `link:<12 hex>` |
 | `source` | `packaged` (our catalog, with a zip) or `community` (a link only: nothing is hosted) |
-| `category` | one of the 12 `categories` ids (`mods/categories.json`) |
+| `category` | one of the 13 `categories` ids (`mods/categories.json`); `themes` holds launcher theme packs (`docs/THEMES.md`) |
 | `builds` | `3.3.5a`, `1.12`, or `any`; a project for both lists both |
 | `author`, `author_url`, `licence`, `repo` | the credit. `licence` is `""` when the repo states none: show "licence not stated" |
 | `credits` | the credit line exactly as the site prints it under each card |

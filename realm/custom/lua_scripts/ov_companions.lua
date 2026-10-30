@@ -47,6 +47,32 @@
 -- Without mod-playerbots (the stock image: no Player:IsPlayerbot method) every command answers "coming soon";
 -- realm/companions-README.md lists what the build needs.
 --
+-- Talking to a bot: through its own PlayerbotAI:HandleCommand(CHAT_MSG_WHISPER, text, owner) when mod-ale has it
+-- (the same queue a whisper reaches, without the "To <bot>: maintenance" lines in the owner's chat), else
+-- Player:Whisper. Strategy switches (passive, crowd control, assist) use PlayerbotAI:ChangeStrategy, which says
+-- nothing back. Never remove group members from Lua (see dismissCommand).
+--
+-- Who owns a bot survives a crash or a script reload: the bots in the player's group whose PlayerbotAI master is
+-- the player are adopted back (adopt, on every command and 15 s after login); without GetBotAI, the table
+-- mod_companions_owned (bot guid -> owner) decides. Rows go on dismiss and on a normal logout.
+--
+-- The Bots window (WrathUnleashedUI/Companions.lua, /companions, /comp) talks over the OVMOD channel
+-- (ov_modapi.lua), mod "wucomp". Nothing goes through chat. Every request is checked here: the bot must be the
+-- player's own, heavy orders wait for the end of combat, and each has a cooldown.
+--   client -> server   roster                                  send me my bots
+--                      order <what> <name|all>                 what: follow stay attack passive active assist
+--                                                              noassist cc nocc
+--                      formation <near|melee|line|circle|arrow|shield|queue|chaos>
+--                      prepare                                 maintenance, autogear (not alts), rebuff
+--                      fill <party|raid>  usual  dismiss <name|all>
+--                      spec <name>\t<premade spec>             role <name> <tank|healer|dps>   gear <name>
+--   server -> client   roster  H\t<count>\t<cap>\t<raid 0|1>\t<formation>\t<assist 0|1>\t<cc 0|1>
+--                              B\t<name>\t<class id>\t<role>\t<kind bot|alt|buddy>\t<spec>\t<item level>\t<status>\t<level>
+--                              S\t<class id>\t<spec>=<role>,...     (the realm's premade specs per class present)
+--                      msg <text>                              the answer the chat would have had
+-- After a window request, the answers to it (and the arrivals it starts) go to the window, not the chat; a typed
+-- command switches them back to the chat.
+--
 -- Env (os.getenv at each use; "1" on, "0" off):
 --   OV_COMPANIONS                 on/off                                                   default 1
 --   OV_COMPANIONS_PER_PLAYER      bots one player may have in a party (buddy, alts included) default 4
@@ -57,8 +83,23 @@
 --   OV_COMPANIONS_COOLDOWN        seconds between two .recruit / .buddy                    default 30
 --   OV_COMPANIONS_BUDDY           .buddy on/off                                            default 1
 -- mod-playerbots' own Playerbots.MaxAddedBots (AC_PLAYERBOTS_MAX_ADDED_BOTS, 9) is the hard cap behind these.
--- Characters database: mod_companions_usual (account, slot, guid, name, saved_at), made here if missing.
--- mod-ale events: 4 ON_LOGOUT, 13 ON_LEVEL_CHANGE, 42 ON_COMMAND (return false = handled).
+-- Characters database: mod_companions_usual (account, slot, guid, name, saved_at) and mod_companions_owned
+-- (bot, owner, name, role, spec, kind, at), made here if missing.
+-- mod-ale events: 3 ON_LOGIN, 4 ON_LOGOUT, 13 ON_LEVEL_CHANGE, 42 ON_COMMAND (return false = handled).
+--
+-- Achievement lines ("<bot> has earned the achievement ...") come from the core (AchievementMgr::
+-- SendAchievementEarned tells everyone in say range) when a bot is levelled, geared and taught spells and mounts
+-- (init=auto, maintenance). Neither mod-playerbots (e88cc40) nor mod-ale can stop the line before it is sent, so
+-- the Bots window's addon hides achievement lines from the player's own bots on the player's screen.
+
+local OVMod
+do
+    -- ALE loads scripts in name order, so ov_modapi.lua has not run yet: require loads it once. Without it the
+    -- window is off; every chat command still works.
+    local ok, m = pcall(function() return require("ov_modapi") end)
+    OVMod = (ok and type(m) == "table" and m) or _G.OVMod
+end
+local MOD = "wucomp"
 
 local TAG = "|cff66ccff[Bots]|r "
 
@@ -93,7 +134,15 @@ local function cooldown()      return num("OV_COMPANIONS_COOLDOWN", 30, 0, 3600)
 
 local PARTY = 5
 
-local function say(player, text) player:SendBroadcastMessage(TAG .. text) end
+local replyTo = {}   -- [ownerGuid] = true while the answers go to the Bots window
+
+local function say(player, text)
+    if replyTo[player:GetGUIDLow()] and OVMod then
+        OVMod.Send(player, MOD, "msg", text)
+        return
+    end
+    player:SendBroadcastMessage(TAG .. text)
+end
 
 local function try(obj, method, ...)
     if not obj then return nil end
@@ -111,6 +160,16 @@ end
 
 -- mod-ale registers IsPlayerbot only when built with MOD_PLAYERBOTS.
 local function botsBuilt(player) return hasMethod(player, "IsPlayerbot") and hasMethod(player, "RunCommand") end
+
+-- The bot's PlayerbotAI (mod-ale's Player:GetBotAI), or nil.
+local function botAI(m)
+    local ai = try(m, "GetBotAI")
+    if type(ai) ~= "table" and type(ai) ~= "userdata" then return nil end
+    return ai
+end
+
+local CHAT_MSG_WHISPER = 7
+local BOT_STATE_COMBAT, BOT_STATE_NON_COMBAT = 0, 1
 
 local function isBot(p)
     if try(p, "IsPlayerbot") == true or try(p, "IsBot") == true then return true end
@@ -176,6 +235,34 @@ local SHAPE = {
     [25] = { tank = 3, healer = 6, dps = 16 },
 }
 
+-- The premade specs a bot may be given, per class: the realm's own (AC_PLAYERBOTS_PREMADE_SPEC_NAME_<class>__<n>,
+-- realm/playerbots-specs.env), pve only; these if the env has none (the pinned playerbots.conf.dist's pve names).
+local FALLBACK_SPECS = {
+    [1] = { "arms pve", "fury pve", "prot pve" }, [2] = { "holy pve", "prot pve", "ret pve" },
+    [3] = { "bm pve", "mm pve", "surv pve" }, [4] = { "as pve", "combat pve", "subtlety pve" },
+    [5] = { "disc pve", "holy pve", "shadow pve" }, [6] = { "blood pve", "frost pve", "unholy pve", "double aura blood pve" },
+    [7] = { "ele pve", "enh pve", "resto pve" }, [8] = { "arcane pve", "fire pve", "frost pve", "frostfire pve" },
+    [9] = { "affli pve", "demo pve", "destro pve" }, [11] = { "balance pve", "bear pve", "resto pve", "cat pve" },
+}
+local TANK_SPECS = { ["prot pve"] = true, ["bear pve"] = true, ["blood pve"] = true }
+local HEAL_SPECS = { ["holy pve"] = true, ["resto pve"] = true, ["disc pve"] = true }
+
+local function specRole(spec)
+    if TANK_SPECS[spec] then return "tank" end
+    if HEAL_SPECS[spec] then return "healer" end
+    return "dps"
+end
+
+local function specsFor(cls)
+    local out = {}
+    for n = 0, 9 do
+        local v = os.getenv("AC_PLAYERBOTS_PREMADE_SPEC_NAME_" .. tostring(cls) .. "__" .. n)
+        if v and v:match("^[%a ]+ pve$") and #v <= 32 then out[#out + 1] = v end
+    end
+    if #out == 0 then for _, v in ipairs(FALLBACK_SPECS[cls] or {}) do out[#out + 1] = v end end
+    return out
+end
+
 local function dkLevel()
     return tonumber(os.getenv("AC_START_HEROIC_PLAYER_LEVEL") or "") or 55
 end
@@ -202,7 +289,8 @@ end
 ------------------------------------------------------------------------------------------------
 -- state (per world server run; mod-playerbots logs a player's bots out when the player logs out)
 ------------------------------------------------------------------------------------------------
-local companions = {}   -- [ownerGuid] = { [botGuid] = { name, cls, role, buddy, alt } }
+local companions = {}   -- [ownerGuid] = { [botGuid] = { name, cls, role, spec, buddy, alt, order, passive } }
+local orders = {}       -- [ownerGuid] = { formation, assist, cc }: the window's group-wide switches
 local pending = {}      -- [ownerGuid] = { { cls, word, spec, role, buddy, alt, guid, name, at }, ... }
 local lastRecruit = {}  -- [ownerGuid] = os.time()
 local ticking = {}      -- [ownerGuid] = the running arrival timer's number
@@ -250,16 +338,20 @@ local function buddyOf(guid)
     return nil
 end
 
--- Drop companions that left the group or logged out (the player kicked them, or a server hiccup).
+local adopt, ownForget   -- below, with the database
+
+-- Drop companions that left the group or logged out (the player kicked them, or a server hiccup), and take back
+-- the player's bots we lost track of (a crash or a script reload empties the tables; the bots stay).
 local function prune(player)
     local guid = player:GetGUIDLow()
+    adopt(player)
     local list = companions[guid]
     if not list then return end
     local inGroup = {}
     local _, members = groupMembers(player)
     for _, m in ipairs(members) do inGroup[m:GetGUIDLow()] = m end
     for bg in pairs(list) do
-        if not inGroup[bg] then list[bg] = nil end
+        if not inGroup[bg] then list[bg] = nil; ownForget(bg) end
     end
 end
 
@@ -273,6 +365,32 @@ end
 
 local function botCommand(owner, text) owner:RunCommand("playerbots bot " .. text) end
 local function whisper(owner, bot, text) try(owner, "Whisper", text, 0, bot) end
+
+-- A command to one bot, as if the owner whispered it: straight into the bot's command queue when mod-ale has
+-- PlayerbotAI:HandleCommand (no whisper lines in the owner's chat), else a real whisper.
+local function tell(owner, bot, text)
+    local ai = botAI(bot)
+    if ai and hasMethod(ai, "HandleCommand") then
+        local ok = pcall(function() ai:HandleCommand(CHAT_MSG_WHISPER, text, owner) end)
+        if ok then return end
+    end
+    whisper(owner, bot, text)
+end
+
+-- A strategy change for combat and out of combat ("+passive", "-cc,+dps assist"): silent through
+-- PlayerbotAI:ChangeStrategy, else the bot's own "co"/"nc" commands.
+local function strategy(owner, bot, change)
+    local ai = botAI(bot)
+    if ai and hasMethod(ai, "ChangeStrategy") then
+        local ok = pcall(function()
+            ai:ChangeStrategy(change, BOT_STATE_COMBAT)
+            ai:ChangeStrategy(change, BOT_STATE_NON_COMBAT)
+        end)
+        if ok then return end
+    end
+    tell(owner, bot, "co " .. change)
+    tell(owner, bot, "nc " .. change)
+end
 
 -- The role a group member covers: our record for our bots, else the spec (mod-playerbots' IsTank/IsHealer
 -- by talents, which works for real players too), else damage.
@@ -301,6 +419,8 @@ end
 ------------------------------------------------------------------------------------------------
 -- arrival: claim the bots that joined, set them up
 ------------------------------------------------------------------------------------------------
+local ownSave, pushRoster   -- below
+
 local function claimed(botGuid)
     for _, list in pairs(companions) do if list[botGuid] then return true end end
     return false
@@ -321,7 +441,7 @@ local function bringOver(owner, m)
     if sameMap and mi ~= nil and mi == oi then
         try(m, "Teleport", owner:GetMapId(), owner:GetX(), owner:GetY(), owner:GetZ(), owner:GetO())
     else
-        whisper(owner, m, "summon")
+        tell(owner, m, "summon")
     end
 end
 
@@ -332,14 +452,14 @@ local function setUp(owner, m, p)
         if m:GetLevel() ~= owner:GetLevel() and name ~= "" then
             botCommand(owner, "init=auto " .. name)
         end
-        if p.spec then whisper(owner, m, "talents spec " .. p.spec) end
+        if p.spec then tell(owner, m, "talents spec " .. p.spec) end
         if not p.buddy then
-            whisper(owner, m, "maintenance")
-            whisper(owner, m, "autogear")
+            tell(owner, m, "maintenance")
+            tell(owner, m, "autogear")
         end
     end
-    whisper(owner, m, "ll normal")
-    whisper(owner, m, "follow")
+    tell(owner, m, "ll normal")
+    tell(owner, m, "follow")
 end
 
 local function convertIfNeeded(owner)
@@ -354,6 +474,7 @@ local function arrivals(owner)
     local list = pending[guid]
     if not list or #list == 0 then return end
     convertIfNeeded(owner)
+    local joined = false
     local _, members = groupMembers(owner)
     for _, m in ipairs(members) do
         local bg = m:GetGUIDLow()
@@ -371,8 +492,11 @@ local function arrivals(owner)
                 local role = p.role
                 if p.alt then role = roleOf(owner, m) end
                 companions[guid] = companions[guid] or {}
-                companions[guid][bg] = { name = m:GetName(), cls = cls, role = role, buddy = p.buddy, alt = p.alt }
+                companions[guid][bg] = { name = m:GetName(), cls = cls, role = role, spec = p.spec, buddy = p.buddy,
+                    alt = p.alt, order = "follow" }
+                ownSave(guid, bg, companions[guid][bg])
                 setUp(owner, m, p)
+                joined = true
                 if p.buddy then
                     say(owner, string.format("%s the %s is your levelling buddy bot. Say 'stay' or 'follow' in party chat.",
                         m:GetName(), CLASS_LABEL[cls] or "bot"))
@@ -386,6 +510,7 @@ local function arrivals(owner)
         end
     end
     if #list == 0 then raidWanted[guid] = nil end
+    if joined then pushRoster(owner) end
 end
 
 local function expire(owner, final)
@@ -457,6 +582,77 @@ dbExec([[CREATE TABLE IF NOT EXISTS mod_companions_usual (
   account INT UNSIGNED NOT NULL, slot TINYINT UNSIGNED NOT NULL, guid INT UNSIGNED NOT NULL,
   name VARCHAR(24) NOT NULL, saved_at INT UNSIGNED NOT NULL, PRIMARY KEY (account, slot)
 )]])
+
+-- Who owns which bot, so a crash or a script reload doesn't orphan them (the module logs them back in with
+-- their master; the in-memory tables start empty).
+dbExec([[CREATE TABLE IF NOT EXISTS mod_companions_owned (
+  bot INT UNSIGNED NOT NULL, owner INT UNSIGNED NOT NULL, name VARCHAR(24) NOT NULL, role VARCHAR(8) NOT NULL,
+  spec VARCHAR(32) NOT NULL, kind VARCHAR(6) NOT NULL, at INT UNSIGNED NOT NULL, PRIMARY KEY (bot), KEY (owner)
+)]])
+
+local ROLE_WORDS = { tank = true, healer = true, dps = true, alt = true, buddy = true }
+
+ownSave = function(owner, bg, c)
+    local name = safeName(c.name)
+    local role = ROLE_WORDS[c.role or ""] and c.role or "dps"
+    local spec = tostring(c.spec or "")
+    if not spec:match("^[%a ]*$") or #spec > 32 then spec = "" end
+    local kind = c.buddy and "buddy" or c.alt and "alt" or "bot"
+    if name == "" then return end
+    dbExec(string.format("REPLACE INTO mod_companions_owned (bot, owner, name, role, spec, kind, at) "
+        .. "VALUES (%d, %d, '%s', '%s', '%s', '%s', %d)", bg, owner, name, role, spec, kind, os.time()))
+end
+
+ownForget = function(bg) dbExec(string.format("DELETE FROM mod_companions_owned WHERE bot = %d", bg)) end
+
+local function ownForgetOwner(owner)
+    dbExec(string.format("DELETE FROM mod_companions_owned WHERE owner = %d", owner))
+end
+
+local function ownRows(owner)
+    local out = {}
+    for _, r in ipairs(dbRows(string.format(
+        "SELECT bot, name, role, spec, kind FROM mod_companions_owned WHERE owner = %d", owner), { "n", "s", "s", "s", "s" })) do
+        if r[1] then out[r[1]] = { name = r[2], role = r[3], spec = r[4], kind = r[5] } end
+    end
+    return out
+end
+
+-- Takes back the bots in the player's group that are the player's: PlayerbotAI:GetMaster() is the player, or
+-- (without GetBotAI) mod_companions_owned says so. Not while recruits are on the way (arrivals claims those).
+-- Returns how many came back.
+adopt = function(player)
+    local guid = player:GetGUIDLow()
+    if #(pending[guid] or {}) > 0 or not try(player, "GetGroup") then return 0 end
+    local _, members = groupMembers(player)
+    local rows, n = nil, 0
+    for _, m in ipairs(members) do
+        local bg = m:GetGUIDLow()
+        if bg ~= guid and isBot(m) and not claimed(bg) then
+            local mine
+            local ai = botAI(m)
+            local master = ai and try(ai, "GetMaster")
+            if master then mine = try(master, "GetGUIDLow") == guid end
+            rows = rows or ownRows(guid)
+            local row = rows[bg]
+            if mine == nil then mine = row ~= nil end
+            if mine then
+                local alt = try(m, "GetAccountId") == player:GetAccountId()
+                local buddy = row ~= nil and row.kind == "buddy"
+                local role = row and ROLE_WORDS[row.role or ""] and row.role or nil
+                if not role then role = roleOf(player, m) end
+                local spec = row and row.spec ~= "" and row.spec or nil
+                companions[guid] = companions[guid] or {}
+                local c = { name = m:GetName(), cls = m:GetClass(), role = role, spec = spec, buddy = buddy, alt = alt,
+                    order = "follow" }
+                companions[guid][bg] = c
+                ownSave(guid, bg, c)
+                n = n + 1
+            end
+        end
+    end
+    return n
+end
 
 -- The other characters on the player's account that are offline: { guid, name, level, class }.
 local function accountAlts(player)
@@ -750,13 +946,14 @@ local function buddyCommand(player, arg)
         if not bg then return say(player, "You have no buddy with you.") end
         local _, members = groupMembers(player)
         for _, m in ipairs(members) do
-            if m:GetGUIDLow() == bg then whisper(player, m, "leave"); break end
+            if m:GetGUIDLow() == bg then tell(player, m, "leave"); break end
         end
         local nm = safeName(b.name)
         if nm ~= "" then
             player:RegisterEvent(function(_, _, _, p) if p then botCommand(p, "remove " .. nm) end end, 2500, 1)
         end
         companions[guid][bg] = nil
+        ownForget(bg)
         return say(player, b.name .. " heads home.")
     end
     if b then
@@ -804,8 +1001,8 @@ local function dismissCommand(player, arg)
     for _, m in ipairs(members) do byGuid[m:GetGUIDLow()] = m end
     local later = {}
     local function send(bg, c)
-        gone[#gone + 1] = c.name; list[bg] = nil
-        if byGuid[bg] then whisper(player, byGuid[bg], "leave") end
+        gone[#gone + 1] = c.name; list[bg] = nil; ownForget(bg)
+        if byGuid[bg] then tell(player, byGuid[bg], "leave") end
         local nm = safeName(c.name)
         if nm ~= "" then later[#later + 1] = nm end
     end
@@ -830,6 +1027,7 @@ local function dismissCommand(player, arg)
         player:RegisterEvent(function(_, _, _, p)
             if not p then return end
             for _, nm in ipairs(later) do botCommand(p, "remove " .. nm) end
+            pushRoster(p)
         end, 2500, 1)
     end
     table.sort(gone)
@@ -857,6 +1055,306 @@ local function showHelp(player)
     end
     table.sort(names)
     if #names > 0 then say(player, "  With you: " .. table.concat(names, ", ")) end
+    if OVMod then say(player, "  The Bots window: |cffffff00/comp|r") end
+end
+
+------------------------------------------------------------------------------------------------
+-- the Bots window (WrathUnleashedUI/Companions.lua) over OVMOD, mod "wucomp"
+------------------------------------------------------------------------------------------------
+local FORMATIONS = { near = true, melee = true, line = true, circle = true, arrow = true, shield = true, queue = true,
+    chaos = true }
+local PREPARE_COOLDOWN = 60   -- seconds between two "Prepare for raid"
+local BOT_COOLDOWN = 10       -- seconds between two spec / role / gear changes of one bot
+local PER_SECOND = 4          -- window requests answered per player per second
+local ILVL_CACHE = 15         -- seconds an item level is reused
+local GEAR_SLOTS = { 0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17 }   -- not the shirt (3) or tabard (18)
+
+local rate, lastPrepare, botBusy, ilvlCache = {}, {}, {}, {}
+
+local function clean(s) return (tostring(s or ""):gsub("[\t\n|]", "")) end
+
+local function flooding(guid)
+    local now = os.time()
+    local r = rate[guid]
+    if not r or r.at ~= now then rate[guid] = { at = now, n = 1 }; return false end
+    r.n = r.n + 1
+    return r.n > PER_SECOND
+end
+
+-- Average item level of what the bot wears (cached a few seconds; 17 slots per bot).
+local function itemLevel(m)
+    local bg, now = m:GetGUIDLow(), os.time()
+    local hit = ilvlCache[bg]
+    if hit and now - hit.at < ILVL_CACHE then return hit.v end
+    local sum, n = 0, 0
+    for _, slot in ipairs(GEAR_SLOTS) do
+        local it = try(m, "GetEquippedItemBySlot", slot)
+        local lv = it and tonumber(try(it, "GetItemLevel"))
+        if lv and lv > 0 then sum = sum + lv; n = n + 1 end
+    end
+    local v = n > 0 and math.floor(sum / n + 0.5) or 0
+    ilvlCache[bg] = { v = v, at = now }
+    return v
+end
+
+local function statusOf(m, c)
+    if try(m, "IsDead") then return "dead" end
+    if c.passive then return "passive" end
+    if c.order == "stay" then return "stay" end
+    return "follow"
+end
+
+-- The player's bots that are in the group now, tanks first, then healers, then damage, then by name.
+local RANK = { tank = 1, healer = 2, dps = 3 }
+local function myBots(player)
+    prune(player)
+    local _, members = groupMembers(player)
+    local byGuid = {}
+    for _, m in ipairs(members) do byGuid[m:GetGUIDLow()] = m end
+    local out = {}
+    for bg, c in pairs(companions[player:GetGUIDLow()] or {}) do
+        if byGuid[bg] then out[#out + 1] = { bg = bg, c = c, m = byGuid[bg], role = roleOf(player, byGuid[bg]) } end
+    end
+    table.sort(out, function(a, b)
+        local ra, rb = RANK[a.role] or 4, RANK[b.role] or 4
+        if ra ~= rb then return ra < rb end
+        return a.c.name < b.c.name
+    end)
+    return out
+end
+
+local function findBot(player, name)
+    name = tostring(name or ""):lower()
+    if name == "" then return nil end
+    for _, e in ipairs(myBots(player)) do if e.c.name:lower() == name then return e end end
+    return nil
+end
+
+pushRoster = function(player)
+    if not OVMod or not player then return end
+    local guid = player:GetGUIDLow()
+    local state = (not botsBuilt(player)) and "soon" or (not onSwitch()) and "off" or "on"
+    local list = state == "on" and myBots(player) or {}
+    local o = orders[guid] or {}
+    local raiding = isRaidGroup(player)
+    local lines = { table.concat({ "H", #list, raiding and perPlayerRaid() or perPlayer(), raiding and 1 or 0,
+        o.formation or "chaos", o.assist and 1 or 0, o.cc and 1 or 0, state }, "\t") }
+    local classes, seen = {}, {}
+    for _, e in ipairs(list) do
+        local c, m = e.c, e.m
+        local cls = c.cls or m:GetClass()
+        lines[#lines + 1] = table.concat({ "B", clean(c.name), cls, e.role, c.buddy and "buddy" or c.alt and "alt" or "bot",
+            clean(c.spec or ""), itemLevel(m), statusOf(m, c), m:GetLevel() }, "\t")
+        if not seen[cls] then seen[cls] = true; classes[#classes + 1] = cls end
+    end
+    table.sort(classes)
+    for _, cls in ipairs(classes) do
+        local parts = {}
+        for _, s in ipairs(specsFor(cls)) do parts[#parts + 1] = s .. "=" .. specRole(s) end
+        lines[#lines + 1] = "S\t" .. cls .. "\t" .. table.concat(parts, ",")
+    end
+    OVMod.Send(player, MOD, "roster", table.concat(lines, "\n"))
+end
+
+local function later(player, ms, fn)
+    player:RegisterEvent(function(_, _, _, p) if p then fn(p) end end, ms, 1)
+end
+
+-- Every window action: answers go to the window from now on; bots on this realm, and on.
+local function windowReady(player)
+    if isBot(player) or flooding(player:GetGUIDLow()) then return false end
+    replyTo[player:GetGUIDLow()] = true
+    if not botsBuilt(player) then comingSoon(player); return false end
+    if not onSwitch() then say(player, "Bots are off on this realm."); return false end
+    return true
+end
+
+-- Orders that teach, re-gear or re-spec wait for a quiet moment.
+local function calm(player)
+    if try(player, "IsDead") then say(player, "Not while dead."); return false end
+    if try(player, "IsInCombat") or groupInCombat(player) then say(player, "Wait until your group is out of combat."); return false end
+    return true
+end
+
+local function busy(player, e)
+    local now = os.time()
+    if botBusy[e.bg] and now - botBusy[e.bg] < BOT_COOLDOWN then
+        say(player, string.format("%s is still busy. Try again in %d s.", e.c.name, BOT_COOLDOWN - (now - botBusy[e.bg])))
+        return true
+    end
+    botBusy[e.bg] = now
+    return false
+end
+
+-- order <what> <name|all>
+local ORDERS = {
+    follow  = { said = "Following you.", fn = function(p, e) tell(p, e.m, "follow"); e.c.order = "follow"; e.c.passive = nil end },
+    stay    = { said = "Staying here.", fn = function(p, e) tell(p, e.m, "stay"); e.c.order = "stay"; e.c.passive = nil end },
+    attack  = { said = "Attacking your target.", fn = function(p, e) tell(p, e.m, "attack") end },
+    passive = { said = "Passive: they won't attack.", fn = function(p, e) strategy(p, e.m, "+passive"); e.c.passive = true end },
+    active  = { said = "They fight again.", fn = function(p, e) strategy(p, e.m, "-passive"); e.c.passive = nil end },
+    -- Tanks mark their target with the skull; damage focuses one target at a time (dps assist, not dps aoe) and
+    -- the skull first (mod-playerbots' DpsTargetValue takes the RTI target first).
+    assist  = { said = "Damage bots focus the tank's skull target.", group = "assist", on = true, fn = function(p, e)
+        if e.role == "tank" then strategy(p, e.m, "+mark rti")
+        elseif e.role == "dps" then strategy(p, e.m, "+dps assist"); tell(p, e.m, "rti skull") end
+    end },
+    noassist = { said = "Assist tank off.", group = "assist", on = false, fn = function(p, e)
+        if e.role == "tank" then strategy(p, e.m, "-mark rti") end
+    end },
+    cc      = { said = "Crowd control on: bots that can will keep extra enemies busy.", group = "cc", on = true,
+        fn = function(p, e) strategy(p, e.m, "+cc") end },
+    nocc    = { said = "Crowd control off.", group = "cc", on = false, fn = function(p, e) strategy(p, e.m, "-cc") end },
+}
+
+local function onOrder(player, data)
+    if not windowReady(player) then return end
+    local what, target = tostring(data or ""):lower():match("^(%a+) (%S+)$")
+    local o = ORDERS[what or ""]
+    if not o then return say(player, "That order isn't known.") end
+    if what == "attack" and not try(player, "GetSelection") then return say(player, "Target something first.") end
+    local list = myBots(player)
+    if #list == 0 then return say(player, "You have no bots with you.") end
+    local done
+    for _, e in ipairs(list) do
+        if target == "all" or e.c.name:lower() == target then o.fn(player, e); done = done or e.c.name end
+    end
+    if not done then return say(player, "None of your bots is called " .. clean(target) .. ".") end
+    if o.group and target == "all" then
+        local guid = player:GetGUIDLow()
+        orders[guid] = orders[guid] or {}
+        orders[guid][o.group] = o.on
+    end
+    say(player, target == "all" and o.said or (done .. ": " .. o.said))
+    pushRoster(player)
+end
+
+local function onFormation(player, data)
+    if not windowReady(player) then return end
+    local f = tostring(data or ""):lower():match("^(%a+)$")
+    if not FORMATIONS[f or ""] then return say(player, "That formation isn't known.") end
+    local list = myBots(player)
+    if #list == 0 then return say(player, "You have no bots with you.") end
+    for _, e in ipairs(list) do tell(player, e.m, "formation " .. f) end
+    local guid = player:GetGUIDLow()
+    orders[guid] = orders[guid] or {}
+    orders[guid].formation = f
+    say(player, "Formation: " .. f .. ".")
+    pushRoster(player)
+end
+
+-- Maintenance (spells, talents, consumables, repairs) and autogear for recruited bots; alts keep their own gear;
+-- everyone rebuffs.
+local function onPrepare(player)
+    if not windowReady(player) or not calm(player) then return end
+    local guid, now = player:GetGUIDLow(), os.time()
+    if lastPrepare[guid] and now - lastPrepare[guid] < PREPARE_COOLDOWN then
+        return say(player, string.format("They are getting ready. Again in %d s.", PREPARE_COOLDOWN - (now - lastPrepare[guid])))
+    end
+    local list = myBots(player)
+    if #list == 0 then return say(player, "You have no bots with you.") end
+    lastPrepare[guid] = now
+    for _, e in ipairs(list) do
+        if not e.c.alt then
+            tell(player, e.m, "maintenance")
+            tell(player, e.m, "autogear")
+            ilvlCache[e.bg] = nil
+        end
+        tell(player, e.m, "rebuff")
+    end
+    say(player, "Getting ready: spells, gear and buffs. Give them a few seconds.")
+    later(player, 5000, function(p) for _, e in ipairs(list) do ilvlCache[e.bg] = nil end; pushRoster(p) end)
+end
+
+-- A premade spec (one of the realm's for that class), then maintenance and autogear for the new talents.
+local function learnSpec(player, e, spec)
+    tell(player, e.m, "talents spec " .. spec)
+    tell(player, e.m, "maintenance")
+    tell(player, e.m, "autogear")
+    e.c.spec = spec
+    if not e.c.buddy then e.c.role = specRole(spec) end
+    ownSave(player:GetGUIDLow(), e.bg, e.c)
+    ilvlCache[e.bg] = nil
+    pushRoster(player)
+    later(player, 4000, function(p) ilvlCache[e.bg] = nil; pushRoster(p) end)   -- the new gear's item level
+end
+
+local function specLabel(spec) return (spec:gsub(" pve$", "")) end
+
+local function changeable(player, e)
+    if not e then say(player, "That bot isn't with you."); return false end
+    if e.c.alt then say(player, e.c.name .. " is your own character: it keeps its own talents and gear."); return false end
+    return true
+end
+
+local function onSpec(player, data)
+    if not windowReady(player) then return end
+    local name, spec = tostring(data or ""):match("^(%S+)\t([%a ]+)$")
+    local e = findBot(player, name)
+    if not changeable(player, e) then return end
+    local fits = false
+    for _, s in ipairs(specsFor(e.c.cls)) do if s == spec then fits = true end end
+    if not fits then return say(player, "That spec isn't one " .. e.c.name .. " can learn.") end
+    if not calm(player) or busy(player, e) then return end
+    learnSpec(player, e, spec)
+    say(player, string.format("%s learns %s.", e.c.name, specLabel(spec)))
+end
+
+local function onRole(player, data)
+    if not windowReady(player) then return end
+    local name, role = tostring(data or ""):lower():match("^(%S+) (%a+)$")
+    role = ROLE_ALIAS[role or ""] or role
+    if not ROLES[role or ""] then return say(player, "Pick tank, healer or damage.") end
+    local e = findBot(player, name)
+    if not changeable(player, e) then return end
+    -- the class's usual pick for the role (ROLES), else any of the realm's specs for that role
+    local word, spec
+    for w, id in pairs(CLASS) do if id == e.c.cls then word = w end end
+    local have = {}
+    for _, s in ipairs(specsFor(e.c.cls)) do have[s] = specRole(s) == role end
+    for _, pk in ipairs(ROLES[role].picks) do if pk[1] == word and have[pk[2]] then spec = pk[2] end end
+    if not spec then for _, s in ipairs(specsFor(e.c.cls)) do if not spec and have[s] then spec = s end end end
+    if not spec then
+        return say(player, string.format("A %s can't be a %s.", CLASS_LABEL[e.c.cls] or "bot", ROLES[role].label))
+    end
+    if not calm(player) or busy(player, e) then return end
+    learnSpec(player, e, spec)
+    say(player, string.format("%s is now a %s (%s).", e.c.name, ROLES[role].label, specLabel(spec)))
+end
+
+local function onGear(player, data)
+    if not windowReady(player) then return end
+    local e = findBot(player, tostring(data or ""):match("^(%S+)$"))
+    if not changeable(player, e) or not calm(player) or busy(player, e) then return end
+    tell(player, e.m, "autogear")
+    ilvlCache[e.bg] = nil
+    say(player, e.c.name .. " is picking better gear.")
+    later(player, 4000, function(p) ilvlCache[e.bg] = nil; pushRoster(p) end)
+end
+
+if OVMod then
+    OVMod.On(MOD, "roster", function(player)
+        if isBot(player) or flooding(player:GetGUIDLow()) then return end
+        pushRoster(player)
+    end)
+    OVMod.On(MOD, "order", onOrder)
+    OVMod.On(MOD, "formation", onFormation)
+    OVMod.On(MOD, "prepare", onPrepare)
+    OVMod.On(MOD, "spec", onSpec)
+    OVMod.On(MOD, "role", onRole)
+    OVMod.On(MOD, "gear", onGear)
+    OVMod.On(MOD, "fill", function(player, data)
+        if not windowReady(player) then return end
+        if data == "party" or data == "raid" then fillCommand(player, data) else say(player, "Fill a party or a raid.") end
+    end)
+    OVMod.On(MOD, "usual", function(player) if windowReady(player) then usualCommand(player) end end)
+    OVMod.On(MOD, "dismiss", function(player, data)
+        if not windowReady(player) then return end
+        local arg = tostring(data or ""):lower():match("^(%S+)$")
+        if not arg then return say(player, "Dismiss whom?") end
+        dismissCommand(player, arg)
+        pushRoster(player)
+    end)
 end
 
 ------------------------------------------------------------------------------------------------
@@ -874,6 +1372,7 @@ local function onCommand(event, player, command)
     local cmd = words[1]
     if not COMMANDS[cmd] then return end
     if isBot(player) then return false end
+    replyTo[player:GetGUIDLow()] = nil   -- typed: the answers go to the chat
     if not botsBuilt(player) then comingSoon(player); return false end
     if cmd == "companions" or cmd == "companion" then
         if words[2] == "alts" then altsCommand(player)
@@ -912,7 +1411,7 @@ local function onLevelChange(event, player, oldLevel)
                     say(p, b.name .. " catches up to your level after the fight (.buddy, or level again).")
                 else
                     botCommand(p, "init=auto " .. safeName(b.name))
-                    whisper(p, m, "follow")
+                    tell(p, m, "follow")
                     say(p, string.format("%s keeps up: level %d.", b.name, p:GetLevel()))
                 end
             end
@@ -920,16 +1419,40 @@ local function onLevelChange(event, player, oldLevel)
     end, 3000, 1)
 end
 
+-- After a crash the module logs the player's bots back in with the player as their master (seen live
+-- 2026-10-26: a 10-player raid came back, our tables were empty). Look for them a few times after login.
+local LOGIN_LOOKS, LOGIN_LOOK_MS = 3, 15000
+local function onLogin(event, player)
+    if not player or isBot(player) or not botsBuilt(player) then return end
+    local looks, found = 0, false
+    player:RegisterEvent(function(_, _, _, p)
+        looks = looks + 1
+        if not p or found or isBot(p) then return end
+        local n = adopt(p)
+        if n > 0 then
+            found = true
+            say(p, plural(n, "bot") .. (n == 1 and " is" or " are") .. " back with you. (.dismiss all sends them home)")
+            pushRoster(p)
+        end
+    end, LOGIN_LOOK_MS, LOGIN_LOOKS)
+end
+
 local function onLogout(event, player)
     if not player then return end
     local guid = player:GetGUIDLow()
     companions[guid], pending[guid], ticking[guid], raidWanted[guid] = nil, nil, nil, nil
+    orders[guid], replyTo[guid], lastPrepare[guid], rate[guid] = nil, nil, nil, nil
+    -- A normal logout: the module logs the bots out with the player, so the ownership rows go. (A crash never
+    -- gets here: the rows stay for adopt.)
+    if not isBot(player) then ownForgetOwner(guid) end
 end
 
+RegisterPlayerEvent(3, onLogin)         -- PLAYER_EVENT_ON_LOGIN
 RegisterPlayerEvent(4, onLogout)        -- PLAYER_EVENT_ON_LOGOUT
 RegisterPlayerEvent(13, onLevelChange)  -- PLAYER_EVENT_ON_LEVEL_CHANGE
 RegisterPlayerEvent(42, onCommand)      -- PLAYER_EVENT_ON_COMMAND
 
 -- for stream/tests/test_ov_companions.lua (read only)
 OV_COMPANIONS_TEST = { companions = companions, pending = pending, realmCount = realmCount, ROLES = ROLES,
-    planRoles = planRoles, SHAPE = SHAPE }
+    planRoles = planRoles, SHAPE = SHAPE, specsFor = specsFor, specRole = specRole, adopt = adopt, orders = orders,
+    pushRoster = pushRoster, window = OVMod ~= nil }

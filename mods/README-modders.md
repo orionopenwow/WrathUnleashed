@@ -45,6 +45,7 @@ This copies the example mod, Dalaran Dice, into `my-mod/` with your id filled in
 | `audio` | Sounds and music | Original ambience, music packs and UI sounds. |
 | `tools` | Tools | Developer HUD plugins, map viewers, log analysers and OBS overlays. |
 | `conversions` | Total conversions | Whole new games built from the categories above. |
+| `themes` | Launcher themes | Theme packs for the Leyline launcher. These are not mods: see [docs/THEMES.md](../docs/THEMES.md). |
 
 The list lives in [categories.json](categories.json); `wu-mod.py check` rejects anything else. An empty shelf on the site says "Publish the first one" and links here, so yours can be the first.
 

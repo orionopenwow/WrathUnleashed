@@ -1,11 +1,21 @@
-# Leyline launcher (launcher/): test the Rust core on every change, and on a `launcher-v*` tag build the
-# desktop app for Windows (.msi and setup .exe), macOS (.dmg, Apple Silicon and Intel) and Linux (.AppImage,
-# .deb) and attach them to a GitHub release for that tag.
+# Leyline launcher (launcher/): test the Rust core on every change; on a `launcher-v<version>` tag build the desktop
+# app and attach it to the GitHub release for that tag:
+#   Windows: setup .exe (NSIS) and .msi;   Linux: .AppImage and .deb;   macOS: one universal .dmg (unsigned).
+# With the updater signing key in the repo's secrets ("Turn on launcher updates.bat"), every build is also signed
+# for Leyline's own updater and the release gets latest.json, the manifest the installed launchers read.
 #
 # Runs in the PUBLIC repo orionopenwow/Leyline (players can't download release files from the private
 # WrathUnleashed repo, and a public repo's Actions minutes are free). Source copy: tools/github-workflows/ in
-# WrathUnleashed; "Turn on GitHub builds.bat" puts it in Leyline's .github/workflows/ and pushes the tag. No secrets are needed: there is no code signing yet (owner decision, L0), so
-# Windows SmartScreen and macOS Gatekeeper will warn on first run; the README says how to open it anyway.
+# WrathUnleashed; "Turn on GitHub builds.bat" puts it in Leyline's .github/workflows/ and pushes the tag.
+# No code signing yet (owner decision): Windows SmartScreen and macOS Gatekeeper warn on first run; the README
+# says how to open it anyway.
+#
+# macOS never makes a run red: its test job and its release job are `continue-on-error` (a GitHub macOS runner
+# outage turned a whole run red on 2026-10-26). A release without its .dmg can be completed by re-running the
+# failed macOS job later.
+#
+# One tag push makes a release: the tag's version (launcher-v0.3.0 -> 0.3.0) must match tauri.conf.json, and a
+# version with a "-" (0.3.1-beta.1) is published as a pre-release, which only the beta channel installs.
 name: leyline launcher
 on:
   # No `paths` filter on push: with one, GitHub can skip tag pushes, and the tag is what makes a release.
@@ -27,6 +37,7 @@ jobs:
       matrix:
         os: [ubuntu-22.04, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ startsWith(matrix.os, 'macos') }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -37,9 +48,54 @@ jobs:
         working-directory: launcher/src-tauri
         run: cargo test --no-default-features
 
-  release:
+  create-release:
     if: startsWith(github.ref, 'refs/tags/launcher-v')
     needs: core-tests
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    outputs:
+      id: ${{ steps.r.outputs.id }}
+      signed: ${{ steps.r.outputs.signed }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make the release (once per tag)
+        id: r
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: |
+          set -euo pipefail
+          ver="${TAG#launcher-v}"
+          conf=$(python3 -c "import json;print(json.load(open('launcher/src-tauri/tauri.conf.json'))['version'])")
+          if [ "$ver" != "$conf" ]; then
+            echo "::error::The tag says $ver but launcher/src-tauri/tauri.conf.json says $conf. Tag the version in the file."
+            exit 1
+          fi
+          pre=""
+          case "$ver" in *-*) pre="--prerelease" ;; esac
+          if ! gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            awk -v v="$ver" '$0 ~ "^## "v"( |$)" {on=1; next} /^## / {if (on) exit} on' launcher/CHANGELOG.md > notes.md || true
+            {
+              echo
+              echo "Builds are not code-signed yet: on Windows choose \"More info, Run anyway\"; on macOS right-click Leyline and choose Open (see launcher/README.md)."
+              echo "Leyline uses the game client you already have. It never downloads one."
+            } >> notes.md
+            gh release create "$TAG" -R "$GITHUB_REPOSITORY" --title "Leyline $ver" --notes-file notes.md $pre
+          fi
+          echo "id=$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json databaseId --jq .databaseId)" >> "$GITHUB_OUTPUT"
+          pk=$(python3 -c "import json;print(json.load(open('launcher/src-tauri/tauri.conf.json'))['plugins']['updater']['pubkey'])")
+          if [ "$HAS_KEY" = "true" ] && [ "${pk#TODO}" = "$pk" ]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No updater signing (secret TAURI_SIGNING_PRIVATE_KEY and the public key in tauri.conf.json are both needed: run 'Turn on launcher updates.bat'). Installed launchers will only link to this release."
+          fi
+
+  release:
+    needs: create-release
     permissions:
       contents: write
     strategy:
@@ -47,13 +103,9 @@ jobs:
       matrix:
         include:
           - platform: windows-latest
-            args: ""
-          - platform: macos-latest
-            args: "--target aarch64-apple-darwin"
-          - platform: macos-latest
-            args: "--target x86_64-apple-darwin"
+            args: "--bundles nsis,msi"
           - platform: ubuntu-22.04
-            args: ""
+            args: "--bundles appimage,deb"
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -61,30 +113,78 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf file
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ startsWith(matrix.platform, 'macos') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: launcher/src-tauri
       - name: Install the Tauri CLI
         working-directory: launcher
         run: npm install
+      - name: Updater signing on or off
+        id: sign
+        shell: bash
+        run: |
+          if [ "${{ needs.create-release.outputs.signed }}" = "true" ]; then
+            # a file next to tauri's own config (the build runs in launcher/), not JSON on the command line
+            echo '{"bundle":{"createUpdaterArtifacts":true}}' > launcher/updater.conf.json
+            echo "args=--config updater.conf.json" >> "$GITHUB_OUTPUT"
+          else
+            echo "args=" >> "$GITHUB_OUTPUT"
+          fi
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: launcher
-          tagName: ${{ github.ref_name }}
-          releaseName: "Leyline ${{ github.ref_name }}"
-          releaseBody: |
-            Leyline desktop launcher. Pick your own installed client (3.3.5a or 1.12.1), install and manage Workshop mods,
-            play on the official realm or a community Beacon, and host your own realm with the host kit.
-            Builds are not code-signed yet: on Windows choose "More info, Run anyway"; on macOS right-click the app and choose Open.
-          releaseDraft: false
-          prerelease: true
-          args: ${{ matrix.args }}
+          releaseId: ${{ needs.create-release.outputs.id }}
+          includeUpdaterJson: ${{ needs.create-release.outputs.signed == 'true' }}
+          updaterJsonPreferNsis: true
+          args: ${{ matrix.args }} ${{ steps.sign.outputs.args }}
+
+  release-macos:
+    needs: create-release
+    runs-on: macos-latest
+    continue-on-error: true
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: launcher/src-tauri
+      - name: Install the Tauri CLI
+        working-directory: launcher
+        run: npm install
+      - name: Updater signing on or off
+        id: sign
+        shell: bash
+        run: |
+          if [ "${{ needs.create-release.outputs.signed }}" = "true" ]; then
+            # a file next to tauri's own config (the build runs in launcher/), not JSON on the command line
+            echo '{"bundle":{"createUpdaterArtifacts":true}}' > launcher/updater.conf.json
+            echo "args=--config updater.conf.json" >> "$GITHUB_OUTPUT"
+          else
+            echo "args=" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: launcher
+          releaseId: ${{ needs.create-release.outputs.id }}
+          includeUpdaterJson: ${{ needs.create-release.outputs.signed == 'true' }}
+          args: --target universal-apple-darwin --bundles app,dmg ${{ steps.sign.outputs.args }}

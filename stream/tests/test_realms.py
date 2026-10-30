@@ -224,5 +224,29 @@ except OSError:
 wp._read_listing = real_read
 os.remove(urlfile)
 
+# A refresh that hangs (a connection that never answers) must not freeze the list for good.
+gate = threading.Event()
+wp._read_listing = lambda url: (gate.wait(30), good)[1]
+reset_cache()
+wp.LISTING_STUCK = 0.3
+wp.community_realms()                      # starts a refresh that hangs
+hung_lock = wp._listing_busy
+check("listing: a hung refresh holds the lock", hung_lock.locked())
+time.sleep(0.4)
+with wp._listing_lock:
+    wp._listing["at"] = -1e9               # stale again
+wp._read_listing = lambda url: good
+wp.community_realms()
+for _ in range(100):
+    if wp._listing["ok"] and wp._listing["realms"]:
+        break
+    time.sleep(0.02)
+check("listing: a new refresh replaces a hung one", wp._listing_busy is not hung_lock and wp._listing["ok"]
+      and [r["name"] for r in wp._listing["realms"]] == ["Dalaran Hangout"])
+gate.set()                                 # the hung one finishes later and releases only its own lock
+time.sleep(0.2)
+check("listing: the late thread leaves the new lock alone", not hung_lock.locked() and not wp._listing_busy.locked())
+wp._read_listing = real_read
+
 print(f"\n{count - fails}/{count} passed")
 sys.exit(1 if fails else 0)

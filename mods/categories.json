@@ -25,6 +25,8 @@
   {"id": "tools", "name": "Tools", "icon": "wrench",
    "line": "Developer HUD plugins, map viewers, log analysers and OBS overlays."},
   {"id": "conversions", "name": "Total conversions", "icon": "globe",
-   "line": "Whole new games built from the categories above."}
+   "line": "Whole new games built from the categories above."},
+  {"id": "themes", "name": "Launcher themes", "icon": "palette",
+   "line": "Theme packs for the Leyline launcher: colours, fonts and art. CSS and images only, no scripts."}
  ]
 }

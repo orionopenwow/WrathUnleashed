@@ -13,5 +13,8 @@ if not defined PY where python >nul 2>&1 && set "PY=python"
 if not defined PY (echo Python 3 is needed: https://www.python.org/downloads/ & exit /b 1)
 where gh >nul 2>&1 || (echo The GitHub CLI is needed: winget install GitHub.cli   then: gh auth login & exit /b 1)
 if not exist "..\..\tools\leyline-repo\hostkit.py" (echo Run this from the WrathUnleashed folder's hosting\kit. & exit /b 1)
-%PY% "..\..\tools\leyline-repo\hostkit.py" --kit "%~dp0." --upload
+%PY% "..\..\tools\leyline-repo\hostkit.py" --kit "%~dp0." --upload || exit /b 1
+rem The same kit as the Leyline Host pack (versioned zip + torrent + hostpack.json on the "host-pack" release), and
+rem stream\hostpack.json for the site (deploy it with the sign-in step, "signin").
+%PY% "..\pack\make-hostpack.py" --upload --write-site
 exit /b %ERRORLEVEL%

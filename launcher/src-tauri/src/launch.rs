@@ -31,7 +31,7 @@ impl Os {
 }
 
 pub fn plan(profile: &ClientProfile, wine: &Wine, os: Os) -> Result<Plan, String> {
-    let exe = find_ci(&profile.path, profile.build.exe_name())
+    let exe = find_ci(&profile.path, profile.exe_name())
         .ok_or_else(|| format!("The game's .exe is missing from {}.", profile.path.display()))?;
     let cwd = profile.path.clone();
     match os {

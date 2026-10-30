@@ -65,7 +65,7 @@ check("mods: the full field table and permissions", all(f"<code>{f}</code>" in p
 import json
 cats = [c["id"] for c in json.load(open(os.path.join(ROOT, "mods", "categories.json")))["categories"]]
 check("mods: the category field and every category in categories.json", "<code>category</code>" in pages["mods"]
-      and len(cats) == 12 and all(f"<td><code>{c}</code></td>" in pages["mods"] for c in cats), cats)
+      and len(cats) == 13 and all(f"<td><code>{c}</code></td>" in pages["mods"] for c in cats), cats)
 check("mods/publishing: no stale 'categories.json does not exist' note",
       "no such file" not in pages["mods"] and "does not exist" not in visible(pages["mods"]))
 check("publishing: the category pages and the submit form as coming soon", "/wrath/mods/c/" in pages["publishing"]

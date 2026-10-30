@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Leyline Launcher</title>
 <link rel="stylesheet" href="style.css">
+<!-- themes (themes agent): the Rounded looks and the Themes section; themes.js applies the theme before paint -->
+<link rel="stylesheet" href="themes/rounded.css"><link rel="stylesheet" href="themes/themes.css"><script src="themes.js"></script>
 </head>
 <body class="ly">
 <div class="frame">
@@ -17,7 +19,8 @@
     <input id="search" type="search" placeholder="Search mods, realms and players" aria-label="Search mods, realms and players" autocomplete="off" spellcheck="false">
   </form>
   <div class="tb-fill" data-tauri-drag-region></div>
-  <button type="button" class="pill upd" id="tb-update" hidden>Update available</button>
+  <button type="button" class="pill upd" id="tb-modupd" hidden title="Workshop mods with a newer version: open My Mods">Mod updates</button>
+  <button type="button" class="pill upd" id="tb-update" hidden title="A new Leyline is downloaded: restart to use it">Update ready, restart</button>
   <div class="pill" id="tb-status"><span class="dot"></span><span id="tb-status-text">Checking…</span></div>
   <button type="button" class="chip" id="tb-account" title="Your account lives on the website: sign in with Google or your Hero Key">
     <span class="chip-crest"><img src="art/kit/crest.png" alt=""><b>L</b></span>
@@ -102,8 +105,9 @@
   <section class="page" id="page-clients">
     <div class="panel">
       <h2>Game Clients</h2>
-      <p class="lede">Point Leyline at a game folder you already have: 3.3.5a (build 12340) or 1.12.1 (build 5875).
-        It reads the build from the executable and the data files, and checks the install looks complete.</p>
+      <p class="lede">Point Leyline at a game folder you already have. It reads the build from the executable:
+        1.12.1 (5875), 2.4.3 (8606), 3.3.5a (12340), 4.3.4 (15595) or 5.4.8 (18414). Any other build is listed as
+        "other": you can play realms with it, but Leyline offers no mods for it. Leyline never downloads a game client.</p>
       <div class="row">
         <button class="btn" id="cl-pick">CHOOSE A FOLDER…</button>
         <input id="cl-path" placeholder="or paste a folder path" autocomplete="off" spellcheck="false">
@@ -121,21 +125,27 @@
       <div class="toolbar">
         <label class="inline">Client <select class="client-pick" data-for="mods"></select></label>
         <span class="hint" id="mods-client-note"></span>
+        <span class="toolbar-fill"></span>
+        <button type="button" class="btn small" id="mods-update-all" hidden>UPDATE ALL</button>
+        <button type="button" class="btn small" data-page-go="discover">FIND MODS</button>
       </div>
       <div class="drop" id="drop">
         <b>Drop a mod here</b>
-        <span>a .zip, an addon folder, or a client patch (.MPQ)</span>
+        <span>a .zip, an addon folder, a client patch (.MPQ) or a native mod (.dll, .asi)</span>
         <div class="row center">
-          <button type="button" class="btn small" id="mods-pick-file">CHOOSE A ZIP OR PATCH…</button>
+          <button type="button" class="btn small" id="mods-pick-file">CHOOSE A FILE…</button>
           <button type="button" class="btn small" id="mods-pick-folder">CHOOSE A FOLDER…</button>
         </div>
       </div>
       <p class="status" id="mods-status" role="status"></p>
       <ul class="problems" id="mods-problems" hidden></ul>
-      <div id="mods-list" class="cards"></div>
-      <p class="hint">Every mod is allowed for now: there is no review or signing yet, so only add mods from people you trust.
-        Addons go to <code>Interface\AddOns</code>, patches to a free <code>Data\patch-X.MPQ</code> slot. Removing a mod
-        takes out exactly the files Leyline put in; an addon's saved settings in <code>WTF</code> stay, as the game keeps them.</p>
+      <div id="mods-list" class="cards mods-grid"></div>
+      <p class="hint">Every mod is allowed: there is no review and no signing, so only add mods from people you trust.
+        Workshop downloads must match their sha256, and anything holding game data or secrets is refused.
+        Addons go to <code>Interface\AddOns</code>, patches to a free <code>Data\patch-X.MPQ</code> slot, native mods
+        (.dll, .asi) next to the game, after a one-time OK. Leyline never runs what it installs.
+        Removing a mod takes out exactly the files Leyline put in and you have not changed; an addon's saved
+        settings in <code>WTF</code> stay, as the game keeps them.</p>
     </div>
   </section>
 
@@ -164,6 +174,7 @@
         <button type="button" class="btn small" id="rl-back">BACK TO WRATH</button>
         <button type="button" class="btn small" id="rl-restore" title="Put back the realmlist you had before Leyline">MY OWN REALMLIST</button>
         <button type="button" class="btn small" id="rl-refresh">REFRESH</button>
+        <label class="check inline"><input type="checkbox" id="rl-mine"> Only realms my clients can play</label>
       </div>
       <p class="status" id="rl-status" role="status"></p>
       <div class="realm-list" id="rl-list"></div>
@@ -278,18 +289,41 @@
         <p class="status" id="set-status" role="status"></p>
       </form>
       <h3>Updates</h3>
-      <p class="lede">Leyline checks GitHub for a newer release and links it. It never installs anything by itself.</p>
-      <div class="row"><button type="button" class="btn" id="upd-check">CHECK FOR UPDATES</button><button type="button" class="btn" id="upd-open" hidden>OPEN THE RELEASE PAGE</button></div>
+      <p class="lede">Leyline looks for a new version when it starts and every 6 hours. It downloads it in the background,
+        checks its signature, and installs it only when you press <b>Update ready, restart</b> in the title bar, never
+        while a game you started from Leyline is open.</p>
+      <div class="form">
+        <label>Channel
+          <select id="upd-channel">
+            <option value="stable">Stable: releases</option>
+            <option value="beta">Beta: early versions too</option>
+          </select>
+        </label>
+      </div>
+      <div class="row"><button type="button" class="btn" id="upd-check">CHECK NOW</button><button type="button" class="btn" id="upd-restart" hidden>RESTART TO UPDATE</button><button type="button" class="btn" id="upd-open" hidden>OPEN THE RELEASE PAGE</button></div>
       <p class="status" id="upd-status" role="status"></p>
       <h3>Privacy</h3>
       <p class="lede">No telemetry and no accounts in the launcher. It fetches the Workshop catalog and the mods you install,
-        the realm list and realm status, and GitHub's release list; it keeps copies of the lists so it works offline, and opens
+        the realm list and realm status, and GitHub's release list and Leyline's own updates; it keeps copies of the lists so it works offline, and opens
         only pages it listed itself in your browser. Each request gives up after 8 seconds.</p>
       <h3>Your data</h3>
       <p class="lede">Settings and caches live in <code id="data-dir"></code>.</p>
     </div>
   </section>
 </main>
+
+<!-- The one-time notice for a mod with native code -->
+<dialog class="dlg" id="native-dlg" aria-labelledby="native-title">
+  <h3 id="native-title">Native code</h3>
+  <p><b id="native-name"></b> has native code. It runs inside your game, with full access to your PC.</p>
+  <ul id="native-files"></ul>
+  <p class="small">Leyline never runs it: the game loads it when you play. There is no review and no signing, so
+    only say yes if you trust its maker. Leyline asks once for each mod.</p>
+  <div class="row">
+    <button type="button" class="btn" id="native-yes">I TRUST IT: INSTALL</button>
+    <button type="button" class="btn" id="native-no">CANCEL</button>
+  </div>
+</dialog>
 
 <!-- The play bar, on every page -->
 <form id="play-form" class="playbar">
@@ -317,5 +351,6 @@
 
 </div>
 <script src="app.js"></script>
+<script src="host.js"></script>
 </body>
 </html>

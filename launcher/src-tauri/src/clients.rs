@@ -10,57 +10,146 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-/// The client builds Leyline supports.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// The client builds Leyline knows. Each is the player's OWN install, found by its executable's version; Leyline
+/// never downloads a client. A build it does not know is listed as `Other`: it can be started and pointed at a
+/// realm (the realm file is guessed from the executable's major version), but no mods are offered for it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Build {
-    /// 3.3.5a, build 12340.
-    #[serde(rename = "3.3.5a")]
-    V335a,
     /// 1.12.1, build 5875.
     #[serde(rename = "1.12.1")]
     V1121,
+    /// 2.4.3, build 8606.
+    #[serde(rename = "2.4.3")]
+    V243,
+    /// 3.3.5a, build 12340.
+    #[serde(rename = "3.3.5a")]
+    V335a,
+    /// 4.3.4, build 15595.
+    #[serde(rename = "4.3.4")]
+    V434,
+    /// 5.4.8, build 18414.
+    #[serde(rename = "5.4.8")]
+    V548,
+    /// Any other build ("other").
+    #[serde(rename = "other")]
+    Other,
+}
+
+/// Where a build reads the realm address from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RealmFile {
+    /// `realmlist.wtf` in the client folder (1.12).
+    ClientRoot,
+    /// `Data/<locale>/realmlist.wtf` (2.4.3, 3.3.5a); a `realmList` line in `WTF/Config.wtf` is kept in step.
+    LocaleData,
+    /// `SET realmlist "..."` in `WTF/Config.wtf` (4.3.4, 5.4.8).
+    ConfigWtf,
 }
 
 impl Build {
+    /// The builds Leyline knows, oldest first.
+    pub const KNOWN: [Build; 5] = [Build::V1121, Build::V243, Build::V335a, Build::V434, Build::V548];
+
+    /// The build number (0 for other builds).
     pub fn number(self) -> u16 {
         match self {
-            Build::V335a => 12340,
             Build::V1121 => 5875,
+            Build::V243 => 8606,
+            Build::V335a => 12340,
+            Build::V434 => 15595,
+            Build::V548 => 18414,
+            Build::Other => 0,
+        }
+    }
+    /// The version as players write it (`3.3.5a`), or `other`.
+    pub fn version(self) -> &'static str {
+        match self {
+            Build::V1121 => "1.12.1",
+            Build::V243 => "2.4.3",
+            Build::V335a => "3.3.5a",
+            Build::V434 => "4.3.4",
+            Build::V548 => "5.4.8",
+            Build::Other => "other",
         }
     }
     pub fn label(self) -> &'static str {
         match self {
-            Build::V335a => "3.3.5a (12340)",
             Build::V1121 => "1.12.1 (5875)",
+            Build::V243 => "2.4.3 (8606)",
+            Build::V335a => "3.3.5a (12340)",
+            Build::V434 => "4.3.4 (15595)",
+            Build::V548 => "5.4.8 (18414)",
+            Build::Other => "other build",
         }
     }
     /// The executable, as named in a stock install (looked up without regard to case).
     pub fn exe_name(self) -> &'static str {
         match self {
-            Build::V335a => "Wow.exe",
-            Build::V1121 => "WoW.exe",
+            Build::V1121 | Build::V243 => "WoW.exe",
+            _ => "Wow.exe",
         }
     }
-    /// The `## Interface:` number an addon for this build has in its .toc.
+    /// The `## Interface:` number an addon for this build has in its .toc ("" for other builds: no addons).
     pub fn interface(self) -> &'static str {
         match self {
-            Build::V335a => "30300",
             Build::V1121 => "11200",
+            Build::V243 => "20400",
+            Build::V335a => "30300",
+            Build::V434 => "40300",
+            Build::V548 => "50400",
+            Build::Other => "",
         }
+    }
+    /// The build whose addons carry this `## Interface:` number.
+    pub fn from_interface(n: &str) -> Option<Build> {
+        Build::KNOWN.into_iter().find(|b| b.interface() == n.trim())
     }
     /// The build as the Workshop catalog names it (`builds` in all.json).
     pub fn catalog_tag(self) -> &'static str {
         match self {
-            Build::V335a => "3.3.5a",
             Build::V1121 => "1.12",
+            Build::V243 => "2.4.3",
+            Build::V335a => "3.3.5a",
+            Build::V434 => "4.3.4",
+            Build::V548 => "5.4.8",
+            Build::Other => "other",
         }
     }
-    fn from_version(v: FileVersion) -> Option<Build> {
-        match (v.major, v.minor, v.patch, v.build) {
-            (3, 3, 5, 12340) => Some(Build::V335a),
-            (1, 12, 1, 5875) => Some(Build::V1121),
-            _ => None,
+    /// A build from a version or build number as catalogs and realm listings write it: `3.3.5a`, `3.3.5`,
+    /// `12340`, `1.12`, `1.12.1`, `wrath-3.3.5a`, ... None when it is none of the known builds.
+    pub fn from_tag(tag: &str) -> Option<Build> {
+        let t = tag.trim().to_ascii_lowercase();
+        let t = t.rsplit('-').next().unwrap_or(&t);
+        Build::KNOWN.into_iter().find(|b| {
+            let v = b.version();
+            t == v || t == b.catalog_tag() || t == b.number().to_string() || t == v.trim_end_matches('a')
+        })
+    }
+    /// Client patches (`Data/patch-<X>.MPQ`) work the same way on 1.12, 2.4.3 and 3.3.5a only.
+    pub fn takes_mpq_patches(self) -> bool {
+        matches!(self, Build::V1121 | Build::V243 | Build::V335a)
+    }
+    /// It keeps its realmlist and locale archives in `Data/<locale>/`.
+    fn has_locale(self) -> bool {
+        !matches!(self, Build::V1121)
+    }
+    /// Where this build reads its realm address. `major` (the executable's major version) decides for other builds.
+    pub fn realm_file(self, major: Option<u16>) -> RealmFile {
+        match self {
+            Build::V1121 => RealmFile::ClientRoot,
+            Build::V243 | Build::V335a => RealmFile::LocaleData,
+            Build::V434 | Build::V548 => RealmFile::ConfigWtf,
+            Build::Other => match major {
+                Some(0 | 1) => RealmFile::ClientRoot,
+                Some(2 | 3) => RealmFile::LocaleData,
+                _ => RealmFile::ConfigWtf,
+            },
         }
+    }
+    /// The build of an executable version: matched on the build number; anything else is `Other`.
+    pub fn from_version(v: FileVersion) -> Build {
+        Build::KNOWN.into_iter().find(|b| b.number() == v.build && b.version().starts_with(&format!("{}.", v.major))).unwrap_or(Build::Other)
     }
 }
 
@@ -71,12 +160,32 @@ pub struct ClientProfile {
     pub name: String,
     pub path: PathBuf,
     pub build: Build,
-    /// The realm address last written to this client's realmlist.wtf.
+    /// The realm address last written to this client's realm file.
     #[serde(default)]
     pub realmlist: String,
-    /// The locale folder (3.3.5a only), such as enUS.
+    /// The locale folder under Data/ (2.4.3 and newer), such as enUS.
     #[serde(default)]
     pub locale: Option<String>,
+    /// The executable's file version (`3.3.5.12340`), when it has one.
+    #[serde(default)]
+    pub exe_version: Option<String>,
+    /// The executable's file name as found in the folder, when it is not the build's usual one.
+    #[serde(default)]
+    pub exe: Option<String>,
+}
+
+impl ClientProfile {
+    /// The executable's major version, from `exe_version`.
+    pub fn major(&self) -> Option<u16> {
+        self.exe_version.as_deref().and_then(|v| v.split('.').next()).and_then(|m| m.parse().ok())
+    }
+    pub fn realm_file(&self) -> RealmFile {
+        self.build.realm_file(self.major())
+    }
+    /// The executable's file name to start.
+    pub fn exe_name(&self) -> &str {
+        self.exe.as_deref().unwrap_or(self.build.exe_name())
+    }
 }
 
 /// How a build was recognised.
@@ -91,6 +200,7 @@ pub enum DetectedBy {
 #[derive(Debug, Clone, Serialize)]
 pub struct Detection {
     pub build: Build,
+    pub build_label: &'static str,
     pub detected_by: DetectedBy,
     pub exe: Option<PathBuf>,
     pub exe_version: Option<String>,
@@ -98,15 +208,17 @@ pub struct Detection {
     /// Files a complete install has that this folder lacks. Empty means it looks complete.
     pub missing: Vec<String>,
     pub complete: bool,
+    pub realm_file: RealmFile,
     pub realmlist_path: PathBuf,
-    /// The realm address currently in realmlist.wtf, if any.
+    /// The realm address the client reads now, if any.
     pub current_realmlist: Option<String>,
+    /// The addons' `## Interface:` number ("" for other builds).
+    pub interface: &'static str,
 }
 
 #[derive(Debug)]
 pub enum DetectError {
     NotAFolder,
-    UnsupportedVersion(String),
     Unrecognised,
     Io(io::Error),
 }
@@ -115,13 +227,9 @@ impl std::fmt::Display for DetectError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DetectError::NotAFolder => write!(f, "That is not a folder."),
-            DetectError::UnsupportedVersion(v) => write!(
-                f,
-                "This client is version {v}. Leyline supports 3.3.5a (12340) and 1.12.1 (5875) for now."
-            ),
             DetectError::Unrecognised => write!(
                 f,
-                "No supported game client found here. Pick the folder that holds the game's .exe and its Data folder."
+                "No game client found here. Pick the folder that holds the game's .exe and its Data folder."
             ),
             DetectError::Io(e) => write!(f, "Could not read the folder: {e}"),
         }
@@ -152,10 +260,15 @@ fn find_rel(root: &Path, rel: &str) -> Option<PathBuf> {
 }
 
 const LOCALES: &[&str] = &[
-    "enUS", "enGB", "deDE", "frFR", "esES", "esMX", "ruRU", "koKR", "zhCN", "zhTW", "enTW", "enCN", "ptBR", "itIT",
+    "enUS", "enGB", "deDE", "frFR", "esES", "esMX", "ruRU", "koKR", "zhCN", "zhTW", "enTW", "enCN", "ptBR", "ptPT",
+    "itIT",
 ];
 
-/// The locale folder under Data/ (3.3.5a keeps realmlist.wtf and the locale MPQs there).
+/// The executables a client folder may have, in the order they are tried (the 32-bit one first: it is the one
+/// Wine and older add-on loaders expect).
+const EXE_CANDIDATES: &[&str] = &["Wow.exe", "Wow-64.exe"];
+
+/// The locale folder under Data/ (2.4.3 and newer keep realmlist.wtf and the locale archives there).
 fn find_locale(data: &Path) -> Option<String> {
     let mut found: Vec<String> = fs::read_dir(data)
         .ok()?
@@ -176,13 +289,23 @@ fn find_locale(data: &Path) -> Option<String> {
         .cloned()
 }
 
+/// The build from the data files alone (no executable, or one without a version resource).
 fn by_data_files(root: &Path) -> Option<Build> {
     let data = find_ci(root, "Data")?;
     let has = |n: &str| find_ci(&data, n).is_some();
+    if has("expansion4.MPQ") {
+        return Some(Build::V548);
+    }
+    if has("expansion3.MPQ") {
+        return Some(Build::V434);
+    }
     if has("lichking.MPQ") || has("common-2.MPQ") {
         return Some(Build::V335a);
     }
-    if has("patch.MPQ") && has("dbc.MPQ") && !has("expansion.MPQ") && !has("lichking.MPQ") && !has("common.MPQ") {
+    if has("expansion.MPQ") && has("common.MPQ") {
+        return Some(Build::V243);
+    }
+    if has("patch.MPQ") && has("dbc.MPQ") && !has("expansion.MPQ") && !has("common.MPQ") {
         return Some(Build::V1121);
     }
     None
@@ -190,23 +313,23 @@ fn by_data_files(root: &Path) -> Option<Build> {
 
 /// The files a complete install of `build` has, relative to the client folder.
 fn required(build: Build, locale: Option<&str>) -> Vec<String> {
-    let mut v: Vec<String> = match build {
-        Build::V335a => ["common.MPQ", "common-2.MPQ", "expansion.MPQ", "lichking.MPQ", "patch.MPQ", "patch-2.MPQ"]
-            .iter()
-            .map(|f| format!("Data/{f}"))
-            .collect(),
-        Build::V1121 => [
+    let data: &[&str] = match build {
+        Build::V1121 => &[
             "dbc.MPQ", "fonts.MPQ", "interface.MPQ", "misc.MPQ", "model.MPQ", "patch.MPQ", "sound.MPQ",
             "speech.MPQ", "terrain.MPQ", "texture.MPQ", "wmo.MPQ",
-        ]
-        .iter()
-        .map(|f| format!("Data/{f}"))
-        .collect(),
+        ],
+        Build::V243 => &["common.MPQ", "expansion.MPQ", "patch.MPQ"],
+        Build::V335a => &["common.MPQ", "common-2.MPQ", "expansion.MPQ", "lichking.MPQ", "patch.MPQ", "patch-2.MPQ"],
+        Build::V434 => &["art.MPQ", "expansion1.MPQ", "expansion2.MPQ", "expansion3.MPQ", "world.MPQ"],
+        Build::V548 => &["expansion1.MPQ", "expansion2.MPQ", "expansion3.MPQ", "expansion4.MPQ", "world.MPQ"],
+        Build::Other => &[],
     };
-    if build == Build::V335a {
-        match locale {
-            Some(l) => v.push(format!("Data/{l}/locale-{l}.MPQ")),
-            None => v.push("Data/<locale>/".into()),
+    let mut v: Vec<String> = data.iter().map(|f| format!("Data/{f}")).collect();
+    if build != Build::Other && build.has_locale() {
+        match (build, locale) {
+            (Build::V243 | Build::V335a, Some(l)) => v.push(format!("Data/{l}/locale-{l}.MPQ")),
+            (_, Some(l)) => v.push(format!("Data/{l}")),
+            (_, None) => v.push("Data/<locale>/".into()),
         }
     }
     v.insert(0, build.exe_name().to_string());
@@ -224,39 +347,57 @@ fn shown(rel: String) -> String {
     }
 }
 
-/// Where this build reads its realmlist from.
-pub fn realmlist_path(root: &Path, build: Build, locale: Option<&str>) -> PathBuf {
-    match (build, locale) {
-        (Build::V335a, Some(l)) => {
+/// Where a client reads its realm address from, by its realm-file rule.
+pub fn realm_file_path(root: &Path, rule: RealmFile, locale: Option<&str>) -> PathBuf {
+    match rule {
+        RealmFile::LocaleData => {
+            let l = locale.unwrap_or("enUS");
             let dir = find_rel(root, &format!("Data/{l}")).unwrap_or_else(|| root.join("Data").join(l));
             find_ci(&dir, "realmlist.wtf").unwrap_or_else(|| dir.join("realmlist.wtf"))
         }
-        (Build::V335a, None) => root.join("Data").join("enUS").join("realmlist.wtf"),
-        (Build::V1121, _) => find_ci(root, "realmlist.wtf").unwrap_or_else(|| root.join("realmlist.wtf")),
+        RealmFile::ClientRoot => find_ci(root, "realmlist.wtf").unwrap_or_else(|| root.join("realmlist.wtf")),
+        RealmFile::ConfigWtf => config_wtf(root),
     }
 }
 
-/// Look at a folder and say which client it is.
+/// `WTF/Config.wtf`, found without regard to case, or where it would be.
+fn config_wtf(root: &Path) -> PathBuf {
+    find_rel(root, "WTF/Config.wtf").unwrap_or_else(|| find_ci(root, "WTF").unwrap_or_else(|| root.join("WTF")).join("Config.wtf"))
+}
+
+/// Where this build reads its realmlist from (other builds: by their executable's major version, see
+/// `ClientProfile::realm_file`).
+pub fn realmlist_path(root: &Path, build: Build, locale: Option<&str>) -> PathBuf {
+    realm_file_path(root, build.realm_file(None), locale)
+}
+
+/// The realm file of a profile.
+pub fn profile_realm_file(p: &ClientProfile) -> PathBuf {
+    realm_file_path(&p.path, p.realm_file(), p.locale.as_deref())
+}
+
+/// Look at a folder and say which client it is. An executable of a build Leyline does not know is `Other`.
 pub fn detect(root: &Path) -> Result<Detection, DetectError> {
     if !root.is_dir() {
         return Err(DetectError::NotAFolder);
     }
     // 1. The executable's version resource.
     let mut exe_version = None;
+    let mut exe = None;
     let mut build = None;
     let mut detected_by = DetectedBy::ExeVersion;
-    for name in ["Wow.exe", "WoW.exe"] {
+    for name in EXE_CANDIDATES {
         if let Some(p) = find_ci(root, name) {
+            if exe.is_none() {
+                exe = Some(p.clone());
+            }
             if let Some(v) = pe_version::read(&p)? {
                 exe_version = Some(v.to_string());
-                build = Build::from_version(v);
+                build = Some(Build::from_version(v));
+                exe = Some(p);
+                break;
             }
-            break;
         }
-    }
-    // An executable that says it is some other version wins over the data files.
-    if let (None, Some(v)) = (build, &exe_version) {
-        return Err(DetectError::UnsupportedVersion(v.clone()));
     }
     // 2. The data-file signatures (no executable, or one without a version resource).
     if build.is_none() {
@@ -264,31 +405,41 @@ pub fn detect(root: &Path) -> Result<Detection, DetectError> {
         detected_by = DetectedBy::DataFiles;
     }
     let build = build.ok_or(DetectError::Unrecognised)?;
-    let locale = match build {
-        Build::V335a => find_ci(root, "Data").and_then(|d| find_locale(&d)),
-        Build::V1121 => None,
+    let major = exe_version.as_deref().and_then(|v| v.split('.').next()).and_then(|m| m.parse::<u16>().ok());
+    let rule = build.realm_file(major);
+    let locale = match (build, rule) {
+        (Build::V1121, _) | (Build::Other, RealmFile::ClientRoot) => None,
+        _ => find_ci(root, "Data").and_then(|d| find_locale(&d)),
     };
     let missing: Vec<String> = required(build, locale.as_deref())
         .into_iter()
-        .filter(|rel| rel.contains('<') || find_rel(root, rel).is_none())
+        .filter(|rel| {
+            if rel.to_ascii_lowercase().ends_with(".exe") {
+                return exe.is_none();
+            }
+            rel.contains('<') || find_rel(root, rel).is_none()
+        })
         .map(shown)
         .collect();
-    let rl = realmlist_path(root, build, locale.as_deref());
+    let rl = realm_file_path(root, rule, locale.as_deref());
     let current_realmlist = fs::read_to_string(&rl).ok().and_then(|t| parse_realmlist(&t));
     Ok(Detection {
         build,
+        build_label: build.label(),
         detected_by,
-        exe: find_ci(root, build.exe_name()),
+        exe,
         exe_version,
         locale,
         complete: missing.is_empty(),
         missing,
+        realm_file: rule,
         realmlist_path: rl,
         current_realmlist,
+        interface: build.interface(),
     })
 }
 
-/// The address in a realmlist.wtf (`set realmlist <host>`), if there is one.
+/// The address in a realmlist.wtf (`set realmlist <host>`) or a Config.wtf (`SET realmlist "<host>"`).
 pub fn parse_realmlist(text: &str) -> Option<String> {
     text.lines().find_map(|l| {
         let mut w = l.split_whitespace();
@@ -330,45 +481,60 @@ pub fn with_realmlist(text: &str, addr: &str) -> String {
     s
 }
 
-/// The backup kept next to a realmlist.wtf the first time Leyline changes it.
+/// The backup kept next to a realm file the first time Leyline changes it.
 pub fn backup_path(rl: &Path) -> PathBuf {
     let mut n = rl.file_name().map(|n| n.to_os_string()).unwrap_or_default();
     n.push(".leyline-backup");
     rl.with_file_name(n)
 }
 
-/// Point a client at a realm: write realmlist.wtf, keeping the player's original as a backup.
+/// Read a file to change, keeping the player's original as a backup the first time. A missing file is "" (its
+/// folder is made).
+fn read_with_backup(p: &Path) -> io::Result<String> {
+    match fs::read_to_string(p) {
+        Ok(t) => {
+            let bak = backup_path(p);
+            if !bak.exists() {
+                fs::write(&bak, &t)?;
+            }
+            Ok(t)
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            if let Some(d) = p.parent() {
+                fs::create_dir_all(d)?;
+            }
+            Ok(String::new())
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Point a client at a realm, keeping the player's original file as a backup (made once, the first time, so it
+/// always holds the file as it was before Leyline).
 ///
-/// The backup is made once, the first time, so it always holds the file as it was before Leyline. 3.3.5a can
-/// also carry a realmList line in WTF/Config.wtf that overrides realmlist.wtf; when it does, that line is
-/// updated too (with its own backup).
+/// * 1.12: `realmlist.wtf` in the client folder.
+/// * 2.4.3, 3.3.5a: `Data/<locale>/realmlist.wtf`; a `realmList` line in `WTF/Config.wtf` overrides it, so when
+///   there is one it is updated too (with its own backup).
+/// * 4.3.4, 5.4.8: the `SET realmlist "..."` line in `WTF/Config.wtf` (added when missing).
 pub fn write_realmlist(profile: &ClientProfile, addr: &str) -> io::Result<PathBuf> {
     if !valid_realm_address(addr) {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("not a realm address: {addr:?}")));
     }
-    let rl = realmlist_path(&profile.path, profile.build, profile.locale.as_deref());
-    let old = match fs::read_to_string(&rl) {
-        Ok(t) => {
-            let bak = backup_path(&rl);
-            if !bak.exists() {
-                fs::write(&bak, &t)?;
-            }
-            t
+    let rule = profile.realm_file();
+    let rl = profile_realm_file(profile);
+    let old = read_with_backup(&rl)?;
+    match rule {
+        RealmFile::ConfigWtf => {
+            crate::settings::write_atomic(&rl, config_wtf_with_realmlist(&old, addr, true).unwrap_or_default().as_bytes())?;
         }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            if let Some(d) = rl.parent() {
-                fs::create_dir_all(d)?;
-            }
-            String::new()
+        RealmFile::ClientRoot | RealmFile::LocaleData => {
+            crate::settings::write_atomic(&rl, with_realmlist(&old, addr).as_bytes())?;
         }
-        Err(e) => return Err(e),
-    };
-    crate::settings::write_atomic(&rl, with_realmlist(&old, addr).as_bytes())?;
-
-    if profile.build == Build::V335a {
+    }
+    if rule == RealmFile::LocaleData {
         if let Some(cfg) = find_rel(&profile.path, "WTF/Config.wtf") {
             let text = fs::read_to_string(&cfg)?;
-            if let Some(new) = config_wtf_with_realmlist(&text, addr) {
+            if let Some(new) = config_wtf_with_realmlist(&text, addr, false) {
                 let bak = backup_path(&cfg);
                 if !bak.exists() {
                     fs::write(&bak, &text)?;
@@ -380,35 +546,42 @@ pub fn write_realmlist(profile: &ClientProfile, addr: &str) -> io::Result<PathBu
     Ok(rl)
 }
 
-/// Config.wtf with its `SET realmList "..."` line changed, or None when it has no such line.
-fn config_wtf_with_realmlist(text: &str, addr: &str) -> Option<String> {
+/// Config.wtf with its `SET realmlist "..."` line changed (the key keeps its spelling, such as `realmList`).
+/// When it has no such line: None, or with `add` the line appended.
+fn config_wtf_with_realmlist(text: &str, addr: &str, add: bool) -> Option<String> {
     let mut hit = false;
-    let lines: Vec<String> = text
-        .lines()
-        .map(|l| {
-            let mut w = l.split_whitespace();
-            if matches!((w.next(), w.next()), (Some(a), Some(b)) if a.eq_ignore_ascii_case("SET") && b.eq_ignore_ascii_case("realmList"))
-            {
+    let mut lines: Vec<String> = Vec::new();
+    for l in text.lines() {
+        let mut w = l.split_whitespace();
+        match (w.next(), w.next()) {
+            (Some(a), Some(b)) if a.eq_ignore_ascii_case("SET") && b.eq_ignore_ascii_case("realmList") => {
+                if !hit {
+                    lines.push(format!("SET {b} \"{addr}\""));
+                }
                 hit = true;
-                format!("SET realmList \"{addr}\"")
-            } else {
-                l.to_string()
             }
-        })
-        .collect();
-    hit.then(|| lines.join("\r\n") + "\r\n")
+            _ => lines.push(l.to_string()),
+        }
+    }
+    if !hit {
+        if !add {
+            return None;
+        }
+        lines.push(format!("SET realmlist \"{addr}\""));
+    }
+    Some(lines.join("\r\n") + "\r\n")
 }
 
-/// Put back the realmlist.wtf (and Config.wtf) the player had before Leyline first changed them. Returns false
-/// when there is no backup (Leyline never changed this client's realmlist).
+/// Put back the realm file(s) the player had before Leyline first changed them. Returns false when there is no
+/// backup (Leyline never changed this client's realm address).
 pub fn restore_realmlist(profile: &ClientProfile) -> io::Result<bool> {
-    let rl = realmlist_path(&profile.path, profile.build, profile.locale.as_deref());
+    let rl = profile_realm_file(profile);
     let bak = backup_path(&rl);
     if !bak.is_file() {
         return Ok(false);
     }
     crate::settings::write_atomic(&rl, &fs::read(&bak)?)?;
-    if profile.build == Build::V335a {
+    if profile.realm_file() == RealmFile::LocaleData {
         if let Some(cfg) = find_rel(&profile.path, "WTF/Config.wtf") {
             let cbak = backup_path(&cfg);
             if cbak.is_file() {
@@ -421,28 +594,36 @@ pub fn restore_realmlist(profile: &ClientProfile) -> io::Result<bool> {
 
 /// Read the realm address a client is pointed at now.
 pub fn read_realmlist(profile: &ClientProfile) -> Option<String> {
-    let rl = realmlist_path(&profile.path, profile.build, profile.locale.as_deref());
-    fs::read_to_string(rl).ok().and_then(|t| parse_realmlist(&t))
+    fs::read_to_string(profile_realm_file(profile)).ok().and_then(|t| parse_realmlist(&t))
 }
 
 /// A new profile from a detection. The id is unique among `existing` ids.
 pub fn new_profile(path: &Path, det: &Detection, existing: &[ClientProfile]) -> ClientProfile {
-    let base = match det.build {
-        Build::V335a => "c335a",
-        Build::V1121 => "c1121",
-    };
+    let base = format!("c{}", det.build.version().replace('.', ""));
     let id = (1..)
         .map(|n| format!("{base}-{n}"))
         .find(|id| !existing.iter().any(|p| &p.id == id))
         .unwrap();
     let folder = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let label = match (det.build, &det.exe_version) {
+        (Build::Other, Some(v)) => format!("other build {v}"),
+        (b, _) => b.label().to_string(),
+    };
+    let exe = det
+        .exe
+        .as_ref()
+        .and_then(|p| p.file_name())
+        .map(|n| n.to_string_lossy().to_string())
+        .filter(|n| !n.eq_ignore_ascii_case(det.build.exe_name()));
     ClientProfile {
         id,
-        name: if folder.is_empty() { det.build.label().to_string() } else { format!("{folder} ({})", det.build.label()) },
+        name: if folder.is_empty() { label } else { format!("{folder} ({label})") },
         path: path.to_path_buf(),
         build: det.build,
         realmlist: det.current_realmlist.clone().unwrap_or_default(),
         locale: det.locale.clone(),
+        exe_version: det.exe_version.clone(),
+        exe,
     }
 }
 
@@ -465,6 +646,36 @@ pub mod testutil {
         }
         touch(root, "Data/enUS/locale-enUS.MPQ", b"");
         touch(root, "Data/enUS/realmlist.wtf", b"set realmlist logon.example.org\r\nset patchlist localhost\r\n");
+    }
+
+    /// A fake client of any known build: placeholder files only, its realm file says old.example.org.
+    pub fn fake_client(root: &Path, b: Build, with_exe_version: bool) {
+        match b {
+            Build::V1121 => return fake_1121(root, with_exe_version),
+            Build::V335a => {
+                fake_335a(root, with_exe_version);
+                return touch(root, "Data/enUS/realmlist.wtf", b"set realmlist old.example.org\r\n");
+            }
+            _ => {}
+        }
+        let (ma, mi, pa) = match b {
+            Build::V243 => (2, 4, 3),
+            Build::V434 => (4, 3, 4),
+            _ => (5, 4, 8),
+        };
+        let exe = if with_exe_version { pe_version::fake_exe(ma, mi, pa, b.number()) } else { b"MZ".to_vec() };
+        touch(root, b.exe_name(), &exe);
+        for f in required(b, Some("enUS")).iter().skip(1) {
+            if f.ends_with(".MPQ") {
+                touch(root, f, b"");
+            } else {
+                fs::create_dir_all(root.join(f)).unwrap();
+            }
+        }
+        match b.realm_file(None) {
+            RealmFile::ConfigWtf => touch(root, "WTF/Config.wtf", b"SET gxApi \"d3d9\"\r\nSET realmlist \"old.example.org\"\r\n"),
+            _ => touch(root, "Data/enUS/realmlist.wtf", b"set realmlist old.example.org\r\n"),
+        }
     }
 
     pub fn fake_1121(root: &Path, with_exe_version: bool) {
@@ -531,17 +742,102 @@ mod tests {
     }
 
     #[test]
-    fn other_versions_are_refused() {
+    fn unknown_builds_are_listed_as_other() {
         let d = tempfile::tempdir().unwrap();
-        touch(d.path(), "Wow.exe", &pe_version::fake_exe(2, 4, 3, 8606));
-        touch(d.path(), "Data/common.MPQ", b"");
-        match detect(d.path()) {
-            Err(DetectError::UnsupportedVersion(v)) => assert_eq!(v, "2.4.3.8606"),
-            other => panic!("{other:?}"),
-        }
+        touch(d.path(), "Wow.exe", &pe_version::fake_exe(7, 3, 5, 26972));
+        touch(d.path(), "Data/enUS/realmlist.wtf", b"");
+        let det = detect(d.path()).unwrap();
+        assert_eq!(det.build, Build::Other);
+        assert_eq!(det.exe_version.as_deref(), Some("7.3.5.26972"));
+        assert_eq!(det.realm_file, RealmFile::ConfigWtf, "a newer major reads Config.wtf");
+        assert_eq!(det.interface, "");
+        let p = new_profile(d.path(), &det, &[]);
+        assert!(p.id.starts_with("cother-") && p.name.contains("other build 7.3.5.26972"), "{p:?}");
+        // An old major reads the realmlist next to the game.
+        let o = tempfile::tempdir().unwrap();
+        touch(o.path(), "WoW.exe", &pe_version::fake_exe(1, 11, 2, 5464));
+        let det = detect(o.path()).unwrap();
+        assert_eq!((det.build, det.realm_file), (Build::Other, RealmFile::ClientRoot));
         let e = tempfile::tempdir().unwrap();
         assert!(matches!(detect(e.path()), Err(DetectError::Unrecognised)));
         assert!(matches!(detect(&e.path().join("nope")), Err(DetectError::NotAFolder)));
+    }
+
+    #[test]
+    fn detects_every_build_by_its_executable() {
+        for (b, (ma, mi, pa)) in Build::KNOWN.into_iter().zip([(1, 12, 1), (2, 4, 3), (3, 3, 5), (4, 3, 4), (5, 4, 8)]) {
+            let d = tempfile::tempdir().unwrap();
+            fake_client(d.path(), b, true);
+            let det = detect(d.path()).unwrap();
+            assert_eq!(det.build, b);
+            assert_eq!(det.detected_by, DetectedBy::ExeVersion);
+            assert_eq!(det.exe_version, Some(format!("{ma}.{mi}.{pa}.{}", b.number())));
+            assert!(det.complete, "{b:?}: {:?}", det.missing);
+            assert_eq!(det.locale.is_some(), b != Build::V1121, "{b:?}");
+            // The same folder without a version resource: the data files tell.
+            let n = tempfile::tempdir().unwrap();
+            fake_client(n.path(), b, false);
+            let det = detect(n.path()).unwrap();
+            assert_eq!((det.build, det.detected_by), (b, DetectedBy::DataFiles), "{b:?}");
+        }
+        assert_eq!(Build::KNOWN.map(|b| b.number()), [5875, 8606, 12340, 15595, 18414]);
+        assert_eq!(Build::KNOWN.map(|b| b.interface()), ["11200", "20400", "30300", "40300", "50400"]);
+        assert_eq!(Build::from_interface("40300"), Some(Build::V434));
+        assert_eq!(Build::from_tag("wrath-3.3.5a"), Some(Build::V335a));
+        assert_eq!(Build::from_tag("3.3.5"), Some(Build::V335a));
+        assert_eq!(Build::from_tag("1.12"), Some(Build::V1121));
+        assert_eq!(Build::from_tag("18414"), Some(Build::V548));
+        assert_eq!(Build::from_tag("9.9.9"), None);
+        // A 64-bit only folder is found too, and remembered.
+        let d = tempfile::tempdir().unwrap();
+        fake_client(d.path(), Build::V548, true);
+        fs::rename(d.path().join("Wow.exe"), d.path().join("Wow-64.exe")).unwrap();
+        let det = detect(d.path()).unwrap();
+        assert_eq!(det.build, Build::V548);
+        let p = new_profile(d.path(), &det, &[]);
+        assert_eq!((p.id.as_str(), p.exe_name()), ("c548-1", "Wow-64.exe"));
+    }
+
+    #[test]
+    fn realm_file_rules_per_build() {
+        let want = [
+            (Build::V1121, RealmFile::ClientRoot, "realmlist.wtf"),
+            (Build::V243, RealmFile::LocaleData, "Data/enUS/realmlist.wtf"),
+            (Build::V335a, RealmFile::LocaleData, "Data/enUS/realmlist.wtf"),
+            (Build::V434, RealmFile::ConfigWtf, "WTF/Config.wtf"),
+            (Build::V548, RealmFile::ConfigWtf, "WTF/Config.wtf"),
+        ];
+        for (b, rule, rel) in want {
+            let d = tempfile::tempdir().unwrap();
+            fake_client(d.path(), b, true);
+            let det = detect(d.path()).unwrap();
+            assert_eq!(det.realm_file, rule, "{b:?}");
+            assert_eq!(det.realmlist_path, d.path().join(rel), "{b:?}");
+            assert_eq!(det.current_realmlist.as_deref(), Some("old.example.org"), "{b:?}");
+            let p = new_profile(d.path(), &det, &[]);
+            let rl = write_realmlist(&p, "relay.openvanilla.app:40002").unwrap();
+            assert_eq!(rl, d.path().join(rel));
+            assert_eq!(read_realmlist(&p).as_deref(), Some("relay.openvanilla.app:40002"), "{b:?}");
+            let text = fs::read_to_string(&rl).unwrap();
+            if rule == RealmFile::ConfigWtf {
+                assert!(text.contains("SET realmlist \"relay.openvanilla.app:40002\"") && text.contains("SET gxApi"), "{text}");
+                assert_eq!(text.matches("realmlist").count(), 1, "{text}");
+            } else {
+                assert!(text.starts_with("set realmlist relay.openvanilla.app:40002"), "{text}");
+            }
+            assert!(fs::read_to_string(backup_path(&rl)).unwrap().contains("old.example.org"), "{b:?}");
+            write_realmlist(&p, "play.openvanilla.app").unwrap();
+            assert!(restore_realmlist(&p).unwrap());
+            assert_eq!(read_realmlist(&p).as_deref(), Some("old.example.org"), "{b:?}");
+        }
+        // 4.3.4 without a Config.wtf yet: it is made, with only the realm line; nothing to put back.
+        let d = tempfile::tempdir().unwrap();
+        fake_client(d.path(), Build::V434, true);
+        fs::remove_file(d.path().join("WTF/Config.wtf")).unwrap();
+        let p = new_profile(d.path(), &detect(d.path()).unwrap(), &[]);
+        write_realmlist(&p, "play.openvanilla.app").unwrap();
+        assert_eq!(fs::read_to_string(d.path().join("WTF/Config.wtf")).unwrap(), "SET realmlist \"play.openvanilla.app\"\r\n");
+        assert!(!restore_realmlist(&p).unwrap());
     }
 
     #[test]

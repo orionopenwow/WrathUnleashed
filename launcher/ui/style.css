@@ -453,3 +453,30 @@ label.inline select { width: auto; min-width: 220px; }
 .steps b { color: var(--gold-hi); }
 #host-card { max-width: 520px; margin-top: 10px; border-radius: 6px; }
 .pill.upd { cursor: pointer; border-color: var(--gold); color: var(--gold-hi); font: 600 12px Inter, sans-serif; }
+
+/* ---------------------------------------------------------------- My Mods: the installed grid and the native notice */
+.toolbar-fill { flex: 1; }
+.mods-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
+@media (max-width: 1150px) { .mods-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .mods-grid { grid-template-columns: minmax(0, 1fr); } }
+.mods-grid .card { align-content: start; min-width: 0; }
+.mods-grid .card.has-update { border-color: var(--gold); box-shadow: 0 0 0 1px rgba(226, 184, 92, 0.35); }
+.mods-grid .name { overflow-wrap: anywhere; }
+.mods-grid .meta { word-break: normal; overflow-wrap: anywhere; }
+.mods-grid .hint { grid-column: 1 / -1; }
+.tile.has-update { border-color: var(--bronze-hi); }
+.tile-txt i.upd { color: var(--gold-hi); }
+.tile-txt i.off { color: var(--muted); }
+
+.dlg {
+  max-width: 460px; padding: 18px 22px 16px; color: var(--ink);
+  border: 14px solid transparent;
+  border-image: url("art/kit/parchment-news.png") 40 fill / 14px stretch;
+  background: transparent;
+  filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.7));
+}
+.dlg::backdrop { background: rgba(4, 5, 7, 0.72); }
+.dlg h3 { margin: 0 0 8px; font: 900 20px Cinzel, serif; letter-spacing: 0.05em; color: #5a3608; }
+.dlg p { margin: 0 0 8px; font-size: 13px; color: #3a2812; }
+.dlg p.small { font-size: 12px; color: var(--ink-soft); }
+.dlg ul { margin: 0 0 10px; padding-left: 18px; font: 12px ui-monospace, Consolas, monospace; color: #2a1a06; max-height: 140px; overflow: auto; user-select: text; }

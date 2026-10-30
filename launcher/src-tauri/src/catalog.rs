@@ -33,7 +33,8 @@ pub struct Project {
     pub name: String,
     pub description: String,
     pub category: String,
-    /// `3.3.5a`, `1.12`, `any`.
+    /// `1.12`, `2.4.3`, `3.3.5a`, `4.3.4`, `5.4.8`, `any` (other spellings such as `1.12.1` or `12340` are
+    /// read and written back in these words).
     pub builds: Vec<String>,
     pub author: String,
     pub author_url: String,
@@ -58,10 +59,11 @@ impl Project {
     pub fn mod_id(&self) -> Option<&str> {
         self.id.strip_prefix("mod:")
     }
-    /// Made for this client build (`any` fits both; a project with no builds listed is taken as `any`).
+    /// Made for this client build (`any` fits every known build; a project with no builds listed is taken as
+    /// `any`). Nothing fits a build Leyline does not know.
     pub fn fits(&self, build: Build) -> bool {
-        self.builds.is_empty()
-            || self.builds.iter().any(|b| b == "any" || b == build.catalog_tag() || (build == Build::V1121 && b == "1.12.1"))
+        build != Build::Other
+            && (self.builds.is_empty() || self.builds.iter().any(|b| b == "any" || Build::from_tag(b) == Some(build)))
     }
     /// Leyline can download and install it (a packaged mod with a zip on the site).
     pub fn installable(&self) -> bool {
@@ -121,7 +123,19 @@ pub fn clean(mut p: Project, origin: &str) -> Option<Project> {
     }
     p.description = text(&p.description, 400);
     p.category = text(&p.category, 32);
-    p.builds = p.builds.into_iter().filter(|b| matches!(b.as_str(), "3.3.5a" | "1.12" | "1.12.1" | "any")).take(4).collect();
+    p.builds = p
+        .builds
+        .into_iter()
+        .filter_map(|b| if b == "any" { Some(b) } else { Build::from_tag(&b).map(|x| x.catalog_tag().to_string()) })
+        .fold(Vec::new(), |mut v, b| {
+            if !v.contains(&b) {
+                v.push(b);
+            }
+            v
+        })
+        .into_iter()
+        .take(8)
+        .collect();
     p.author = text(&p.author, 80);
     p.author_url = link(&p.author_url);
     p.licence = text(&p.licence, 80);
@@ -234,6 +248,25 @@ mod tests {
         assert_eq!(sneaky.download, None, "downloads only from the catalog's own site");
         assert_eq!(sneaky.sha256, None);
         assert!(!sneaky.installable());
+    }
+
+    #[test]
+    fn filters_by_every_build() {
+        let doc = r#"{"projects":[
+          {"id":"mod:tbc-bars","source":"packaged","builds":["2.4.3","8606"]},
+          {"id":"mod:cata-map","source":"packaged","builds":["4.3.4","5.4.8","9.9.9"]},
+          {"id":"mod:vanilla-x","source":"packaged","builds":["1.12.1"]},
+          {"id":"mod:any-thing","source":"packaged","builds":["any"]}]}"#;
+        let (_, ps) = parse(&serde_json::from_str(doc).unwrap(), "https://play.openvanilla.app").unwrap();
+        assert_eq!(ps[0].builds, vec!["2.4.3"], "spellings fold into one tag");
+        assert_eq!(ps[1].builds, vec!["4.3.4", "5.4.8"], "unknown builds are dropped");
+        assert_eq!(ps[2].builds, vec!["1.12"]);
+        let fits = |i: usize| Build::KNOWN.into_iter().filter(|b| ps[i].fits(*b)).collect::<Vec<_>>();
+        assert_eq!(fits(0), vec![Build::V243]);
+        assert_eq!(fits(1), vec![Build::V434, Build::V548]);
+        assert_eq!(fits(2), vec![Build::V1121]);
+        assert_eq!(fits(3), Build::KNOWN.to_vec());
+        assert!(!ps[3].fits(Build::Other), "nothing is offered for an unknown build");
     }
 
     #[test]

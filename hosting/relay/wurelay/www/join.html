@@ -76,7 +76,7 @@
     <ol class="small">
       <li>Start the game and log in with the account from step 2.</li>
       <li>Opening this page let your internet connection in for <span id="hours">24</span> hours. After that, open the invite link again.</li>
-      <li>If the shared address doesn't work for you, use this one instead:<br><code id="realmlist-port"></code></li>
+      <li id="alt-line">If the shared address doesn't work for you, use this one instead:<br><code id="realmlist-port"></code></li>
     </ol>
   </div>
 
@@ -146,6 +146,7 @@
     say($("knock-msg"), "Done: your internet connection may now reach this realm.", "ok");
     $("realmlist").textContent = "set realmlist " + k.doc.realmlist;
     $("realmlist-port").textContent = "set realmlist " + k.doc.realmlist_port;
+    $("alt-line").hidden = !k.doc.realmlist_port || k.doc.realmlist_port === k.doc.realmlist;   // no shared port: one address only
     $("hours").textContent = k.doc.valid_hours || 24;
     $("play-card").hidden = hop;   // in the browser game the realm list is already set
     if (hop) { $("signin-card").hidden = false; $("sub").textContent = "Make an account on this realm, or sign in with one you have. Then you're in."; }

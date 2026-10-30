@@ -57,6 +57,7 @@ The one list of categories is `mods/categories.json`. `wu-mod.py check` checks `
 | `audio` | Sounds and music | original ambience, music packs and UI sounds |
 | `tools` | Tools | developer HUD plugins, map viewers, log analysers and OBS overlays |
 | `conversions` | Total conversions | whole new games built from the categories above |
+| `themes` | Launcher themes | theme packs for the Leyline launcher: colours, fonts and art (CSS and images only). A theme pack is a `theme.json` package, not a `mod.json` one: see [THEMES.md](https://github.com/orionopenwow/WrathUnleashed/blob/main/docs/THEMES.md) |
 
 A category with no mods yet says so on the Workshop and links the modders' guide. It never shows made-up entries.
 

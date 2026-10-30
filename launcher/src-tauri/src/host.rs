@@ -8,7 +8,13 @@
 //!   website gave them (`leyline-<realm id>.bat` / `.sh`, from /wrath/host), in the kit or in Downloads;
 //! * copy a seed from Downloads into the kit (that is where it must run);
 //! * start the kit's script in a terminal window of its own, so its questions and progress show;
-//! * show the realm's status from the relay's public lookup.
+//! * show the realm's status from the relay's public lookup;
+//! * stop it, show its logs and its invite link, make a new invite link (`docker`);
+//! * the Host pack (`pack`): the kit as a download inside Leyline, installed into app data and updated from
+//!   the catalog. A kit the player unzipped themselves keeps working as before.
+
+pub mod docker;
+pub mod pack;
 
 use crate::realms;
 use serde::Serialize;
@@ -316,6 +322,66 @@ pub fn status(base: &str, rid: &str, listed: bool) -> Result<HostStatus, String>
     Ok(out)
 }
 
+/// The realm's invite link, as the kit last wrote it (`state/invite.txt`): `https://<relay or site>/join/<id>`
+/// plus `#<secret>` for a private realm. Only a link of that shape is handed to the UI.
+pub fn invite(kit: &Path) -> Option<String> {
+    let t = fs::read_to_string(kit.join("state").join("invite.txt")).ok()?;
+    let link = t.lines().next()?.trim().to_string();
+    let rest = link.strip_prefix("https://")?;
+    let (host, path) = rest.split_once('/')?;
+    let (path, frag) = match path.split_once('#') {
+        Some((p, f)) => (p, Some(f)),
+        None => (path, None),
+    };
+    let rid = path.strip_prefix("join/")?.trim_end_matches('/');
+    let frag_ok = frag.map_or(true, |f| (16..=40).contains(&f.len()) && f.chars().all(|c| c.is_ascii_uppercase() || ('2'..='9').contains(&c)));
+    (realms::relay_ok(host) && realms::realm_id_ok(rid) && frag_ok && link.len() <= 200).then_some(link)
+}
+
+const DOCKER_SHORT: std::time::Duration = std::time::Duration::from_secs(20);
+const DOCKER_LONG: std::time::Duration = std::time::Duration::from_secs(180);
+
+fn need_kit(kit: &Path) -> Result<(), String> {
+    if !kit.join("docker-compose.host.yml").is_file() {
+        return Err("This folder has no docker-compose.host.yml: pick your host kit, or get the Host pack.".into());
+    }
+    Ok(())
+}
+
+fn docker_in(kit: &Path, args: Vec<String>, timeout: std::time::Duration) -> Result<String, String> {
+    let a: Vec<&str> = args.iter().map(String::as_str).collect();
+    match docker::run_docker(&a, Some(kit), timeout) {
+        None => Err("Docker is not installed (or not on PATH).".into()),
+        Some((0, out)) => Ok(docker::plain(&out)),
+        Some((-2, _)) => Err("Docker took too long to answer.".into()),
+        Some((_, out)) => Err(format!("Docker said: {}", docker::plain(&out).lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("an error").trim())),
+    }
+}
+
+/// Stop the realm (`docker compose stop`): characters, accounts and the invite link are kept.
+pub fn stop(kit: &Path) -> Result<String, String> {
+    need_kit(kit)?;
+    docker_in(kit, docker::compose_args(kit, &["stop"]), DOCKER_LONG)?;
+    Ok("Stopped. Characters, accounts and your invite link are kept; start it again any time.".into())
+}
+
+/// The last lines of every service's log.
+pub fn logs(kit: &Path, lines: u32) -> Result<String, String> {
+    need_kit(kit)?;
+    let n = lines.clamp(20, 1000).to_string();
+    docker_in(kit, docker::compose_args(kit, &["logs", "--tail", &n, "--no-color", "--timestamps"]), DOCKER_SHORT)
+}
+
+/// A new invite link (the old one stops letting anyone new in). Needs the realm set up once.
+pub fn new_invite(kit: &Path) -> Result<String, String> {
+    need_kit(kit)?;
+    if !kit.join("state").join("host.json").is_file() {
+        return Err("Start your realm once first: the invite link is made on the first start.".into());
+    }
+    docker_in(kit, docker::tools_args(kit, &["new-invite"]), DOCKER_SHORT)?;
+    invite(kit).ok_or_else(|| "The new invite link was not written: try \"Realm tools\" in the kit.".into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -398,6 +464,23 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         assert_eq!(fs::read_to_string(k.path().join("state/ran.txt")).unwrap().trim(), "started");
+    }
+
+    #[test]
+    fn invite_links_from_the_kit() {
+        let k = kit();
+        assert_eq!(invite(k.path()), None);
+        touch(k.path(), "state/invite.txt", format!("https://relay.openvanilla.app/join/{RID}#ABCDEFGHJKMNPQRSTVWX\n").as_bytes());
+        assert_eq!(invite(k.path()).unwrap(), format!("https://relay.openvanilla.app/join/{RID}#ABCDEFGHJKMNPQRSTVWX"));
+        touch(k.path(), "state/invite.txt", format!("https://openvanilla.app/join/{RID}").as_bytes());
+        assert!(invite(k.path()).is_some(), "a public realm's link has no secret");
+        touch(k.path(), "state/invite.txt", b"javascript:alert(1)");
+        assert_eq!(invite(k.path()), None);
+        touch(k.path(), "state/invite.txt", format!("https://evil.example.com:22/join/{RID}").as_bytes());
+        assert_eq!(invite(k.path()), None);
+        assert!(stop(k.path()).unwrap_err().contains("docker-compose.host.yml"));
+        touch(k.path(), "docker-compose.host.yml", b"services: {}");
+        assert!(new_invite(k.path()).unwrap_err().contains("Start your realm once"));
     }
 
     #[test]

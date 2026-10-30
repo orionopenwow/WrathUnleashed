@@ -9,6 +9,7 @@
 //! what the invite knock (`POST /api/realms/<id>/knock {"invite"}`) does. Accounts are made on the realm's
 //! join page in the browser (the password never leaves it), so the launcher only opens that page.
 
+use crate::clients::{Build, ClientProfile};
 use crate::net::{self, Listing};
 use serde::Serialize;
 use serde_json::Value;
@@ -46,6 +47,60 @@ pub struct Realm {
     pub discord: Option<String>,
     pub rules: Vec<String>,
     pub claimed: bool,
+    /// The server software: `azerothcore`, `trinitycore`, `cmangos`, `vmangos`, `mangos` or `other`.
+    pub core: String,
+    /// The client build the realm takes, when known.
+    pub build: Option<Build>,
+}
+
+/// The server cores Leyline names, as (tag, label).
+pub const CORES: &[(&str, &str)] = &[
+    ("azerothcore", "AzerothCore"),
+    ("trinitycore", "TrinityCore"),
+    ("cmangos", "CMaNGOS"),
+    ("vmangos", "vMaNGOS"),
+    ("mangos", "MaNGOS"),
+    ("other", "Other"),
+];
+
+/// A core's tag from how a listing writes it (`AzerothCore`, `azeroth-core`, `TC`, ...): `other` when unknown.
+pub fn core_tag(s: &str) -> &'static str {
+    let k: String = s.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>().to_ascii_lowercase();
+    match k.as_str() {
+        "azerothcore" | "ac" | "acore" => "azerothcore",
+        "trinitycore" | "tc" | "trinity" => "trinitycore",
+        "cmangos" | "continuedmangos" => "cmangos",
+        "vmangos" => "vmangos",
+        "mangos" | "mangoszero" | "mangosone" | "mangostwo" | "mangosthree" => "mangos",
+        _ => "other",
+    }
+}
+
+pub fn core_label(tag: &str) -> &'static str {
+    CORES.iter().find(|(t, _)| *t == tag).map(|(_, l)| *l).unwrap_or("Other")
+}
+
+/// The client to play `realm` with: the picked one when its build fits, else the first of the player's clients
+/// that fits. A realm whose build is not known takes the picked client. Otherwise it says what is missing:
+/// Leyline never downloads a client, so the player adds their own.
+pub fn pick_client<'a>(realm: &Realm, clients: &'a [ClientProfile], picked: Option<&str>) -> Result<&'a ClientProfile, String> {
+    let chosen = picked.and_then(|id| clients.iter().find(|c| c.id == id));
+    let Some(want) = realm.build else {
+        return chosen.or(clients.first()).ok_or_else(|| "Add your game client first (Game clients).".into());
+    };
+    if let Some(c) = chosen.filter(|c| c.build == want) {
+        return Ok(c);
+    }
+    clients.iter().find(|c| c.build == want).ok_or_else(|| {
+        let have: Vec<&str> = clients.iter().map(|c| c.build.version()).collect();
+        let have = if have.is_empty() { "no clients yet".to_string() } else { format!("you have {}", have.join(", ")) };
+        format!(
+            "{} needs a {} client ({have}). Add your own {} install under Game clients: Leyline never downloads a client.",
+            realm.name,
+            want.label(),
+            want.version()
+        )
+    })
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -69,8 +124,17 @@ pub fn official() -> Realm {
         version: "3.3.5a".into(),
         address: Some(crate::OFFICIAL_REALM.into()),
         status_url: Some(crate::status::OFFICIAL_STATUS_URL.into()),
+        core: "azerothcore".into(),
+        build: Some(Build::V335a),
         ..Default::default()
     }
+}
+
+/// The official realms, first on the list. Wrath (3.3.5a, AzerothCore) is the one there is today.
+/// TODO(owner): the sibling Open Vanilla 1.12 realm is not in the relay's listing and its desktop address is not
+/// written down anywhere in this repo; when it is, add it here (build 1.12.1, its core and its address).
+pub fn officials() -> Vec<Realm> {
+    vec![official()]
 }
 
 /// A realm id: 16 base32 characters (lower case a-z, 2-7), as the relay makes them.
@@ -135,9 +199,21 @@ pub fn parse_community(v: &Value) -> Vec<Realm> {
                     .map(|a| a.iter().filter_map(Value::as_str).take(10).map(|x| x.chars().take(120).collect()).collect())
                     .unwrap_or_default(),
                 claimed: c.get("claimed").and_then(Value::as_bool).unwrap_or(false),
+                // Beacons run the host kit, which is AzerothCore, unless the record says otherwise.
+                core: core_tag(&profile.get("core").or_else(|| r.get("core")).and_then(Value::as_str).map(String::from)
+                    .unwrap_or_else(|| "azerothcore".into()))
+                .into(),
+                build: listing_build(&profile),
             })
         })
         .collect()
+}
+
+/// The client build a listing record's profile names: its `build` number, `version` or `game` (`wrath-3.3.5a`).
+pub fn listing_build(profile: &Value) -> Option<Build> {
+    let num = profile.get("build").and_then(Value::as_u64).map(|n| n.to_string());
+    let text = |k: &str| profile.get(k).and_then(Value::as_str).map(String::from);
+    [num, text("build"), text("version"), text("game")].into_iter().flatten().find_map(|t| Build::from_tag(&t))
 }
 
 /// A relay status file's address: `https://<relay>/r/<realm id>/status.json`.
@@ -162,7 +238,7 @@ pub fn fetch_all_from(url: &str, app_dir: &Path) -> RealmList {
     let f = net::fetch_json(url, &cache_path(app_dir), net::TIMEOUT, |v| {
         v.get("realms").and_then(Value::as_array).map(|_| ()).ok_or_else(|| "no \"realms\" list in the reply".into())
     });
-    let mut realms = vec![official()];
+    let mut realms = officials();
     match f {
         Ok(f) => {
             realms.extend(parse_community(&f.value));
@@ -174,7 +250,7 @@ pub fn fetch_all_from(url: &str, app_dir: &Path) -> RealmList {
 
 /// The realms as last fetched, without the network.
 pub fn cached(app_dir: &Path) -> Vec<Realm> {
-    let mut v = vec![official()];
+    let mut v = officials();
     if let Some((doc, _)) = net::read_cache(&cache_path(app_dir)) {
         v.extend(parse_community(&doc));
     }
@@ -282,6 +358,39 @@ mod tests {
         assert_eq!(r[1].address, None);
         assert_eq!(r[1].join_url, None, "a join page that is not the realm's own is dropped");
         assert_eq!(r[1].state, "offline");
+        assert_eq!((r[0].core.as_str(), r[0].build), ("azerothcore", Some(Build::V335a)));
+        assert_eq!(r[1].build, None, "no version in the record");
+    }
+
+    #[test]
+    fn cores_builds_and_the_right_client() {
+        for (s, t) in [("AzerothCore", "azerothcore"), ("TrinityCore", "trinitycore"), ("cMaNGOS", "cmangos"), ("vmangos", "vmangos"),
+            ("MaNGOS Zero", "mangos"), ("ascent", "other")] {
+            assert_eq!(core_tag(s), t);
+        }
+        assert_eq!(core_label("cmangos"), "CMaNGOS");
+        let doc: Value = serde_json::from_str(r#"{"realms":[{"name":"Old Days","profile":{"version":"1.12.1","core":"vMaNGOS","address":"relay.openvanilla.app","port":40020},
+            "community":{"realmId":"cccccccccccccccc","relay":"relay.openvanilla.app"}},
+            {"name":"Cata","profile":{"build":15595,"core":"TrinityCore"},"community":{"realmId":"dddddddddddddddd","relay":"relay.openvanilla.app"}}]}"#).unwrap();
+        let r = parse_community(&doc);
+        assert_eq!((r[0].core.as_str(), r[0].build), ("vmangos", Some(Build::V1121)));
+        assert_eq!((r[1].core.as_str(), r[1].build), ("trinitycore", Some(Build::V434)));
+        let w = official();
+        assert_eq!((w.core.as_str(), w.build), ("azerothcore", Some(Build::V335a)));
+
+        let prof = |id: &str, b: Build| ClientProfile {
+            id: id.into(), name: format!("my {}", b.version()), path: "/x".into(), build: b,
+            realmlist: String::new(), locale: None, exe_version: None, exe: None,
+        };
+        let clients = vec![prof("c1121-1", Build::V1121), prof("c335a-1", Build::V335a), prof("c335a-2", Build::V335a)];
+        assert_eq!(pick_client(&w, &clients, Some("c1121-1")).unwrap().id, "c335a-1", "the picked 1.12 client does not fit");
+        assert_eq!(pick_client(&w, &clients, Some("c335a-2")).unwrap().id, "c335a-2", "the picked one when it fits");
+        assert_eq!(pick_client(&r[0], &clients, Some("c335a-2")).unwrap().id, "c1121-1");
+        let e = pick_client(&r[1], &clients, None).unwrap_err();
+        assert!(e.contains("4.3.4 (15595)") && e.contains("you have 1.12.1, 3.3.5a, 3.3.5a") && e.contains("never downloads"), "{e}");
+        assert!(pick_client(&w, &[], None).unwrap_err().contains("no clients yet"));
+        let unknown = Realm { build: None, ..Default::default() };
+        assert_eq!(pick_client(&unknown, &clients, Some("c1121-1")).unwrap().id, "c1121-1");
     }
 
     #[test]

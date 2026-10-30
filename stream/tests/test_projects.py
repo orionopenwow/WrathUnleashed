@@ -109,7 +109,7 @@ Wk.projects.meta.timeout = 0.5
 # the one category list: mods/categories.json (the Workshop's own), for the form, the filters and all.json
 cj = json.load(open(os.path.join(ROOT, "mods", "categories.json")))
 CAT_IDS = [c["id"] for c in cj["categories"]]
-check("12 categories from mods/categories.json", len(CAT_IDS) == 12 and [c["id"] for c in Wk.categories()[0]] == CAT_IDS)
+check("13 categories from mods/categories.json", len(CAT_IDS) == 13 and [c["id"] for c in Wk.categories()[0]] == CAT_IDS)
 
 srv = serve(wp.PageHandler)
 PORT = srv.server_address[1]
@@ -158,7 +158,7 @@ check("an expired session is signed out", "Sign in to add a link" in h)
 st, _, h = req("GET", "/wrath/mods/submit", "down")
 check("website down: a clear 503", st == 503 and "isn't answering" in h)
 st, _, h = req("GET", "/wrath/mods/submit", "alice")
-check("signed in: the form", st == 200 and 'action="/wrath/mods/submit"' in h and 'name="url"' in h and h.count("<option value=") == 13
+check("signed in: the form", st == 200 and 'action="/wrath/mods/submit"' in h and 'name="url"' in h and h.count("<option value=") == 14
       and all(f'<option value="{c}">' in h for c in CAT_IDS)
       and all(f'value="{b}"' in h for b in ("3.3.5a", "1.12", "both", "any")))
 st, _, h = submit("alice", "https://github.com/alice/frame-kit", tok="")
@@ -331,7 +331,7 @@ keys = {"id", "source", "name", "description", "category", "builds", "author", "
         "stars", "last_push", "submitted_by", "submitted_at", "last_checked", "version", "kind", "permissions", "on_wrath",
         "download", "sha256"}
 check("all.json: format 1, CORS *", doc.get("format") == 1 and hd.get("Access-Control-Allow-Origin") == "*")
-check("all.json: the 12 categories and the builds", [c["id"] for c in doc.get("categories", [])] == CAT_IDS and doc.get("builds") == ["3.3.5a", "1.12", "any"])
+check("all.json: the 13 categories and the builds", [c["id"] for c in doc.get("categories", [])] == CAT_IDS and doc.get("builds") == ["3.3.5a", "1.12", "any"])
 check("all.json: both kinds in one schema", {p["source"] for p in ps} == {"packaged", "community"} and all(set(p) == keys for p in ps))
 check("all.json: every project once", len(ps) == 3 + len(records()) and len({p["id"] for p in ps}) == len(ps))
 pk = next(p for p in ps if p["id"] == "mod:pings")
