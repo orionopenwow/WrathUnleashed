@@ -49,6 +49,7 @@ supports() { [ -f "$1" ] && grep -q '^  brand)' "$1"; }
 sql_str() { printf '%s' "$1" | sed "s/'/''/g"; }
 
 # The hangout's relay listing text, with the brand on (descriptive, not the owner's own pitch).
+# TODO(owner): the Dalaran Hangout's own tagline and summary on Leyline (the same two lines are in hosting/hangout/hangout-up.sh)
 HB_TAGLINE_ON="Leyline's own Dalaran: your characters, and everyone meets here."
 HB_SUMMARY_ON="The Dalaran Hangout itself, reached through the Leyline relay and run by the Leyline team. Sign in with your website login (no new account), hop here from any Leyline realm, and arrive in Dalaran."
 

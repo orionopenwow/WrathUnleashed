@@ -48,7 +48,7 @@ NAME="${WU_HANGOUT_NAME:-Dalaran Hangout}"
 DEFAULT_TAGLINE="WrathUnleashed's own Dalaran: your Wrath characters, and everyone meets here."
 DEFAULT_SUMMARY="The WrathUnleashed realm itself, reached through the Leyline relay and run by the WrathUnleashed team. Sign in with your Wrath login (no new account), hop here from any Leyline realm, and arrive in Dalaran."
 # The Leyline brand switch (realm/brand.sh, LEYLINE_BRAND=1 in portal.env): the listing text says Leyline (the same
-# words brand.sh writes to state/beacon.json).
+# words brand.sh writes to state/beacon.json). TODO(owner): the Dalaran Hangout's own tagline and summary on Leyline.
 if grep -qx 'LEYLINE_BRAND=1' "${WU_WRATH_DIR:-/srv/wrath}/portal.env" 2>/dev/null; then
   DEFAULT_TAGLINE="Leyline's own Dalaran: your characters, and everyone meets here."
   DEFAULT_SUMMARY="The Dalaran Hangout itself, reached through the Leyline relay and run by the Leyline team. Sign in with your website login (no new account), hop here from any Leyline realm, and arrive in Dalaran."
