@@ -286,7 +286,7 @@ check("catalog: the query is escaped", "<script>" not in junk and "&lt;script&gt
 item = req("/wrath/leyline-preview/p/" + first["id"].replace(":", "-"))[2].decode()
 check("item: View source, credit, licence, no Install", "View source on GitHub" in item and first["licence"] in item
       and 'rel="noopener noreferrer nofollow ugc"' in item and ">Install<" not in item
-      and "/download" not in re.sub(r'<header class="hb-top">.*?</header>', "", item, flags=re.S))   # the menu's own Download is the launcher
+      and "/download" not in re.sub(r'<header class="hb-top">.*?</header>|<footer class="hb-foot">.*?</footer>', "", item, flags=re.S))   # the menu's own Download is the launcher
 check("item: the repo URL is a link, never shown as text", first["repo"] not in visible(item))
 theme = req("/wrath/leyline-preview/p/theme-night-sky")[2].decode()
 check("themes: listed, bad ones dropped", "Night Sky" in theme and "WoW theme" not in req("/wrath/leyline-preview/catalog?cat=themes")[2].decode())
