@@ -891,12 +891,18 @@ ART_TYPES = {
     "leyline-emblem.webp": "image/webp", "leyline-bg.webp": "image/webp",   # the Leyline page (owner's art)
     "leyline-shot-dalaran.webp": "image/webp", "leyline-shot-start.webp": "image/webp",   # gallery (live client shots)
     "leyline-shot-city.webp": "image/webp", "leyline-shot-durotar.webp": "image/webp",
+    "leyline-shot-coa-ultrahd.webp": "image/webp",   # the front page's featured modpack (its authors' screenshot)
+    # the owner's Minigolf recording for the Game modes section: a short muted loop and its poster
+    "leyline-shot-minigolf.mp4": "video/mp4", "leyline-shot-minigolf.webm": "video/webm", "leyline-shot-minigolf.webp": "image/webp",
+    "leyline-mode-azeroth-survivors.webp": "image/webp",   # the mode's key art (the owner's; crest cropped out)
     "leyline-display.woff2": "font/woff2", "leyline-display-OFL.txt": "text/plain; charset=utf-8",   # Big Shoulders Display 600 (SIL OFL 1.1, leyline-display-OFL.txt)
     "leyline-corner-tl.webp": "image/webp", "leyline-corner-tr.webp": "image/webp",   # our gold frame art, hued blue
     "leyline-corner-bl.webp": "image/webp", "leyline-corner-br.webp": "image/webp", "leyline-divider.webp": "image/webp",
     # the owner's screenshots for /wrath/modes (stream/modes.py); a missing one leaves a painted panel
     "leyline-shot-dalaran.webp": "image/webp", "leyline-shot-start.webp": "image/webp",
     "leyline-shot-city.webp": "image/webp", "leyline-shot-durotar.webp": "image/webp",
+    "leyline-shot-coa-ultrahd.webp": "image/webp",
+    "leyline-shot-minigolf.mp4": "video/mp4", "leyline-shot-minigolf.webm": "video/webm", "leyline-shot-minigolf.webp": "image/webp",
     # the round Leyline mark, split so the swirl turns while the crystal stays upright (SPIN_CSS, the hub)
     "leyline-swirl-256.webp": "image/webp", "leyline-crystal-256.webp": "image/webp",
     "leyline-swirl-128.png": "image/png", "leyline-crystal-128.png": "image/png",
@@ -2406,7 +2412,7 @@ class PageHandler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         script = f"'nonce-{nonce}'" if nonce else "'none'"
         self.send_header("Content-Security-Policy",
-                         f"default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'; "
+                         f"default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self'; media-src 'self'; font-src 'self'; "
                          f"script-src {script}; "
                          f"frame-src https://{STREAM_HOST}; "
                          + ("connect-src 'self'; " if connect else "") +
@@ -2425,9 +2431,27 @@ class PageHandler(BaseHTTPRequestHandler):
         if body is None:
             self.send(404, b"not found\n", "text/plain")
             return
-        self.send_response(200)
+        # one byte range (bytes=a-b, a-, -n) for the videos, so a browser can seek and Safari plays them at all;
+        # anything else gets the whole file
+        status, total = 200, len(body)
+        m = re.fullmatch(r"bytes=(\d*)-(\d*)", (self.headers.get("Range") or "").strip())
+        if m and art_type(name).startswith("video/") and (m.group(1) or m.group(2)):
+            a, b = m.group(1), m.group(2)
+            start, end = (total - min(int(b), total), total - 1) if not a else (int(a), min(int(b), total - 1) if b else total - 1)
+            if start >= total or end < start:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{total}")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            status, body = 206, body[start:end + 1]
+        self.send_response(status)
         self.send_header("Content-Type", art_type(name))
         self.send_header("Content-Length", str(len(body)))
+        if art_type(name).startswith("video/"):
+            self.send_header("Accept-Ranges", "bytes")
+            if status == 206:
+                self.send_header("Content-Range", f"bytes {start}-{end}/{total}")
         self.send_header("Cache-Control", f"public, max-age={ART_MAX_AGE if name in ART_TYPES else 86400}")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Cross-Origin-Resource-Policy", "cross-origin")

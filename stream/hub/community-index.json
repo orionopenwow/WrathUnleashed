@@ -85,7 +85,9 @@
    "updated": "2026-07-14",
    "archived": false,
    "source": "seed",
-   "score": 11.0
+   "score": 11.0,
+   "thumb": "/wrath/art/hub-thumbs/nom0re__classicnumbers-wotlk.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:ebb4c03f69a1",
@@ -401,7 +403,9 @@
    "updated": "2024-06-08",
    "archived": false,
    "source": "discovered",
-   "score": 13.0
+   "score": 13.0,
+   "thumb": "/wrath/art/hub-thumbs/brian8544__setxpbar.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:5110e63d9c90",
@@ -512,7 +516,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 29.3
+   "score": 29.3,
+   "thumb": "/wrath/art/hub-thumbs/trauntrow__mod-dungeon-master.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:d93a379e5aee",
@@ -534,7 +540,9 @@
    "archived": false,
    "source": "seed",
    "needs": "mod-ale or Eluna",
-   "score": 22.3
+   "score": 22.3,
+   "thumb": "/wrath/art/hub-thumbs/55honey__acore_eventscripts.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:2388cfb0bc29",
@@ -578,7 +586,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 11.0
+   "score": 11.0,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-zone-difficulty.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:22e8f9d0ec1c",
@@ -620,7 +630,9 @@
    "updated": "2026-10-28",
    "archived": false,
    "source": "seed",
-   "score": 50.6
+   "score": 50.6,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__azerothcore-wotlk.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:27c65bb94e2e",
@@ -642,7 +654,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 11.0
+   "score": 11.0,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__acore-docker.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:a4a625df3e8e",
@@ -663,7 +677,9 @@
    "updated": "2026-10-18",
    "archived": false,
    "source": "discovered",
-   "score": 20.2
+   "score": 20.2,
+   "thumb": "/wrath/art/hub-thumbs/zoidwaffle__azerothcore-ansible.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:8e007e48688f",
@@ -684,7 +700,9 @@
    "updated": "2026-10-25",
    "archived": false,
    "source": "seed",
-   "score": 11.0
+   "score": 11.0,
+   "thumb": "/wrath/art/hub-thumbs/the-cataclysm-preservation-project__trinitycore.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:1e2365494bfd",
@@ -768,7 +786,9 @@
    "updated": "2026-10-22",
    "archived": false,
    "source": "discovered",
-   "score": 16.5
+   "score": 16.5,
+   "thumb": "/wrath/art/hub-thumbs/mserajnik__cmangos-deploy.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:a675bb2d87b4",
@@ -791,7 +811,9 @@
    "updated": "2026-08-06",
    "archived": false,
    "source": "discovered",
-   "score": 19.0
+   "score": 19.0,
+   "thumb": "/wrath/art/hub-thumbs/jrtashjian__cmangos-docker.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:86ebe4ba1c52",
@@ -940,7 +962,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 11.0
+   "score": 11.0,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-progression-system.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:1c4787d04338",
@@ -1066,7 +1090,9 @@
    "updated": "2021-01-02",
    "archived": false,
    "source": "discovered",
-   "score": 15.6
+   "score": 15.6,
+   "thumb": "/wrath/art/hub-thumbs/trinitytbc__core.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:c3f17b2f370f",
@@ -1108,7 +1134,9 @@
    "updated": "2026-10-20",
    "archived": false,
    "source": "discovered",
-   "score": 23.8
+   "score": 23.8,
+   "thumb": "/wrath/art/hub-thumbs/mserajnik__vmangos-deploy.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:2c1008db45f0",
@@ -1130,7 +1158,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 23.9
+   "score": 23.9,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-account-achievements.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:46943e73f89e",
@@ -1196,7 +1226,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 30.9
+   "score": 30.9,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-aoe-loot.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:53fcfeb11487",
@@ -1218,7 +1250,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 27.9
+   "score": 27.9,
+   "thumb": "/wrath/art/hub-thumbs/noisiver__mod-assistant.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:bf4ae58049ad",
@@ -1240,7 +1274,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 8.0
+   "score": 8.0,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-auto-revive.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:f24254450288",
@@ -1284,7 +1320,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 27.2
+   "score": 27.2,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-npc-beastmaster.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:f452d957aef2",
@@ -1372,7 +1410,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 27.1
+   "score": 27.1,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-breaking-news-override.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:a6043ddfc4e0",
@@ -1460,7 +1500,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 20.8
+   "score": 20.8,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-character-tools.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:b46cfd3fc332",
@@ -1482,7 +1524,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 11.0
+   "score": 11.0,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-cfbg.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:b18cefb58f0c",
@@ -1570,7 +1614,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 11.0
+   "score": 11.0,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-duel-reset.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:497c926f8dd7",
@@ -1592,7 +1638,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore with mod-playerbots",
-   "score": 32.8
+   "score": 32.8,
+   "thumb": "/wrath/art/hub-thumbs/jrad7__mod-dungeon-clear.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:36ba2ac8b3b9",
@@ -1614,7 +1662,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 21.8
+   "score": 21.8,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-rdf-expansion.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:811a52b5aad1",
@@ -1658,7 +1708,9 @@
    "archived": false,
    "source": "seed",
    "needs": "mod-ale or Eluna",
-   "score": 19.5
+   "score": 19.5,
+   "thumb": "/wrath/art/hub-thumbs/55honey__acore_exchangenpc.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:4c0c9793825b",
@@ -1702,7 +1754,9 @@
    "archived": false,
    "source": "discovered",
    "needs": "AzerothCore",
-   "score": 13.8
+   "score": 13.8,
+   "thumb": "/wrath/art/hub-thumbs/gozzim__mod-globalchat.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:591df46d78dd",
@@ -1768,7 +1822,9 @@
    "archived": false,
    "source": "discovered",
    "needs": "AzerothCore",
-   "score": 18.8
+   "score": 18.8,
+   "thumb": "/wrath/art/hub-thumbs/silviu20092__mod-improved-bank.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:183341a5030c",
@@ -1878,7 +1934,9 @@
    "archived": false,
    "source": "discovered",
    "needs": "AzerothCore",
-   "score": 15.0
+   "score": 15.0,
+   "thumb": "/wrath/art/hub-thumbs/winfidonarleyan__kargatum-system.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:dfee43f4cca5",
@@ -1900,7 +1958,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 8.0
+   "score": 8.0,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-keep-out.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:81dd07ed66b3",
@@ -1944,7 +2004,9 @@
    "archived": false,
    "source": "discovered",
    "needs": "AzerothCore",
-   "score": 19.0
+   "score": 19.0,
+   "thumb": "/wrath/art/hub-thumbs/zhengpeiru21__mod-leech.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:303212cfa67d",
@@ -1966,7 +2028,9 @@
    "archived": false,
    "source": "seed",
    "needs": "mod-ale or Eluna",
-   "score": 11.0
+   "score": 11.0,
+   "thumb": "/wrath/art/hub-thumbs/phreeez__levelreward.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:1bf8a947f4a2",
@@ -1988,7 +2052,9 @@
    "archived": false,
    "source": "seed",
    "needs": "mod-ale or Eluna",
-   "score": 11.0
+   "score": 11.0,
+   "thumb": "/wrath/art/hub-thumbs/brytenwally__levelstats.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:654589b1fb61",
@@ -2010,7 +2076,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 20.5
+   "score": 20.5,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-fireworks-on-level.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:a17bb49af2e8",
@@ -2032,7 +2100,9 @@
    "archived": false,
    "source": "seed",
    "needs": "mod-ale or Eluna",
-   "score": 20.8
+   "score": 20.8,
+   "thumb": "/wrath/art/hub-thumbs/55honey__acore_levelupreward.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:5b3a3f7fb6b6",
@@ -2076,7 +2146,9 @@
    "archived": false,
    "source": "discovered",
    "needs": "AzerothCore",
-   "score": 18.8
+   "score": 18.8,
+   "thumb": "/wrath/art/hub-thumbs/hokken__mod-llm-guide.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:eafe3133f7b5",
@@ -2207,7 +2279,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 22.4
+   "score": 22.4,
+   "thumb": "/wrath/art/hub-thumbs/bytesgalore__mod-no-hearthstone-cooldown.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:80257fc3e1a8",
@@ -2251,7 +2325,9 @@
    "archived": false,
    "source": "discovered",
    "needs": "AzerothCore",
-   "score": 23.6
+   "score": 23.6,
+   "thumb": "/wrath/art/hub-thumbs/dustinhendrickson__mod-ollama-bot-buddy.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:90048fe5728c",
@@ -2273,7 +2349,9 @@
    "archived": false,
    "source": "discovered",
    "needs": "AzerothCore",
-   "score": 28.1
+   "score": 28.1,
+   "thumb": "/wrath/art/hub-thumbs/dustinhendrickson__mod-ollama-chat.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:70da67ee3465",
@@ -2295,7 +2373,9 @@
    "archived": false,
    "source": "discovered",
    "needs": "AzerothCore",
-   "score": 24.2
+   "score": 24.2,
+   "thumb": "/wrath/art/hub-thumbs/deseven__mod-pbc.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:dfefb279f469",
@@ -2317,7 +2397,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 11.0
+   "score": 11.0,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-reward-played-time.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:7658a8011c77",
@@ -2339,7 +2421,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore (the Playerbot branch)",
-   "score": 42.4
+   "score": 42.4,
+   "thumb": "/wrath/art/hub-thumbs/mod-playerbots__mod-playerbots.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:430593ff6e69",
@@ -2361,7 +2445,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 8.0
+   "score": 8.0,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-pvp-titles.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:fea662d2975b",
@@ -2383,7 +2469,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 22.8
+   "score": 22.8,
+   "thumb": "/wrath/art/hub-thumbs/yuof__mod-rndbot-sync.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:90bf445fb64e",
@@ -2471,7 +2559,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 24.6
+   "score": 24.6,
+   "thumb": "/wrath/art/hub-thumbs/silviu20092__mod-reforging.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:ac9a21cea21b",
@@ -2493,7 +2583,9 @@
    "archived": false,
    "source": "seed",
    "needs": "mod-ale or Eluna",
-   "score": 6.0
+   "score": 6.0,
+   "thumb": "/wrath/art/hub-thumbs/55honey__acore_sendandbind.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:861346157c44",
@@ -2515,7 +2607,9 @@
    "archived": false,
    "source": "seed",
    "needs": "mod-ale or Eluna",
-   "score": 11.0
+   "score": 11.0,
+   "thumb": "/wrath/art/hub-thumbs/brytenwally__sitmeansrest.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:c0dd169d8414",
@@ -2537,7 +2631,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 24.2
+   "score": 24.2,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-skip-dk-starting-area.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:4512890b57b6",
@@ -2581,7 +2677,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 30.6
+   "score": 30.6,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-solocraft.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:e5ebb6c7ff56",
@@ -2603,7 +2701,9 @@
    "archived": false,
    "source": "discovered",
    "needs": "AzerothCore",
-   "score": 19.3
+   "score": 19.3,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-starter-guild.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:6af94a5c0e27",
@@ -2625,7 +2725,9 @@
    "archived": false,
    "source": "seed",
    "needs": "mod-ale or Eluna",
-   "score": 6.0
+   "score": 6.0,
+   "thumb": "/wrath/art/hub-thumbs/55honey__acore_summonall.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:c442185b4d5c",
@@ -2669,7 +2771,9 @@
    "archived": false,
    "source": "seed",
    "needs": "mod-ale or Eluna",
-   "score": 6.0
+   "score": 6.0,
+   "thumb": "/wrath/art/hub-thumbs/55honey__acore_tempannouncements.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:de23160dc0fe",
@@ -2691,7 +2795,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 11.0
+   "score": 11.0,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-war-effort.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:15bef5ff7ab1",
@@ -2713,7 +2819,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 23.8
+   "score": 23.8,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-weapon-visual.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:f4d06527306b",
@@ -2735,7 +2843,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 21.8
+   "score": 21.8,
+   "thumb": "/wrath/art/hub-thumbs/noisiver__mod-weekendbonus.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:1babff170bce",
@@ -2757,7 +2867,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 24.6
+   "score": 24.6,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-world-chat.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:b1a3a87d91c0",
@@ -2779,7 +2891,9 @@
    "archived": false,
    "source": "seed",
    "needs": "mod-ale or Eluna",
-   "score": 6.0
+   "score": 6.0,
+   "thumb": "/wrath/art/hub-thumbs/55honey__acore_zonecheck.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:50be32029146",
@@ -2801,7 +2915,9 @@
    "archived": false,
    "source": "seed",
    "needs": "mod-ale or Eluna",
-   "score": 6.0
+   "score": 6.0,
+   "thumb": "/wrath/art/hub-thumbs/55honey__acore_zonedebuff.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:d92f5c60359a",
@@ -2823,7 +2939,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 11.0
+   "score": 11.0,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-1v1-arena.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:df23b61da8aa",
@@ -2845,7 +2963,9 @@
    "archived": false,
    "source": "seed",
    "needs": "mod-ale or Eluna",
-   "score": 8.0
+   "score": 8.0,
+   "thumb": "/wrath/art/hub-thumbs/privatedonut__1v1_pvp_system.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:c99fc3af5241",
@@ -2867,7 +2987,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 11.0
+   "score": 11.0,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__mod-arena-3v3-solo-queue.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:a49421bd6182",
@@ -2889,7 +3011,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 15.8
+   "score": 15.8,
+   "thumb": "/wrath/art/hub-thumbs/r-o-b-o-t-o__mod-i-found-your-sword.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:40a0aa9f1e98",
@@ -2911,7 +3035,9 @@
    "archived": false,
    "source": "seed",
    "needs": "mod-ale or Eluna",
-   "score": 11.0
+   "score": 11.0,
+   "thumb": "/wrath/art/hub-thumbs/zyggy123__crime-bounty-system.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:5a267e969406",
@@ -2933,7 +3059,9 @@
    "archived": false,
    "source": "seed",
    "needs": "mod-ale or Eluna, plus AIO",
-   "score": 8.0
+   "score": 8.0,
+   "thumb": "/wrath/art/hub-thumbs/sogladev__mod-deathroll-aio.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:de6b3c3bcfc3",
@@ -2977,7 +3105,9 @@
    "archived": false,
    "source": "seed",
    "needs": "mod-ale or Eluna",
-   "score": 24.0
+   "score": 24.0,
+   "thumb": "/wrath/art/hub-thumbs/zyggy123__treasure-chest-system.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:083f63e7735d",
@@ -2998,7 +3128,9 @@
    "updated": "2024-10-10",
    "archived": false,
    "source": "discovered",
-   "score": 18.8
+   "score": 18.8,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__acore-client.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:83fccd8521f6",
@@ -3019,7 +3151,9 @@
    "updated": "2022-06-05",
    "archived": false,
    "source": "seed",
-   "score": 6.0
+   "score": 6.0,
+   "thumb": "/wrath/art/hub-thumbs/alchem1ster__addons-update-tool.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:fb8a6a00dbd2",
@@ -3106,7 +3240,9 @@
    "archived": false,
    "source": "seed",
    "needs": "AzerothCore",
-   "score": 23.3
+   "score": 23.3,
+   "thumb": "/wrath/art/hub-thumbs/dmck96__azeroth-world-editor.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:e43457e58669",
@@ -3127,7 +3263,9 @@
    "updated": "2026-01-24",
    "archived": false,
    "source": "discovered",
-   "score": 26.3
+   "score": 26.3,
+   "thumb": "/wrath/art/hub-thumbs/r-o-b-o-t-o__azerothcore-armory.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:ce831d3570c2",
@@ -3148,7 +3286,9 @@
    "updated": "2026-04-15",
    "archived": false,
    "source": "discovered",
-   "score": 21.0
+   "score": 21.0,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__azerothmcp.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:ea998b723869",
@@ -3277,7 +3417,9 @@
    "updated": "2026-03-01",
    "archived": false,
    "source": "discovered",
-   "score": 34.6
+   "score": 34.6,
+   "thumb": "/wrath/art/hub-thumbs/bandysc__wowdatabaseeditor.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:0c0a296730bd",
@@ -3362,7 +3504,9 @@
    "updated": "2019-08-24",
    "archived": false,
    "source": "discovered",
-   "score": 7.0
+   "score": 7.0,
+   "thumb": "/wrath/art/hub-thumbs/xadras__gcmdb.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:31407f17feb3",
@@ -3426,7 +3570,9 @@
    "updated": "2025-01-07",
    "archived": false,
    "source": "discovered",
-   "score": 24.0
+   "score": 24.0,
+   "thumb": "/wrath/art/hub-thumbs/helias__keira2.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:bb7fdc619729",
@@ -3447,7 +3593,9 @@
    "updated": "2026-10-25",
    "archived": false,
    "source": "seed",
-   "score": 38.6
+   "score": 38.6,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__keira3.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:b43939ee4da3",
@@ -3531,7 +3679,9 @@
    "updated": "2026-09-20",
    "archived": false,
    "source": "seed",
-   "score": 29.6
+   "score": 29.6,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__skeleton-module.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:40961115e62a",
@@ -3552,7 +3702,9 @@
    "updated": "2021-12-27",
    "archived": false,
    "source": "discovered",
-   "score": 15.8
+   "score": 15.8,
+   "thumb": "/wrath/art/hub-thumbs/neechbear__trinitycore.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:bc0785eb13d6",
@@ -3573,7 +3725,9 @@
    "updated": "2026-04-13",
    "archived": false,
    "source": "seed",
-   "score": 11.0
+   "score": 11.0,
+   "thumb": "/wrath/art/hub-thumbs/wowdev__noggit3.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:4e18e63f66a3",
@@ -3636,7 +3790,9 @@
    "updated": "2026-10-25",
    "archived": false,
    "source": "discovered",
-   "score": 23.0
+   "score": 23.0,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__server-status.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:eb924cec2471",
@@ -3699,7 +3855,9 @@
    "updated": "2019-10-13",
    "archived": false,
    "source": "discovered",
-   "score": 10.4
+   "score": 10.4,
+   "thumb": "/wrath/art/hub-thumbs/helias__tc-telegram-bot.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:10106f4a30d4",
@@ -3720,7 +3878,9 @@
    "updated": "2026-10-25",
    "archived": false,
    "source": "discovered",
-   "score": 25.6
+   "score": 25.6,
+   "thumb": "/wrath/art/hub-thumbs/azerothcore__telegram-automated-db-backup.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:6e979ed09a39",
@@ -3763,7 +3923,9 @@
    "updated": "2026-09-08",
    "archived": false,
    "source": "discovered",
-   "score": 26.2
+   "score": 26.2,
+   "thumb": "/wrath/art/hub-thumbs/walkline__tocloud9.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   },
   {
    "id": "link:ba25190e701f",
@@ -3848,7 +4010,9 @@
    "updated": "2026-02-04",
    "archived": false,
    "source": "discovered",
-   "score": 18.5
+   "score": 18.5,
+   "thumb": "/wrath/art/hub-thumbs/hextv__wrath-of-the-vanilla-v2.webp",
+   "thumb_credit": "Preview image from the project's GitHub page"
   }
  ],
  "external": [

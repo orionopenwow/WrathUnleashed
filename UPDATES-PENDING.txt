@@ -303,3 +303,5 @@
 1096c thumbs  Fetch the projects' GitHub preview pictures for the Mods pages
 1096d ship  Save to GitHub (orionopenwow/WrathUnleashed): the preview pictures
 1096e signin  Leyline site: show the preview pictures
+1097a signin  Leyline site: featured UltraHD modpack, server software, realm list panel, Minigolf loop, sharper launcher screenshots
+1097b ship  Save to GitHub (orionopenwow/WrathUnleashed): site showcase and the launcher's Survivors banner
