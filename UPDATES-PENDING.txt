@@ -351,3 +351,5 @@
 1119b ship Save to GitHub: the side menu
 1120a signin Download goes straight to Leyline.exe (one file, no installer)
 1120b ship Save to GitHub: the Download link
+1121a bots-off No roaming bots on the Dalaran Hangout (5-minute warning in game, then a restart)
+1121b ship Save to GitHub: the bots switch

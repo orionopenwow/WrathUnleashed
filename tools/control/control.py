@@ -109,6 +109,8 @@ STEPS = {
     "ship":    ("Ship to GitHub.bat", "Save everything to GitHub", True),
     "check":   ("realm/Server check.bat", "Server check (read-only)", False),
     "gm":      ("gmconsole/Install GM Console.bat", "GM console update (game keeps running)", False),
+    "bots-off": ("realm/Bots - none.bat", "No roaming bots on the Dalaran Hangout (5-min warning, then a restart)", False),
+    "bots-on": ("realm/Bots - back on.bat", "Undo: the roaming bots back on the Dalaran Hangout (5-min warning, then a restart)", False),
     "lean":    ("realm/Lean server.bat", "Lean server: fewer bots, idle areas unload (5-min restart)", False),
     "relay": ("hosting/relay/Deploy relay.bat", "Beacons relay (relay.openvanilla.app)", False),
     "hangout": ("hosting/hangout/Deploy Dalaran hangout.bat", "Dalaran Hangout on Leyline (the realm as a Beacon)", False),
