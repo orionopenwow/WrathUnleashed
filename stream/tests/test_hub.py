@@ -680,7 +680,8 @@ check("mod strip: near the foot (after the spotlight, before the fine print), re
       and ms.count("<li>") == 2 * ms.split('class="hb-ms-l dup"')[0].count("<li>"), ms_imgs)
 check("mod strip: stops on hover and focus, does not move with reduced motion",
       ".hb-ms:hover .hb-ms-run,.hb-ms:focus-within .hb-ms-run{animation-play-state:paused}" in fp
-      and "@media (prefers-reduced-motion:reduce){.hb-ms{overflow-x:auto}.hb-ms-run{animation:none" in fp)
+      and "@media (prefers-reduced-motion:reduce){.hb-ms{overflow-x:auto!important}.hb-ms-run{animation:none" in fp)
+check("mod strip: clipped to the page, so the sliding copy never widens it", ".hb-ms{margin:34px 0 18px;overflow:hidden;overflow:clip;max-width:100%}" in fp)
 gsec = req("/wrath/leyline-preview/gallery")[2].decode()
 tiles = GALS.findall(gsec)[:12]
 kinds = [t[1] for t in tiles]

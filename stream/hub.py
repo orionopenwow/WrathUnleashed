@@ -2491,9 +2491,8 @@ transform:translate(-50%,-50%);border-radius:50%;
 background:radial-gradient(closest-side,rgba(91,141,239,.34),rgba(139,108,240,.15) 55%,transparent 100%)}
 .hb-hero-mark{--ly-spin-size:clamp(220px,min(34vw,42vh),400px)!important;--ly-spin-turn:48s!important}
 .hb-hero-mark::before{background-image:url(/wrath/art/leyline-swirl-512.png)}
-.hb-hero-mark::after{background-image:url(/wrath/art/leyline-crystal-512.png);filter:drop-shadow(0 0 18px rgba(140,180,255,.85)) drop-shadow(0 0 42px rgba(91,141,239,.6)) brightness(1.12)}
-.hb-hero-mark::before{filter:drop-shadow(0 0 14px rgba(139,108,240,.75)) drop-shadow(0 0 36px rgba(91,141,239,.45)) brightness(1.18) saturate(1.15)}
-.hb-art{position:relative}.hb-art::before{content:"";position:absolute;left:50%;top:50%;width:min(560px,90vw);aspect-ratio:1;translate:-50% -50%;border-radius:50%;background:radial-gradient(closest-side,rgba(11,13,20,.78),rgba(11,13,20,.45) 55%,transparent);pointer-events:none;z-index:-1}
+.hb-hero-mark::after{background-image:url(/wrath/art/leyline-crystal-512.png);filter:drop-shadow(0 8px 10px rgba(0,0,0,.6)) drop-shadow(0 2px 3px rgba(0,0,0,.55))}
+.hb-hero-mark::before{filter:drop-shadow(0 12px 16px rgba(0,0,0,.6)) drop-shadow(0 3px 4px rgba(0,0,0,.5))}
 .hb-hero h1{margin:0 0 8px;font-size:clamp(22px,3vw,32px);line-height:1.1;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--lk-text-2)}
 .hb-sub-h{max-width:560px;margin:0 auto 18px;color:var(--lk-text-2);font-size:clamp(15px,1.8vw,17px);line-height:1.5}
 .hb-hero-a{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:10px 12px;margin:0}
@@ -2949,7 +2948,7 @@ background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,0) 60%)
 .hb-sw-eras span{font-size:11px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--lk-accent-soft);color:var(--lk-accent-strong)}
 .hb-sw dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;margin:0;font-size:12px}.hb-sw dt{color:var(--lk-muted)}.hb-sw dd{margin:0;color:var(--lk-text-2)}
 .hb-sw-svc{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:0;padding:0;list-style:none}
-.hb-ms{margin:34px 0 18px}
+.hb-ms{margin:34px 0 18px;overflow:hidden;overflow:clip;max-width:100%}
 .hb-ms-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}
 .hb-ms-head h2{margin:0;font-size:20px;font-weight:700}
 .hb-ms-head a{color:var(--lk-accent-strong);font-weight:600;font-size:14px}
@@ -2965,7 +2964,7 @@ background:#11131a;box-shadow:0 10px 26px rgba(0,0,0,.35)}
 .hb-ms-t span{position:absolute;inset:auto 0 0;display:grid;padding:22px 12px 9px;background:linear-gradient(transparent,rgba(8,10,16,.88));color:#fff}
 .hb-ms-t b{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hb-ms-t i{font-style:normal;font-size:11px;color:var(--lk-text-2)}
-@media (prefers-reduced-motion:reduce){.hb-ms{overflow-x:auto}.hb-ms-run{animation:none;mask-image:none}.hb-ms-l.dup{display:none}}
+@media (prefers-reduced-motion:reduce){.hb-ms{overflow-x:auto!important}.hb-ms-run{animation:none;mask-image:none}.hb-ms-l.dup{display:none}}
 @media (max-width:640px){.hb-ms-t{width:240px}}
 .hb-sw-cols{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:10px;margin-top:10px}
 .hb-sw-box{padding:12px;border-radius:10px;background:rgba(0,0,0,.22);border:1px solid #2a2e39}
