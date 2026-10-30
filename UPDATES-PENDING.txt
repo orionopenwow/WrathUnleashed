@@ -317,3 +317,6 @@
 1102f ship  Save to GitHub (orionopenwow/WrathUnleashed): in-game Realm List, Leyline look, hosting from the game
 1103a remove-files  Tidy the workspace: old root patches, scratch and the 1.12 tools moved (the copies at the old places removed)
 1103b ship  Save to GitHub: the workspace says Leyline (labs/, client/patches, docs map, Leyline Control, Move to Leyline)
+1104a frontpage  The site's home (play.openvanilla.app/) opens the Leyline front page
+1104b ov112-check  The old 1.12 jobs: what would be turned off (read-only)
+1104c ship  Save to GitHub: front page as home, the 1.12 jobs switch
