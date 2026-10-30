@@ -28,11 +28,14 @@ stream/hub/community-index.json. Nothing of anyone's is mirrored or hosted; each
         A build never drops an entry because its forge didn't answer, and refuses to shrink the index by more than
         20% at once (build --allow-shrink to override).
 
-    python3 -I tools/hub-index/hub_index.py thumbs [--top 30] [--only owner/repo ...] [--refresh]
+    python3 -I tools/hub-index/hub_index.py thumbs [--top 30] [--new] [--only owner/repo ...] [--refresh]
         Each picked GitHub entry's own preview image (its og:image: the owner's social preview or GitHub's card), only
         from GitHub's image hosts, only real images (magic bytes, 2 MB cap), as a 640x320 WebP of at most 60 KB in
         stream/www-files/art/hub-thumbs/<owner>__<repo>.webp; the entry gets thumb and thumb_credit once stream/hub.py
-        accepts them. Needs Pillow (or ffmpeg). build --thumbs N runs it after a good build.
+        accepts them. --new adds every GitHub entry without a thumb that was never tried. Needs Pillow (or ffmpeg).
+        build --thumbs N runs it after a good build (the daily workflow: build --thumbs 30, before the gate, so new
+        thumbnails go to the review PR). On the owner's PC: "tools/hub-index/Refresh hub thumbnails.bat"
+        (Autopilot step "thumbs"), then ship.
 
     python3 -I tools/hub-index/hub_index.py check
         Validate the index with the hub's own rules (stream/hub.py validate_index), the thumbnail fields and files, and
@@ -1219,6 +1222,23 @@ def gate(base: dict, new: dict, holding: dict) -> tuple[dict, dict]:
             wait["new"].append({"repo": e["repo"], "name": e["name"], "builds": e["builds"], "category": e["category"]})
     doc = dict(new)
     doc["entries"] = sorted(out, key=H.entry_order)
+    # External packs are curated by hand (external-packs.json, merged by a person), but their thumbnails are this
+    # run's: those wait for review like any other thumbnail (the image files only travel with the review PR).
+    base_ext = {x.get("id"): x for x in base.get("external") or [] if isinstance(x, dict)}
+    ext = []
+    for x in new.get("external") or []:
+        if not isinstance(x, dict):
+            continue
+        y = {k: v for k, v in x.items() if k not in THUMB_FIELDS}
+        b = base_ext.get(x.get("id")) or {}
+        if all(k in b for k in THUMB_FIELDS) and b.get("repo") == x.get("repo"):
+            y.update({k: b[k] for k in THUMB_FIELDS})
+        if any(y.get(k) != x.get(k) for k in THUMB_FIELDS):
+            wait["changed"].append({"repo": x.get("repo") or x.get("url", ""), "name": x.get("name", ""),
+                                    "fields": sorted(THUMB_FIELDS)})
+        ext.append(y)
+    if "external" in new:
+        doc["external"] = ext
     for k in wait:
         wait[k].sort(key=lambda r: r["repo"].lower())
     return doc, wait
@@ -1526,9 +1546,11 @@ def fetch_thumb(e: dict, fetcher: Fetcher, cache: dict, thumb_dir: str) -> tuple
 
 
 def thumbs(top: int, only: list[str], refresh: bool = False, fetcher: Fetcher | None = None,
-           thumb_dir: str | None = None) -> int:
-    """Fetch preview images for index entries: the top `top` by score and the `only` repos. An entry that already has
-    its thumb is left alone unless refresh (GitHub's card changes with every star, and each change is a review)."""
+           thumb_dir: str | None = None, new: bool = False) -> int:
+    """Fetch preview images for index entries: the top `top` by score and the `only` repos, and with new=True every
+    GitHub entry that has no thumb yet and was never tried (the thumbs cache remembers a skip, so a repo without a
+    usable image isn't asked again every run). An entry that already has its thumb is left alone unless refresh
+    (GitHub's card changes with every star, and each change is a review)."""
     fetcher = fetcher or Fetcher()
     thumb_dir = thumb_dir or THUMB_DIR
     doc = read_json(INDEX, None)
@@ -1540,11 +1562,13 @@ def thumbs(top: int, only: list[str], refresh: bool = False, fetcher: Fetcher | 
     ranked = sorted(es, key=lambda e: (-(e.get("score") or 0), e["id"]))[:max(0, top)]
     pick = {e["id"] for e in ranked} | {e["id"] for e in es
                                        if H.canonical(e["repo"])["key"].split("/", 3)[-1] in want or e["repo"].lower() in want}
+    cache = read_json(THUMBS_CACHE, {})
+    if new:
+        pick |= {e["id"] for e in es if "thumb" not in e and H.canonical(e["repo"])["key"] not in cache}
     record = hub_accepts_thumbs()
     if not record:
         log("thumbs: stream/hub.py doesn't accept thumb fields yet (ENTRY_KEYS): images are written, entries left as "
             "they are until it does")
-    cache = read_json(THUMBS_CACHE, {})
     counts: dict[str, int] = {}
     changed = False
     ext_pick = [x for x in doc.get("external") or [] if isinstance(x, dict) and x.get("repo")
@@ -1560,6 +1584,9 @@ def thumbs(top: int, only: list[str], refresh: bool = False, fetcher: Fetcher | 
             status, detail = "unchanged", "has its thumb"
         else:
             status, detail = fetch_thumb(e, fetcher, cache, thumb_dir)
+            key = (H.canonical(e["repo"]) or {}).get("key")
+            if status == "skipped" and key and not (cache.get(key) or {}).get("image"):
+                cache[key] = {"skipped": detail[:120]}        # remembered for --new; --only / top still retry it
         counts[status] = counts.get(status, 0) + 1
         print(f"  {status:9} {e['repo']}: {detail}")
         ok_file = bool(name) and os.path.exists(os.path.join(thumb_dir, name))
@@ -1605,11 +1632,13 @@ def main(argv: list[str]) -> int:
     b.add_argument("--report", default="")
     b.add_argument("--allow-shrink", action="store_true")
     b.add_argument("--thumbs", type=int, default=0, metavar="N",
-                   help="after a good build, fetch preview images for the top N entries (and the --only ones)")
+                   help="after a good build, fetch preview images for the top N entries, every new one (never "
+                        "tried) and the --only ones")
     t = sub.add_parser("thumbs")
     t.add_argument("--top", type=int, default=30)
     t.add_argument("--only", nargs="*", default=[])
     t.add_argument("--refresh", action="store_true")
+    t.add_argument("--new", action="store_true", help="also every GitHub entry without a thumb that was never tried")
     g = sub.add_parser("gate")
     g.add_argument("--base", required=True)
     g.add_argument("--full-out", default="")
@@ -1626,10 +1655,10 @@ def main(argv: list[str]) -> int:
     if a.cmd == "build":
         rc = build(a.jobs, a.approved, a.issues, a.only, a.report, allow_shrink=a.allow_shrink)
         if rc == 0 and a.thumbs > 0:
-            thumbs(a.thumbs, a.only)                    # a thumbnail that can't be fetched never fails the build
+            thumbs(a.thumbs, a.only, new=True)          # a thumbnail that can't be fetched never fails the build
         return rc
     if a.cmd == "thumbs":
-        return thumbs(a.top, a.only, a.refresh)
+        return thumbs(a.top, a.only, a.refresh, new=a.new)
     if a.cmd == "gate":
         return run_gate(a.base, a.full_out, a.summary, a.report)
     return check()

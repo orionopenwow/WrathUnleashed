@@ -117,6 +117,8 @@ STEPS = {
     "brand-check": ("realm/Leyline brand - check.bat", "Leyline brand: what would change (read-only)", False),
     "brand-leyline": ("realm/Leyline brand - on.bat", "Leyline brand ON: site, game and realm list say Leyline / Dalaran Hangout", False),
     "brand-off": ("realm/Leyline brand - off.bat", "Leyline brand off: every name back as it was", False),
+    # The hub's preview thumbnails (tools/hub-index, docs/HUB-INDEX.md): top 30 and new entries, then ship + signin.
+    "thumbs": ("tools/hub-index/Refresh hub thumbnails.bat", "Hub thumbnails: preview images for the top 30 and new catalog entries (then ship)", False),
     "builds-why": ("tools/github-builds/Why did the build fail.bat", "Why the last GitHub build failed (read-only)", False),
     "remove-files": ("tools/cleanup/Remove listed files.bat", "Remove the files a change took out (tools/cleanup/REMOVE.txt)", False),
     "fresh-check": ("tools/fresh-history/Fresh history - dry run.bat", "Fresh Leyline history: what it would do (read-only)", False),

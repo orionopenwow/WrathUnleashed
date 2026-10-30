@@ -355,6 +355,25 @@ class DailyRefresh(Pipeline):
         _, w3 = HI.gate(base, index(entry(a), entry(c), entry(g)), {"needs_licence": [{"repo": b, "reason": "no open licence file"}]})
         self.assertEqual([r["repo"] for r in w3["removed"]], [b])
 
+    def test_gate_holds_new_thumbnails_for_review(self):
+        a = "https://github.com/o/a"
+        th = {"thumb": "/wrath/art/hub-thumbs/o__a.webp", "thumb_credit": HI.THUMB_CREDIT}
+        url = "https://forum.example.org/t/pack"
+        x = {"id": HI.external_id(url), "name": "Pack", "author": "", "url": url, "category": "graphics",
+             "type": "external-pack", "builds": ["3.3.5a"], "summary": "A pack.", "external": True, "note": HI.EXTERNAL_NOTE,
+             "repo": "https://github.com/p/pack"}
+        xth = dict(x, thumb="/wrath/art/hub-thumbs/p__pack.webp", thumb_credit=HI.THUMB_CREDIT)
+        base = dict(index(entry(a)), external=[x])
+        new = dict(index(entry(a, **th)), external=[xth])
+        doc, wait = HI.gate(base, new, {})
+        self.assertNotIn("thumb", doc["entries"][0])                  # the daily PR never carries a new thumbnail
+        self.assertNotIn("thumb", doc["external"][0])
+        self.assertEqual(sorted(r["repo"] for r in wait["changed"]), [a, "https://github.com/p/pack"])
+        doc2, wait2 = HI.gate(new, new, {})                           # once merged, they stay
+        self.assertEqual(doc2["external"][0]["thumb"], xth["thumb"])
+        self.assertEqual(doc2["entries"][0]["thumb"], th["thumb"])
+        self.assertEqual(wait2["changed"], [])
+
     def test_run_gate_files(self):
         base = os.path.join(self.tmp, "base.json")
         HI.write_json(base, index(entry("https://github.com/o/a")))
@@ -679,6 +698,20 @@ class Thumbs(unittest.TestCase):
         self.assertNotIn("thumb", es["good"])
         self.assertTrue(os.path.exists(os.path.join(self.dir, "o__good.webp")))
 
+    def test_new_picks_untried_entries_and_remembers_skips(self):
+        HI.write_json(HI.INDEX, index(*(entry(f"https://github.com/o/{n}") for n in ("good", "html"))))
+        self.assertEqual(HI.thumbs(0, [], False, self.fetcher, self.dir, new=True), 0)
+        es = {e["repo"].rsplit("/", 1)[1]: e for e in HI.read_json(HI.INDEX, {})["entries"]}
+        self.assertIn("thumb", es["good"])
+        self.assertNotIn("thumb", es["html"])
+        cache = HI.read_json(HI.THUMBS_CACHE, {})
+        self.assertIn("skipped", cache["https://github.com/o/html"])
+        calls = []
+        real = self.fetcher.get
+        self.fetcher.get = lambda *a, **k: (calls.append(a[0]), real(*a, **k))[1]
+        self.assertEqual(HI.thumbs(0, [], False, self.fetcher, self.dir, new=True), 0)
+        self.assertEqual(calls, [])                 # good has its thumb, html was tried: nothing fetched again
+
     def test_names_magic_and_field_checks(self):
         self.assertEqual(HI.thumb_name("https://github.com/Some-Owner/My.Repo"), "some-owner__my.repo.webp")
         self.assertEqual(HI.thumb_name("https://gitlab.com/a/b"), "")
@@ -706,6 +739,34 @@ class Workflow(unittest.TestCase):
         self.assertIn("hub-index/review", wf)
         merge = [l for l in wf.splitlines() if "gh pr merge" in l]
         self.assertTrue(merge and all("hub-index/daily" in l or "$DAILY" in l for l in merge), merge)
+
+    def test_thumbs_in_the_daily_run_go_to_the_review_pr(self):
+        for path in (os.path.join(HI.REPO, "tools", "github-workflows", "hub-index.yml"),
+                     os.path.join(HI.REPO, ".github", "workflows", "hub-index.yml")):
+            with open(path, encoding="utf-8") as f:
+                wf = f.read()
+            self.assertRegex(wf, r"pip install [^\n]*pillow", path)
+            self.assertRegex(wf, r"hub_index\.py build [^\n]*--thumbs 30", path)
+            self.assertLess(wf.index("--thumbs 30"), wf.index("hub_index.py gate"), path)   # thumbs before the gate
+            daily = wf[wf.index("Daily refresh PR"):wf.index("Review PR")]
+            review = wf[wf.index("Review PR"):]
+            self.assertNotIn("hub-thumbs", daily.split("paths=")[1].splitlines()[0], path)   # never auto-merged
+            self.assertIn("stream/www-files/art/hub-thumbs", review, path)
+        with open(os.path.join(HI.REPO, "tools", "github-workflows", "hub-index.yml"), encoding="utf-8") as f:
+            src = f.read()
+        with open(os.path.join(HI.REPO, ".github", "workflows", "hub-index.yml"), encoding="utf-8") as f:
+            self.assertEqual(f.read(), src)          # the installed copy is the source copy
+
+    def test_local_thumbs_bat_and_autopilot_step(self):
+        with open(os.path.join(HERE, "Refresh hub thumbnails.bat"), encoding="utf-8") as f:
+            bat = f.read()
+        self.assertIn("hub_index.py\" thumbs --top 30 --new", bat)
+        self.assertIn("pip install", bat)
+        self.assertIn("pillow", bat.lower())
+        self.assertIn("hub_index.py\" check", bat)
+        with open(os.path.join(HI.REPO, "tools", "control", "control.py"), encoding="utf-8") as f:
+            ctl = f.read()
+        self.assertIn('"thumbs": ("tools/hub-index/Refresh hub thumbnails.bat"', ctl)
 
 
 class CheckedIn(unittest.TestCase):
