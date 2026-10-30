@@ -132,7 +132,7 @@ check("front page: creators and Host a Beacon", "/wrath/leyline-preview/creators
 check("front page: a TODO(owner) for the tagline, no words in the owner's voice", "TODO(owner)" in front)
 # the owner's mockup (2026-10-30): header nav, the hero, Platform Status, Community Spotlight, the footer
 # the header mirrors the launcher's pages (owner 2026-10-30: "servers, mods, addons, etc ... it should all work in browser too")
-NAV_ORDER = ["Play", "Realms", "Mods", "Addons", "Modes", "Host", "Community", "More"]
+NAV_ORDER = ["Play", "Realms", "Mods", "Addons", "Host", "Community", "More"]
 
 
 def header_of(page):
@@ -152,20 +152,20 @@ check("side menu (owner 2026-10-30: \"make all the tools come from the side by d
       and "body.hb .hb-top{position:fixed;inset:0 auto 0 0;width:var(--hb-side)" in front
        and ":root:has(#hb-side:checked){--hb-side:72px}" in front and 'localStorage.setItem("leyline.side"' in HB.HUB_JS
       and "@media (max-width:1080px){.hb-side-t,.hb-side-b{display:none}}" in front)
-check("header: Play, Realms, Mods, Addons, Modes, Host, Community, More", labels == NAV_ORDER, labels)
-hrefs = dict(re.findall(r'<a class="hb-ni[^"]*" href="([^"]+)"[^>]*><svg.*?</svg><span>([^<]+)</span>', nav, re.S)[i][::-1] for i in range(7))
+check("header: Play, Realms, Mods, Addons, Host, Community, More (Modes, Gallery and Status out of the menu)", labels == NAV_ORDER, labels)
+hrefs = dict(re.findall(r'<a class="hb-ni[^"]*" href="([^"]+)"[^>]*><svg.*?</svg><span>([^<]+)</span>', nav, re.S)[i][::-1] for i in range(6))
 check("header: each item goes to the launcher page's web twin", hrefs == {
       "Play": "/wrath", "Realms": "/wrath/leyline-preview/realms", "Mods": "/wrath/leyline-preview/catalog",
-      "Addons": "/wrath/leyline-preview/catalog?cat=addons", "Modes": "/wrath/leyline-preview/modes", "Host": "/wrath/host",
+      "Addons": "/wrath/leyline-preview/catalog?cat=addons", "Host": "/wrath/host",
       "Community": "/wrath/leyline-preview#community"} and "addons" in HB.CATEGORY_IDS, hrefs)
 more = re.search(r'<details class="hb-more-d"><summary class="hb-ni[^"]*">.*?<span>More</span></summary><div class="hb-more-m">(.*?)</div></details>', nav, re.S)
-check("header: More is a details dropdown (no script needed) with Forge, Agents, Gallery, Docs, News, Creators, Status",
-      more and re.findall(r"<span>([^<]+)</span>", more.group(1)) == ["Forge", "Agents", "Gallery", "Docs", "News", "Creators", "Status"]
-      and 'href="/wrath/leyline-preview#status"' in more.group(1) and 'href="/wrath/leyline-preview/gallery"' in more.group(1))
+check("header: More is a details dropdown (no script needed) with Forge, Agents, Docs, News, Creators",
+      more and re.findall(r"<span>([^<]+)</span>", more.group(1)) == ["Forge", "Agents", "Docs", "News", "Creators"]
+      and "#status" not in more.group(1) and "/gallery" not in more.group(1))
 check("header: the phone sheet has the same items as tiles, and the download", re.findall(
-      r"<span>([^<]+)</span>", re.search(r'<div class="hb-nav-x">(.*?)</div>', nav, re.S).group(1)) == ["Forge", "Agents", "Gallery", "Docs", "News", "Creators", "Status"]
+      r"<span>([^<]+)</span>", re.search(r'<div class="hb-nav-x">(.*?)</div>', nav, re.S).group(1)) == ["Forge", "Agents", "Docs", "News", "Creators"]
       and 'class="hb-dl-x"' in nav and 'id="hb-menu" class="hb-menu-t"' in hd and '<label for="hb-menu" class="hb-menu-b"' in hd)
-check("header: a line icon by every item (inline SVG, currentColor)", nav.count('<svg viewBox="0 0 24 24" aria-hidden="true">') == 7 + 1 + 7 + 7
+check("header: a line icon by every item (inline SVG, currentColor)", nav.count('<svg viewBox="0 0 24 24" aria-hidden="true">') == 6 + 1 + 5 + 5
       and "stroke:currentColor" in front)
 check("header: Download (primary) and Sign In (the crystal) on the right, no item active on the front page",
       re.search(r'<div class="hb-end"><a class="hb-dl" href="https://github\.com/orionopenwow/Leyline/releases"[^>]*>.*?Download</a>'
@@ -241,7 +241,7 @@ check("polish: the script reads only this site's public JSON", re.findall(r'json
 check("sub-nav: Realms, Modes and News", all(f'href="/wrath/leyline-preview/{x}"' in req("/wrath/leyline-preview/catalog")[2].decode()
                                                for x in ("realms", "modes", "news")))
 for path, want in (("/realms", ["Realms"]), ("/catalog", ["Mods"]), ("/catalog?cat=addons", ["Addons"]), ("/catalog?cat=tools", ["Mods"]),
-                   ("/modes", ["Modes"]), ("/beacon", ["Host"]), ("/submit", ["Mods"]), ("/p/" + first["id"].replace(":", "-"), ["Mods"]),
+                   ("/modes", []), ("/beacon", ["Host"]), ("/submit", ["Mods"]), ("/p/" + first["id"].replace(":", "-"), ["Mods"]),
                    ("/news", ["More"]), ("/creators", ["More"]), ("", [])):
     pg = req("/wrath/leyline-preview" + path)[2].decode()
     hd, nav, labels, on = header_of(pg)
@@ -746,8 +746,8 @@ for f in ("game", "mods", "launcher"):
           and re.search(rf'<a class="hb-chip on" href="/wrath/leyline-preview/gallery\?f={f}" data-f="{f}" aria-current="true">', g), ks)
 check("gallery ?f=<junk>: everything", [t[1] for t in GALS.findall(req("/wrath/leyline-preview/gallery?f=nope")[2].decode())] == [t[1] for t in tiles_all])
 hd, nav, labels, on = header_of(gal)
-check("gallery page: the hub header, More highlighted, Gallery in More and the phone sheet, the sub-nav",
-      labels == NAV_ORDER and on == ["More"] and '<a class="hb-mi on" href="/wrath/leyline-preview/gallery" aria-current="page" title="Gallery">' in nav
+check("gallery page: the hub header (Gallery is no longer in the menu), the sub-nav",
+      labels == NAV_ORDER and "/gallery" not in nav
       and '<a href="/wrath/leyline-preview/gallery" aria-current="page" class="on">Gallery</a>' in gal)
 check("gallery: script filters in place and opens the lightbox (Esc, arrows, Tab kept inside, focus back to the tile), no innerHTML",
       all(x in HB.HUB_JS for x in ('d.querySelectorAll("[data-gal]")', 'ev.key==="Escape"', 'ev.key==="ArrowLeft"', 'ev.key==="ArrowRight"',
@@ -972,9 +972,9 @@ s = b.decode()
 check("switch on: /wrath/leyline is the hub's front page, indexable", st == 200 and 'class="hb-top"' in s
       and "x-robots-tag" not in h and 'content="noindex"' not in s and "Preview:" not in s)
 st, h, b = req("/wrath/leyline/gallery")
-check("switch on: /wrath/leyline/gallery is the gallery, indexable, linked from More",
+check("switch on: /wrath/leyline/gallery is the gallery, indexable (no longer in the menu)",
       st == 200 and "<h1>Gallery</h1>" in b.decode() and "x-robots-tag" not in h and 'content="noindex"' not in b.decode()
-      and 'href="/wrath/leyline/gallery"' in s)
+      and "/wrath/leyline/gallery" not in s)
 # the front door is the main site (owner 2026-10-30: "make this our main one"): every hub page at /wrath/leyline/<page>
 check("switch on: no link on the front page says leyline-preview", "leyline-preview" not in s)
 for pg in ("/realms", "/catalog?cat=addons", "/modes", "/news", "/creators", "/beacon", "/submit", "/forge", "/agents",

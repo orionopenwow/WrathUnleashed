@@ -804,11 +804,11 @@ class Hub:
         home = FRONT if front_on() else BASE
         main = [("play", "Play", "/wrath", "play"), ("realms", "Realms", BASE + "/realms", "realms"),
                 ("mods", "Mods", BASE + "/catalog", "mods"), ("addons", "Addons", BASE + "/catalog?cat=addons", "addons"),
-                ("modes", "Modes", BASE + "/modes", "modes"), ("host", "Host", "/wrath/host", "host"),
+                ("host", "Host", "/wrath/host", "host"),
                 ("community", "Community", home + "#community", "community")]
         more = [("forge", "Forge", BASE + "/forge", "forge"), ("agents", "Agents", BASE + "/agents", "agents"),
-                ("gallery", "Gallery", home + "/gallery", "gallery"), ("docs", "Docs", "/wrath/docs", "docs"), ("news", "News", BASE + "/news", "news"),
-                ("creators", "Creators", BASE + "/creators", "creators"), ("status", "Status", home + "#status", "status")]
+                ("docs", "Docs", "/wrath/docs", "docs"), ("news", "News", BASE + "/news", "news"),
+                ("creators", "Creators", BASE + "/creators", "creators")]   # Modes, Gallery and Status left the menu (owner 2026-10-30)
         return main, more
 
     def _header(self, active: str) -> str:
