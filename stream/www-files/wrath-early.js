@@ -173,7 +173,10 @@
   var settle = function (v) { if (lockDone) { lockDone(v); lockDone = null; } };
   try {
     var here = location.pathname + location.search + location.hash;
-    var noteUrl = function (m) { return './tab.html?m=' + m + '&r=' + encodeURIComponent(here); };
+    // b=1: the Leyline brand switch is on (/__env.js), so the note page is flat even where it can't read the
+    // brand kept in localStorage (storage off). Off: the address is exactly as before.
+    var lyOn = (window.__wenilla_env || {}).brand === 'leyline';
+    var noteUrl = function (m) { return './tab.html?m=' + m + (lyOn ? '&b=1' : '') + '&r=' + encodeURIComponent(here); };
     var locks = navigator.locks && typeof navigator.locks.request === 'function' ? navigator.locks : null;
     if (locks && !/[?&]multitab=1\b/.test(location.search)) {
       var chan = typeof BroadcastChannel === 'function' ? new BroadcastChannel('wu-game') : null;

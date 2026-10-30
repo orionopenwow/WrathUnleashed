@@ -3,8 +3,12 @@
 <title>WrathUnleashed</title>
 <script>
 // The Leyline brand switch (wrath-page.js keeps "wu-brand" while it is on): the flat look, set before the first paint.
+// ?b=1 (wrath-early.js adds it while the switch is on) counts too, for a browser with storage off.
+var lyKept = null;
+try { lyKept = localStorage.getItem('wu-brand'); } catch (e) {}
+if (!lyKept && /[?&]b=1(&|$)/.test(location.search)) lyKept = 'Leyline';
 try {
-  if (localStorage.getItem('wu-brand')) {
+  if (lyKept) {
     document.documentElement.className = 'ly-brand';
     document.write('<link rel="stylesheet" href="./leyline-look.css">');
   }
@@ -38,6 +42,7 @@ background:linear-gradient(#f0d389,#d8b25a);color:#1b1406}button:disabled{opacit
   // The Leyline brand switch: wrath-page.js keeps the main realm's name here while it is on (else nothing is kept).
   var brand = null;
   try { brand = localStorage.getItem('wu-brand'); } catch (e) {}
+  if (!brand && q.get('b') === '1') brand = 'Leyline';
   var site = brand ? 'Leyline' : 'WrathUnleashed';
   if (brand) document.title = site;
   if (m === 'moved') {

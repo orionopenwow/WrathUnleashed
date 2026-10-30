@@ -2,7 +2,7 @@
 // wrath-early.js). With the brand ON (/__env.js brand "leyline"): <html class="ly-brand">, boot.js's overlay and the
 // world-loading cover show the spinning mark (the swirl's transform changes over time, the crystal stays upright),
 // none of the painted art is fetched, and with reduced motion the mark stands still. With it OFF: leyline-look.css is
-// never asked for and the old look is untouched. tab.html follows the kept brand the same way.
+// never asked for and the old look is untouched. tab.html follows the kept brand (or ?b=1) the same way.
 //
 //   NODE_PATH=$(npm root -g) node --test stream/tests/spin.browser.test.cjs
 'use strict';
@@ -128,4 +128,19 @@ test('tab.html follows the kept brand', async () => {
   assert.equal(await on.page.evaluate(() => document.documentElement.className), '');
   assert.ok(on.asked.some((u) => /wu-load-orion/.test(u)) && !on.asked.includes('/leyline-look.css'));
   await on.ctx.close();
+});
+
+test('tab.html with ?b=1 (wrath-early.js adds it while the switch is on): flat even with nothing kept', async () => {
+  const { ctx, page, asked } = await open('/tab.html?m=busy&b=1&r=/');
+  assert.equal(await page.evaluate(() => localStorage.getItem('wu-brand')), null);
+  assert.equal(await page.evaluate(() => document.documentElement.className), 'ly-brand');
+  assert.equal(await page.evaluate(() => document.title), 'Leyline');
+  assert.ok(!asked.some((u) => PAINTED.test(u)), asked.join(' '));
+  await ctx.close();
+});
+
+test('wrath-early.js: the note page address carries b=1 only while the switch is on', () => {
+  const src = fs.readFileSync(path.join(WWW, 'wrath-early.js'), 'utf8');
+  assert.match(src, /var lyOn = \(window\.__wenilla_env \|\| \{\}\)\.brand === 'leyline';/);
+  assert.match(src, /'\.\/tab\.html\?m=' \+ m \+ \(lyOn \? '&b=1' : ''\) \+ '&r='/);
 });
