@@ -31,6 +31,8 @@ OWNER = "orionopenwow"
 REPO = f"{OWNER}/WrathUnleashed"
 NOT_OWNER = ("chumpton",)
 MESSAGE = "Leyline"
+AUTOPILOT_FILES = {"UPDATES-DONE.txt", "UPDATES-PENDING.txt", "control/autopilot.json", "control/claude-status.json",
+                   "control/last-run.json"}
 AUTHOR = ("Orion", "orionopenwow@users.noreply.github.com")
 
 
@@ -62,8 +64,11 @@ def fresh(root, go=False, confirm_file=None, backup_dir=None, runner=run, out=pr
     if rc != 0 or branch != "main":
         raise Stop(f"this folder is on '{branch}', not main")
     rc, dirty = git("status", "--porcelain", "--untracked-files=no")
-    if dirty:
-        raise Stop("this folder has changes that aren't saved to GitHub yet: run Ship first")
+    # Autopilot rewrites its own bookkeeping after every step; those changes are not work to lose.
+    paths = [ln.split(None, 1)[1].strip().strip('"') for ln in dirty.splitlines() if len(ln.split(None, 1)) == 2]
+    own = [p for p in paths if p not in AUTOPILOT_FILES]
+    if own:
+        raise Stop("this folder has changes that aren't saved to GitHub yet: run Ship first (" + ", ".join(own[:5]) + ")")
     rc, txt = git("fetch", "-q", "--prune", "--tags", "origin")
     if rc != 0:
         raise Stop("git fetch failed: " + txt)

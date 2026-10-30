@@ -104,6 +104,15 @@ class FreshTests(unittest.TestCase):
             self.go(confirm=self.old)
         self.assertEqual(self.g("-C", self.origin, "rev-parse", "main"), self.old)
 
+    def test_autopilot_bookkeeping_is_not_unsaved_work(self):
+        self.commit("UPDATES-DONE.txt", "1086a")
+        self.g("-C", self.pc, "push", "-q", "origin", "main")
+        old = self.g("-C", self.pc, "rev-parse", "HEAD")
+        with open(os.path.join(self.pc, "UPDATES-DONE.txt"), "a") as f:
+            f.write("\n1087x")                                  # Autopilot wrote it after the last ship
+        self.assertEqual(self.go(go=False), 0, self.lines)
+        self.assertEqual(self.go(confirm=old), 0, self.lines)
+
     def test_never_the_helper_account(self):
         self.who = "Chumpton"
         with self.assertRaises(F.Stop):
