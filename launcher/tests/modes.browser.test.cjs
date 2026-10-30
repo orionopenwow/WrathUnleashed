@@ -37,7 +37,7 @@ const FAKE = ({ modes, extra, offline, browser, page }) => {
       case 'play': return 'Started My Wrath on play.openvanilla.app.';
       case 'realms_list': return { realms: [], network: { realms: 0, players: 0, bots: 0 }, from_cache: false, saved_at: 1, error: null };
       case 'p2p_flags': return { effective: { p2p_hosting: false, limits: {} } };
-      case 'host_info': return { kit: null, seeds: [], realm: null };
+      case 'host_info': return { dir: '', is_kit: false, problems: [], kit: null, seeds: [], realm: null };
       default: throw 'unknown ' + cmd;
     }
   } } };

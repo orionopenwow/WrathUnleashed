@@ -1,22 +1,30 @@
 // Leyline themes: applies the chosen theme before the page paints, and draws Settings › Themes and
 // Discover › Themes. Plain JS, no framework. The Rust side is src-tauri/src/themes.rs.
 //
-// How a theme is applied:
-//   <html data-theme="<id>">                             always
-//   <html data-skin="rounded" data-base="dark|light">    for the Rounded looks (themes/rounded.css)
-//   no data-skin                                          Leyline Classic: style.css as it is
+// Two built-in looks, Dark (the default) and Light. How a theme is applied:
+//   <html data-theme="<id>" data-base="dark|light">      always (style.css is Dark; data-base="light" switches)
 //   <style id="ly-theme-pack">                            an installed pack's checked CSS (from the core only)
-// Ctrl+Shift+Backspace always goes back to Leyline Classic.
+// Ctrl+Shift+Backspace always goes back to Dark. A choice saved by an older Leyline (Leyline Classic, the
+// Rounded looks) is moved to Dark or Light, here and in the core.
 "use strict";
 
 (function () {
   const KEY = "leyline.theme";
-  const BUILTIN_KIND = { "leyline-classic": "classic", "dark-rounded": "rounded-dark", "light-rounded": "rounded-light", "rounded-system": "rounded-system" };
+  const DEFAULT = "dark";
+  const BUILTIN_KIND = { dark: "dark", light: "light" };
   const root = document.documentElement;
-  const dark = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  const sysDark = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  // Older built-ins, and what they become. "Rounded Auto" followed the system: it lands on whichever the system is now.
+  const LEGACY = {
+    "leyline-classic": () => "dark",
+    "dark-rounded": () => "dark",
+    "light-rounded": () => "light",
+    "rounded-system": () => (sysDark && !sysDark.matches ? "light" : "dark"),
+  };
   const invoke = window.__TAURI__ && window.__TAURI__.core ? window.__TAURI__.core.invoke : null;
 
-  let current = { id: "leyline-classic", kind: "classic" };
+  let current = { id: DEFAULT, kind: "dark" };
+  let migrated = false;         // an old choice was moved: tell the core once
   let saved = current;          // what is remembered (a preview may differ until KEEP)
   let list = [];                // themes_list().themes
   let catalogThemes = [];       // the Workshop's "themes" projects
@@ -30,17 +38,13 @@
     },
   };
 
-  function base(kind) {
-    if (kind === "rounded-light") return "light";
-    if (kind === "rounded-dark") return "dark";
-    if (kind === "rounded-system") return dark && !dark.matches ? "light" : "dark";
-    return "";
-  }
+  // A pack's kind: "dark" or "light" (packs made for an older Leyline say "rounded-light", "rounded-dark" or "classic").
+  const base = (kind) => (kind === "light" || kind === "rounded-light" ? "light" : "dark");
 
   function paint(id, kind, css) {
     root.dataset.theme = id;
-    if (kind === "classic") { delete root.dataset.skin; delete root.dataset.base; }
-    else { root.dataset.skin = "rounded"; root.dataset.base = base(kind); }
+    root.dataset.base = base(kind);
+    delete root.dataset.skin;
     let tag = document.getElementById("ly-theme-pack");
     if (css) {
       if (!tag) { tag = document.createElement("style"); tag.id = "ly-theme-pack"; document.head.append(tag); }
@@ -69,19 +73,21 @@
 
   // ---------------------------------------------------------------- before first paint
   (function boot() {
-    const s = store.get();
-    if (s && typeof s.id === "string" && typeof s.kind === "string") {
-      try { paint(s.id, s.kind, typeof s.css === "string" ? s.css : ""); } catch (_) { paint("leyline-classic", "classic", ""); }
-      saved = current;
-    } else root.dataset.theme = "leyline-classic";
-    if (dark) {
-      const follow = () => { if (current.kind === "rounded-system") root.dataset.base = base("rounded-system"); };
-      if (dark.addEventListener) dark.addEventListener("change", follow); else if (dark.addListener) dark.addListener(follow);
+    let s = store.get();
+    if (s && typeof s.id === "string" && LEGACY[s.id]) {
+      const id = LEGACY[s.id]();
+      s = { id, kind: BUILTIN_KIND[id] };
+      store.set(s);
+      migrated = true;
     }
+    if (s && typeof s.id === "string" && typeof s.kind === "string") {
+      try { paint(s.id, s.kind, typeof s.css === "string" ? s.css : ""); } catch (_) { paint(DEFAULT, "dark", ""); }
+    } else paint(DEFAULT, "dark", "");
+    saved = current;
     document.addEventListener("keydown", (e) => {
       if (e.ctrlKey && e.shiftKey && e.key === "Backspace") {
         e.preventDefault();
-        apply("leyline-classic", { save: true }).then(() => say("Back to Leyline Classic.", "ok")).catch(() => paint("leyline-classic", "classic", ""));
+        apply(DEFAULT, { save: true }).then(() => say("Back to Dark.", "ok")).catch(() => paint(DEFAULT, "dark", ""));
       }
     });
   })();
@@ -91,6 +97,10 @@
     if (!invoke) {
       list = Object.keys(BUILTIN_KIND).map((id) => ({ id, builtin: true, kind: BUILTIN_KIND[id], name: NAMES[id], description: LINES[id], author: "Leyline" }));
       return;
+    }
+    if (migrated) {                                  // the core moves old choices too; this keeps Light-from-Auto
+      migrated = false;
+      try { await invoke("theme_apply", { id: saved.id }); } catch (_) { /* the core's own default stands */ }
     }
     const r = await invoke("themes_list");
     list = r.themes || [];
@@ -102,17 +112,15 @@
       const css = (document.getElementById("ly-theme-pack") || {}).textContent || "";
       store.set(css.length < 1500000 ? { id: current.id, kind: current.kind, css } : { id: current.id, kind: current.kind });
     } catch (_) {
-      paint("leyline-classic", "classic", "");
+      paint(DEFAULT, "dark", "");
       saved = current;
       store.set(saved);
     }
   }
-  const NAMES = { "leyline-classic": "Leyline Classic", "dark-rounded": "Dark Rounded", "light-rounded": "Light Rounded", "rounded-system": "Rounded Auto" };
+  const NAMES = { dark: "Dark", light: "Light" };
   const LINES = {
-    "leyline-classic": "Stone, parchment and gold: the Leyline art.",
-    "dark-rounded": "Flat and dark with rounded corners. No art.",
-    "light-rounded": "Flat and light with rounded corners. No art.",
-    "rounded-system": "Dark or light Rounded, following your system setting.",
+    dark: "Navy and charcoal with a blue accent. The default.",
+    light: "Bright and clean with the same blue accent.",
   };
 
   // ---------------------------------------------------------------- small helpers
@@ -170,7 +178,7 @@
       img.src = t.preview;
       s.append(img);
     } else {
-      s.classList.add("k-" + (t.kind || "classic"));
+      s.classList.add("k-" + (t.kind === "unknown" ? "unknown" : base(t.kind)));
       s.append(el("i", "sw-side"), el("i", "sw-main"), el("i", "sw-btn"));
     }
     return s;
@@ -198,7 +206,7 @@
     if (!t.builtin) {
       acts.append(btn("REMOVE", "danger", () => busy(null, async () => {
         await invoke("theme_remove", { id: t.id });
-        if (current.id === t.id || saved.id === t.id) await apply("leyline-classic", { save: true });
+        if (current.id === t.id || saved.id === t.id) await apply(DEFAULT, { save: true });
         await sync();
         say("Removed " + (t.name || t.id) + ".", "ok");
       })));
@@ -283,7 +291,7 @@
     actions.append(go);
     box.replaceChildren(
       el("h3", "", "Themes"),
-      el("p", "lede", "How Leyline looks. Themes change colours, corners, fonts and art, never what the launcher does. Ctrl+Shift+Backspace always goes back to Leyline Classic."),
+      el("p", "lede", "How Leyline looks. Themes change colours, corners and fonts, never what the launcher does. Ctrl+Shift+Backspace always goes back to Dark."),
       section("Built in", builtins, ""),
       section("Installed", packs, "No theme packs yet. Find some under Discover › Themes, or install one from a zip."),
       actions,
@@ -382,7 +390,7 @@
     sync().then(render).catch((e) => say(String(e), "bad"));
   }
 
-  window.LeylineThemes = { apply, takeThemes, showTab, current: () => current };
+  window.LeylineThemes = { apply, takeThemes, showTab, current: () => current, DEFAULT, BUILTINS: Object.keys(BUILTIN_KIND) };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
   else mount();
 })();

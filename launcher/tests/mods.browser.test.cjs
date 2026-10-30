@@ -74,7 +74,7 @@ const FAKE = ({ catalog, metrics, order, link, signedOut, noRanks, installedMods
       case 'set_count_installs': return null;
       case 'mods_updates': return [];
       case 'realms_list': return { realms: [], network: { realms: 0, players: 0, bots: 0 }, from_cache: false, saved_at: 1, error: null };
-      case 'host_info': return { kit: null, seeds: [], realm: null };
+      case 'host_info': return { dir: '', is_kit: false, problems: [], kit: null, seeds: [], realm: null };
       case 'launcher_update_state': return { mode: 'auto', checking: false, downloading: false, ready: null, info: null };
       case 'modes_list': return { modes: [], from_cache: false, builtin: false, saved_at: null, error: null };
       default: throw 'unknown ' + cmd;

@@ -3,6 +3,12 @@
 Each `## <version>` section is the text of that GitHub release (`launcher-v<version>`); the release workflow
 copies it.
 
+## Unreleased
+
+- **A new look.** Leyline is flat and modern now: a navy Dark theme (the default) and a Light theme, rounded cards,
+  a clean sans font and the Leyline mark up top. Pick one under Settings › Themes. The painted stone and parchment
+  look is gone; if you had it (or a Rounded theme), Leyline moves you to Dark or Light on its own.
+
 ## 0.3.1 (2026-10-29)
 
 <!-- TODO(owner): the release's opening line -->

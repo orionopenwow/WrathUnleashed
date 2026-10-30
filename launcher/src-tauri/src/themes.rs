@@ -1,5 +1,6 @@
-//! Theme packs: how the launcher looks. Three built-ins (Leyline Classic, Dark Rounded, Light Rounded, plus
-//! "Rounded Auto" that follows the system's light or dark setting) and packs the player installs.
+//! Theme packs: how the launcher looks. Two built-ins, Dark (the default) and Light, and packs the player
+//! installs. A choice saved by an older Leyline (Leyline Classic, Dark/Light Rounded, Rounded Auto) is read as
+//! Dark or Light (`migrate_id`).
 //!
 //! A pack is `theme.json`, one `theme.css` and optional images and fonts (png, webp, svg, woff2). Never any
 //! JavaScript. Every pack is checked when it is installed and again every time it is loaded:
@@ -36,17 +37,31 @@ pub const MAX_FILES: usize = 64;
 pub const MAX_PREVIEW: usize = 1024 * 1024;
 /// The Workshop category theme packs sit in.
 pub const CATEGORY: &str = "themes";
-pub const DEFAULT: &str = "leyline-classic";
+pub const DEFAULT: &str = "dark";
 
 /// id, name, kind, one line.
 pub const BUILTINS: &[(&str, &str, &str, &str)] = &[
-    ("leyline-classic", "Leyline Classic", "classic", "Stone, parchment and gold: the Leyline art."),
-    ("dark-rounded", "Dark Rounded", "rounded-dark", "Flat and dark with rounded corners. No art."),
-    ("light-rounded", "Light Rounded", "rounded-light", "Flat and light with rounded corners. No art."),
-    ("rounded-system", "Rounded Auto", "rounded-system", "Dark or light Rounded, following your system setting."),
+    ("dark", "Dark", "dark", "Navy and charcoal with a blue accent. The default."),
+    ("light", "Light", "light", "Bright and clean with the same blue accent."),
 ];
-/// What a pack builds on: the classic art, or the flat rounded look in dark or light.
-pub const KINDS: &[&str] = &["classic", "rounded-dark", "rounded-light"];
+/// What a pack builds on: the Dark or the Light look.
+pub const KINDS: &[&str] = &["dark", "light"];
+/// The built-ins of older Leylines and what a saved choice of one becomes. "Rounded Auto" followed the system's
+/// setting, which the core cannot see: it reads as Dark here, and the UI (themes.js) moves it to Light when the
+/// system is light. Packs may not take these ids either.
+pub const LEGACY: &[(&str, &str)] =
+    &[("leyline-classic", "dark"), ("dark-rounded", "dark"), ("light-rounded", "light"), ("rounded-system", "dark")];
+/// Older pack kinds, read as today's.
+const LEGACY_KINDS: &[(&str, &str)] = &[("classic", "dark"), ("rounded-dark", "dark"), ("rounded-light", "light")];
+
+/// A saved theme id with an older built-in moved to Dark or Light; anything else as it is.
+pub fn migrate_id(id: &str) -> &str {
+    LEGACY.iter().find(|l| l.0 == id).map_or(id, |l| l.1)
+}
+
+fn is_builtin(id: &str) -> bool {
+    BUILTINS.iter().any(|b| b.0 == id)
+}
 
 // ------------------------------------------------------------------------------------------------ theme.json
 
@@ -78,7 +93,8 @@ pub fn id_ok(id: &str) -> bool {
         && id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
         && !id.contains("--")
         && !id.ends_with('-')
-        && !BUILTINS.iter().any(|b| b.0 == id)
+        && !is_builtin(id)
+        && !LEGACY.iter().any(|l| l.0 == id)
 }
 
 pub fn parse_meta(bytes: &[u8]) -> Result<ThemeMeta, String> {
@@ -93,13 +109,15 @@ pub fn parse_meta(bytes: &[u8]) -> Result<ThemeMeta, String> {
     if !id_ok(&m.id) {
         return Err(format!("theme.json: \"id\" {:?} must be 3-32 lower-case letters, digits and dashes, and not a built-in's", m.id));
     }
+    let kind = m.kind.trim();
+    let kind = LEGACY_KINDS.iter().find(|k| k.0 == kind).map_or(kind, |k| k.1).to_string();
     let m = ThemeMeta {
         name: text(&m.name, 48),
         author: text(&m.author, 80),
         version: text(&m.version, 24),
         licence: text(&m.licence, 80),
         preview: m.preview.trim().to_string(),
-        kind: m.kind.trim().to_string(),
+        kind,
         description: text(&m.description, 300),
         id: m.id,
     };
@@ -807,10 +825,12 @@ struct Active {
     theme: String,
 }
 
-/// The chosen theme (a built-in or an installed pack that still loads), or the default.
+/// The chosen theme (a built-in or an installed pack that still loads), or the default. An older built-in reads
+/// as Dark or Light.
 pub fn active(app: &Path) -> String {
     let id = fs::read(themes_dir(app).join("active.json")).ok().and_then(|b| serde_json::from_slice::<Active>(&b).ok()).map(|a| a.theme).unwrap_or_default();
-    if BUILTINS.iter().any(|b| b.0 == id) || (id_ok(&id) && themes_dir(app).join(&id).join("theme.json").is_file()) {
+    let id = migrate_id(&id).to_string();
+    if is_builtin(&id) || (id_ok(&id) && themes_dir(app).join(&id).join("theme.json").is_file()) {
         id
     } else {
         DEFAULT.into()
@@ -818,7 +838,8 @@ pub fn active(app: &Path) -> String {
 }
 
 pub fn set_active(app: &Path, id: &str) -> Result<(), String> {
-    if !BUILTINS.iter().any(|b| b.0 == id) {
+    let id = migrate_id(id);
+    if !is_builtin(id) {
         load(app, id)?;
     }
     let b = serde_json::to_vec(&Active { theme: id.into() }).map_err(|e| e.to_string())?;
@@ -925,7 +946,7 @@ pub fn install_project(app: &Path, p: &Project, catalog_origin: &str) -> Result<
 }
 
 pub fn remove(app: &Path, id: &str) -> Result<(), String> {
-    if BUILTINS.iter().any(|b| b.0 == id) {
+    if is_builtin(id) || LEGACY.iter().any(|l| l.0 == id) {
         return Err("Built-in themes cannot be removed.".into());
     }
     if !id_ok(id) {
@@ -1155,6 +1176,8 @@ mod tests {
         for bad in [
             r#"{"id":"Bad Id","name":"x","author":"a","version":"1","licence":"MIT","kind":"classic"}"#,
             r#"{"id":"dark-rounded","name":"x","author":"a","version":"1","licence":"MIT","kind":"classic"}"#,
+            r#"{"id":"leyline-classic","name":"x","author":"a","version":"1","licence":"MIT","kind":"dark"}"#,
+            r#"{"id":"good-id","name":"x","author":"a","version":"1","licence":"MIT","kind":"system"}"#,
             r#"{"id":"good-id","name":"x","author":"a","version":"1","licence":"MIT","kind":"neon"}"#,
             r#"{"id":"good-id","name":"x","author":"a","version":"1","kind":"classic"}"#,
             r#"[1]"#,
@@ -1192,7 +1215,7 @@ mod tests {
         set_active(app, "night-owl").unwrap();
         assert_eq!(active(app), "night-owl");
         let c = css(app, "night-owl").unwrap();
-        assert_eq!(c.kind, "rounded-dark");
+        assert_eq!(c.kind, "dark", "an older pack kind (rounded-dark) is read as dark");
         assert!(c.css.contains("url(\"data:image/png;base64,") && c.css.contains("url(\"data:font/woff2;base64,d09GMnJlc3Q=\")"), "{}", c.css);
         assert!(!c.css.contains("images/bg.png"));
         // A file changed on disk after install is caught when it loads.
@@ -1209,9 +1232,10 @@ mod tests {
         install_local(app, &folder).unwrap();
         assert!(css(app, "night-owl").is_ok());
         assert!(set_active(app, "nope-theme").is_err());
-        assert!(set_active(app, "light-rounded").is_ok());
+        assert!(set_active(app, "light").is_ok());
         set_active(app, "night-owl").unwrap();
-        assert!(remove(app, "dark-rounded").is_err());
+        assert!(remove(app, "dark").is_err());
+        assert!(remove(app, "leyline-classic").is_err());
         remove(app, "night-owl").unwrap();
         assert_eq!(active(app), DEFAULT, "removing the active pack goes back to the default");
         assert!(!themes_dir(app).join("night-owl").exists());
@@ -1297,5 +1321,48 @@ mod tests {
     fn builtins_are_known() {
         assert!(BUILTINS.iter().any(|b| b.0 == DEFAULT));
         assert!(BUILTINS.iter().all(|b| !id_ok(b.0)), "packs cannot take a built-in's id");
+        assert!(LEGACY.iter().all(|l| !id_ok(l.0)), "nor an older built-in's");
+    }
+
+    #[test]
+    fn only_dark_and_light_are_built_in_and_dark_is_the_default() {
+        let ids: Vec<&str> = BUILTINS.iter().map(|b| b.0).collect();
+        assert_eq!(ids, ["dark", "light"]);
+        assert_eq!(DEFAULT, "dark");
+        assert_eq!(KINDS, ["dark", "light"]);
+        let d = tempfile::tempdir().unwrap();
+        let l = list(d.path());
+        assert_eq!(l.active, "dark", "nothing saved: Dark");
+        assert_eq!(l.themes.iter().map(|t| (t.id.as_str(), t.name.as_str(), t.kind.as_str())).collect::<Vec<_>>(),
+            [("dark", "Dark", "dark"), ("light", "Light", "light")]);
+        for t in &l.themes {
+            for bad in ["Classic", "parchment", "Rounded", "World of Warcraft", "WoW", "Warcraft", "Blizzard"] {
+                assert!(!t.name.contains(bad) && !t.description.contains(bad), "{bad} in {t:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn an_older_saved_choice_moves_to_dark_or_light() {
+        let d = tempfile::tempdir().unwrap();
+        let app = d.path();
+        fs::create_dir_all(themes_dir(app)).unwrap();
+        for (old, new) in [("leyline-classic", "dark"), ("dark-rounded", "dark"), ("light-rounded", "light"), ("rounded-system", "dark"),
+            ("gone-pack", "dark"), ("", "dark")] {
+            fs::write(themes_dir(app).join("active.json"), format!(r#"{{"theme":"{old}"}}"#)).unwrap();
+            assert_eq!(active(app), new, "{old}");
+            assert_eq!(list(app).active, new, "{old}");
+        }
+        // An older UI asking for an old id gets the new one saved.
+        set_active(app, "light-rounded").unwrap();
+        let saved: Active = serde_json::from_slice(&fs::read(themes_dir(app).join("active.json")).unwrap()).unwrap();
+        assert_eq!(saved.theme, "light");
+        set_active(app, "leyline-classic").unwrap();
+        assert_eq!(active(app), "dark");
+        // A pack made for an older Leyline still installs: its kind is read as today's.
+        for (old, new) in [("classic", "dark"), ("rounded-dark", "dark"), ("rounded-light", "light"), ("light", "light")] {
+            let m = parse_meta(format!(r#"{{"id":"old-pack","name":"x","author":"a","version":"1","licence":"MIT","kind":"{old}"}}"#).as_bytes()).unwrap();
+            assert_eq!(m.kind, new, "{old}");
+        }
     }
 }

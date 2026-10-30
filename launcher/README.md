@@ -16,7 +16,7 @@ No telemetry, no accounts.
 | **My Mods** | per client: what is installed, the update ready, native code; one click to update or remove, turn off / on, UPDATE ALL; drop (or choose) a .zip, an addon folder, a .MPQ patch or a native mod (.dll, .asi; a one-time OK per mod). The title bar's pill counts Workshop updates across all clients. |
 | **Realms** | the official realm plus the relay's Beacons, with their server (AzerothCore, TrinityCore, CMaNGOS, vMaNGOS, MaNGOS, other), build, status and players; PLAY picks one of your clients of the realm's build (or says which is missing), sets its realm address and starts it; "Only realms my clients can play"; join a private realm with its invite link; BACK TO WRATH; put back your own realmlist. |
 | **Host** | plain-words steps: HOST A REALM (the website's /wrath/host gives the realm file), choose the host kit folder, start the realm file or the kit's host script in its own window, the realm's status from the relay. |
-| **Themes** | Settings › Themes and Discover › Themes: Leyline Classic, Dark Rounded, Light Rounded and Rounded Auto (follows the system), plus theme packs (CSS and images only, checked by an allowlist) from the Workshop's `themes` category or a zip. See [docs/THEMES.md](../docs/THEMES.md). |
+| **Themes** | Settings › Themes and Discover › Themes: Dark (the default) and Light, plus theme packs (CSS and images only, checked by an allowlist) from the Workshop's `themes` category or a zip. See [docs/THEMES.md](../docs/THEMES.md). |
 | **Settings** | Wine on/off, the wine command and an optional prefix (macOS and Linux run Windows clients through Wine); updates: the Stable or Beta channel, CHECK NOW, RESTART TO UPDATE. |
 
 ### Builds: what Leyline knows per client
@@ -95,7 +95,7 @@ up to 30 seconds between reads.
 | `src-tauri/src/host.rs` | the host kit: finding it, its realm and the website's realm files, starting it, the realm's relay status |
 | `src-tauri/src/update.rs` | the launcher's own updates: the channel's newest release (GitHub, `launcher-v*`), semver order, the `latest.json` check |
 | `src-tauri/src/status.rs` | a realm's live status: login-port ping plus its status file |
-| `ui/themes.js`, `ui/themes/` | themes: applied before paint, the Themes section, the Rounded looks (`--t-*` tokens) |
+| `ui/themes.js`, `ui/themes/` | themes: applied before paint, the Themes section and its cards (the looks and `--t-*` tokens are in `ui/style.css`) |
 | `src-tauri/src/themes.rs` | theme packs: the format, the CSS allowlist, install (catalog with sha256, zip, folder), list, apply, remove |
 | `src-tauri/src/app.rs` | the Tauri commands the UI calls (only built with the `app` feature) |
 | `../tools/github-workflows/leyline-launcher.yml` | CI: tests, and release builds on a `launcher-v*` tag (Windows, macOS universal, Linux; signed for the updater when the key is set) |

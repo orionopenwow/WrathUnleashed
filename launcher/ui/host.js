@@ -20,7 +20,7 @@
   const page = byId("page-host");
   const panel = page && page.querySelector(".panel");
   if (!panel) return;
-  const packCard = mk("section", "card stone");
+  const packCard = mk("section", "card");
   packCard.id = "hp-card";
   const head = mk("div", "card-head");
   head.append(mk("span", "", "HOST PACK"));
@@ -120,7 +120,7 @@
   const TAGS = [["blizzlike", "Blizzlike"], ["boosted", "Boosted"], ["custom", "Custom"], ["pvp", "PvP"], ["rp", "RP"], ["hangout", "Hangout"], ["bots", "Bots"]];
   const REGIONS = [["", "Not shown"], ["na-east", "North America east"], ["na-west", "North America west"], ["sa", "South America"],
     ["eu", "Europe"], ["africa", "Africa"], ["me", "Middle East"], ["asia", "Asia"], ["oce", "Oceania"]];
-  const listCard = mk("section", "card stone");
+  const listCard = mk("section", "card");
   listCard.id = "hl-card";
   const lhead = mk("div", "card-head");
   lhead.append(mk("span", "", "ON THE REALM LIST"));
@@ -171,7 +171,7 @@
   // The realm profiles the kit can run for the clients Leyline found on this PC (host/profiles.rs). The pick is
   // saved in the kit folder; START MY REALM hands it to the kit's script with that client's folder, from which the
   // server data is made (read-only, nothing downloaded).
-  const gameCard = mk("section", "card stone");
+  const gameCard = mk("section", "card");
   gameCard.id = "hg-card";
   const ghead = mk("div", "card-head");
   ghead.append(mk("span", "", "WHICH GAME"));

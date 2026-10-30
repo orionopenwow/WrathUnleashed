@@ -7,13 +7,13 @@ launcher does. Players pick one under **Settings › Themes**, and find more und
 
 | Theme | Look |
 |---|---|
-| **Leyline Classic** | stone, parchment and gold: the Leyline art (the default) |
-| **Dark Rounded** | flat dark surfaces, 12 px corners, Inter or the system font, no art |
-| **Light Rounded** | the same shape in light |
-| **Rounded Auto** | Dark or Light Rounded, following the system's light or dark setting |
+| **Dark** | navy and charcoal, flat cards, 14 px corners, a blue accent, Inter or the system font (the default) |
+| **Light** | the same shape in light |
 
 The choice is saved in the app-data folder (`themes/active.json`) and applies at once.
-**Ctrl+Shift+Backspace** always goes back to Leyline Classic.
+**Ctrl+Shift+Backspace** always goes back to Dark. A choice saved by an older Leyline moves on its own:
+Leyline Classic and Dark Rounded become Dark, Light Rounded becomes Light, and Rounded Auto becomes whichever of
+the two the system is set to.
 
 ## Make a theme pack
 
@@ -42,7 +42,7 @@ files sit at most two folders down.
   "version": "1.0.0",
   "licence": "MIT",
   "preview": "preview.png",
-  "kind": "rounded-dark",
+  "kind": "dark",
   "description": "Deep blue, soft corners."
 }
 ```
@@ -51,7 +51,7 @@ files sit at most two folders down.
 |---|---|---|
 | `id` | yes | 3–32 lower-case letters, digits and single dashes, starting with a letter; not a built-in's id. A Workshop pack's id is its Workshop id (`mod:<id>`). |
 | `name`, `author`, `version`, `licence` | yes | text (`licence`: an SPDX id such as `MIT` or `CC-BY-4.0`) |
-| `kind` | yes | what the pack builds on: `rounded-dark`, `rounded-light` or `classic` |
+| `kind` | yes | what the pack builds on: `dark` or `light` (older packs' `rounded-dark` and `classic` read as `dark`, `rounded-light` as `light`) |
 | `preview` | no | a png or webp in the pack |
 | `description` | no | up to 300 characters |
 
@@ -59,14 +59,15 @@ files sit at most two folders down.
 
 `kind` picks the starting look; your CSS goes on top of it.
 
-**`rounded-dark` / `rounded-light`.** The flat look reads every colour, corner, font and border from
+**`dark` / `light`.** The look reads every colour, corner, font and border from
 `--t-*` custom properties. Most packs only set these:
 
 ```css
 :root {
   --t-bg: #0b1020;            /* the window */
   --t-bg-image: none;         /* or url("images/bg.webp") */
-  --t-surface: #121933;       /* panels, cards, title bar, side bar, play bar */
+  --t-chrome: #0f1530;        /* title bar, side bar, play bar */
+  --t-surface: #121933;       /* panels and cards */
   --t-surface-2: #182143;     /* inputs, cards inside panels */
   --t-raised: #202b55;        /* buttons, hover */
   --t-border: #283563;
@@ -79,6 +80,8 @@ files sit at most two folders down.
   --t-accent-strong: #a9c7ff; /* hover on the accent */
   --t-on-accent: #0b1020;     /* text on the accent */
   --t-accent-soft: rgba(138, 180, 255, 0.15);
+  --t-accent-2: #a58bff;      /* the second colour: the account letter, PLAY's gradient */
+  --t-mark-opacity: 0.13;     /* the Leyline mark behind the Home card */
   --t-ok: #5ad58a;  --t-warn: #f2c14e;  --t-bad: #ff8a80;  --t-danger: #e5484d;
   --t-radius: 12px;  --t-radius-sm: 10px;  --t-radius-xs: 6px;
   --t-font: "Owl Sans", Inter, system-ui, sans-serif;
@@ -90,10 +93,6 @@ files sit at most two folders down.
 
 Keep text readable: aim for a contrast of at least 4.5:1 for `--t-text`, `--t-text-2` and `--t-muted` on
 `--t-surface`, and for `--t-on-accent` on `--t-accent`.
-
-**`classic`.** Starts from Leyline Classic. Set its variables (`--text`, `--muted`, `--gold`, `--gold-hi`,
-`--bronze`, `--bronze-hi`, `--ink`, `--ink-soft`, `--ok`, `--warn`, `--bad`) and replace art with plain rules,
-for example `.side { background: url("images/my-panel.webp") center / 100% 100%; }`.
 
 Plain rules may target any element of the launcher (`.titlebar`, `.side`, `.nav.on`, `.panel`, `.btn`,
 `.card`, `.playbar`, `.play`, and so on: see `launcher/ui/index.html`). `html[data-theme="<your id>"]` is
@@ -148,7 +147,7 @@ you made or may share, and say their licence.
 | Path | What |
 |---|---|
 | `launcher/ui/themes.js` | applies the theme before the window paints; Settings › Themes and Discover › Themes |
-| `launcher/ui/themes/rounded.css` | the Rounded looks and the `--t-*` tokens |
+| `launcher/ui/style.css` | the Dark and Light looks and the `--t-*` tokens |
 | `launcher/ui/themes/themes.css` | the theme cards, tabs and the preview bar |
 | `launcher/src-tauri/src/themes.rs` | the pack format, the checker, install, list, apply, remove (`cargo test --no-default-features themes`) |
 | `<app data>/themes/<id>/` | installed packs; `installed.json` says where each came from, `active.json` which is on |
