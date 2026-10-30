@@ -5,7 +5,7 @@ keeps the all.json shape, the front-door switch, and no current page links to th
 
     python3 -I stream/tests/test_hub.py stream/wrath_portal.py
 """
-import http.client, importlib.util, json, os, re, shutil, sys, tempfile, threading
+import http.client, importlib.util, json, os, re, shutil, sys, tempfile, threading, time
 from http.server import ThreadingHTTPServer
 
 PAGE_PORT = 18231
@@ -112,7 +112,7 @@ for p in ("/wrath/leyline-preview/p/link-000000000000", "/wrath/leyline-preview/
     check(f"GET {p}: 404, still noindex", st == 404 and h.get("x-robots-tag") == "noindex, nofollow", st)
 
 front = req("/wrath/leyline-preview")[2].decode()
-check("front page: every offered build with a count", all(f"/wrath/leyline-preview/catalog?build={b}" in front for b in HB.offered_builds()))
+check("front page: no Browse by client chips (no client numbers on the hub)", "catalog?build=" not in front and "Browse by category" in front)
 # 4.3.4 and 5.4.8 are not offered for now (the owner, 2026-10-30): no chips, no items made only for them
 check("offered builds: capped at 3.3.5a", HB.offered_builds({}) == ["1.12", "2.4.3", "3.3.5a"]
       and HB.offered_builds({"LEYLINE_ALL_CLIENTS": "1"}) == HB.BUILDS)
@@ -129,10 +129,10 @@ check("front page: a TODO(owner) for the tagline, no words in the owner's voice"
 # the owner's mockup (2026-10-30): header nav, the hero, Platform Status, Community Spotlight, the footer
 nav = re.search(r'<nav class="hb-nav"[^>]*>(.*?)</nav>', front, re.S).group(1)
 check("header: Features, Download, Community, Status, Docs", re.findall(r">([^<]+)</a>", nav) == ["Features", "Download", "Community", "Status", "Docs"], nav)
-check("hero: the crystal over the turning swirl, the heading, three bullets, Download Now",
-      'class="ly-spin slow hb-swirl"' in front and "leyline-crystal-512.png" in front and "Every client, every server" in front
-      and front.count("<li>", front.index('class="hb-bullets"'), front.index("</ul>", front.index('class="hb-bullets"'))) == 3
-      and "1.12.1, 2.4.3 and 3.3.5a" in front and "4.3.4" not in visible(front) and "5.4.8" not in visible(front)
+check("hero: the whole mark, crisp (2x layers), turning slowly; the heading, the all-clients line, Download Now",
+      'class="ly-spin slow hb-hero-mark"' in front and "leyline-swirl-512.png) 2x" in front and "hb-crystal" not in front
+      and "Every client, every server" in front and "One launcher for every classic client and every server" in front
+      and "hb-bullets" not in front and "TODO(owner): the hero heading" in front
       and re.search(r'class="hb-cta" href="https://github\.com/orionopenwow/Leyline/releases"[^>]*>Download Now<', front))
 stats = re.search(r'<section class="hb-sec" id="status".*?</section>', front, re.S).group(0)
 check("Platform Status: the main realm online from realm_status, sign-in, the network, the relay, the mod catalog",
@@ -142,30 +142,46 @@ check("Platform Status: a failing source is red, never a made-up OK", '<em class
 check("Platform Status: no client downloads (we never download clients)", "Client" not in stats and "download" not in stats.lower())
 spot = re.search(r'<section class="hb-sec" id="community".*?</section>', front, re.S).group(0)
 spots = re.findall(r'<a class="hb-spot" href="/wrath/leyline-preview/p/([^"]+)">.*?<b>([^<]+)</b><i>by ([^<]+)</i>', spot, re.S)
-names = {e["id"].replace(":", "-"): (e["name"], e["author"]) for e in INDEX["entries"]}
+names = {e["id"].replace(":", "-"): (HB.neutral(e["name"]), HB.neutral(e["author"])) for e in INDEX["entries"]}
 check("Community Spotlight: two to four real items, with their own names and authors", 2 <= len(spots) <= 4
-      and all(names.get(slug) == (n, a) for slug, n, a in spots if slug in names) and any(slug in names for slug, _, _ in spots), spots)
+      and all(names.get(slug) == (HB.neutral(n), HB.neutral(a)) for slug, n, a in spots if slug in names) and any(slug in names for slug, _, _ in spots), spots)
 foot = re.search(r'<footer class="hb-foot">.*?</footer>', front, re.S).group(0)
 check("footer: Docs, Download, Community, Status, the wordmark, Discord and GitHub only",
       all(f">{x}<" in foot for x in ("Docs", "Download", "Community", "Status", "Discord", "GitHub")) and "<b>Leyline</b>" in foot)
-# the owner's 2026-10-30 additions: realms under the hero, the products in order, how it works, the polish
-feats = re.findall(r'<a class="hb-feat" href="([^"]+)"[^>]*>.*?<b>([^<]+)</b><span>([^<]+)</span><i>([^<]+)</i></a>', front, re.S)
-check("products: the recommended order, each one line and one link", [f[1] for f in feats] == [
-      "Leyline Launcher", "Host a server", "Realms &amp; hopping", "Game modes", "Mods &amp; addons", "Community hub",
-      "Agents &amp; tooling"] and all(f[2] and f[3] for f in feats), [f[1] for f in feats])
-check("products: links to pages that exist, nothing paid", [f[0] for f in feats][1:] == [
+# the owner's 2026-10-30 additions: realms under the hero, the feature sections in order, how it works, the polish
+fs = re.findall(r'<section class="hb-fs hb-rv( flip)?" id="f-([a-z]+)".*?<p class="hb-eyebrow">.*?</span>([^<]+)</p><h2[^>]*>([^<]+)</h2>'
+                r'<p class="hb-lede">([^<]+)</p><ul class="hb-points">(.*?)</ul><p class="hb-fs-a">(.*?)</p></div>'
+                r'<div class="hb-fs-v">(.*?)</div></section>', front, re.S)
+check("feature sections: one per part of Leyline, in the recommended order", [f[1] for f in fs] == [
+      "launcher", "host", "realms", "modes", "mods", "community", "agents"] and [f[2] for f in fs] == [
+      "Desktop launcher", "Host a server", "Realms &amp; hopping", "Game modes", "Mods &amp; the Workshop", "Community hub",
+      "Agents &amp; tooling"], [f[1:3] for f in fs])
+check("feature sections: alternating sides (every other one flips)", [bool(f[0]) for f in fs] == [False, True] * 3 + [False])
+check("feature sections: a heading, a lede, points and a first link each", all(f[3] and f[4] and f[5].count("<li>") >= 2
+      and 'class="hb-cta sm"' in f[6] for f in fs))
+hrefs = [re.findall(r'href="([^"]+)"', f[6]) for f in fs]
+check("feature sections: links to pages that exist, nothing paid", [h[0] for h in hrefs][1:] == [
       "/wrath/host", "/wrath/leyline-preview/realms", "/wrath/leyline-preview/modes", "/wrath/leyline-preview/catalog?sort=hot",
-      "/wrath/workshop", "/wrath/leyline-preview/creators"] and feats[0][0].startswith("https://github.com/orionopenwow/Leyline/releases")
-      and not re.search(r"(?i)support|donat|\bvip\b|\bshop\b", " ".join(" ".join(f) for f in feats)))
-check("products: a TODO(owner) to reorder them", "TODO(owner): the order of the products" in open(HB.__file__).read())
-check("products: the game modes line from playmodes.json", "Minigolf" in feats[3][2])
-check("products: every card has its icon", front.count('<span class="hb-ico"><svg viewBox="0 0 24 24" aria-hidden="true">') == 7)
+      "/wrath/workshop", "/wrath/leyline-preview/creators"] and hrefs[0][0].startswith("https://github.com/orionopenwow/Leyline/releases")
+      and not re.search(r"(?i)support|donat|\bvip\b|\bshop\b", " ".join(f[6] for f in fs)))
+check("feature sections: a TODO(owner) to reorder them", "TODO(owner): the order of the products" in open(HB.__file__).read())
+check("feature sections: the game modes line from playmodes.json, Hero Key as coming", "Minigolf" in fs[3][4]
+      and "Hero Key sign-in across realms (coming)" in fs[2][5])
+check("feature sections: every one has its icon", front.count('<span class="hb-ico"><svg viewBox="0 0 24 24" aria-hidden="true">') == 7)
+shots = re.findall(r'<img src="/wrath/art/(leyline-ui-[a-z]+\.webp)" alt="([^"]+)" width="1240" height="760" loading="lazy"', front)
+check("feature sections: the launcher's own pages as pictures (served, lazy, with alt text), CSS drawings for the rest",
+      [n for n, _ in shots] == ["leyline-ui-home.webp", "leyline-ui-realms.webp", "leyline-ui-modes.webp", "leyline-ui-workshop.webp"]
+      and all(a for _, a in shots) and all(n in wp.ART_TYPES and not n.startswith("leyline-shot-") for n, _ in shots)
+      and all(os.path.isfile(os.path.join(HERE, "www-files", "art", n)) for n, _ in shots)
+      and 'class="hb-draw hb-console"' in fs[1][7] and 'class="hb-draw hb-people"' in fs[5][7] and 'class="hb-draw hb-code"' in fs[6][7]
+      and not re.search(r"leyline-shot-|wu-load-orion|painted", front, re.I))
 how = re.search(r'<ol class="hb-how[^"]*" aria-label="How it works">(.*?)</ol>', front, re.S)
 check("how it works: three steps, launcher, game folder or browser, realm", how and re.findall(r"<b>([^<]+)</b>", how.group(1)) == [
       "Get the launcher", "Point it at your game folder", "Pick a realm"] and "play in your browser" in how.group(1)
       and "TODO(owner): the \"how it works\" wording" in front)
-order = [front.index(x) for x in ('class="hb-hero"', 'id="realms"', 'class="hb-how', 'id="features"', 'id="status"', 'id="community"')]
-check("front page order: hero, realms, how it works, products, status, spotlight", order == sorted(order), order)
+order = [front.index(x) for x in ('class="hb-hero"', 'id="realms"', 'class="hb-how', 'id="features"', 'id="f-launcher"', 'id="f-agents"',
+                                  'id="status"', 'id="community"')]
+check("front page order: hero, realms, how it works, the feature sections, status, spotlight", order == sorted(order), order)
 check("realm list without a relay: our realm still there, one click", 'data-home="1"' in front and 'class="hb-play" href="/wrath"' in front
       and f'>{wp.PUBLIC_HOST}</code>' in front and "may be a little out of date" in front)
 check("polish: hover lift and the reveal stop for reduced motion", "@media (prefers-reduced-motion:reduce)" in front
@@ -199,8 +215,9 @@ if wp.admin is not None and hasattr(wp.admin, "leyline_dir"):
 json.dump({"stable": {"version": "0.4.0", "tag": "x", "url": "https://evil.example/x"}}, open(os.path.join(os.environ["WU_LEYLINE_DIR"], "channel.json"), "w"))
 check("Download Now: never a link off the releases page", "evil.example" not in req("/wrath/leyline-preview")[2].decode())
 cat = req("/wrath/leyline-preview/catalog?build=2.4.3")[2].decode()
-check("catalog: filtered by build", all(("2.4.3" in e["builds"] or "any" in e["builds"]) for e in INDEX["entries"]
-                                      if f'/p/{e["id"].replace(":", "-")}"' in cat) and "2.4.3" in cat)
+check("catalog: filtered by build, labelled in words", all(("2.4.3" in e["builds"] or "any" in e["builds"]) for e in INDEX["entries"]
+                                      if f'/p/{e["id"].replace(":", "-")}"' in cat) and "for the second era" in cat
+      and 'aria-current="true">Second era</a>' in cat and "2.4.3" not in visible(re.sub(r'<input type="hidden"[^>]*>', "", cat)))
 cata = req("/wrath/leyline-preview/catalog?build=5.4.8")[2].decode()
 check("catalog: no item made only for 4.3.4 / 5.4.8", not any(
     f'/p/{e["id"].replace(":", "-")}"' in cata for e in INDEX["entries"] if not set(e["builds"]) & {"1.12", "2.4.3", "3.3.5a", "any"}))
@@ -309,6 +326,94 @@ feed2 = json.loads(req("/wrath/leyline/catalog.json")[2])
 pings = next(p for p in feed2["projects"] if p["id"] == "mod:pings")
 check("feed: packaged mods keep their download", pings["download"].endswith("/download") and pings["link_out"] is False)
 HB.hub.portal = real
+
+# ---------------------------------------------------------------- no client numbers, no game name (owner 2026-10-30)
+# Every hub page, with realms on several builds and catalog text full of build numbers and the game's name: none of it
+# reaches what a visitor reads (text, title, meta, alt, labels). The launcher feed keeps the numbers (it is data).
+NOPE = re.compile(r"(?i)(?<![\w.])v?(?:1\.12(?:\.1)?|2\.4\.3|3\.3\.5a?|4\.3\.4|5\.4\.8|5875|8606|12340|15595|18414)(?![\w])"
+                  r"|world\s*of\s*warcraft|warcraft|(?<![a-z])wow(?![a-z])|lich\s*king|blizzard")
+
+
+def shown(p):
+    """What a visitor can read: the text, the title, meta content, alt, title, aria-label, placeholder (not values,
+    hidden inputs, URLs, the script or the styles)."""
+    p = re.sub(r"<(script|style)\b.*?</\1>", " ", p, flags=re.S)
+    p = re.sub(r"<!--.*?-->|<input[^>]*type=\"hidden\"[^>]*>", " ", p, flags=re.S)
+    attrs = " ".join(re.findall(r'(?:alt|title|content|aria-label|placeholder)="([^"]*)"', p))
+    import html as _h
+    return _h.unescape(re.sub(r"<[^>]+>", " ", p) + " " + attrs)
+
+
+def rec(rid, name, build, live=True, players=3, tags=(), core="azerothcore", port=40100):
+    return wp.clean_listing_record({"schema": 1, "name": name, "state": "live" if live else "offline", "tags": list(tags),
+        "profile": {"build": build, "core": core, "port": port, "address": "relay.example"},
+        "community": {"realmId": rid, "relay": "relay.example", "claimed": True, "score": 5,
+                      "lastHeartbeat": {"online": live, "players": players, "bots": 0}}})
+
+
+listing = [rec("aaaaaaaaaaaaaaaa", "WoW 1.12.1 Classic", 5875, tags=["blizzlike"], core="vmangos"),
+           rec("bbbbbbbbbbbbbbbb", "Outland 2.4.3 Blizzard Fans", 8606, core="cmangos", port=40101),
+           rec("cccccccccccccccc", "Lich King 3.3.5a (12340)", 12340, port=40102),
+           rec("dddddddddddddddd", "Warcraft Nights", 12340, live=False, port=40103)]
+with wp._listing_lock:
+    wp._listing.update(realms=[r for r in listing if r], ok=True, fetched=True, at=time.monotonic() + 1e6, when=time.time())
+json.dump({"format": 1, "posts": [{"id": "v", "date": "2026-10-30", "tag": "Patch 2.4.3", "title": "Launcher 0.5 for 1.12.1 and 3.3.5a",
+                                   "items": ["Finds your own 1.12.1, 2.4.3 and 3.3.5a clients", "Build 12340 realms play in the browser"]}]},
+          open(os.path.join(os.environ["WU_LEYLINE_DIR"], "news.json"), "w"))
+idx = json.load(open(os.path.join(HUBDIR, "community-index.json")))
+kept = json.dumps(idx)
+e0 = idx["entries"][2]
+e0["summary"] = "An addon for 1.12.1 and 3.3.5a clients (5875 / 12340)."
+e0["description"] = "Works on 2.4.3 too. Version 3.3.5a build."
+e0["needs"] = "A 3.3.5a client"
+json.dump(idx, open(os.path.join(HUBDIR, "community-index.json"), "w"))
+
+
+class BrandWorkshop(FakeWorkshop):
+    def all_json(self):
+        return json.dumps({"projects": [
+            {"id": "mod:bags", "source": "packaged", "name": "WoW 1.12.1 Bags", "category": "addons", "builds": ["1.12", "3.3.5a"],
+             "description": "A World of Warcraft 3.3.5a addon for Wrath of the Lich King (12340), made by Blizzard fans.",
+             "author": "Bag Maker", "licence": "MIT", "repo": "", "page": "https://play.example/wrath/mods/bags",
+             "download": "https://play.example/wrath/mods/bags/download", "sha256": "a" * 64, "kind": "ui"}]})
+
+
+HB.hub.portal = lambda name: BrandWorkshop() if name == "workshop" else real(name)
+every = ["", "/realms", "/realms?client=own", "/realms?client=browser&now=1", "/realms?build=1.12.1", "/modes", "/news",
+         "/catalog", "/catalog?build=1.12", "/catalog?build=3.3.5a&sort=name", "/catalog?q=bags", "/creators", "/beacon",
+         "/submit", "/p/mod-bags", "/p/" + e0["id"].replace(":", "-"), "/p/theme-night-sky"]
+for path in every:
+    st, _, b = req("/wrath/leyline-preview" + path)
+    found = NOPE.findall(shown(b.decode()))
+    check(f"no client numbers or game name: {path or '/'} ({st})", st == 200 and not found, found[:6])
+st, _, b = req("/wrath/leyline-preview/submit", "POST", "repo=https%3A%2F%2Fgithub.com%2Fa%2Fb&build=9.9&category=tools", ip="10.4.4.4")
+check("no client numbers or game name: the submit form's error page", st == 400 and not NOPE.findall(shown(b.decode())))
+front = req("/wrath/leyline-preview")[2].decode()
+bags = req("/wrath/leyline-preview/p/mod-bags")[2].decode()
+rl = req("/wrath/leyline-preview/realms")[2].decode()
+check("neutralised, not dropped: the realms, the mod and the news are still there in words",
+      "<b>Classic</b>" in rl and "Outland Fans" in rl or "Outland" in rl)
+check("realm rows: how it plays in words, the filter by those words",
+      "Plays in your browser · AzerothCore" in rl and "Bring your own game client · vMaNGOS" in rl and "Original rules" in rl
+      and 'href="/wrath/leyline-preview/realms?client=browser">Plays in browser</a>' in rl
+      and 'href="/wrath/leyline-preview/realms?client=own">Own client</a>' in rl
+      and '<option value="browser">Plays in browser</option><option value="own">Own client</option>' in front
+      and 'data-client="own"' in front)
+own = req("/wrath/leyline-preview/realms?client=own")[2].decode()
+check("realm filter: Own client is every realm the browser can't play", "<b>Classic</b>" in own and "Leyline Sample Hangout" not in own
+      and 'data-client="browser"' not in own)
+check("item page: the mod in words", "<h1>Bags</h1>" in bags and "An addon for Wrath" in bags and "Classic era, Third era" in bags
+      and "<title>Bags · Leyline</title>" in bags, re.sub(r"<style.*?</style>", "", bags, flags=re.S)[:2500])
+news = req("/wrath/leyline-preview/news")[2].decode()
+check("news: the post kept, its numbers gone", "<h2>Launcher 0.5</h2>" in news and "Finds your own clients" in news, news[-600:])
+check("the launcher feed still has the builds (data, not text)", json.loads(req("/wrath/leyline/catalog.json")[2])["builds"][:3] == ["1.12", "2.4.3", "3.3.5a"])
+check("neutral(): the helper", HB.neutral("Vanilla WoW 1.12.1 addon (3.3.5a)") == "Vanilla addon"
+      and HB.neutral("TrinityCore (3.3.5 branch)") == "TrinityCore" and HB.neutral("Uses Lua 5.1") == "Uses Lua 5.1"
+      and HB.neutral("A WoW 1.12.1 addon for World of Warcraft") == "An addon for the game")
+HB.hub.portal = real
+open(os.path.join(HUBDIR, "community-index.json"), "w").write(kept)
+with wp._listing_lock:
+    wp._listing.update(realms=[], ok=False, fetched=False, at=-1e9)
 
 # ---------------------------------------------------------------- hidden: nothing links here; the switches
 for p in ("/wrath/leyline", "/wrath/realms", "/wrath/modes", "/wrath/mods", "/wrath/docs", "/wrath/armory", "/wrath/workshop",
