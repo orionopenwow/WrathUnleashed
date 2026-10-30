@@ -9,7 +9,7 @@ rem   3. reads the merged branch out of wenilla-sync.bundle (made by Claude: wen
 rem      commits, the char-create fix and server profiles) and pushes it as branch
 rem      leyline-sync-2026-10-29, then offers to open the pull request into that repo's main.
 rem Never force-pushes. Never pushes to Arnesen/wenilla. Safe to run again.
-rem Log: logs\leyline-client-112.log in the WrathUnleashed folder.
+rem Log: logs\leyline-client-112.log in the WrathUnleashed folder. (In labs/ since 2026-10-30: same depth as tools/, so %~dp0..\.. is still the repo.)
 set "WU=%~dp0..\.."
 for %%I in ("%WU%") do set "WU=%%~fI"
 if not exist "%WU%\logs" mkdir "%WU%\logs"

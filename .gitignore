@@ -61,3 +61,6 @@ tools/fresh-history/CONFIRM
 
 # a copy of mods/wu-mod.py that "Update sign-in and warm-up.bat" makes beside the portal before upload
 /stream/wu-mod.py
+
+# the sync bundle Claude drops beside the labs 1.12 client tool (never committed)
+labs/leyline-client-112/*.bundle
