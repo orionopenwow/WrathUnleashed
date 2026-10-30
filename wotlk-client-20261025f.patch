@@ -1,0 +1,138 @@
+diff --git a/crates/benilla-app/src/pipe_warm/mod.rs b/crates/benilla-app/src/pipe_warm/mod.rs
+index f556c93b..159c0166 100644
+--- a/crates/benilla-app/src/pipe_warm/mod.rs
++++ b/crates/benilla-app/src/pipe_warm/mod.rs
+@@ -85,6 +85,16 @@ pub(crate) fn plugin(app: &mut App) {
+     let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
+         return;
+     };
++    // Small mesh slabs (owner smoke 2026-10-25: Trial of the Champion → hearth to Dalaran went
++    // black). Bevy's default lets a general slab grow by 1.5× up to 512 MiB, and each growth needs
++    // the old and the new buffer alive at once; the 204 MB "general mesh slab 12" creation failed
++    // in the browser, and every later frame submitted an invalid command buffer. Capping slabs at
++    // 64 MiB keeps every growth step small enough for a browser's GPU process.
++    render_app.insert_resource(bevy::render::mesh::allocator::MeshAllocatorSettings {
++        max_slab_size: 64 * 1024 * 1024,
++        large_threshold: 32 * 1024 * 1024,
++        ..Default::default()
++    });
+     render_app.insert_resource(PipeWatch(shared));
+     render_app.add_systems(Render, watch_pipelines.in_set(RenderSystems::Cleanup));
+ }
+diff --git a/crates/benilla-app/src/player/mover.rs b/crates/benilla-app/src/player/mover.rs
+index 50822410..ce00caa3 100644
+--- a/crates/benilla-app/src/player/mover.rs
++++ b/crates/benilla-app/src/player/mover.rs
+@@ -34,6 +34,10 @@ pub(super) fn water_floor(
+         .flatten()
+ }
+ 
++
++/// How far below the void guard looks for any ground at all (yards): Dalaran floats about 600
++/// over Crystalsong, so a real drop always finds the forest floor within this.
++const VOID_PROBE: f32 = 2000.0;
+ /// What [`step`] decided, for the move flags and the wire that follow it in `control`.
+ pub(super) struct Outcome {
+     /// The settle hold while the world streams in after a teleport: frozen, gravity off.
+@@ -123,7 +127,28 @@ pub(super) fn step(
+     // The settle hold after a teleport or login: the world streams in over several frames, so the
+     // body is frozen with gravity off. The terrain streamer releases it on the destination's
+     // residency, never on ground contact, which a flyer or a swimmer never makes.
+-    let held = player.settling;
++    // The void guard (WrathUnleashed): falling with nothing at all below for [`VOID_PROBE`] yards
++    // means the ground there has not streamed in yet (a tile, or a city's collider still
++    // building). Falling on would drop the player through the world, so the body waits frozen,
++    // as under the settle hold, and the page says why. A flyer, a swimmer or a rooted body is
++    // left alone; real ground anywhere below ends it.
++    let over_void = !player.settling
++        && !on_walkable
++        && !on_water
++        && !player.steep_support
++        && !player.wedged
++        && !player.modes.can_fly
++        && !player.modes.rooted
++        && player.vel_y <= 0.0
++        && probe_down(center, VOID_PROBE).is_none();
++    if over_void != player.void_hold {
++        player.void_hold = over_void;
++        crate::webprogress::signal(if over_void { "ground-wait:1" } else { "ground-wait:0" });
++        if over_void {
++            info!("void guard: nothing under the body for {VOID_PROBE} yd — held until the ground streams in");
++        }
++    }
++    let held = player.settling || over_void;
+     // Rooted, nothing moves the body: `SetRoot` (`0x7c7340`) clears FALLING (`0x7c6290`) and the
+     // direction bits, so the dispatcher (`0x634040`) skips the fall integrator (`0x635b00`) and the
+     // walk resolver returns on a step under `2^-20`. A root caught mid-air hangs until `ClearRoot`
+diff --git a/crates/benilla-app/src/player/state.rs b/crates/benilla-app/src/player/state.rs
+index 5044df7f..b13e68b1 100644
+--- a/crates/benilla-app/src/player/state.rs
++++ b/crates/benilla-app/src/player/state.rs
+@@ -397,6 +397,9 @@ pub(crate) struct Player {
+     /// standing, since the straight-down ground probe sees only the steep face; re-earned each
+     /// frame.
+     pub(super) steep_support: bool,
++    /// The void guard ([`super::mover::step`]): airborne over nothing, so the ground under the
++    /// body has not streamed in yet; the body waits, frozen, until something is below.
++    pub(super) void_hold: bool,
+     /// A hover grant owes a jump: the reference's handler `0x61a620` calls `CMovement::Jump(0)`
+     /// (`0x61a630`) before setting the flag, and its disable arm calls `StartFalling` (`0x61a637`).
+     /// Latched for the take-off site, since our mover re-derives ground contact every frame and
+diff --git a/crates/benilla-app/src/portrait/glue_backdrop.rs b/crates/benilla-app/src/portrait/glue_backdrop.rs
+index 8a749cd0..ff828dbf 100644
+--- a/crates/benilla-app/src/portrait/glue_backdrop.rs
++++ b/crates/benilla-app/src/portrait/glue_backdrop.rs
+@@ -24,8 +24,10 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+ 
+ use super::glue_booth::GlueLook;
+ 
+-/// The minimal backdrop is on: the scene model is read stage-only and never drawn.
+-pub(crate) const MINIMAL_GLUE_BACKDROP: bool = true;
++/// The minimal backdrop: off (owner, 2026-10-25: "put the animated background back"). The race's
++/// own animated scene stands behind the character at select and create again; flip to `true` for
++/// the plain faction room.
++pub(crate) const MINIMAL_GLUE_BACKDROP: bool = false;
+ 
+ /// Whether `token`'s scene gets the minimal backdrop: character select and create, not the login
+ /// screen's.
+@@ -353,15 +355,20 @@ pub(super) fn drive_glue_backdrop(
+     real: Res<Time<bevy::time::Real>>,
+     mut setup: (ResMut<Assets<Mesh>>, ResMut<Assets<Image>>),
+ ) {
+-    let Some(view) = scene.backdrop_view() else {
++    // The assets first, whenever a glue scene is up: the scene's spawn waits on them, and the view
++    // exists only after that spawn, so creating them on the view stood both waiting for ever (the
++    // black character screen of 2026-10-25).
++    let Some(mut backdrop) = backdrop else {
++        if preview.scene.is_some() && MINIMAL_GLUE_BACKDROP {
++            commands.insert_resource(GlueBackdrop::new(
++                &mut setup.0,
++                &mut setup.1,
++                &mut materials,
++            ));
++        }
+         return;
+     };
+-    let Some(mut backdrop) = backdrop else {
+-        commands.insert_resource(GlueBackdrop::new(
+-            &mut setup.0,
+-            &mut setup.1,
+-            &mut materials,
+-        ));
++    let Some(view) = scene.backdrop_view() else {
+         return;
+     };
+     let key = view.key();
+diff --git a/crates/benilla-app/src/portrait/glue_booth.rs b/crates/benilla-app/src/portrait/glue_booth.rs
+index b09c8382..b38d1179 100644
+--- a/crates/benilla-app/src/portrait/glue_booth.rs
++++ b/crates/benilla-app/src/portrait/glue_booth.rs
+@@ -393,7 +393,7 @@ struct PendingSwap {
+ }
+ 
+ /// The bound on that hold, so a look whose assembly never completes cannot freeze the screen.
+-const GLUE_SWAP_HOLD_SECS: f32 = 2.0;
++const GLUE_SWAP_HOLD_SECS: f32 = 6.0;
+ 
+ /// Whether the stage may swap this frame: nothing coherent is `standing`, both the requested art
+ /// and body are ready, or the hold has reached [`GLUE_SWAP_HOLD_SECS`].

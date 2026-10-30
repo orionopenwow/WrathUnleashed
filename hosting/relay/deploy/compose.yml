@@ -1,0 +1,38 @@
+# wu-relay on its own small VM (recommended) or next to a realm (then RELAY_SHARED_AUTH_PORT=0).
+# Host networking: the relay listens on 3724 + a port range (40000-40999); publishing 1000 ports
+# through Docker's proxy would start 1000 processes, host networking needs none.
+# Lives in /opt/wu-relay with relay.env and Caddyfile. Not deployed yet (owner's OK).
+name: wu-relay
+services:
+  relay:
+    image: wu-relay:1                 # built by deploy-relay.sh on the box (or ghcr.io/orionopenwow/wu-relay:1)
+    restart: unless-stopped
+    network_mode: host
+    env_file: relay.env
+    volumes:
+      - relay-state:/var/lib/wu-relay
+    read_only: true
+    cap_drop: [ALL]
+
+    security_opt: ["no-new-privileges:true"]
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
+    mem_limit: 512m
+    pids_limit: 128
+    stop_grace_period: 20s
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "14" }   # ~14 days; IPs appear only as salted daily hashes
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    network_mode: host                # 80/443 (tcp+udp) for https:// and wss://, proxies to 127.0.0.1:8080
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+volumes:
+  relay-state:
+  caddy-data:
+  caddy-config:

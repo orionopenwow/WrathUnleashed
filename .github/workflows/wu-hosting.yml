@@ -1,0 +1,40 @@
+# WrathUnleashed: the hosting tests (relay, host kit, agent, setup, Discord bridge) and the owner tools around
+# them (the Leyline export, the host-kit publisher, the GitHub-builds helper), on every change to those files.
+# Standard runner, no secrets. Source copy: tools/github-workflows/wu-hosting.yml ("Turn on GitHub builds.bat"
+# copies it to .github/workflows/).
+name: wu-hosting
+on:
+  push:
+    branches: [main]
+    paths:
+      - "hosting/**"
+      - "tools/leyline-repo/**"
+      - "tools/github-builds/**"
+      - "tools/github-workflows/**"
+      - ".github/workflows/wu-hosting.yml"
+  pull_request:
+    paths:
+      - "hosting/**"
+      - "tools/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "cryptography==43.0.3" "pyyaml==6.0.2"
+      - name: hosting tests
+        run: python -m unittest discover -s hosting/tests -p 'test_*.py'
+      - name: owner tools
+        run: |
+          python -m unittest discover -s tools/leyline-repo -p 'test_hostkit.py'
+          python -m unittest discover -s tools/github-builds -p 'test_*.py'
+          python -m unittest discover -s tools/github-workflows -p 'test_*.py'

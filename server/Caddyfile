@@ -1,0 +1,52 @@
+# WrathUnleashed web front (Caddy). Loaded via /etc/caddy/Caddyfile -> import /srv/wrath/Caddyfile.
+# DOMAIN comes from /srv/wrath/caddy.env (systemd drop-in written by bootstrap.sh), e.g.
+#   DOMAIN=example.com   ->   https://play.example.com
+# Caddy gets and renews the TLS certificate itself (needs DNS for play.<domain> pointing at
+# this box and ports 80/443 open). After editing: systemctl reload caddy
+#
+# RULE: no Blizzard game data is ever served over HTTP. Client data lives in
+# /srv/wrath/client-data, outside site/, and the static-site block below refuses game-file
+# extensions even if one is copied into site/ by mistake.
+
+play.{$DOMAIN} {
+	encode zstd gzip
+
+	# Account sign-up service (signup/signup.py on 127.0.0.1:8090). Covers /signup,
+	# /signup/ and /signup/healthz. Caddy passes the client IP in X-Forwarded-For.
+	@signup path /signup /signup/*
+	handle @signup {
+		reverse_proxy 127.0.0.1:8090
+	}
+
+	# Future browser-client relay (WebSocket -> TCP 3724/8085). Not active: uncomment when a
+	# relay service runs on these local ports. Caddy proxies WebSocket upgrades as-is.
+	# handle /ws/3724 {
+	# 	reverse_proxy 127.0.0.1:9724
+	# }
+	# handle /ws/8085 {
+	# 	reverse_proxy 127.0.0.1:9085
+	# }
+
+	# Everything else: the static site the owner writes (site/index.html etc.).
+	handle {
+		# Belt and braces: never serve client/game data files, even if one lands in site/.
+		# (Inside this block Caddy runs respond before file_server.)
+		@gamedata path *.mpq *.MPQ *.dbc *.DBC *.m2 *.M2 *.blp *.BLP *.adt *.wdt *.wmo *.map *.vmtree *.vmtile *.mmap *.mmtile *.skin *.anim
+		respond @gamedata 404
+		root * /srv/wrath/site
+		file_server
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/play.log {
+			roll_size 50MiB
+			roll_keep 5
+		}
+	}
+}

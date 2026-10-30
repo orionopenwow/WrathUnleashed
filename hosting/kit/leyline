@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+# leyline: host a Beacon (a 3.3.5a realm on Leyline) from this Mac or Linux PC with one command.
+# Needs Docker only. No port forwarding: the realm talks out to the Leyline relay, players connect
+# to the relay, nobody sees your home address.
+#
+#   leyline host                 set up and start a Beacon (first time: a few questions); safe to re-run
+#   leyline host --config-only   only write the config (state/, .env); start later with: leyline host
+#   leyline status               invite / join link, realm list line, GM account, relay status
+#   leyline gm NAME              give GM rights to your own account NAME (you make the account)
+#   leyline rules                after editing state/rules.txt or state/beacon.json
+#   leyline public | private     listed on the Leyline realm list, or friends-only (invite link)
+#   leyline check | stop | logs [service] | new-invite | claim TOKEN | signup invite|open|off
+#   leyline herokey on | off     Hero Key sign-in: players from the Leyline website, no join page (off by default)
+#
+# Questions can be answered from the environment (no prompts): LEYLINE_NAME, LEYLINE_RULESET
+# (dalaran | main | brawl | progression, or a profile for another client in profiles/: cmangos-1.12.1, cmangos-2.4.3;
+# default dalaran; WU_CLIENT_DIR = that client's game folder), LEYLINE_VISIBILITY (public | private;
+# default public), LEYLINE_GM (your account name), LEYLINE_TAGLINE, LEYLINE_RULES_FILE (one rule per line).
+#
+# This command never makes game accounts and never sets passwords. You make your own account on
+# your join page (your password never leaves your browser) and it gets GM rights by itself.
+set -euo pipefail
+
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOSTSH="$KIT/host-wrath-realm.sh"
+STATE="$KIT/state"
+
+if [ -t 1 ]; then B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; N=$'\033[0m'; else B=""; G=""; Y=""; R=""; N=""; fi
+say()  { printf '%s\n' "$*"; }
+step() { printf '\n%s== %s%s\n' "$B" "$*" "$N"; }
+die()  { printf '%sProblem: %s%s\n' "$R" "$*" "$N" >&2; exit 1; }
+
+state_get() {  # a top-level string value from state/host.json (no jq needed)
+  [ -f "$STATE/host.json" ] || return 0
+  sed -n "s/^ *\"$1\": *\"\{0,1\}\([^\",]*\)\"\{0,1\},\{0,1\}$/\1/p" "$STATE/host.json" | head -1
+}
+
+interactive() { [ -t 0 ] && [ "${LEYLINE_NONINTERACTIVE:-0}" != 1 ]; }
+
+ask() {  # ask VAR "question" default [choices...]; an env value or a non-interactive run takes the default
+  local var="$1" q="$2" def="$3"; shift 3
+  [ -n "${!var:-}" ] && return
+  if ! interactive; then printf -v "$var" '%s' "$def"; return; fi
+  local a
+  while true; do
+    read -r -p "$q [$def]: " a || true
+    a="${a:-$def}"
+    [ $# -eq 0 ] && break
+    for c in "$@"; do [ "$a" = "$c" ] && break 2; done
+    say "  Please type one of: $*"
+  done
+  printf -v "$var" '%s' "$a"
+}
+
+valid_gm() { [[ "$1" =~ ^[A-Za-z0-9]{3,16}$ ]]; }
+
+host_sh() { bash "$HOSTSH" "$@"; }
+
+show_rules() {
+  local n=0 ln
+  [ -f "$STATE/rules.txt" ] || return 0
+  while IFS= read -r ln || [ -n "$ln" ]; do
+    case "$ln" in ''|'#'*) continue ;; esac
+    n=$((n + 1)); say "    $n. $ln"
+  done < "$STATE/rules.txt"
+  [ "$n" -gt 0 ] || say "    (none yet)"
+}
+
+write_rules() {  # stdin: one rule per line
+  local tmp="$STATE/rules.txt.new" ln n=0
+  {
+    printf '# Your realm'"'"'s house rules: one per line (up to 10, 120 characters each). Lines starting\n'
+    printf '# with # are ignored. Shown on the Leyline realm list and your join page. After editing: leyline rules\n'
+    while IFS= read -r ln || [ -n "$ln" ]; do
+      ln="$(printf '%s' "$ln" | tr -d '\r')"
+      case "$ln" in ''|'#'*) continue ;; esac
+      n=$((n + 1)); [ "$n" -le 10 ] || break
+      printf '%s\n' "${ln:0:120}"
+    done
+  } > "$tmp"
+  mv "$tmp" "$STATE/rules.txt"
+}
+
+house_rules() {
+  step "House rules (shown on the realm list and your join page)"
+  if [ -n "${LEYLINE_RULES_FILE:-}" ]; then
+    [ -f "$LEYLINE_RULES_FILE" ] || die "LEYLINE_RULES_FILE=$LEYLINE_RULES_FILE does not exist."
+    write_rules < "$LEYLINE_RULES_FILE"
+  elif interactive; then
+    show_rules
+    local a
+    read -r -p "Keep these rules? [Y/n]: " a || true
+    case "${a:-y}" in
+      n|N|no|NO)
+        say "  Type your rules, one per line (up to 10). An empty line ends."
+        local lines=() ln
+        while IFS= read -r -p "  > " ln && [ -n "$ln" ]; do lines+=("$ln"); [ "${#lines[@]}" -lt 10 ] || break; done
+        printf '%s\n' ${lines[@]+"${lines[@]}"} | write_rules ;;
+    esac
+  fi
+  show_rules
+  host_sh rules >/dev/null 2>&1 || true
+}
+
+cmd_host() {
+  local config_only=0
+  for a in "$@"; do
+    case "$a" in
+      --config-only) config_only=1 ;;
+      *) die "Unknown option '$a'. Try: leyline help" ;;
+    esac
+  done
+  [ -f "$HOSTSH" ] || die "host-wrath-realm.sh is missing next to this script (use the full host kit)."
+  local first=1; [ -f "$STATE/host.json" ] && first=0
+
+  LEYLINE_NAME="${LEYLINE_NAME:-$(state_get name)}"
+  LEYLINE_RULESET="${LEYLINE_RULESET:-$(state_get profile)}"
+  LEYLINE_VISIBILITY="${LEYLINE_VISIBILITY:-$(state_get visibility)}"
+  LEYLINE_GM="${LEYLINE_GM:-$(state_get gm_name)}"
+
+  step "Your Beacon"
+  ask LEYLINE_NAME "Realm name" "Dalaran Hangout"
+  # the profiles offered now (profiles/host-profile.sh profile_list: 4.3.4 is not offered for now)
+  local others; others="$( (. "$KIT/profiles/host-profile.sh" && profile_list) 2>/dev/null | tr '\n' ' ' || true)"
+  ask LEYLINE_RULESET "Ruleset: dalaran (light hangout, boost to 80, no bots), main, brawl, progression${others:+, or for another client: $others}" "dalaran" dalaran main brawl progression $others
+  ask LEYLINE_VISIBILITY "public (listed on the Leyline realm list) or private (only people with your invite link)" "public" public private
+  if [ "$first" = 1 ] && [ -z "${LEYLINE_TAGLINE:-}" ] && interactive; then
+    read -r -p "One line for the realm list (Enter for the ruleset's default): " LEYLINE_TAGLINE || true
+  fi
+  while ! valid_gm "${LEYLINE_GM:-}"; do
+    if ! interactive; then die "Set LEYLINE_GM to your account name (3-16 letters or digits)."; fi
+    [ -n "${LEYLINE_GM:-}" ] && say "  Account names are 3-16 letters or digits."
+    read -r -p "Your GM account name (you make this account yourself in a minute; 3-16 letters or digits): " LEYLINE_GM || true
+  done
+
+  # 1) the config: realm key, ruleset, house rules, GM name (no accounts, no passwords)
+  export WU_NAME="$LEYLINE_NAME" WU_PROFILE="$LEYLINE_RULESET" WU_VISIBILITY="$LEYLINE_VISIBILITY" \
+         WU_GM_NAME="$LEYLINE_GM"
+  [ -n "${LEYLINE_TAGLINE:-}" ] && export WU_TAGLINE="$LEYLINE_TAGLINE"
+  WU_CONFIG_ONLY=1 host_sh up >/dev/null || die "Writing the config failed (see above)."
+  house_rules
+
+  # 2) start the realm; its agent registers with the relay and (public) heartbeats to the realm list
+  if [ "$config_only" = 1 ]; then
+    step "Config written"
+    say "  Start the Beacon with: leyline host"
+  else
+    host_sh up
+  fi
+
+  step "Make your GM account (one minute, you do this, not the script)"
+  local link invite
+  link="$(cat "$STATE/host-link.txt" 2>/dev/null || true)"
+  invite="$(cat "$STATE/invite.txt" 2>/dev/null || true)"
+  say "  1. Open YOUR link (keep it to yourself): ${link:-(see: leyline status)}"
+  say "  2. Make the account ${B}$(printf '%s' "$LEYLINE_GM" | tr '[:lower:]' '[:upper:]')${N} there with a password you choose."
+  say "     Your password never leaves your browser; the realm gets only a one-way login key."
+  say "  3. Within seconds it has GM rights on this realm (check: leyline status)."
+  say "  In game: .gm on, .announce TEXT, .tele dalaran, .kick NAME, .account set gmlevel NAME 2 -1 (make a friend a GM)."
+  say ""
+  say "Friends: send them ${B}${invite:-the invite link (leyline status)}${N}. They make their own account there."
+  if [ "$LEYLINE_VISIBILITY" = public ]; then
+    say "Your Beacon shows on the Leyline realm list within a minute of starting."
+  fi
+}
+
+case "${1:-help}" in
+  host|up|start) shift; cmd_host "$@" ;;
+  status|show) host_sh show ;;
+  gm)
+    [ $# -ge 2 ] && valid_gm "$2" || die "Usage: leyline gm NAME   (your own account, 3-16 letters or digits)"
+    if [ "${LEYLINE_LOCAL_TOOLS:-0}" = 1 ]; then PYTHONPATH="$KIT/tools" WU_KIT="$KIT" python3 -m wuhost.setup gm "$2" >/dev/null
+    else docker run --rm --user "$(id -u):$(id -g)" -v "$KIT:/kit" -e WU_KIT=/kit "${WU_TOOLS_IMAGE:-wu-host-tools:1}" python -m wuhost.setup gm "$2" >/dev/null; fi
+    say "GM account: $(printf '%s' "$2" | tr '[:lower:]' '[:upper:]'). Make it on your join page if you haven't; it gets GM rights by itself." ;;
+  rules) shift; [ "${1:-}" = "--edit" ] && { LEYLINE_RULES_FILE="" house_rules; exit 0; }; host_sh rules ;;
+  public|private|check|stop|logs|new-invite|claim|signup|herokey) host_sh "$@" ;;
+  friend) die "leyline doesn't make accounts. Friends make their own on your join page (leyline status shows the link)." ;;
+  -h|--help|help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) die "Unknown command '$1'. Try: leyline help" ;;
+esac

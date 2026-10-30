@@ -1,0 +1,102 @@
+/* wu-loading.css — the WrathUnleashed page's loading screens: the boot overlay (boot.js
+   #wenilla-boot) restyled, and the world-loading cover (wu-loading.js #wu-loading), in the look of
+   Open Vanilla's 1.12 boot screen (realm/www/openvanilla.js style()): the night-sky portal art, a
+   framed panel with gold filigree corners, the dragon end caps either side of an arcane-blue bar,
+   and one short line in Cinzel. No numbers: boot.js's percent, MB and file-count lines are hidden
+   here (stages.js and wu-loading.js send them to the console and window.owdiag).
+   Linked by wrath-early.js before the page's module script, so the overlay never shows unstyled.
+   The art (art/, about 100 KB with the font) is the 1.12 page's, recompressed to webp. */
+
+@font-face { font-family: 'OW Cinzel'; src: url("art/Cinzel-SemiBold.woff2") format("woff2"); font-display: swap; }
+
+:root { --wu-load-art: url("art/wu-load-bg.webp"); }
+/* the Orion constellation art instead (CONFIG.loadingArt = 'orion', or ?loadart=orion) */
+:root.wu-art-orion { --wu-load-art: url("art/wu-load-orion.webp"); }
+
+/* -- the backdrop: the boot overlay and the world cover ------------------------------------------ */
+html body #wenilla-boot, #wu-loading {
+  background: #05040c var(--wu-load-art) center / cover no-repeat !important;
+  isolation: isolate;
+}
+#wenilla-boot::before, #wu-loading::before {
+  /* a soft vignette so the panel reads on any part of the art */
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(120% 90% at 50% 40%, rgba(5,4,12,0) 40%, rgba(5,4,12,.55) 100%);
+}
+#wu-loading { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center;
+  opacity: 0; visibility: hidden; transition: opacity .35s ease, visibility 0s .35s; color: #ccc;
+  font: 15px system-ui, sans-serif; }
+#wu-loading.on { opacity: 1; visibility: visible; transition: opacity .25s ease, visibility 0s; }
+
+/* -- the panel --------------------------------------------------------------------------------- */
+html body #wenilla-boot .box, #wu-loading .box {
+  position: relative; margin-top: 52vh; width: min(560px, 88vw); padding: 18px 92px 22px; box-sizing: border-box;
+  background: radial-gradient(120% 140% at 50% 0%, rgba(42,28,84,.80), rgba(8,6,18,.92) 70%);
+  border: 1px solid #8a6a2c; border-radius: 10px;
+  box-shadow: inset 0 0 0 1px rgba(255,215,130,.14), inset 0 0 36px rgba(70,50,160,.35), 0 14px 44px rgba(0,0,0,.7);
+}
+html body #wenilla-boot .box::before, #wu-loading .box::before {
+  content: ''; position: absolute; inset: 3px; pointer-events: none;
+  background: url("art/wu-corner-tl.webp") top left / 40px 34px no-repeat,
+    url("art/wu-corner-tr.webp") top right / 40px 34px no-repeat,
+    url("art/wu-corner-bl.webp") bottom left / 40px 34px no-repeat,
+    url("art/wu-corner-br.webp") bottom right / 40px 34px no-repeat;
+}
+html body #wenilla-boot .box::after, #wu-loading .box::after {
+  content: ''; position: absolute; left: 4px; right: 4px; bottom: 0; height: 70px; pointer-events: none;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,.85));
+  background: url("art/wu-dragon-l.webp") left center / auto 70px no-repeat,
+    url("art/wu-dragon-r.webp") right center / auto 70px no-repeat;
+}
+
+/* -- the one line: boot.js's stage text is replaced by a single word -------------------------- */
+html body #wenilla-boot .stage, #wu-loading .stage {
+  margin: 0 0 14px; padding-bottom: 15px; text-align: center; font-size: 0 !important;
+  background: url("art/wu-divider.webp") bottom center / 78% auto no-repeat;
+}
+html body #wenilla-boot .stage::after, #wu-loading .stage::after {
+  content: "Loading\2026"; display: inline-block;
+  font: 600 17px 'OW Cinzel', 'Cinzel', Georgia, serif; letter-spacing: .08em;
+  background: linear-gradient(180deg, #fff3c4, #f0c058 55%, #b07a22); -webkit-background-clip: text; background-clip: text;
+  color: transparent; filter: drop-shadow(0 2px 3px rgba(0,0,0,.9));
+}
+#wu-loading .stage::after { content: "Entering the world\2026"; }
+
+/* -- the bar: arcane blue in a gold rim, not the yellow pill ------------------------------------ */
+html body #wenilla-boot .bar, #wu-loading .bar {
+  height: 12px; background: #060912; border: 1px solid #b8913c; border-radius: 6px;
+  box-shadow: inset 0 2px 5px #000, 0 0 0 1px rgba(0,0,0,.6), 0 0 16px rgba(60,120,255,.2); overflow: hidden;
+}
+html body #wenilla-boot .bar > i, #wu-loading .bar > i {
+  display: block; height: 100%; position: relative; overflow: hidden; border-radius: 6px;
+  background: linear-gradient(90deg, #1b5cb8, #298bf0 60%, #9be2ff) !important;
+  box-shadow: 0 0 12px #3ca2f5, inset 0 1px 2px rgba(255,255,255,.65); transition: width .3s linear;
+}
+#wu-loading .bar > i { width: 8%; }
+html body #wenilla-boot .bar > i::after, #wu-loading .bar > i::after {
+  content: ''; position: absolute; inset: 0; background-size: 220% 100%;
+  background-image: linear-gradient(100deg, transparent 35%, rgba(255,255,255,.45) 50%, transparent 65%);
+  animation: wu-shimmer 2.2s linear infinite;
+}
+/* no measured progress (boot.js "pulse", or the world cover before any count): a gliding segment */
+html body #wenilla-boot .bar.pulse > i, #wu-loading .bar.pulse > i { width: 30% !important; animation: wu-glide 1.6s ease-in-out infinite; }
+@keyframes wu-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+@keyframes wu-glide { 0% { margin-left: 0; } 50% { margin-left: 70%; } 100% { margin-left: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  html body #wenilla-boot .bar > i::after, #wu-loading .bar > i::after { animation: none; }
+  html body #wenilla-boot .bar.pulse > i, #wu-loading .bar.pulse > i { animation: none; width: 100% !important; opacity: .55; }
+}
+
+/* -- small screens (phones on their side: about 900 x 420) -------------------------------------- */
+@media (max-width: 520px), (max-height: 480px) {
+  html body #wenilla-boot .box, #wu-loading .box { padding: 14px 64px 18px; margin-top: 46vh; }
+  html body #wenilla-boot .box::after, #wu-loading .box::after { height: 54px; background-size: auto 54px, auto 54px; left: 2px; right: 2px; }
+  html body #wenilla-boot .stage::after, #wu-loading .stage::after { font-size: 13.5px; letter-spacing: .05em; }
+}
+
+/* -- no numbers on screen ----------------------------------------------------------------------- */
+html body #wenilla-boot .data, #wenilla-corner { display: none !important; }
+html body #wenilla-boot .err { margin-bottom: 14px; text-align: center; font: 600 15px 'OW Cinzel', Georgia, serif; color: #ff9a8a; }
+
+/* while a loading screen is up, the page's own links stay out of the way */
+body.wu-loading #ow-dock, body.wu-loading #ow-busy { display: none !important; }

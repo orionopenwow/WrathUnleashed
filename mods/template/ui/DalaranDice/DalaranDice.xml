@@ -1,0 +1,27 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
+  <!-- A small movable box with the last five rolls. Drag it with the left mouse button. -->
+  <Frame name="DalaranDiceFrame" parent="UIParent" movable="true" enableMouse="true" hidden="true">
+    <Size><AbsDimension x="240" y="104"/></Size>
+    <Anchors>
+      <Anchor point="RIGHT"><Offset><AbsDimension x="-220" y="80"/></Offset></Anchor>
+    </Anchors>
+    <Layers>
+      <Layer level="ARTWORK">
+        <FontString name="$parentTitle" inherits="GameFontNormal" text="Dice">
+          <Anchors><Anchor point="TOPLEFT"><Offset><AbsDimension x="10" y="-8"/></Offset></Anchor></Anchors>
+        </FontString>
+        <FontString name="$parentText" inherits="GameFontHighlightSmall" justifyH="LEFT" justifyV="TOP">
+          <Size><AbsDimension x="220" y="72"/></Size>
+          <Anchors><Anchor point="TOPLEFT"><Offset><AbsDimension x="10" y="-24"/></Offset></Anchor></Anchors>
+        </FontString>
+      </Layer>
+    </Layers>
+    <Scripts>
+      <OnLoad>DalaranDice_OnLoad(self)</OnLoad>
+      <OnEvent>DalaranDice_OnEvent(self, event, ...)</OnEvent>
+      <OnMouseDown>self:StartMoving()</OnMouseDown>
+      <OnMouseUp>self:StopMovingOrSizing()</OnMouseUp>
+    </Scripts>
+  </Frame>
+</Ui>

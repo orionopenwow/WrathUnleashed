@@ -1,0 +1,47 @@
+[package]
+name = "leyline"
+version = "0.3.1"
+description = "Leyline: pick a game client, manage mods, find and host realms"
+authors = ["Leyline contributors"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+# The core (clients, launch, settings, catalog, realms) is a plain library; the Tauri app sits on top of it.
+name = "leyline_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+# `app` is the desktop app (Tauri + webview). Without it only the core builds, which needs no system webview:
+#   cargo test --no-default-features
+default = ["app"]
+app = ["dep:tauri", "dep:tauri-build", "dep:tauri-plugin-dialog", "dep:tauri-plugin-opener", "dep:tauri-plugin-updater"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [], optional = true }
+
+[dependencies]
+tauri = { version = "2", features = [], optional = true }
+tauri-plugin-dialog = { version = "2", optional = true }
+tauri-plugin-opener = { version = "2", optional = true }
+# Leyline's own updates: GitHub release downloads, signature-checked against the public key in tauri.conf.json.
+tauri-plugin-updater = { version = "2", optional = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "5"
+ureq = { version = "2", default-features = false, features = ["tls"] }
+# Mods: reading zips (deflate only, no other codecs) and checking the catalog's sha256.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+sha2 = "0.10"
+# The Leyline mesh (src/p2p/mesh.rs): Ed25519 checks of signed realm records. Already in the tree through rustls.
+ring = "0.17"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

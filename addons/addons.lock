@@ -1,0 +1,8 @@
+# Optional addon pack for the 3.3.5a client. name repo commit folders(inside repo -> AddOns name)
+# "." means the repo root; "src:dest" renames. Fetched by install-gm-addons.bat into _src\.
+Questie-335    https://github.com/Aldori15/Questie                  d695e9048e6df8b48d36a6db9436d82ca3bbbd87 .:Questie-335
+DBM-Warmane    https://github.com/Zidras/DBM-Warmane                6165654fb413f4166b1c142809ae287b1227ba6a DBM-*
+Details-WotLK  https://github.com/Bunny67/Details-WotLK             97e1cac2e4b5f68a3572f2f4872c9422759a1bca Details*
+AtlasLoot      https://github.com/Gescht/AtlasLoot3.3.5a            f437767f282566abd8424cb4119476c586e3b3a3 AtlasLoot*
+AdiBags        https://github.com/Sattva-108/AdiBags-WoTLK-3.3.5     d8b49ed56ddf81825ab2a4bc22c08fb7a0d59eed .:AdiBags
+MultiBot       https://github.com/Wishmaster117/MultiBot-Chatless   80148dff3f3a25a56d38dba0ecbd4f165b8c1d3f .:MultiBot

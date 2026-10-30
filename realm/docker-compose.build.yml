@@ -1,0 +1,27 @@
+# Builds the custom realm images (AzerothCore mod-playerbots fork + the modules in
+# custom\sources.lock). Used only by "Build custom realm.bat":
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+x-build: &build
+  context: ./custom/acore
+  dockerfile: apps/docker/Dockerfile
+  args:
+    CTOOLS_BUILD: db-only
+    CWITH_WARNINGS: "OFF"
+    CTYPE: Release
+
+services:
+  ac-db-import:
+    image: ov/ac-wotlk-db-import:custom
+    build:
+      <<: *build
+      target: db-import
+  ac-authserver:
+    image: ov/ac-wotlk-authserver:custom
+    build:
+      <<: *build
+      target: authserver
+  ac-worldserver:
+    image: ov/ac-wotlk-worldserver:custom
+    build:
+      <<: *build
+      target: worldserver

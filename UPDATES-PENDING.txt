@@ -1,0 +1,296 @@
+# What Claude has ready. "WrathUnleashed Control.bat" (or UPDATE.bat) runs these in order.
+# <id> <step> <what it brings>
+1024r foreverui  URGENT: undo tonight's character-select script; it sent players back to the login screen (about 1 min, no restart)
+1024v scripts  Dungeon Finder fix: queues were refused silently for everyone (live reload, nobody kicked)
+1024u lean  Lean server: 60 -> 30 roaming bots, idle map areas unload after 1 min, database monitoring off (less memory, steadier Dalaran; 5-min restart)
+1024x client  New browser build: no login screen when signed in, built-in keys, faster loading, mobile touch controls, new loading screens
+1024w foreverui  Character select clean-up: no Lich King logo, even Realms/Menu buttons, list, name and buttons placed properly
+1024y slice   Streamed files: Wrath 5-player dungeons and heroics now fit, dungeons from level 10 (30-60 min)
+1024z ship    Save tonight's work to GitHub
+1024t slice  Streamed files again: all Wrath 5-player dungeons and heroics now fit (budget 6 GB; the 22:37 run used the old order) (30-60 min)
+1024s gm  GM console: Bug Reports tab (every .bug with where it happened; mark seen/fixed), Health tab (game keeps running)
+1024q client  Client 20261024y: fixes the login bounce and stuck banners, Dalaran loads only what is near you, phone typing, touch icons, smaller character model
+1024p foreverui  Forever UI character-select fixes v2 (tested in the real menu code): logo off, even Realms/Menu buttons, clean layout
+1024o scripts  Rescue anyone who falls under Dalaran: brought back up and revived (live reload, nobody kicked)
+1025a scripts  Random Lich King Dungeon/Heroic queues allowed (every Wrath dungeon is streamed); fall rescue survives script reloads; "you fell, brought back up" message
+1025b client  Client 20261025z: you never fall through the ground while it loads ("Still loading the ground under you"), nearest ground first, lighter Dalaran load
+1025c ship  Save tonight to GitHub (orionopenwow/WrathUnleashed): Autopilot, fall rescue after reloads, random dungeon queues, client 20261025z
+1025d ship  Recommit to orionopenwow only: only orionopenwow references left in the repo
+1025e ship  Tidy the update list wording
+1025f client  Client 20261025a: fixes the grey view inside dungeons after the Dungeon Finder teleport, bot role icons; one game tab at a time ("Play here" moves it), Esc works in fullscreen
+1025g ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1025h foreverui  Modern UI size by default (smaller minimap, everything in proportion) with a UI size slider; every action bar on; level 80 bars filled; Esc > Mods & Workshop (addons on/off, workshop and repos)
+1025i ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1025j scripts  Level 80 guide: .guide, shown on reaching 80 (boost too), with a pointer at login for 80s
+1025k ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1025l foreverui  Default keys for every bar (1-7 and F G T Z X; Shift, Ctrl, Alt for the bars above; 8 9 0 - = left free), talent planner on
+1025m ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1025n client  Report a bug in the page menu (same queue as .bug, with browser and place added)
+1025o ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1025p foreverui  Fix: nothing cut off on the left (the UI scale goes through the game setting now), empty bar buttons hidden; farthest camera, auto loot, instant quest accept and hand-in (Shift to read)
+1025q ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1025r scripts  Every mount for level 80s (on reaching 80, the boost, or first login at 80; .mounts re-runs it)
+1025s foreverui  Collections window (Shift-P, /collections, micro-menu button): Mounts and Pets with search, preview and summon
+1025t ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1025u foreverui  Bars: the two extra bottom bars stacked straight above the main bar (lined up), right bars off the screen edge, no stray totem "Fire" button before level 30
+1025v ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1025w scripts  Every new race/class combo starts with its full class kit (weapon, armour, ammo, Hearthstone, food); live reload
+1025x ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1025y signin  Play page: Realms list at /wrath/realms (official first, then community realms from Beacons)
+1025z ship  Save the Beacons beta to GitHub (orionopenwow/WrathUnleashed)
+1026a relay  Beacons relay at relay.openvanilla.app (backup, health check, rollback)
+1026b relay  Beacons relay (picks a free web port; 8099 is taken on the server)
+1026c ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1026d client  Client 20261025b: modern UI size everywhere (UI 768 units tall, like retail), character select sized and framed right, nameplate keys V / Shift-V / Ctrl-V
+1026e signin  New look for the play page and realm list (Orion art, gold frames, Cinzel), link-preview cards for X / Discord / Reddit
+1026f gm  GM console in the same look
+1026g ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1026h realm  Instant spell learn on level up (.learnall), .respec, .xp off/on, .hearth, .summon, rested note: world server restart with a 5-minute warning
+1026i ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1026j signin  Wording: Wrath and Leyline only, no game-brand names on the site; new link card
+1026k client  Same wording in the own-files picker
+1026l foreverui  Same wording in Mods & Workshop
+1026m scripts  Same wording in .guide
+1026n relay  Same wording on the join page
+1026o ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1026p signin  New page: play.openvanilla.app/wrath/leyline, what Leyline is (play, host, mod, open), linked from the realm list
+1026q ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1026r signin  The Leyline page in its own look (your emblem and nebula art): hub nav, Play / Client launcher / Host realm, live realm list, features and aims
+1026s ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1026t signin  Leyline page: blue frame corners and dividers, a slow starfield, and the Leyline display font
+1026u ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1026v signin  Share links: play.openvanilla.app/wrath/r|h|q|m|u/<id> with link cards, and the link carried through sign-in
+1026w ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1026x scripts  Companions (.recruit tank/healer/dps, .buddy, .dismiss, .companions) and the Leyline realm list for the in-game window (5-minute restart warning)
+1026y foreverui  In-game Leyline window: Esc > Mods & Workshop > Leyline realms, or /leyline
+1026z client  Client 20261025c: minimal blue (Alliance) / red (Horde) backdrop at character select and create, faster first load behind the loading screen
+1027a ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1027b foreverui  Action bars: the Shift and Ctrl bars side by side in one row above the main bar
+1027c signin  Portal: Goldshire Inn guest pass code (switched off until the owner says), share links kept
+1027d relay  Leyline relay: private realms leave the list at once, only connected realms listed, join page wording, open signup for public realms
+1027e ship  Save to GitHub (orionopenwow/WrathUnleashed): also leyline host, the Discord bridge (off until you add a token), the Goldshire demo
+# held 1027f scripts  Goldshire guest pass script (group invites fixed) and the Discord chat script (both inert until switched on)
+# held 1027g client  Client 20261025d: taps work on phones, modern nameplates, Dalaran minimap, our loading screen on every teleport, faster Dalaran arrival
+# held 1027h signin  Leyline page: live screenshots and the new features (Companions, realms in the game, share links)
+# held 1027i slice  Streamed areas: add the Goldshire Inn (for the guest pass)
+# held 1027j ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1027k check  Read-only check: why the script reload was refused (world server state, restarts, errors)
+1027l scripts  Realm scripts: website "Go" teleports (.go), the Builder (.build), armory privacy (.armory off) and its export; new scripts load by a restart with a 5-minute warning (a live reload of new scripts crashed the realm at 03:39)
+1027m foreverui  In-game: the Builder window (/builder) and its button in Mods & Workshop
+1027n client  Client 20261025d: taps work on phones, modern nameplates, Dalaran minimap, our loading screen on every teleport, faster Dalaran arrival
+1027o signin  Site: /wrath/modes (duels, boss fights by raid and wing, dungeons, hangouts), /wrath/armory, Leyline page screenshots
+1027p slice  Streamed areas: add the Goldshire Inn (for the guest pass)
+1027q ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1027r leyline  Create or update the public orionopenwow/Leyline repo (needs gh signed in as orionopenwow)
+1027s scripts  Load the website "Go" teleports and the Builder: a real restart this time (5-minute warning); the last one only announced
+1027t foreverui  In-game: Mods & Workshop lists the installed mods with on/off
+1027u signin  Site: /wrath/mods (the Workshop), sign-in keeps share links, public pages no longer show "Lots of sign-ins"
+1027v client  Client 20261025e: guests go straight into the Goldshire Inn, "Taking you to" toast, bars re-seat after a resize
+1027w mods  Mods on Wrath: Pings, Emote Wheel and Dalaran Dice (new realm scripts load by a restart with a 5-minute warning)
+1027x ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1027y leyline  Update the public orionopenwow/Leyline repo
+1027z client  One-tab guard: "Play here" takes over a frozen or crashed tab after 6 seconds instead of waiting forever
+1028a ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1028b mods  Workshop: the twelve categories (addons, shaders, sandbox, custom maps, builds, encounters, models, realm scripts, presets, sounds, tools, total conversions)
+1028c signin  /wrath/mods shows the category grid, category pages and search
+1028d ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1028e signin  Site: one nav and footer on every page (phone menu), "Right now" strip on the Leyline page, share boxes, styled 404, a next step on every page
+1028f ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1029a relay  Relay: browser realm hopping bridge (wss /ws/<id>/auth and /world), join page can open over the game
+1029b signin  Site: + Your server (/wrath/host, player-hosted through the relay), Leyline docs at /wrath/docs, Workshop link submissions with credits, realm hop sign-in
+1029c client  Play page: drag and drop addons (.zip) into the game, Back to Wrath bar for realm hops
+1029d foreverui  Leyline window: Join a realm from in game, Back to Wrath
+1029e realm  ov_leyline: realm hop echo (reload, no restart)
+1029f ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1029g leyline  Update the public orionopenwow/Leyline repo (docs and the Leyline Launcher source)
+1029h ship  Save to GitHub (orionopenwow/WrathUnleashed): every save now also refreshes the public Leyline repo; Leyline tests skip the WrathUnleashed-only files
+1029i leyline  Update the public orionopenwow/Leyline repo
+1031a slice  Rebuild the streamed slice: every player mount and summon, zone music and ambience, torch and fountain sounds, the Dalaran minimap, target circles and shadows, transports (new slice tool)
+1031b ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1030f ship  Save to GitHub (orionopenwow/WrathUnleashed): the Leyline Launcher in the stone, parchment and gold look (own title bar, live realm status, links), cleaned UI art
+1032a slice  Rebuild the streamed slice at 7.4 GB: every dungeon and raid back, full sound in Dalaran, the capitals and the starting areas, grass and creature footsteps (instance music deferred)
+1032b ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1033a scripts  Builder: edit mode commands (.build pick, spawnat, placeat) for the free building camera
+1033b foreverui  Edit mode HUD (F7 or /edit): banner, tool bar, click to select, Props to place by clicking, G to carry
+1033c client  Client 20261025g: edit mode (F7) free building camera, click-select, carry and drop props with Q/E turning; plus the 20261025f fixes (animated char select/create, no black create screen, no falling through, no black screen in Dalaran)
+1033d ship  Save to GitHub (orionopenwow/WrathUnleashed): edit mode, the Leyline Launcher look
+1035a ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline Launcher 0.2.0 (mods: browse, install and remove per client, drag and drop; realms: play any Beacon, Back to Wrath; host: run the kit from the website's realm file; update check)
+1035b leyline  Update the public orionopenwow/Leyline repo
+1036a relay  Relay: pairing for PC-made realm keys, wrong-password limits per player address
+1036b hangout  Dalaran Hangout on Leyline: the realm as a Beacon through the relay (second login server, agent), checked and rolled back on failure
+1036c signin  Site: Dalaran Hangout first on the realm list (Play in Dalaran), hops into the hangout use your Wrath login, keys made on the host's PC
+1036d client  Play page: hop trigger that always works, Back to Wrath lands in Dalaran
+1036e scripts  Realm list in game: Dalaran Hangout first
+1036f foreverui  Leyline window wording
+1036g ship  Save to GitHub (orionopenwow/WrathUnleashed): hosting and hopping end to end
+1036h leyline  Update the public orionopenwow/Leyline repo
+1037a signin  Site: the realm list falls back to the relay's public address (it had gone stale for an hour; the Dalaran Hangout now shows)
+1037b ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1037a-golf scripts  Minigolf on the realm (ov_golf.lua): /golf sessions, party invites, turns, shot relay, scorecard, course publishing; plus the Builder's edit-mode tools (ov_build.lua)
+1037b-golf foreverui  Minigolf HUD (Golf.lua: /golf, Practice, scorecard, power meter, course editor UI) and the edit mode HUD
+1037c-golf client  Client 20261025i: Leyline minigolf (deterministic course physics, Meadow Nine, aim and roll camera) on top of 20261025h edit mode tools
+1037d-golf ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline minigolf, edit mode tools, course guide
+1038a-golf scripts  Minigolf referee goes live: ov_golf.lua added to the realm script upload (it was left out of the list), safe load order
+1038b-golf foreverui  Minigolf HUD: course editor bar, publishing, the aim keys stay captured on your turn
+1038c-golf client  Client 20261025j: minigolf course editor (place, carry, turn, tilt, size, copy, undo; test a hole; publish)
+1038d-golf ship  Save to GitHub (orionopenwow/WrathUnleashed): minigolf course editor and realm referee
+1039a-golf scripts  Minigolf: every finished round's shots are recorded; best rounds per course; replays
+1039b-golf foreverui  Minigolf HUD: Best rounds and Watch (a replay checks the recorded score), test-hole fix
+1039c-golf ship  Save to GitHub (orionopenwow/WrathUnleashed): minigolf leaderboards and replays
+1040a signin  Site: your own game folder opens the whole world for your account (lifted while the page holds the folder, back when you play streamed), guides
+1040b client  Play page: drop your 3.3.5a game folder any time (or Use my game folder): the streamed files first, your folder for everything else; one drop target for addons and folders
+1040c scripts  Zone edge: the message says how to go anywhere with your game folder
+1040d foreverui  In game: Whole world / Streamed line and Use my game folder button (/folder)
+1040e ship  Save to GitHub (orionopenwow/WrathUnleashed): the game-folder layer
+1040f leyline  Update the public orionopenwow/Leyline repo
+1041a-modes scripts  Leyline Modes on the realm (ov_modes.lua): sessions, invites, the host/player relay, publishing with GM review
+1041b-modes foreverui  Leyline Modes HUD (/modes): the sandboxed mode runtime, Bumper Balls, scores, keys
+1041c-modes client  Client 20261025k: Leyline Modes drawing (shapes, easing, follow/top cameras) and the script time guard
+1041d-modes ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline Modes and the mode guide
+1042a-golf scripts  Minigolf spectating (live rounds nearby, watch without playing) and Coin Dash as a built-in mode
+1042b-golf foreverui  Minigolf: Live rounds in /golf; Modes: Coin Dash, the in-game mode editor
+1042c-golf client  Client 20261025l: a smoother golf ball and an aim guide before the swing (on top of 20261025k modes)
+1042d-golf ship  Save to GitHub (orionopenwow/WrathUnleashed): golf spectating, Coin Dash, the mode editor
+1041a client  Play page: reads the game cancels itself are not retried (saves bandwidth during loading)
+1041b ship  Save to GitHub (orionopenwow/WrathUnleashed)
+1043a ship  Save to GitHub (orionopenwow/WrathUnleashed): Turn on GitHub builds, image and hosting workflows (not active until the owner runs the bat), host kit publisher, port check
+1043b leyline  Update the public orionopenwow/Leyline repo
+1043c hostkit  Host kit download: checked zip on the public Leyline release
+1043d signin  Site: + Your server links the host kit download and the hosting guide
+1043e check  Server check (with the relay port check)
+1044a client  Client 20261025m (on top of l): faster Dalaran load (colliders in small pieces, no long freezes, shader warm-up), no reveal before the city is built, Dalaran zone and chat, dismount, character select/create and loading art fill the window, no logout hitch, smoother frames
+1044b ship  Save to GitHub (orionopenwow/WrathUnleashed): client 20261025m
+1045a-golf scripts  Minigolf tees and mode arenas open a few steps ahead of the host (no camera inside anyone's body)
+1045b-golf foreverui  Minigolf window: the help text no longer overlaps the buttons
+1045c-golf client  Client 20261025n (20261025m + minigolf camera): the hole fly-over plays, practice tees off clear of you
+1045d-golf ship  Save to GitHub (orionopenwow/WrathUnleashed): client 20261025n, golf camera fixes
+1046a client  Client 20261025o (on top of n): loading screen no longer waits ~2 minutes on shader warm-up, Dalaran zone and chat, smoother frames, no black on character select, IsMounted, load timing readout
+1046b ship  Save to GitHub (orionopenwow/WrathUnleashed): client 20261025o, GitHub builds log
+1047a client  Client 20261025o + Dalaran prefetch list: the files Enter World needs (1056) download in the background on character select, so entering Dalaran no longer fetches them one at a time
+1047b ship  Save to GitHub (orionopenwow/WrathUnleashed): Dalaran prefetch list, GitHub builds bat installs gh and logs every step
+1048a client  Browsers keep game files (world data a week, UI 10 minutes): until now every visit re-downloaded everything, which is most of the Dalaran load time
+1048b ship  Save to GitHub (orionopenwow/WrathUnleashed): game-file caching on the stream site
+1049a client  Game files no longer stall 1-3 s in bursts: the sign-in check now queues connections instead of dropping them (50 files at once: 2.6 s before)
+1049b ship  Save to GitHub (orionopenwow/WrathUnleashed): stream portal connection queue
+1051a client  Faster Enter World: the files entering the world needs download first at character select (was ~54 s of one-at-a-time reads); cancelled sound reads no longer count as failures
+1051b ship  Save to GitHub (orionopenwow/WrathUnleashed): Enter World prefetch order, retry fix, GitHub builds without the second sign-in
+1052a scripts  Modes devices: Pressure Plates sample, device drafts on your account
+1052b foreverui  Modes device editor: place triggers, buttons, timers, counters, teleporters and movers, wire them up, Play and Stop
+1052c ship  Save to GitHub (orionopenwow/WrathUnleashed): Modes devices (M5)
+1053a scripts  Workshop: publish courses, modes and builds, ratings, GM review, Play (new script: restart with the 5-minute warning)
+1053b foreverui  Workshop tab in Mods & Workshop (/workshop): browse, rate, Play, publish a build
+1053c signin  Workshop pages on the site: /wrath/workshop with Play buttons and share links
+1053d ship  Save to GitHub (orionopenwow/WrathUnleashed): Workshop (M9), image build without Patch-A.MPQ
+1054a scripts  Building: plots with co-builders, budgets and trust tiers, group select, copy and paste, prefabs, properties, GM op log and rollback
+1054b foreverui  Building: spawn menu (favourites, recents, search, prefabs), budget meter, properties panel, box select
+1054c ship  Save to GitHub (orionopenwow/WrathUnleashed): building suite (M3)
+1055a foreverui  Windows get solid backgrounds (they showed the world through them); Workshop panel rows no longer overlap
+1055b ship  Save to GitHub (orionopenwow/WrathUnleashed): solid window backgrounds
+1056a client  Client 20261026a: character-select sky (no black), build handles (axis arrows, turn ring, box select, hold Q spawn menu, Ctrl+C/V), no 30 fps cap, faster first world frame, your character hidden behind a mode camera
+1056b ship  Save to GitHub (orionopenwow/WrathUnleashed): client 20261026a and its patch
+1057a scripts  Building: the realm sends the whole selection, so a carried group moves together on screen
+1057b foreverui  Building: the selected group follows the cursor while you carry or drag it
+1057c ship  Save to GitHub (orionopenwow/WrathUnleashed): group carry
+1058a foreverui  Windows get a solid colour fill (the backdrop fill still showed the world through)
+1058b ship  Save to GitHub (orionopenwow/WrathUnleashed): solid window fill
+1059a client  Client 20261026b: shaders build a few per frame (the 9 s login and world-entry freezes), far character models load after the cover, world-only tables load after character select, the character-select sunset no longer ends in a hard edge
+1059b ship  Save to GitHub (orionopenwow/WrathUnleashed): client 20261026b, deploy script joins N build parts
+1060a client  Players on their own 3.3.5a client (realmlist play.openvanilla.app) can go anywhere: only browser sessions are kept to the streamed zones
+1060b ship  Save to GitHub (orionopenwow/WrathUnleashed): zone rule only for browser sessions
+1061a signin  Play page: step-by-step realmlist.wtf for your own 3.3.5a client; the game account name and password are labelled as the game login
+1061b ship  Save to GitHub (orionopenwow/WrathUnleashed): desktop client help on the play page
+1062a realm  Companions for 10-player raids: up to 9 bots per player, bots always pass on loot, no guildmates as bots (5-minute warning, then restart)
+1062b scripts  Companions: .recruit party, .recruit raid, recruit between pulls inside instances, your own alts (.companions alts, .recruit alt, .companions save, .recruit usual)
+1062c ship  Save to GitHub (orionopenwow/WrathUnleashed): Companions for raids and alts
+1063a realm  Companions: bots get their role's talents (tank, healer, damage), and dismissed bots leave the group (5-minute warning, then restart)
+1063b ship  Save to GitHub (orionopenwow/WrathUnleashed): Companions talent specs and dismiss fix
+1064a scripts  Companions hotfix: .dismiss no longer crashes the world server (bots leave the group themselves, then log out)
+1064b ship  Save to GitHub (orionopenwow/WrathUnleashed): Companions dismiss hotfix
+1065a scripts  Modes: creator script editor checks (blocked names refused with the line), Play Here test lobbies, .modes check
+1065b foreverui  Modes script editor: line numbers, error console, Play / Play Here / Stop, hot reload, creator API v2, examples Coin Collect and King of the Hill
+1065c ship  Save to GitHub (orionopenwow/WrathUnleashed): creator scripting (M6)
+1066a hostkit  Host pack: publish the host kit as a Leyline Host pack (zip, sha256, torrent with web seed)
+1066b signin  Leyline flags file (all off), Host pack in the catalog, realm list refresh can no longer freeze
+1066c relay  Join page: one address line when there is no shared port
+1066d mods  Workshop: new category Launcher themes
+1066e ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline launcher 0.3.0 (every client and server type, one-click mods, self-updates, themes, Host pack, macOS/Linux builds)
+1067a scripts  Companions: the Bots window's realm side, bots come back after a crash, orders without chat lines
+1067b foreverui  Companions window (/comp): roster, orders, formation, prepare, fill, per-bot spec/role/gear, bot chatter filter
+1067c ship  Save to GitHub (orionopenwow/WrathUnleashed): Companions window and the smarter bots plan
+1068a signin  Leyline friends and messages (/wrath/api/social, /wrath/link), the Admin Console (/wrath/admin, staff only), the hidden Leyline hub (/wrath/leyline-preview) and the launcher catalog feed
+1068b realm  New realm scripts: Leyline friends bridge (ov_social), Admin Console (ov_admin), sandbox core bridge (ov_sandbox_core); .build move/rotate/scale (5-minute warning, then restart)
+1068c foreverui  Leyline Friends panel (/lfriends), Builder: gizmo commits once on release, Properties pitch and roll
+1068d ship  Save to GitHub (orionopenwow/WrathUnleashed): friends and messages, admin console, Leyline hub and mod index, mod-sandbox-core
+1069a client  Browser client 20261029a: quick key taps move, no black screen when the window is not painted, Lua fixes (secure frames, party opacity), a warning that names missing building files
+1069b ship  Save to GitHub (orionopenwow/WrathUnleashed): browser client 20261029a
+1071a scripts  Player messages say [Leyline] instead of [Open Vanilla]
+1071b client  Play page: no Open Vanilla mention for 1.12 folders (the browser build is unchanged)
+1071c ship  Save to GitHub (orionopenwow/WrathUnleashed): client patch comments describe behaviour only; the Leyline export refuses binary citations; old names out of player text
+1072a ship  Save to GitHub (orionopenwow/WrathUnleashed): the private Leyline 1.12 client repo maker, benilla sync workflow (off)
+1073a scripts  Leyline Sample Hangout fence (inert until OV_SAMPLER=1): Dalaran, starting zones and every dungeon and raid for streamed browser players; own game files keep the whole world
+1073b signin  Sample Hangout labels and the play-slice alias (inert until WU_SAMPLER=1)
+1073c ship  Save to GitHub (orionopenwow/WrathUnleashed): the Leyline Sample Hangout switch, overlay, slice and labels
+1073x sampler-check  Dry run of the Leyline Sample Hangout switch (read-only, changes nothing)
+1074a ship  Save to GitHub (orionopenwow/WrathUnleashed): the build-failure reader (read-only builds-why step)
+1074x builds-why  Why the last GitHub build failed (read-only)
+1075a builds-why  Why the last GitHub build failed: now with the compiler error lines (read-only)
+1075b ship  Save to GitHub (orionopenwow/WrathUnleashed): builds-why picks out compiler errors
+1076a relay  Leyline network listing: tags, region, build, uptime, fair score, quicker offline (direct connections stay off)
+1076b signin  Realm browser with filters and badges, realms.json, realm reports, admin Feature/Verify, game data killswitch wiring (switch stays off)
+1076c scripts  In-game Leyline window: network order and fields
+1076d foreverui  In-game Leyline window: filters, badges, Host your own, Report
+1076e client  Page scripts: game data killswitch handling (switch stays off), killswitch kit
+1076f hostkit  Host pack: realm list details (tags, region, language, player limit)
+1076g ship  Save to GitHub (orionopenwow/WrathUnleashed): community realms first, game data killswitch (off), launcher 0.3.1 source
+1077a signin  Put the new Host pack listing (hostpack.json) live
+1078a scripts  One-click modes: ov_playmode (go=mode: links start minigolf, Bumper Balls, Coin Dash, or open community Modes after login)
+1078b foreverui  Modes and Golf windows open on the realm's request
+1078c signin  Games section on /wrath/modes, /wrath/modes.json, go=mode: sign-in links
+1078d ship  Save to GitHub (orionopenwow/WrathUnleashed): launcher Modes page and one-click modes
+1079a ship  Save to GitHub (orionopenwow/WrathUnleashed): the ovrename and ovland steps (OpenVanilla repo becomes Leyline-Launcher)
+1079b ovrename  Rename GitHub repo OpenVanilla to Leyline-Launcher (description, homepage, PC clone origin)
+1079c ovland  Leyline Launcher 1.57.0 changes to GitHub (main, fast-forward only; support and tips hidden)
+1079d ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline launcher support buttons hidden
+1080a ship  Save to GitHub (orionopenwow/WrathUnleashed): Clean deployments tool (the owner runs it himself)
+1081a relay  Leyline mesh in the relay (inert until RELAY_MESH=1 in relay.env), volunteer relay profile
+1081b signin  Network flags gain mesh_realms, mesh_relays, relay_volunteer (all off)
+1081c hostkit  Host pack: the volunteer relay (help the network, off unless chosen)
+1081d ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline mesh (signed realm records, gossip, volunteer relays; all off)
+1082a signin  Mod hub rankings: installs, 1-5 star ratings, Hot/Rising/Top rated/Most installed/New/Updated, /wrath/leyline/mods.json
+1082b ship  Save to GitHub (orionopenwow/WrathUnleashed): hub rankings, daily index workflow source, launcher Discover tabs
+1082x builds-why  Did the realm image build (in-place moves fix) pass? (read-only)
+1083a relay  Join pages say which client a realm needs; account salts every core can read
+1083b signin  Join page: the client note and the salt fix
+1083c hostkit  Host pack: host a realm for 1.12.1 or 2.4.3 (CMaNGOS, built from source with your own client), 4.3.4 waits for a pinned checksum
+1083d ship  Save to GitHub (orionopenwow/WrathUnleashed): host any client (profiles, launcher WHICH GAME card)
+1084a ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline export carries playmodes.json (fixes the launcher CI), fresh-history tool (dormant)
+1085a ovland  Leyline Launcher (old launcher repo): the new Leyline mark as window, taskbar and release icon
+1085b ship  Save to GitHub (orionopenwow/WrathUnleashed): the new Leyline logo and app icons for the launcher
+1086a signin  Leyline brand built in, dormant (switch off); hub and realm filters offer 1.12.1, 2.4.3 and 3.3.5a
+1086b scripts  Realm scripts: the dormant Leyline brand (flag file off)
+1086c foreverui  In-game window: dormant Leyline brand; Sample Hangout and Dalaran Hangout count as home
+1086d mods  Mod catalog addon: dormant Leyline brand
+1086e hostkit  Host pack: Leyline wording, 3.3.5a at most (4.3.4 not offered yet)
+1086f relay  Join pages and relay: Leyline wording, 3.3.5a at most
+1086g ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline rebrand (dormant), client cap 3.3.5a
+1087a ship  Save to GitHub (orionopenwow/WrathUnleashed): the launcher's new Dark and Light look (the paper look is gone), remove-files step
+1087b remove-files  Remove the painted launcher art, Cinzel and rounded.css (the redesign took them out)
+1087c ship  Save to GitHub (orionopenwow/WrathUnleashed): record those deletions
+1087x brand-check  What the Leyline brand switch would change (read-only)
+1088a ship  Save to GitHub (orionopenwow/WrathUnleashed): fresh-history ignores Autopilot bookkeeping
+1089a signin  Leyline: spinning-mark look behind the brand switch (off, no visible change), hub preview redone (hidden)
+1089b ship  Save to GitHub (orionopenwow/WrathUnleashed): spinning Leyline mark, hub front page, fresh-history ignores realm/custom/acore
+1089c fresh-check  What the fresh Leyline history would do (read-only dry run)
+1090a signin  Leyline hub preview (hidden): realm list under the hero with one-click join, products in order, Modes and News pages
+1090b ship  Save to GitHub (orionopenwow/WrathUnleashed): hub realm list and products, Open in launcher for realms
+1091a signin  Sign-in site: Hero Key sign-on for realms (flag herokey_sso, off: nothing changes)
+1091b relay  Relay: the Hero Key sign-on route (answers 'off' until a realm opts in)
+1091c hostkit  Host pack: Hero Key sign-on, off unless a host turns it on
+1091d ship  Save to GitHub (orionopenwow/WrathUnleashed): Hero Key sign-on (off), no Orion art on the tab page
+1092a signin  Sign-in site: point the Host pack download at the new pack
+1092b ship  Save to GitHub (orionopenwow/WrathUnleashed): new Host pack listing
+1093a signin  Leyline hub preview (hidden): feature sections, clean hero, no client numbers or game names
+1093b ship  Save to GitHub (orionopenwow/WrathUnleashed): hub feature sections and clean hero
+1094a signin  Leyline site (still hidden until the brand step): bigger hero, launcher-style top bar, ticker, gallery, cleaned game shots
+1094b ship  Save to GitHub (orionopenwow/WrathUnleashed): front page, gallery, Discord script, page step, brand switch shows the front page
+1094c fresh-check  What the fresh Leyline history would do (read-only dry run)

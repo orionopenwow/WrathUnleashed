@@ -1,0 +1,33 @@
+# WrathUnleashed account sign-up service (signup/signup.py), behind Caddy on 127.0.0.1:8090.
+# Install: bootstrap.sh copies this to /etc/systemd/system/. Start once the SOAP account exists:
+#   systemctl start wu-signup && journalctl -u wu-signup -f
+[Unit]
+Description=WrathUnleashed account sign-up (SOAP -> worldserver)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# SOAP_USER, SOAP_PASS, TURNSTILE_* ... (mode 600, read by systemd as root, not by the service user)
+EnvironmentFile=/srv/wrath/signup.env
+ExecStart=/usr/bin/python3 -I /srv/wrath/signup/signup.py
+Restart=on-failure
+RestartSec=3
+
+# Runs as a throw-away unprivileged user with a read-only view of the system.
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

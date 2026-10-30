@@ -1,0 +1,99 @@
+--- a/web/index.html
++++ b/web/index.html
+@@ -13,6 +13,11 @@
+           background: rgba(0,0,0,.55); border: 0; border-bottom-left-radius: 6px; cursor: pointer;
+           font: 14px system-ui, sans-serif; opacity: .7; }
+   #bell.on { opacity: 1; }
++  /* "Download this section" (web/sections.js), left of the bell; shown only on a streamed slice. */
++  #dl { position: fixed; top: 0; right: 8.4rem; z-index: 10; padding: .3rem .6rem; color: #ddd;
++        background: rgba(0,0,0,.55); border: 0; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px;
++        cursor: pointer; font: 12px system-ui, sans-serif; text-decoration: underline; }
++  #dl[hidden] { display: none; }
+ </style>
+ <script>
+   // Sound: the browser suspends any AudioContext created before the first user gesture (autoplay
+@@ -68,6 +73,7 @@
+ </script>
+ <button type="button" id="fs" title="Full screen. Captures Esc, Tab and Ctrl+W for the game — press and hold Esc to leave.">full screen</button>
+ <button type="button" id="bell" title="Desktop notifications while this tab is in the background: level-ups, death, whispers, invites, mail, combat. Asks the browser once.">🔔</button>
++<button type="button" id="dl" hidden title="Download whole parts of the streamed game ahead of time, or remove them.">download sections</button>
+ <canvas id="benilla"></canvas>
+ <script>
+   // Dev page: allow `?user=&pass=&char=` links to log in. A hosting page that fetched the
+@@ -79,6 +85,8 @@
+   import init from './wenilla.js';
+   import { bind } from './wasi_stubs.js';
+   import { boot } from './boot.js';
++  import { ensureDataSource } from './ownfiles.js';
++  import { installSections, mountSectionsUi } from './sections.js';
+   // `boot(init)` is the loading overlay + parallel data prefetch (see boot.js's header); it calls
+   // `init()` with a byte-counted Response, and `init()` instantiates the wasm module, which runs
+   // `#[wasm_bindgen(start)] start()` as part of instantiation (`wenilla/src/lib.rs`) — that's the
+@@ -117,6 +125,21 @@
+       }
+     })
+     .catch((e) => console.warn('bridge.js:', e));
+-  const w = await boot(init);
++  // "Use my own game files" (web/ownfiles.js): when this origin serves no /data (no wenilla-host
++  // behind it), the player's own 3.3.5a Data folder is mounted: a worker reads their local MPQs
++  // and answers the client's /data requests in the page — nothing is uploaded. The chooser sits
++  // above the boot overlay; the wasm download runs underneath it, and init() waits for the data.
++  // `?data=host` skips it; `?ownfiles=1` shows it even when a folder is remembered.
++  // "Download this section" (web/sections.js): on a streamed slice (the server lists its tiers at
++  // /data/__tier/index.json), downloaded tiers are read from Cache Storage; installed before the
++  // client starts, and only when the data comes from the server (not with the player's own files).
++  const dataReady = ensureDataSource({ streamUrl: window.WU_STREAM_URL }).then(async (src) => {
++    if (!src || src.mode === 'host') {
++      await installSections();
++      mountSectionsUi(document.getElementById('dl'));
++    }
++    return src;
++  });
++  const w = await boot(init, { dataReady });
+   bind(w.memory);
+ </script>
+--- a/web/boot.js
++++ b/web/boot.js
+@@ -20,7 +20,7 @@
+ //      exactly today's behavior, and a warm-cache visitor flies through all of it: progress is
+ //      measured, never scripted.
+ //
+-// Page contract: `const w = await boot(init); bind(w.memory);` — bind must stay immediately
++// Page contract: `const w = await boot(init, { dataReady }); bind(w.memory);` — bind must stay immediately
+ // after (the Lua WASI shims need the module's linear memory). Query switches: `?boottrace=1`
+ // arms window.__wenilla_boottrace and skips the prefetch (a manifest-capture boot must show the
+ // true read order); `?noprefetch=1` skips the prefetch only (the A/B lever).
+@@ -39,11 +39,17 @@
+   const skipPrefetch = q.get('boottrace') === '1' || q.get('noprefetch') === '1';
+   installProgressHook(ui, skipPrefetch);
+ 
+-  const prefetch = skipPrefetch
+-    ? Promise.resolve()
+-    : prefetchManifest('./boot-manifest.json', (done, total) => ui.setData(done, total)).catch(
+-        () => ui.setData(0, 0)
+-      );
++  // `opts.dataReady`: a promise for the /data source (web/ownfiles.js — the player's own game
++  // files). The wasm download starts now regardless; the prefetch and init() wait for it, since
++  // both read /data. A rejection fails the boot visibly instead of starting a client with no data.
++  const dataReady = Promise.resolve(opts.dataReady);
++  const prefetch = dataReady.then(() =>
++    skipPrefetch
++      ? undefined
++      : prefetchManifest('./boot-manifest.json', (done, total) => ui.setData(done, total)).catch(
++          () => ui.setData(0, 0)
++        )
++  );
+ 
+   // Compile immediately: merely fetching a Response leaves its body backpressured until
+   // someone consumes it. Instantiation must still wait for the cache warmup because the
+--- a/scripts/web-build.sh
++++ b/scripts/web-build.sh
+@@ -46,6 +46,8 @@
+ [ "${WEB_DEBUG:-0}" = 1 ] && strip=()
+ wasm-bindgen --target web --no-typescript "${strip[@]}" --out-dir "${DIST}" "${WASM}"
+ cp web/index.html web/wasi_stubs.js web/boot.js web/platform.js web/bridge.js web/automate.js "${DIST}/"
++# "Use my own game files" (ownfiles.js + worker + MPQ reader) and "Download this section" (sections.js + worker).
++cp web/ownfiles.js web/ownfiles-worker.js web/mpq.js web/chain.js web/sections.js web/sections-worker.js "${DIST}/"
+ # The bridge examples (web/README.md § "JavaScript bridge"): a HUD, an idle loop.
+ mkdir -p "${DIST}/examples" && cp web/examples/*.js "${DIST}/examples/"
+ # The boot prefetch manifest (see web/boot.js) — optional so a tree that hasn't captured one

@@ -1,0 +1,20 @@
+# name repo branch commit  (core first; the rest go into acore/modules/)
+# repo "local": the module is in this repo, realm/custom/modules/<name> (fetch.sh copies it; branch and commit are -)
+core https://github.com/mod-playerbots/azerothcore-wotlk Playerbot 3f2969ddb0da42b48b4fca050c02b19163ba1e20
+mod-1v1-arena https://github.com/azerothcore/mod-1v1-arena master 5ef5708d031f3b02283e6e599aa655bd320d904e
+mod-ah-bot-plus https://github.com/NathanHandley/mod-ah-bot-plus master f685832994c825f90aa5a3dc0e1620aa568e875b
+mod-ale https://github.com/azerothcore/mod-ale master 84b85cc55980dbf67d596f3d5cb34ded10c59102
+mod-aoe-loot https://github.com/azerothcore/mod-aoe-loot master 44486b1aecebd86944ce115972b3c839544903d3
+mod-arac https://github.com/heyitsbench/mod-arac master 3f605e09c656eb3b620ef2d70c7ef61808c1cfb0
+mod-autobalance https://github.com/azerothcore/mod-autobalance master 1d707cb61a0962ab01e4123681e2d3b66cc558a2
+mod-challenge-modes https://github.com/ZhengPeiRu21/mod-challenge-modes master 1930525b9530d329cb9fe0504a3c9b5b40a12261
+mod-dungeon-master https://github.com/trauntrow/mod-dungeon-master main 612eaf804cd7fc4af74fde66d376a571a5550077
+mod-guildhouse https://github.com/azerothcore/mod-guildhouse master 0b3cc14e947a859f8a7751a10676107d6316275b
+mod-individual-progression https://github.com/ZhengPeiRu21/mod-individual-progression master 4933d455d2f611eed50c74c68c78832df4ed37a3
+mod-playerbots https://github.com/mod-playerbots/mod-playerbots master e88cc4099e69f35126b28942a412ca702d20453b
+mod-solo-lfg https://github.com/azerothcore/mod-solo-lfg master 3821fe1d108ade8d2b7ad6611e41154e05864c65
+mod-transmog https://github.com/azerothcore/mod-transmog master 327753a05b9024f2a90738bb08e9b8afc2fc9a21
+mod-mythic-plus https://github.com/silviu20092/mod-mythic-plus master e2a487d358c1c1c562d686f53a3e269b2cf1b8c5
+mod-multibot-bridge https://github.com/Wishmaster117/mod-multibot-bridge main ebfa01a129dd4c441b2527e42dcc37b6da95e6c2
+mod-questie-bridge https://github.com/Aldori15/mod-questie-bridge main ad6ebd8fd70270992d0d843f0dc8c73ba924be30
+mod-sandbox-core local - -

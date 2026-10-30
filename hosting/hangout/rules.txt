@@ -1,0 +1,6 @@
+# The Dalaran Hangout's house rules on the Leyline realm list (one per line, up to 10, 120 characters each).
+# Lines starting with # are ignored. Deployed by "Deploy Dalaran hangout.bat" (the "hangout" step).
+Be kind: no harassment, hate speech or spam.
+Duel anyone who agrees; no griefing in Dalaran.
+No cheats, bots or exploits. Report bugs with .bug
+Bots are always labelled and never counted as players.

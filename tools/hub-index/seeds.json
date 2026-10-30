@@ -1,0 +1,1441 @@
+{
+ "format": 1,
+ "note": "Curated by hand: category, type, display name and a description in our own words; builds (default 3.3.5a). skip = left out by policy, with why (licence, game-format and patch-file skips are re-checked every build).",
+ "seeds": [
+  {
+   "repo": "https://github.com/azerothcore/azerothcore-wotlk",
+   "category": "presets",
+   "type": "core",
+   "name": "AzerothCore",
+   "description": "The open 3.3.5a server core most realm modules here are written for: world, auth and database, with a module system."
+  },
+  {
+   "repo": "https://github.com/TrinityCore/TrinityCore",
+   "category": "presets",
+   "type": "core",
+   "name": "TrinityCore (3.3.5 branch)",
+   "description": "Long-running open server core; its 3.3.5 branch runs Wrath realms and is the base AzerothCore grew from."
+  },
+  {
+   "repo": "https://github.com/cmangos/mangos-wotlk",
+   "category": "presets",
+   "type": "core",
+   "name": "CMaNGOS WotLK",
+   "description": "The CMaNGOS server core for 3.3.5a, with its own scripting and a focus on accurate behaviour."
+  },
+  {
+   "repo": "https://github.com/azerothcore/acore-docker",
+   "category": "presets",
+   "type": "preset",
+   "name": "AzerothCore in Docker",
+   "description": "Run a whole realm (database, auth and world servers) from ready-made Docker images and one compose file.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/ZhengPeiRu21/mod-individual-progression",
+   "category": "presets",
+   "type": "module",
+   "name": "Individual Progression",
+   "description": "Each player moves through the game's content eras on their own, from the level 60 raids onward, on one shared realm.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-progression-system",
+   "category": "presets",
+   "type": "module",
+   "name": "Progression System",
+   "description": "Opens content in phases across the whole realm, with tuned bosses and loot per phase, for progression-style realms.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/PrivateDonut/hardcore_mode",
+   "category": "presets",
+   "type": "lua",
+   "name": "Hardcore Mode",
+   "description": "Opt-in permadeath with hardcore and ironman rules, milestone rewards and seasons.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/trauntrow/mod-dungeon-master",
+   "category": "encounters",
+   "type": "module",
+   "name": "Dungeon Master",
+   "description": "Generates random dungeon runs: pick a theme and difficulty, then fight scaled creatures and a boss at the end.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/ZhengPeiRu21/mod-challenge-modes",
+   "category": "encounters",
+   "type": "module",
+   "name": "Challenge Modes",
+   "description": "Optional character challenges such as hardcore, slow XP, self-crafted gear and iron man, each with its own rewards.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/silviu20092/mod-mythic-plus",
+   "category": "encounters",
+   "type": "module",
+   "name": "Mythic Plus",
+   "description": "Keystone-style dungeon runs with timers, rising difficulty levels, affixes and better loot as you climb.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-zone-difficulty",
+   "category": "encounters",
+   "type": "module",
+   "name": "Zone Difficulty",
+   "description": "Tunes damage, healing and absorbs per map and phase, and adds a harder mode for selected raids and dungeons.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/55Honey/Acore_eventScripts",
+   "category": "encounters",
+   "type": "lua",
+   "name": "Event Bosses",
+   "description": "GM-started events with custom bosses fought in their own phase, plus party-sized encounters.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-1v1-arena",
+   "category": "sandbox",
+   "type": "module",
+   "name": "1v1 Arena",
+   "description": "Adds a one-versus-one rated arena queue through an arena NPC.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-arena-3v3-solo-queue",
+   "category": "sandbox",
+   "type": "module",
+   "name": "3v3 Solo Queue",
+   "description": "Queue alone for 3v3 arena; the module builds balanced teams from the solo players waiting.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/PrivateDonut/1v1_pvp_system",
+   "category": "sandbox",
+   "type": "lua",
+   "name": "1v1 PvP Queue",
+   "description": "A 1v1 duel queue with best-of-three matches and matchmaking, written in Lua.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/sogladev/mod-deathroll-aio",
+   "category": "sandbox",
+   "type": "lua",
+   "name": "Deathroll",
+   "description": "The classic roll-down dice game between two players, with its own window.",
+   "needs": "mod-ale or Eluna, plus AIO"
+  },
+  {
+   "repo": "https://github.com/zyggy123/Treasure-Chest-System",
+   "category": "sandbox",
+   "type": "lua",
+   "name": "Treasure Chests",
+   "description": "GMs hide chests with custom loot and hints for players to hunt down, with server announcements.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/zyggy123/Crime-Bounty-System",
+   "category": "sandbox",
+   "type": "lua",
+   "name": "Crime and Bounty",
+   "description": "Wanted levels for player crimes that persist and send NPC bounty hunters after the guilty.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/zyggy123/Morphing-Flask",
+   "category": "sandbox",
+   "type": "lua",
+   "name": "Morphing Flask",
+   "description": "A usable flask that turns the drinker into a random creature model for a while.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/zyggy123/mod-duel-bet",
+   "category": "sandbox",
+   "type": "lua",
+   "name": "Duel Bets",
+   "description": "Wager in-game gold on duels.",
+   "needs": "mod-ale or Eluna",
+   "skip": "not probed; wagering, left out by choice"
+  },
+  {
+   "repo": "https://github.com/azerothcore/Keira3",
+   "category": "tools",
+   "type": "tool",
+   "name": "Keira3",
+   "description": "Desktop database editor for AzerothCore: creatures, quests, items, loot and gossip, with SQL output you can review."
+  },
+  {
+   "repo": "https://github.com/wowdev/noggit3",
+   "category": "tools",
+   "type": "tool",
+   "name": "Noggit",
+   "description": "Map editor for the 3.3.5a terrain format: sculpt, paint textures, place models and edit water. You bring your own game files.",
+   "author": "Noggit contributors"
+  },
+  {
+   "repo": "https://github.com/wowdev/WoWDBDefs",
+   "category": "tools",
+   "type": "tool",
+   "name": "Database definitions (DBDefs)",
+   "description": "Machine-readable layouts of the client's database tables for every build, 3.3.5a included; used by editors and tools.",
+   "author": "DBDefs contributors"
+  },
+  {
+   "repo": "https://github.com/ladislav-zezula/StormLib",
+   "category": "tools",
+   "type": "tool",
+   "name": "StormLib",
+   "description": "C library for reading and writing MPQ archives; the basis of many patch and extraction tools.",
+   "author": "Ladislav Zezula"
+  },
+  {
+   "repo": "https://github.com/azerothcore/eluna-ts",
+   "category": "tools",
+   "type": "tool",
+   "name": "Eluna-TS",
+   "description": "Write realm scripts in TypeScript with typings, and compile them to Lua for the Eluna engine."
+  },
+  {
+   "repo": "https://github.com/azerothcore/skeleton-module",
+   "category": "tools",
+   "type": "tool",
+   "name": "Module template",
+   "description": "The starting template for a new AzerothCore module, with the folder layout, CMake hooks and a sample script."
+  },
+  {
+   "repo": "https://github.com/ElunaLuaEngine/Eluna",
+   "category": "tools",
+   "type": "tool",
+   "name": "Eluna",
+   "description": "Lua scripting engine for server cores: hook events and script creatures, items and gossip without rebuilding."
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-ale",
+   "category": "tools",
+   "type": "module",
+   "name": "ALE (Lua engine)",
+   "description": "The AzerothCore Lua Engine, an Eluna-based module that runs Lua realm scripts on AzerothCore.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/Rochet2/AIO",
+   "category": "tools",
+   "type": "tool",
+   "name": "AIO",
+   "description": "Sends addon code and messages between a Lua-scripted server and the game client, so a server script can ship its own UI.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/alchem1ster/AddOns-Update-Tool",
+   "category": "tools",
+   "type": "tool",
+   "name": "AddOns Update Tool",
+   "description": "Command-line updater for addons hosted on GitHub or GitLab, driven by a simple list file."
+  },
+  {
+   "repo": "https://github.com/FrostAtom/awesome_wotlk",
+   "category": "tools",
+   "type": "tool",
+   "name": "awesome_wotlk",
+   "description": "A client-side library that adds newer interface functions (such as nameplate APIs) to the 3.3.5a client for addons to use."
+  },
+  {
+   "repo": "https://github.com/Oddity-git/WoW-Pad",
+   "category": "tools",
+   "type": "tool",
+   "name": "Controller support",
+   "description": "Gamepad play for the 3.3.5a client: sticks to move and look, a radial menu and a controller action bar. Client-side only."
+  },
+  {
+   "repo": "https://github.com/baguviix/AzerothCore-Server-Manager-Pro",
+   "category": "tools",
+   "type": "tool",
+   "name": "Server Manager",
+   "description": "Desktop app to manage an AzerothCore realm over SSH, MySQL and SOAP: start, stop, accounts and logs."
+  },
+  {
+   "repo": "https://github.com/zyggy123/gm-monitor",
+   "category": "tools",
+   "type": "lua",
+   "name": "GM Monitor",
+   "description": "Logs GM commands for review and shows them on a small web dashboard.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/0xCiBeR/Acore_DiscordNotifier",
+   "category": "tools",
+   "type": "lua",
+   "name": "Discord Notifier",
+   "description": "Posts chosen realm events and messages to a Discord channel through a webhook.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-better-item-reloading",
+   "category": "tools",
+   "type": "module",
+   "name": "Better Item Reloading",
+   "description": "Reload edited items on a running server, and in the client where the protocol allows it.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/zyggy123/ptr-toolkit-item",
+   "category": "tools",
+   "type": "lua",
+   "name": "Test Realm Toolkit",
+   "description": "An item for test realms that opens menus for levels, gear, teleports and other testing shortcuts.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/ntorres38/MiniGM",
+   "category": "tools",
+   "type": "addon",
+   "name": "MiniGM",
+   "description": "Compact GM panel addon: common commands, a teleport list and playerbot controls in one window."
+  },
+  {
+   "repo": "https://github.com/DarkChimu/Improved-Profession-Capper",
+   "category": "addons",
+   "type": "addon",
+   "name": "Improved Profession Capper",
+   "description": "Shows the next recipe to craft to level a trade skill toward the cap, beside the profession window."
+  },
+  {
+   "repo": "https://github.com/NoM0Re/ClassicNumbers-WotLK",
+   "category": "addons",
+   "type": "addon",
+   "name": "ClassicNumbers",
+   "description": "Floating combat numbers with the older pop-up animation style."
+  },
+  {
+   "repo": "https://github.com/Ostoic/RaidBrowser",
+   "category": "addons",
+   "type": "addon",
+   "name": "RaidBrowser",
+   "description": "Turns the unused raid tab of the social window into a raid finder that reads group adverts from chat."
+  },
+  {
+   "repo": "https://github.com/fondlez/GroupBulletinBoard",
+   "category": "addons",
+   "type": "addon",
+   "name": "Group Bulletin Board",
+   "description": "Collects group requests from chat into one board, sorted by dungeon, so finding a group takes one look."
+  },
+  {
+   "repo": "https://github.com/ghbset/DialogUI-WotLK",
+   "category": "addons",
+   "type": "addon",
+   "name": "DialogUI",
+   "description": "A larger, immersive window for quest, gossip and book text."
+  },
+  {
+   "repo": "https://github.com/Cortes-Jeremy/SoundAlerter",
+   "category": "audio",
+   "type": "addon",
+   "name": "SoundAlerter Enhanced",
+   "description": "Spoken alerts for important enemy spells and cooldowns, aimed at arena and battlegrounds."
+  },
+  {
+   "repo": "https://github.com/mod-playerbots/mod-playerbots",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Playerbots",
+   "description": "Adds AI-driven player characters that quest, group, run dungeons and fill the world; needs its own core branch.",
+   "needs": "AzerothCore (the Playerbot branch)"
+  },
+  {
+   "repo": "https://github.com/jrad7/mod-dungeon-clear",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Dungeon Clear",
+   "description": "Helps playerbot groups clear whole dungeons on their own.",
+   "needs": "AzerothCore with mod-playerbots"
+  },
+  {
+   "repo": "https://github.com/DustinHendrickson/mod-player-bot-level-brackets",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Bot Level Brackets",
+   "description": "Spreads playerbots across level ranges you set, so every bracket has company.",
+   "needs": "AzerothCore with mod-playerbots"
+  },
+  {
+   "repo": "https://github.com/DustinHendrickson/mod-classless-wildcard",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Classless and Wildcard",
+   "description": "A classless system: learn spells and talents from other classes with scrolls bought for in-game gold.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-aoe-loot",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "AoE Loot",
+   "description": "Loot every nearby corpse at once.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-solocraft",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Solocraft",
+   "description": "Scales a player's stats inside dungeons and raids to the group size, for small groups and solo players.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-solo-lfg",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Solo LFG",
+   "description": "Lets a single player queue for the Dungeon Finder.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-anticheat",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Anticheat",
+   "description": "Passive checks for speed, fly, teleport and similar hacks, with reports for GMs.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-learn-spells",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Learn Spells",
+   "description": "Teaches class spells automatically on level-up, so no trainer trips.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-npc-enchanter",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Enchanter NPC",
+   "description": "An NPC that enchants a player's gear from a menu.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/ZhengPeiRu21/mod-reagent-bank",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Reagent Bank",
+   "description": "An NPC that stores crafting reagents without using bag or bank slots.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/Day36512/mod-reagent-bank-account",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Account Reagent Bank",
+   "description": "An account-wide reagent bank with a companion addon, profession integration and shopping lists.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/noisiver/mod-assistant",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Assistant",
+   "description": "An NPC that hands out heirlooms, glyphs and gems and offers profession help; prices are set by the realm owner.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-npc-beastmaster",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Beastmaster NPC",
+   "description": "An NPC that lets hunters pick tameable pets, including rare ones, from a menu.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-breaking-news-override",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Breaking News",
+   "description": "Shows your own news panel on the character select screen.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-account-achievements",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Account Achievements",
+   "description": "Shares achievements across all characters on an account.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/noisiver/mod-junk-to-gold",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Junk to Gold",
+   "description": "Sells grey items for gold the moment they are looted.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-individual-xp",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Individual XP",
+   "description": "Each player sets their own experience rate with a command.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-gain-honor-guard",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Honor from Guards",
+   "description": "Guards and elites give honor when killed in world PvP.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-skip-dk-starting-area",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Skip Death Knight Start",
+   "description": "Lets new death knights skip the starting quest chain.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/BytesGalore/mod-no-hearthstone-cooldown",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "No Hearthstone Cooldown",
+   "description": "Resets the hearthstone cooldown right after use.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-rdf-expansion",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Dungeon Finder Expansion",
+   "description": "Lets higher-level characters queue for the random dungeons of earlier level ranges.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/noisiver/mod-weekendbonus",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Weekend Bonus",
+   "description": "More experience, money, reputation and skill-ups on weekends, with announcements.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-character-tools",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Character Tools",
+   "description": "Items that let players change their race, faction or appearance and rename themselves.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-weapon-visual",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Weapon Visuals",
+   "description": "Lets players choose enchant glow effects on their weapons.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/silviu20092/mod-reforging",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Reforging",
+   "description": "Move part of one secondary stat on an item into another, as later expansions allow.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-world-chat",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "World Chat",
+   "description": "A realm-wide chat channel, with faction options.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-cfbg",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Cross-faction Battlegrounds",
+   "description": "Fills battleground teams from both factions so queues pop faster.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-duel-reset",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Duel Reset",
+   "description": "Restores health, mana and cooldowns after a duel.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-pvp-titles",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "PvP Titles",
+   "description": "Awards the old PvP rank titles for honorable kills.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-reward-played-time",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Played-time Rewards",
+   "description": "Gives a reward item for every set amount of time played.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-npc-buffer",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Buffer NPC",
+   "description": "An NPC that casts a set of buffs on players.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-boss-announcer",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Boss Announcer",
+   "description": "Announces raid boss kills to the whole realm.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-auto-revive",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Auto Revive",
+   "description": "Revives players automatically, for test or casual realms.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-fireworks-on-level",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Level-up Fireworks",
+   "description": "A firework show for players who reach a new level.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-desertion-warnings",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Desertion Warnings",
+   "description": "Warns players before they leave a battleground early and take the deserter debuff.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-keep-out",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Keep Out",
+   "description": "Keeps players out of maps and zones you choose.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-war-effort",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "War Effort",
+   "description": "A realm-wide collection event in which players hand in supplies to unlock content.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/LykaonTitheus/mod_custom_loot",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Custom Loot Choice",
+   "description": "After a boss kill, players pick one item from its loot table themselves.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/bl1tzkr13g/mod-flightpath-discovery",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Flight Path Discovery",
+   "description": "A board at flight masters to unlock nearby flight paths for in-game gold.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/g7138580/mod-guild-expansion",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Guild Expansion",
+   "description": "Guild levels and perks, work orders, contracts and a mission table, built for small and solo guilds; comes with an addon.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/g7138580/mod-lore-codex",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Lore Codex",
+   "description": "A codex of the world's lore that unlocks as you explore, talk and quest; comes with an addon.",
+   "needs": "AzerothCore"
+  },
+  {
+   "repo": "https://github.com/55Honey/Acore_LevelUpReward",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Level-up Rewards",
+   "description": "Mails rewards to players who reach set levels, with a counter of who got there first.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/mostlynick3/azerothcore-lua-ah-bot",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Lua Auction Bot",
+   "description": "Keeps the auction house stocked and buys from players, written in Lua.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/55Honey/Acore_RecruitAFriend",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Recruit a Friend",
+   "description": "A standalone recruit-a-friend system with its own rewards.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/55Honey/Acore_ExchangeNpc",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Exchange NPC",
+   "description": "An NPC that trades materials for other materials at rates you set.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/Shadowveil-WotLK/AzerothCore-lua-MultiVendor",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "MultiVendor",
+   "description": "One NPC that opens several vendor lists from a menu.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/55Honey/Acore_SendAndBind",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Send and Bind",
+   "description": "Lets GMs mail items to players already soulbound.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/Brytenwally/BagOGoods",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Bag o' Goods",
+   "description": "A bag item that rolls random, level-appropriate loot.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/55Honey/Acore_Zonecheck",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Zone Check",
+   "description": "Moves players out of zones you have closed.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/55Honey/Acore_TempAnnouncements",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Timed Announcements",
+   "description": "Repeating announcements that a GM or the console starts and stops.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/55Honey/Acore_CarbonCopy",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Carbon Copy",
+   "description": "Lets players copy a character at its current stage, for example for low-level PvP.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/zyggy123/warmane-like-transmogrification",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Item Transmogrification",
+   "description": "Change the look of gear to that of other items you own, through an NPC.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/55Honey/Acore_ZoneDebuff",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Zone Debuff",
+   "description": "Applies a configurable debuff to players in chosen zones.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/Brytenwally/Loot-Arbiter",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Loot Arbiter",
+   "description": "Routes group loot to the player who can use it best.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/Brytenwally/Random-Item-Enchants",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Random Item Enchants (Lua)",
+   "description": "Rolls random bonus enchants on weapons and armour when they drop.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/Brytenwally/SitMeansRest",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Sit Means Rest",
+   "description": "Sitting down slowly restores health and mana.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/zyggy123/mod-beginner-companion",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Beginner Companion",
+   "description": "An in-game guide for new players with tips, a small wiki and progress rewards.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/Brytenwally/Lootpet",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Loot Pet",
+   "description": "A companion pet that loots corpses for you.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/Brytenwally/LevelStats",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Level Stats",
+   "description": "Grants a random primary stat bonus on each level-up.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/mostlynick3/azerothcore-lua-demon-morpher",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Demon Morpher",
+   "description": "Lets warlocks change the look of their demon pets.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/Shadowveil-WotLK/lua-Super-BufferNPC",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Super Buffer NPC",
+   "description": "A Lua NPC that buffs players on request.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/snowbizzon/azerothcore-lua-mods-wotlk",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Buffs and Loot Tweaks",
+   "description": "A buff menu in two languages, loot multipliers and random buffs, with no SQL needed.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/phreeez/Levelreward",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Level Reward",
+   "description": "An item reward on each level-up, and weapon skills learned automatically.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/55Honey/Acore_Summonall",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Summon All",
+   "description": "A GM command to summon every player, or a group, to one place.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/Shadowveil-WotLK/lua-ItemUpgrader-Template",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Item Upgrader Template",
+   "description": "A starting point for an NPC that upgrades items in steps.",
+   "needs": "mod-ale or Eluna"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-transmog",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Transmog",
+   "description": "",
+   "skip": "paywall: its TransmogPlus option is built to be sold through a subscription module"
+  },
+  {
+   "repo": "https://github.com/MalfurionWoW/ACore-BG-End-Announcer",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "BG End Announcer",
+   "description": "",
+   "skip": "owner name contains a banned word, and the credit can't be shown honestly without it"
+  },
+  {
+   "repo": "https://github.com/liyunfan1223/azerothcore-wotlk",
+   "category": "presets",
+   "type": "core",
+   "name": "Playerbot core branch",
+   "description": "",
+   "skip": "old home of the Playerbot core branch; the module now lives under the mod-playerbots account"
+  },
+  {
+   "repo": "https://github.com/shagu/pfQuest",
+   "category": "addons",
+   "type": "addon",
+   "name": "pfQuest",
+   "description": "Quest helper with a built-in database: quest givers, objectives and routes on the map. Its 3.3.5a database isn't there yet, so it is listed for 1.12.1 and 2.4.3.",
+   "builds": [
+    "1.12",
+    "2.4.3"
+   ]
+  },
+  {
+   "repo": "https://github.com/DenoHearth/ButtonDrawer",
+   "category": "addons",
+   "type": "addon",
+   "name": "Button Drawer",
+   "description": "",
+   "skip": "written for a different client build, not 3.3.5a"
+  },
+  {
+   "repo": "https://github.com/DenoHearth/QuestBlobMinimap",
+   "category": "addons",
+   "type": "addon",
+   "name": "QuestBlob Minimap",
+   "description": "",
+   "skip": "written for one commercial server's modified client"
+  },
+  {
+   "repo": "https://github.com/NoM0Re/WeakAuras-WotLK",
+   "category": "addons",
+   "type": "addon",
+   "name": "WeakAuras-WotLK",
+   "description": "",
+   "skip": "bundles game-format textures (BLP); our rule leaves out any repo with game-format files"
+  },
+  {
+   "repo": "https://github.com/ElvUI-WotLK/ElvUI",
+   "category": "addons",
+   "type": "addon",
+   "name": "ElvUI",
+   "description": "",
+   "skip": "bundles game-format textures (BLP); our rule leaves out any repo with game-format files"
+  },
+  {
+   "repo": "https://github.com/NeticSoul/DragonUI",
+   "category": "addons",
+   "type": "addon",
+   "name": "DragonUI",
+   "description": "",
+   "skip": "bundles game-format textures (BLP); our rule leaves out any repo with game-format files"
+  },
+  {
+   "repo": "https://github.com/bkader/Skada-WoTLK",
+   "category": "addons",
+   "type": "addon",
+   "name": "Skada-WoTLK",
+   "description": "",
+   "skip": "bundles game-format textures (BLP); our rule leaves out any repo with game-format files"
+  },
+  {
+   "repo": "https://github.com/s0h2x/Immersion-WotLK",
+   "category": "addons",
+   "type": "addon",
+   "name": "Immersion-WotLK",
+   "description": "",
+   "skip": "bundles game-format textures (BLP); our rule leaves out any repo with game-format files"
+  },
+  {
+   "repo": "https://github.com/PentSec/ForeverLogin",
+   "category": "addons",
+   "type": "addon",
+   "name": "ForeverLogin",
+   "description": "",
+   "skip": "bundles game-format textures (BLP); our rule leaves out any repo with game-format files"
+  },
+  {
+   "repo": "https://github.com/a3st/RetailUI",
+   "category": "addons",
+   "type": "addon",
+   "name": "RetailUI",
+   "description": "",
+   "skip": "bundles game-format textures (BLP); our rule leaves out any repo with game-format files"
+  },
+  {
+   "repo": "https://github.com/RichSteini/NotPlater",
+   "category": "addons",
+   "type": "addon",
+   "name": "NotPlater",
+   "description": "",
+   "skip": "bundles game-format textures (BLP); our rule leaves out any repo with game-format files"
+  },
+  {
+   "repo": "https://github.com/NoM0Re/OmniCC-WotLK",
+   "category": "addons",
+   "type": "addon",
+   "name": "OmniCC-WotLK",
+   "description": "",
+   "skip": "bundles game-format textures (BLP); our rule leaves out any repo with game-format files"
+  },
+  {
+   "repo": "https://github.com/anhility/WhatsTraining_WotLK",
+   "category": "addons",
+   "type": "addon",
+   "name": "WhatsTraining_WotLK",
+   "description": "",
+   "skip": "bundles game-format textures (BLP); our rule leaves out any repo with game-format files"
+  },
+  {
+   "repo": "https://github.com/s0h2x/LossOfControl",
+   "category": "addons",
+   "type": "addon",
+   "name": "LossOfControl",
+   "description": "",
+   "skip": "bundles game-format textures (BLP); our rule leaves out any repo with game-format files"
+  },
+  {
+   "repo": "https://github.com/Ridemofi/CleanBot",
+   "category": "addons",
+   "type": "addon",
+   "name": "CleanBot",
+   "description": "",
+   "skip": "bundles game-format textures (BLP); our rule leaves out any repo with game-format files"
+  },
+  {
+   "repo": "https://github.com/NeticSoul/Skada-WotLK-Netic",
+   "category": "addons",
+   "type": "addon",
+   "name": "Skada-WotLK-Netic",
+   "description": "",
+   "skip": "bundles game-format textures (BLP); our rule leaves out any repo with game-format files"
+  },
+  {
+   "repo": "https://github.com/PentSec/DragonUI_AddOnSkins",
+   "category": "addons",
+   "type": "addon",
+   "name": "DragonUI_AddOnSkins",
+   "description": "",
+   "skip": "bundles game-format textures (BLP); our rule leaves out any repo with game-format files"
+  },
+  {
+   "repo": "https://github.com/heyitsbench/mod-worgoblin",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "mod-worgoblin",
+   "description": "",
+   "skip": "ships client patch files (MPQ, DBC, M2 or BLP)"
+  },
+  {
+   "repo": "https://github.com/Helias/mod-bg-slaveryvalley",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "mod-bg-slaveryvalley",
+   "description": "",
+   "skip": "ships client patch files (MPQ, DBC, M2 or BLP)"
+  },
+  {
+   "repo": "https://github.com/Youpeoples/Prestige-and-Draft-Mode",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Prestige-and-Draft-Mode",
+   "description": "",
+   "skip": "ships client patch files (MPQ, DBC, M2 or BLP)"
+  },
+  {
+   "repo": "https://github.com/araxiaonline/Delves",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Delves",
+   "description": "",
+   "skip": "ships client patch files (MPQ, DBC, M2 or BLP)"
+  },
+  {
+   "repo": "https://github.com/Ildourol/MythicPlus-extended",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "MythicPlus-extended",
+   "description": "",
+   "skip": "ships client patch files (MPQ, DBC, M2 or BLP)"
+  },
+  {
+   "repo": "https://github.com/Isidorsson/Eluna-scripts",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Eluna-scripts",
+   "description": "",
+   "skip": "ships client patch files (MPQ, DBC, M2 or BLP)"
+  },
+  {
+   "repo": "https://github.com/DanieltheDeveloper/azerothcore-transmog-3.3.5a",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "azerothcore-transmog-3.3.5a",
+   "description": "",
+   "skip": "ships client patch files (MPQ, DBC, M2 or BLP)"
+  },
+  {
+   "repo": "https://github.com/Grim-Batol/Paragon-Anniversary",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Paragon-Anniversary",
+   "description": "",
+   "skip": "ships client patch files (MPQ, DBC, M2 or BLP)"
+  },
+  {
+   "repo": "https://github.com/Youpeoples/Black-Market-Auction-House",
+   "category": "realm-scripts",
+   "type": "lua",
+   "name": "Black Market",
+   "description": "",
+   "skip": "backports another expansion's game assets"
+  },
+  {
+   "repo": "https://github.com/Jnnshschl/AmeisenBotX",
+   "category": "tools",
+   "type": "tool",
+   "name": "AmeisenBotX",
+   "description": "",
+   "skip": "automated play on other people's realms (a bot)"
+  },
+  {
+   "repo": "https://github.com/Zendevve/VeilHUD",
+   "category": "addons",
+   "type": "addon",
+   "name": "VeilHUD",
+   "description": "",
+   "skip": "licence is not open (non-commercial or no-derivatives terms)"
+  },
+  {
+   "repo": "https://github.com/Zendevve/OmniInventory",
+   "category": "addons",
+   "type": "addon",
+   "name": "OmniInventory",
+   "description": "",
+   "skip": "licence is not open (non-commercial or no-derivatives terms)"
+  },
+  {
+   "repo": "https://github.com/Zendevve/CartoMapper",
+   "category": "addons",
+   "type": "addon",
+   "name": "CartoMapper",
+   "description": "",
+   "skip": "licence is not open (non-commercial or no-derivatives terms)"
+  },
+  {
+   "repo": "https://github.com/s0h2x/Equipence",
+   "category": "addons",
+   "type": "addon",
+   "name": "Equipence",
+   "description": "",
+   "skip": "licence is not open (non-commercial or no-derivatives terms)"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-autobalance",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "mod-autobalance",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-ah-bot",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "mod-ah-bot",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/NathanHandley/mod-ah-bot-plus",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "mod-ah-bot-plus",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-guildhouse",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "mod-guildhouse",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-random-enchants",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "mod-random-enchants",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-npc-services",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "mod-npc-services",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-weekend-xp",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "mod-weekend-xp",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/trickerer/Trinity-Bots",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Trinity-Bots",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-server-auto-shutdown",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "mod-server-auto-shutdown",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-npc-free-professions",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "mod-npc-free-professions",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-instance-reset",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "mod-instance-reset",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/coc0nut/AzerothCore-with-Playerbots-Docker-Setup",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "AzerothCore-with-Playerbots-Docker-Setup",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/Zidras/DBM-Warmane",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "DBM-Warmane",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/stoneharry/WoW-Spell-Editor",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "WoW-Spell-Editor",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/WowDevTools/WDBXEditor",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "WDBXEditor",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/NotCoffee418/TrinityCreator",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "TrinityCreator",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/bkader/KPack",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "KPack",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/Arcitec/GearScoreLite_Reborn",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "GearScoreLite_Reborn",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/sirus-addons/MoveAnything",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "MoveAnything",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/hypopheria2k/xCT_Plus_wotlk",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "xCT_Plus_wotlk",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/Sattva-108/AdiBags-WoTLK-3.3.5",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "AdiBags-WoTLK-3.3.5",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/anzz1/Carbonite-3.3.5",
+   "category": "realm-scripts",
+   "type": "module",
+   "name": "Carbonite-3.3.5",
+   "description": "",
+   "skip": "no licence file in the repo"
+  },
+  {
+   "repo": "https://github.com/vmangos/core",
+   "builds": [
+    "1.12"
+   ],
+   "category": "presets",
+   "type": "core",
+   "name": "VMaNGOS",
+   "description": "An open server core for 1.12.1 realms, aiming at the content of each patch of that era."
+  },
+  {
+   "repo": "https://github.com/cmangos/mangos-classic",
+   "builds": [
+    "1.12"
+   ],
+   "category": "presets",
+   "type": "core",
+   "name": "CMaNGOS Classic",
+   "description": "The CMaNGOS server core for 1.12.1, with its own scripting and a focus on accurate behaviour."
+  },
+  {
+   "repo": "https://github.com/cmangos/mangos-tbc",
+   "builds": [
+    "2.4.3"
+   ],
+   "category": "presets",
+   "type": "core",
+   "name": "CMaNGOS TBC",
+   "description": "The CMaNGOS server core for 2.4.3 realms."
+  },
+  {
+   "repo": "https://github.com/mangoszero/server",
+   "builds": [
+    "1.12"
+   ],
+   "category": "presets",
+   "type": "core",
+   "name": "MaNGOS Zero",
+   "description": "The MaNGOS server core for 1.12.1, with Eluna Lua scripting built in."
+  },
+  {
+   "repo": "https://github.com/mangosone/server",
+   "builds": [
+    "2.4.3"
+   ],
+   "category": "presets",
+   "type": "core",
+   "name": "MaNGOS One",
+   "description": "The MaNGOS server core for 2.4.3, with Eluna Lua scripting built in."
+  },
+  {
+   "repo": "https://github.com/mangosthree/server",
+   "builds": [
+    "4.3.4"
+   ],
+   "category": "presets",
+   "type": "core",
+   "name": "MaNGOS Three",
+   "description": "The MaNGOS server core for 4.3.4 realms."
+  },
+  {
+   "repo": "https://github.com/The-Cataclysm-Preservation-Project/TrinityCore",
+   "builds": [
+    "4.3.4"
+   ],
+   "category": "presets",
+   "type": "core",
+   "name": "Cataclysm Preservation Project",
+   "description": "A TrinityCore-based server core kept up for 4.3.4 realms."
+  },
+  {
+   "repo": "https://github.com/ProjectSkyfire/SkyFire_548",
+   "builds": [
+    "5.4.8"
+   ],
+   "category": "presets",
+   "type": "core",
+   "name": "SkyFire 5.4.8",
+   "description": "An open server core for 5.4.8 realms."
+  },
+  {
+   "repo": "https://github.com/shagu/pfUI",
+   "builds": [
+    "1.12",
+    "2.4.3"
+   ],
+   "category": "addons",
+   "type": "addon",
+   "name": "pfUI",
+   "description": "A complete interface replacement: unit frames, bars, bags, nameplates and more, in one addon."
+  },
+  {
+   "repo": "https://github.com/shagu/ShaguTweaks",
+   "builds": [
+    "1.12"
+   ],
+   "category": "addons",
+   "type": "addon",
+   "name": "ShaguTweaks",
+   "description": "Small quality-of-life changes to the default interface, each one switchable on its own."
+  },
+  {
+   "repo": "https://github.com/shagu/ShaguDPS",
+   "builds": [
+    "1.12"
+   ],
+   "category": "addons",
+   "type": "addon",
+   "name": "ShaguDPS",
+   "description": "A light damage and healing meter."
+  },
+  {
+   "repo": "https://github.com/shagu/ShaguPlates",
+   "builds": [
+    "1.12"
+   ],
+   "category": "addons",
+   "type": "addon",
+   "name": "ShaguPlates",
+   "description": "Nameplates with health, cast bars and debuffs."
+  }
+ ]
+}

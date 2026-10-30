@@ -1,0 +1,61 @@
+diff --git a/crates/benilla-app/src/golf/mod.rs b/crates/benilla-app/src/golf/mod.rs
+index 2cbd4b0f..5edd5c12 100644
+--- a/crates/benilla-app/src/golf/mod.rs
++++ b/crates/benilla-app/src/golf/mod.rs
+@@ -618,7 +618,8 @@ fn drain_bridge(
+     let here_spot = {
+         let f = cams.single().map(|t| t.forward().as_vec3()).unwrap_or(Vec3::NEG_Z);
+         let flat = Vec3::new(f.x, 0.0, f.z).try_normalize().unwrap_or(Vec3::NEG_Z);
+-        (player.pos + flat * 1.6, (-flat.x).atan2(-flat.z))
++        // Far enough ahead that the putting camera (behind the ball) stays in front of your own body.
++        (player.pos + flat * 4.5, (-flat.x).atan2(-flat.z))
+     };
+     let here = || here_spot;
+     for msg in inbox {
+@@ -681,8 +682,8 @@ fn drain_bridge(
+                 let Some(ball) = golf.balls.get(*name).map(|b| b.pos) else { continue };
+                 let Some(hole) = golf.hole() else { continue };
+                 let angle = w.get(2).and_then(|s| s.parse::<i32>().ok()).unwrap_or_else(|| golf::aim_at_cup(hole, ball));
++                // The hole's fly-over still plays first; the aim waits for it (Space skips it).
+                 golf.aim = Some(Aim { name: name.to_string(), angle: angle as f32, power: 0.0, charging: None });
+-                golf.flyover = None;
+             }
+             Some("noaim") => golf.aim = None,
+             Some("phase") => {
+@@ -782,6 +783,14 @@ fn aim_input(
+     if golf.roll.is_some() || capture.typing {
+         return;
+     }
++    // During the hole's fly-over the aim waits; Space skips the fly-over.
++    if golf.flyover.is_some() {
++        if keys.just_pressed(KeyCode::Space) {
++            golf.flyover = None;
++            golf.cam = None;
++        }
++        return;
++    }
+     let dt = time.delta_secs().min(0.1);
+     let now = time.elapsed_secs();
+     let zoom_in = keys.pressed(KeyCode::KeyW) || keys.pressed(KeyCode::ArrowUp);
+@@ -953,7 +962,7 @@ fn golf_camera(mut golf: ResMut<Golf>, time: Res<Time>, mut cams: Query<&mut Tra
+         let dir = if dir.length() > 0.5 { dir.normalize() } else { golf.world_dir(V3::new(0.0, 0.0, 1.0)) };
+         let eye = p - dir * 4.2 * golf.zoom + Vec3::Y * 2.4 * golf.zoom;
+         want = Some((eye, p, 3.5));
+-    } else if let Some(aim) = &golf.aim {
++    } else if let (None, Some(aim)) = (golf.flyover, &golf.aim) {
+         if let Some(ball) = golf.balls.get(&aim.name) {
+             let p = golf.world(ball.pos);
+             let (s, c) = benilla_mode::detmath::sin_cos_tenths(aim.angle.round() as i32);
+diff --git a/crates/benilla-app/src/golf/modes.rs b/crates/benilla-app/src/golf/modes.rs
+index e9bb2c6a..c191a8fa 100644
+--- a/crates/benilla-app/src/golf/modes.rs
++++ b/crates/benilla-app/src/golf/modes.rs
+@@ -206,7 +206,7 @@ pub(super) fn drain_modes(
+                     Some("here") => {
+                         let fwd = cams.single().map(|(_, t)| t.forward().as_vec3()).unwrap_or(Vec3::NEG_Z);
+                         let flat = Vec3::new(fwd.x, 0.0, fwd.z).try_normalize().unwrap_or(Vec3::NEG_Z);
+-                        Some((player.pos + flat * 3.0, (-flat.x).atan2(-flat.z)))
++                        Some((player.pos + flat * 14.0, (-flat.x).atan2(-flat.z)))
+                     }
+                     _ => match (f(1), f(2), f(3), f(4)) {
+                         (Some(x), Some(y), Some(z), Some(o)) => Some((benilla_assets::coords::wow_to_bevy([x, y, z]), o)),

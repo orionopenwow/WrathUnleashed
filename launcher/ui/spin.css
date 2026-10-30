@@ -1,0 +1,39 @@
+/* The Leyline spinner (owner 2026-10-30): the round mark as the loading logo. The swirl turns, the crystal stays
+   upright on top. One empty element, no script:
+
+     <span class="ly-spin" role="img" aria-label="Loading"></span>
+     <span class="ly-spin" style="--ly-spin-size: 64px"></span>     size (default 18px)
+     <span class="ly-spin slow"></span>                             the header mark: a calmer turn
+
+   The same rules ship with the website (stream/wrath_portal.py SPIN_CSS) and the game page
+   (stream/www-files/leyline-look.css); only the image paths differ. Reduced motion: the mark stands still. */
+.ly-spin {
+  --ly-spin-size: 18px;
+  --ly-spin-turn: 7s;
+  position: relative; display: inline-block; flex: none; vertical-align: middle;
+  width: var(--ly-spin-size); height: var(--ly-spin-size);
+}
+.ly-spin::before, .ly-spin::after {
+  content: ""; position: absolute; inset: 0; background: center / contain no-repeat; pointer-events: none;
+}
+.ly-spin::before {
+  background-image: url("art/brand/leyline-swirl-256.webp");
+  animation: ly-spin-turn var(--ly-spin-turn) linear infinite;
+  will-change: transform;
+}
+.ly-spin::after { background-image: url("art/brand/leyline-crystal-256.webp"); }
+.ly-spin.slow { --ly-spin-turn: 16s; }
+@keyframes ly-spin-turn { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ly-spin::before { animation: none; } }
+
+/* A status line that is busy (a text ending in "…": spin.js marks it) carries a small spinner before its words. */
+.busy > .ly-spin:first-child { --ly-spin-size: 15px; margin: -2px 7px 0 0; }
+/* a server pill that is checking: the spinner takes the dot's place */
+.srv-state:has(.busy) > .dot, .pill:has(.busy) > .dot { display: none; }
+/* the header mark: the same spinner in its ring, calmer (class slow) */
+.brand .ly-spin {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: radial-gradient(circle at 50% 45%, rgba(91, 141, 239, 0.18), rgba(139, 108, 240, 0.06) 70%);
+  box-shadow: 0 0 0 1px var(--t-border-strong);
+}
+.brand .ly-spin::before, .brand .ly-spin::after { inset: 3px; }

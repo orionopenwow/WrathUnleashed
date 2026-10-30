@@ -1,0 +1,7 @@
+## Interface: 30300
+## Title: OVQoL
+## Notes: WrathUnleashed quality of life: sell grays, auto-repair, coordinates, quest helper, /qol
+## Author: WrathUnleashed
+## Version: 1.0.0
+## SavedVariables: OVQoLDB
+OVQoL.lua

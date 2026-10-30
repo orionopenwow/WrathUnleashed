@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WrathUnleashed</title>
+<script>
+// The Leyline brand switch (wrath-page.js keeps "wu-brand" while it is on): the flat look, set before the first paint.
+// ?b=1 (wrath-early.js adds it while the switch is on) counts too, for a browser with storage off.
+var lyKept = null;
+try { lyKept = localStorage.getItem('wu-brand'); } catch (e) {}
+if (!lyKept && /[?&]b=1(&|$)/.test(location.search)) lyKept = 'Leyline';
+try {
+  if (lyKept) {
+    document.documentElement.className = 'ly-brand';
+    document.write('<link rel="stylesheet" href="./leyline-look.css">');
+  }
+} catch (e) {}
+</script>
+<style>
+html,body{margin:0;height:100%;color:#e9e4d4;font:16px/1.5 Georgia,serif}
+html:not(.ly-brand),html:not(.ly-brand) body{background:#070a12 url(./art/wu-load-orion.webp) center/cover no-repeat}
+html.ly-brand,html.ly-brand body{background:#15181f;color:#eef0f4;font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+html.ly-brand .box{background:#1e222b;border-color:#2c313c;border-radius:14px}
+html.ly-brand .box::before{content:"";display:block;width:64px;height:64px;margin:0 auto 14px;
+background:url(./art/leyline-crystal-128.png) center/contain no-repeat,url(./art/leyline-swirl-128.png) center/contain no-repeat}
+html.ly-brand h1{font:700 19px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#eef0f4}
+html.ly-brand button{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#5b8def;color:#fff;border-radius:10px}
+.wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
+.box{background:rgba(7,10,18,.84);border:1px solid #6b5a2e;border-radius:10px;padding:28px 34px;max-width:420px;text-align:center}
+h1{font-size:21px;font-weight:normal;color:#f0d389;margin:0 0 8px}
+button{margin-top:18px;font:600 16px Georgia,serif;padding:10px 22px;border-radius:8px;border:0;cursor:pointer;
+background:linear-gradient(#f0d389,#d8b25a);color:#1b1406}button:disabled{opacity:.6;cursor:default}
+</style></head>
+<body><div class="wrap"><div class="box"><h1 id="t"></h1><div id="b"></div><button id="go"></button></div></div>
+<script>
+// The one-tab guard's note page (wrath-early.js sends tabs here). No game runs on this page.
+(function () {
+  'use strict';
+  var q = new URLSearchParams(location.search);
+  var m = q.get('m') === 'moved' ? 'moved' : 'busy';
+  var r = q.get('r') || '/';
+  if (r.charAt(0) !== '/' || r.charAt(1) === '/' || r.charAt(1) === '\\') r = '/';   // same site only
+  var T = document.getElementById('t'), B = document.getElementById('b'), go = document.getElementById('go');
+  // The Leyline brand switch: wrath-page.js keeps the main realm's name here while it is on (else nothing is kept).
+  var brand = null;
+  try { brand = localStorage.getItem('wu-brand'); } catch (e) {}
+  if (!brand && q.get('b') === '1') brand = 'Leyline';
+  var site = brand ? 'Leyline' : 'WrathUnleashed';
+  if (brand) document.title = site;
+  if (m === 'moved') {
+    T.textContent = 'You’re playing in another tab';
+    B.textContent = 'This tab stepped aside so the other one could play.';
+    go.textContent = 'Play in this tab instead';
+  } else {
+    T.textContent = site + ' is already open in another tab';
+    B.textContent = 'Playing in two tabs at once signs you out of both. Play here and the other tab steps aside.';
+    go.textContent = 'Play here';
+  }
+  go.onclick = function () {
+    go.disabled = true; go.textContent = 'Starting…';
+    if (brand) { var sp = document.createElement('span'); sp.className = 'ly-spin'; sp.style.cssText = '--ly-spin-size:16px;margin-right:8px';
+      go.prepend(sp); }
+    try { if (typeof BroadcastChannel === 'function') new BroadcastChannel('wu-game').postMessage('take-over'); } catch (e) {}
+    var locks = navigator.locks;
+    if (locks && typeof locks.request === 'function') {
+      // Wait until the other tab has let go, then start here (the game page takes the lock itself).
+      // A tab that never answers (frozen, crashed, discarded) would hold the lock forever: after 6 s take
+      // it anyway (steal), so a stuck tab can't lock a player out of the game.
+      var done = false, ac = typeof AbortController === 'function' ? new AbortController() : null;
+      var go2 = function () { if (done) return; done = true; location.replace(r); };
+      var opts = ac ? { signal: ac.signal } : {};
+      locks.request('wu-game', opts, function () { go2(); return new Promise(function () {}); }).catch(function () {});
+      setTimeout(function () {
+        if (done) return;
+        if (ac) ac.abort();
+        go.textContent = 'Taking over…';
+        locks.request('wu-game', { steal: true }, function () { go2(); return new Promise(function () {}); })
+          .catch(function () { go2(); });
+      }, 6000);
+    } else {
+      setTimeout(function () { location.replace(r); }, 1500);
+    }
+  };
+})();
+</script></body></html>

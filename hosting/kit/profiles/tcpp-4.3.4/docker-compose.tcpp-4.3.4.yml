@@ -1,0 +1,127 @@
+# A 4.3.4 realm on TrinityCore (the 4.3.4 preservation fork): the host kit's "tcpp-4.3.4" profile ("host any client"). Started by
+# profiles/host-profile.sh or "profiles/Host a profile realm.bat" (from "Host a Wrath realm", `leyline host` or the
+# launcher's Host page when the profile is tcpp-4.3.4), which build the images on this PC first. Don't run it by
+# hand the first time.
+#
+# Same rules as the kit's main compose file: nothing is published on this PC's network. The servers and the
+# database sit on an internal Docker network with no internet access; only wu-agent talks out, to the relay.
+#
+#   .env (written by setup):  DB_ROOT_PASSWORD   generated, never leaves this PC
+#                             WU_IMAGE / WU_TAG   the images built here (leyline-tcpp-434-*:<version>-<commit>)
+#                             WU_DB_BUFFER, WU_PLAYER_LIMIT, WU_TOOLS_IMAGE
+#
+# Volumes: the database (accounts, characters, the world) and the client data (made from YOUR 4.3.4 client by the
+# extractors image; it never leaves this PC). The kit's 3.3.5a volumes are separate and untouched.
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "20m", max-file: "3" }
+
+x-db: &db
+  DB_HOST: realm-db
+  DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?run Host a Wrath realm first}
+
+networks:
+  realm:
+    internal: true      # the game servers and the database: no route out, nothing published
+  egress: {}            # the agent's way out to the relay
+
+services:
+  realm-db:
+    container_name: wu-host-realm-db
+    image: mariadb:11.4
+    restart: unless-stopped
+    logging: *logging
+    networks: [realm]
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?run Host a Wrath realm first}
+    command: ["--innodb-buffer-pool-size=${WU_DB_BUFFER:-512M}", "--max-allowed-packet=256M"]
+    volumes:
+      - tcpp-434-database:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 20s
+      retries: 60
+      start_period: 30s
+
+  realm-db-import:
+    image: ${WU_IMAGE:-leyline-tcpp-434}-db-import:${WU_TAG:?run Host a Wrath realm first}
+    logging: *logging
+    networks: [realm]
+    environment: *db
+    depends_on:
+      realm-db: { condition: service_healthy }
+
+  realm-logon:
+    container_name: wu-host-realm-logon
+    image: ${WU_IMAGE:-leyline-tcpp-434}-server:${WU_TAG:?run Host a Wrath realm first}
+    command: ["authserver"]
+    restart: unless-stopped
+    logging: *logging
+    networks: [realm]
+    environment: *db
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/3724"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      realm-db: { condition: service_healthy }
+      realm-db-import: { condition: service_completed_successfully }
+
+  realm-world:
+    container_name: wu-host-realm-world
+    image: ${WU_IMAGE:-leyline-tcpp-434}-server:${WU_TAG:?run Host a Wrath realm first}
+    command: ["worldserver"]
+    restart: unless-stopped
+    logging: *logging
+    networks: [realm]
+    stop_grace_period: 2m      # saves every online player on the way down
+    volumes:
+      # dbc, maps, vmaps, mmaps made from YOUR 4.3.4 client by the extractors image (read-only here)
+      - tcpp-434-client-data:/data:ro
+    environment:
+      <<: *db
+      WU_PLAYER_LIMIT: "${WU_PLAYER_LIMIT:-100}"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8085"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10m
+    depends_on:
+      realm-db: { condition: service_healthy }
+      realm-db-import: { condition: service_completed_successfully }
+
+  wu-agent:
+    container_name: wu-host-agent
+    image: ${WU_TOOLS_IMAGE:-wu-host-tools:1}
+    restart: unless-stopped
+    logging: *logging
+    networks: [realm, egress]
+    command: ["python", "-m", "wuhost.agent", "--state", "/state"]
+    user: "${WU_UID:-0}:${WU_GID:-0}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp"]
+    volumes:
+      - ./state:/state
+    environment:
+      DB_HOST: realm-db
+      DB_PASSWORD: ${DB_ROOT_PASSWORD:?run Host a Wrath realm first}
+      WU_REALM_DB_ID: "1"
+      WU_CORE: trinitycore        # wuhost/coredb.py: TrinityDB
+      WU_DB_AUTH: auth
+      WU_DB_CHARS: characters
+      WU_EXPANSION: "3"
+    depends_on:
+      realm-db: { condition: service_healthy }
+
+volumes:
+  tcpp-434-database:
+  tcpp-434-client-data:
+    name: leyline-tcpp-434-client-data
+    external: true

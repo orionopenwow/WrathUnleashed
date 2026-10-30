@@ -1,0 +1,13 @@
+# Runs wu-backup.service every night at 04:30 UTC (low-population hour for EU/US players).
+# Persistent=true: if the box was off at 04:30, the backup runs at the next boot.
+# Cron alternative (instead of this timer):  30 4 * * * root /srv/wrath/backup.sh >>/var/log/wu-backup.log 2>&1
+[Unit]
+Description=Nightly WrathUnleashed database backup
+
+[Timer]
+OnCalendar=*-*-* 04:30:00 UTC
+RandomizedDelaySec=10m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

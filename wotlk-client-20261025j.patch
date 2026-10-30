@@ -1,0 +1,1062 @@
+diff --git a/crates/benilla-app/src/golf/editor.rs b/crates/benilla-app/src/golf/editor.rs
+new file mode 100644
+index 00000000..82a4d8cd
+--- /dev/null
++++ b/crates/benilla-app/src/golf/editor.rs
+@@ -0,0 +1,883 @@
++//! The course editor: build minigolf holes in the world, piece by piece, then test and publish them.
++//!
++//! It works on the same picture the game shows: every change is written back to course text, parsed
++//! by [`golf::parse`] (so the editor can never save a course the game would refuse) and rebuilt by
++//! the game's own [`build_hole`]. The camera is the free-fly view (WASD, Space/C, Ctrl faster, hold
++//! the right button to look), kept within [`EDIT_REACH`] of the course.
++//!
++//! ```text
++//! LeylineGolf("editor on here\n<course text or empty>")    start (an empty text gets a starter hole)
++//! LeylineGolf("editor off")
++//! LeylineGolf("editor tool turf|sand|ice|wall|bump|water|boost|spin|slide|tee|cup|select")
++//! LeylineGolf("editor hole <n>") / ("editor addhole") / ("editor delhole")
++//! LeylineGolf("editor par <n>") / ("editor name <hole name>") / ("editor title <course title>")
++//! LeylineGolf("editor grid <yards>") / ("editor undo") / ("editor redo") / ("editor delete") / ("editor dup")
++//! LeylineGolf("editor set <speed|spin|travelx|travelz|seconds> <value>")
++//! LeylineGolf("editortext")   -> the course text
++//! LeylineGolf("editorstate")  -> "on=1 hole=2 holes=5 par=3 tool=wall sel=wall pieces=9 undo=4 redo=0 grid=0.25 name=..."
++//! ```
++//!
++//! In the world: click places the current piece (or picks one with the select tool), G carries the
++//! selection (click or G drops it), Q/E turn it (Shift: 1°), Z/X tilt it (blocks), the arrows size it
++//! (Shift: finer), [ and ] change its height, the wheel raises and lowers it, V duplicates it beside
++//! itself, Delete removes it, Ctrl+Z / Ctrl+Y undo and redo.
++
++use super::*;
++
++/// How far the edit camera may stray from the course origin (yards).
++const EDIT_REACH: f32 = 70.0;
++const UNDO_DEPTH: usize = 64;
++
++#[derive(Clone, Copy, PartialEq, Eq, Debug)]
++pub(super) enum Kind {
++    Turf,
++    Sand,
++    Ice,
++    Wall,
++    Bump,
++    Water,
++    Boost,
++    Spin,
++    Slide,
++}
++
++impl Kind {
++    const ALL: [Kind; 9] = [Kind::Turf, Kind::Sand, Kind::Ice, Kind::Wall, Kind::Bump, Kind::Water, Kind::Boost, Kind::Spin, Kind::Slide];
++
++    fn word(self) -> &'static str {
++        match self {
++            Kind::Turf => "turf",
++            Kind::Sand => "sand",
++            Kind::Ice => "ice",
++            Kind::Wall => "wall",
++            Kind::Bump => "bump",
++            Kind::Water => "water",
++            Kind::Boost => "boost",
++            Kind::Spin => "spin",
++            Kind::Slide => "slide",
++        }
++    }
++    fn from_word(w: &str) -> Option<Kind> {
++        Kind::ALL.into_iter().find(|k| k.word() == w)
++    }
++    fn is_block(self) -> bool {
++        matches!(self, Kind::Turf | Kind::Sand | Kind::Ice | Kind::Wall)
++    }
++}
++
++/// One piece as the editor holds it. `h` is the half-size (a bumper: x = radius, y = height;
++/// water and boosts use x and z). `a`, `b`, `t` are the kind's extras: boost speed; spin degrees
++/// per second; slide travel x, travel z and seconds.
++#[derive(Clone, PartialEq, Debug)]
++pub(super) struct Item {
++    kind: Kind,
++    c: V3,
++    h: V3,
++    yaw: i32,
++    pitch: i32,
++    a: f32,
++    b: f32,
++    t: f32,
++}
++
++impl Item {
++    fn new(kind: Kind, p: V3) -> Item {
++        let v = V3::new;
++        let (c, h, a, b, t) = match kind {
++            Kind::Turf | Kind::Sand | Kind::Ice => (p + v(0.0, -0.25, 0.0), v(1.5, 0.25, 2.0), 0.0, 0.0, 0.0),
++            Kind::Wall => (p + v(0.0, 0.15, 0.0), v(0.1, 0.4, 2.0), 0.0, 0.0, 0.0),
++            Kind::Bump => (p, v(0.3, 0.5, 0.3), 0.0, 0.0, 0.0),
++            Kind::Water => (p + v(0.0, -0.4, 0.0), v(1.5, 0.05, 1.5), 0.0, 0.0, 0.0),
++            Kind::Boost => (p, v(0.6, 0.02, 0.6), 9.0, 0.0, 0.0),
++            Kind::Spin => (p + v(0.0, 0.3, 0.0), v(1.35, 0.3, 0.12), 90.0, 0.0, 0.0),
++            Kind::Slide => (p + v(0.0, 0.2, 0.0), v(0.4, 0.25, 0.12), 1.2, 0.0, 3.0),
++        };
++        Item { kind, c, h, yaw: 0, pitch: 0, a, b, t }
++    }
++
++    fn line(&self) -> String {
++        let (c, h) = (self.c, self.h);
++        let deg = |t: i32| num(t as f32 / 10.0);
++        let p = format!("{} {} {}", num(c.x), num(c.y), num(c.z));
++        match self.kind {
++            k if k.is_block() => {
++                let mut s = format!("{} {}   {} {} {}", k.word(), p, num(h.x), num(h.y), num(h.z));
++                if self.yaw != 0 || self.pitch != 0 {
++                    s += &format!("  {} {}", deg(self.yaw), deg(self.pitch));
++                }
++                s
++            }
++            Kind::Bump => format!("bump {}   {} {}", p, num(h.x), num(h.y)),
++            Kind::Water => format!("water {}   {} {}", p, num(h.x), num(h.z)),
++            Kind::Boost => format!("boost {}   {} {}  {} {}", p, num(h.x), num(h.z), deg(self.yaw), num(self.a)),
++            Kind::Spin => format!("spin {}   {} {} {}  {}", p, num(h.x), num(h.y), num(h.z), self.a.round() as i32),
++            Kind::Slide => format!("slide {}   {} {} {}  {} {}  {}", p, num(h.x), num(h.y), num(h.z), num(self.a), num(self.b), num(self.t)),
++            _ => unreachable!(),
++        }
++    }
++
++    /// The box the editor picks and outlines: centre, half-size, rotation (hole-local).
++    fn bounds(&self) -> (V3, V3, Rot) {
++        match self.kind {
++            Kind::Bump => (self.c + V3::new(0.0, self.h.y * 0.5, 0.0), V3::new(self.h.x, self.h.y * 0.5, self.h.x), Rot::IDENTITY),
++            Kind::Water | Kind::Boost => (self.c, V3::new(self.h.x, 0.05, self.h.z), Rot::yaw_pitch(self.yaw, 0)),
++            _ => (self.c, self.h, Rot::yaw_pitch(self.yaw, self.pitch)),
++        }
++    }
++}
++
++/// A number for course text: three decimals at most, no trailing zeros, no "-0".
++fn num(v: f32) -> String {
++    let s = format!("{:.3}", v);
++    let s = s.trim_end_matches('0').trim_end_matches('.').to_string();
++    if s == "-0" || s.is_empty() {
++        "0".into()
++    } else {
++        s
++    }
++}
++
++#[derive(Clone, PartialEq, Debug)]
++pub(super) struct EditHole {
++    name: String,
++    par: u32,
++    tee: V3,
++    cup: V3,
++    items: Vec<Item>,
++}
++
++impl EditHole {
++    fn starter(n: usize) -> EditHole {
++        let v = V3::new;
++        let mut items = vec![Item { h: v(1.5, 0.25, 5.5), ..Item::new(Kind::Turf, v(0.0, 0.0, 4.0)) }];
++        for (c, h) in [
++            (v(1.6, 0.0, 4.0), v(0.1, 0.4, 5.6)),
++            (v(-1.6, 0.0, 4.0), v(0.1, 0.4, 5.6)),
++            (v(0.0, 0.0, 9.6), v(1.7, 0.4, 0.1)),
++            (v(0.0, 0.0, -1.6), v(1.7, 0.4, 0.1)),
++        ] {
++            items.push(Item { h, ..Item::new(Kind::Wall, c) });
++        }
++        EditHole { name: format!("Hole {n}"), par: 2, tee: V3::ZERO, cup: v(0.0, 0.0, 8.0), items }
++    }
++
++    fn from_hole(h: &Hole) -> EditHole {
++        let mut items = Vec::new();
++        for p in &h.pieces {
++            let item = match (p.shape, p.motion) {
++                (Shape::Block { half, yaw_t, pitch_t }, Motion::Still) => Item {
++                    kind: match p.surface {
++                        Surface::Sand => Kind::Sand,
++                        Surface::Ice => Kind::Ice,
++                        Surface::Wall | Surface::Bumper => Kind::Wall,
++                        Surface::Turf => Kind::Turf,
++                    },
++                    c: p.center,
++                    h: half,
++                    yaw: yaw_t,
++                    pitch: pitch_t,
++                    a: 0.0,
++                    b: 0.0,
++                    t: 0.0,
++                },
++                (Shape::Block { half, .. }, Motion::Spin { deg_per_s }) => {
++                    Item { kind: Kind::Spin, c: p.center, h: half, yaw: 0, pitch: 0, a: deg_per_s as f32, b: 0.0, t: 0.0 }
++                }
++                (Shape::Block { half, .. }, Motion::Slide { travel, period }) => Item {
++                    kind: Kind::Slide,
++                    c: p.center,
++                    h: half,
++                    yaw: 0,
++                    pitch: 0,
++                    a: travel.x,
++                    b: travel.z,
++                    t: period as f32 / golf::TICK_HZ as f32,
++                },
++                (Shape::Post { r, h }, _) => Item { kind: Kind::Bump, c: p.center, h: V3::new(r, h, r), yaw: 0, pitch: 0, a: 0.0, b: 0.0, t: 0.0 },
++            };
++            items.push(item);
++        }
++        for w in &h.water {
++            items.push(Item { kind: Kind::Water, c: w.center, h: V3::new(w.half_x, 0.05, w.half_z), yaw: 0, pitch: 0, a: 0.0, b: 0.0, t: 0.0 });
++        }
++        for b in &h.boosts {
++            items.push(Item { kind: Kind::Boost, c: b.center, h: V3::new(b.half_x, 0.02, b.half_z), yaw: b.yaw_t, pitch: 0, a: b.speed, b: 0.0, t: 0.0 });
++        }
++        EditHole { name: h.name.clone(), par: h.par, tee: h.tee, cup: h.cup, items }
++    }
++}
++
++#[derive(Clone, Copy, PartialEq, Eq, Debug)]
++pub(super) enum Tool {
++    Select,
++    Piece(Kind),
++    Tee,
++    Cup,
++}
++
++#[derive(Resource)]
++pub(super) struct Editor {
++    pub(super) on: bool,
++    title: String,
++    author: String,
++    holes: Vec<EditHole>,
++    hole: usize,
++    tool: Tool,
++    sel: Option<usize>,
++    /// Carrying the selection: its pose before the carry, for cancel.
++    carry: Option<Item>,
++    undo: Vec<(Vec<EditHole>, usize)>,
++    redo: Vec<(Vec<EditHole>, usize)>,
++    grid: f32,
++    /// The cursor's point on the course (hole-local), for the ghost and placing.
++    cursor: Option<V3>,
++    msg: String,
++    rebuild: bool,
++}
++
++impl Default for Editor {
++    fn default() -> Self {
++        Editor {
++            on: false,
++            title: "My Course".into(),
++            author: String::new(),
++            holes: Vec::new(),
++            hole: 0,
++            tool: Tool::Select,
++            sel: None,
++            carry: None,
++            undo: Vec::new(),
++            redo: Vec::new(),
++            grid: 0.25,
++            cursor: None,
++            msg: String::new(),
++            rebuild: false,
++        }
++    }
++}
++
++fn clean_name(s: &str, max: usize) -> String {
++    let s: String = s.chars().filter(|c| c.is_alphanumeric() || " -'!&.".contains(*c)).take(max).collect();
++    s.trim().to_string()
++}
++
++impl Editor {
++    pub(super) fn text(&self) -> String {
++        let mut out = format!("course {}\n", if self.title.is_empty() { "My Course" } else { &self.title });
++        if !self.author.is_empty() {
++            out += &format!("by {}\n", self.author);
++        }
++        for h in &self.holes {
++            out += &format!("\nhole {} {}\n", h.par, h.name);
++            out += &format!("tee  {} {} {}\n", num(h.tee.x), num(h.tee.y), num(h.tee.z));
++            out += &format!("cup  {} {} {}\n", num(h.cup.x), num(h.cup.y), num(h.cup.z));
++            for i in &h.items {
++                out += &i.line();
++                out.push('\n');
++            }
++        }
++        out
++    }
++
++    fn cur(&mut self) -> Option<&mut EditHole> {
++        self.holes.get_mut(self.hole)
++    }
++
++    fn checkpoint(&mut self) {
++        self.undo.push((self.holes.clone(), self.hole));
++        if self.undo.len() > UNDO_DEPTH {
++            self.undo.remove(0);
++        }
++        self.redo.clear();
++    }
++
++    /// Applies an edit if the result still parses; otherwise rolls it back and says why.
++    fn commit(&mut self, what: &str) -> bool {
++        match golf::parse(&self.text()) {
++            Ok(_) => {
++                self.rebuild = true;
++                self.msg = what.to_string();
++                true
++            }
++            Err(e) => {
++                if let Some((holes, hole)) = self.undo.pop() {
++                    self.holes = holes;
++                    self.hole = hole;
++                }
++                self.msg = format!("Not allowed: {}", e.message);
++                false
++            }
++        }
++    }
++
++    fn snap(&self, v: f32) -> f32 {
++        if self.grid > 0.0 {
++            (v / self.grid).round() * self.grid
++        } else {
++            v
++        }
++    }
++
++    pub(super) fn state(&self) -> String {
++        let h = self.holes.get(self.hole);
++        let sel = self.sel.and_then(|i| h.and_then(|h| h.items.get(i)));
++        let tool = match self.tool {
++            Tool::Select => "select",
++            Tool::Piece(k) => k.word(),
++            Tool::Tee => "tee",
++            Tool::Cup => "cup",
++        };
++        format!(
++            "on={} hole={} holes={} par={} tool={} sel={} pieces={} undo={} redo={} grid={} carry={} name={}|{}",
++            self.on as u8,
++            self.hole + 1,
++            self.holes.len(),
++            h.map(|h| h.par).unwrap_or(0),
++            tool,
++            sel.map(|s| format!("{}:{}:{}:{}:{}:{}:{}:{}:{}", s.kind.word(), num(s.h.x * 2.0), num(s.h.y * 2.0), num(s.h.z * 2.0), num(s.yaw as f32 / 10.0), num(s.pitch as f32 / 10.0), num(s.a), num(s.b), num(s.t)))
++                .unwrap_or_else(|| "-".into()),
++            h.map(|h| h.items.len()).unwrap_or(0),
++            self.undo.len(),
++            self.redo.len(),
++            num(self.grid),
++            self.carry.is_some() as u8,
++            h.map(|h| h.name.as_str()).unwrap_or(""),
++            self.msg,
++        )
++    }
++}
++
++// ------------------------------------------------------------------------------------------------
++// Picking
++
++/// The world ray under the cursor, in hole-local yards: origin and direction.
++fn cursor_ray(golf: &Golf, window: &Window, cam: (&Camera, &GlobalTransform)) -> Option<(V3, V3)> {
++    let at = window.cursor_position()?;
++    let ray = cam.0.viewport_to_world(cam.1, at).ok()?;
++    let inv = golf.basis().inverse();
++    let o = inv * (ray.origin - golf.origin);
++    let d = inv * ray.direction.as_vec3();
++    Some((V3::new(o.x, o.y - LIFT, -o.z), V3::new(d.x, d.y, -d.z)))
++}
++
++/// Ray against an oriented box (slabs): the distance along the ray, if it hits.
++fn ray_box(o: V3, d: V3, c: V3, h: V3, r: &Rot) -> Option<f32> {
++    let lo = r.unapply(o - c);
++    let ld = r.unapply(d);
++    let (mut t0, mut t1) = (0.0f32, f32::MAX);
++    for (p, v, e) in [(lo.x, ld.x, h.x), (lo.y, ld.y, h.y), (lo.z, ld.z, h.z)] {
++        if v.abs() < 1e-8 {
++            if p.abs() > e {
++                return None;
++            }
++            continue;
++        }
++        let (a, b) = ((-e - p) / v, (e - p) / v);
++        let (a, b) = if a < b { (a, b) } else { (b, a) };
++        t0 = t0.max(a);
++        t1 = t1.min(b);
++        if t0 > t1 {
++            return None;
++        }
++    }
++    Some(t0)
++}
++
++/// What the cursor is over: the nearest piece (index, hit point) and the point to place at.
++fn pick(hole: &EditHole, o: V3, d: V3) -> (Option<(usize, V3)>, Option<V3>) {
++    let mut best: Option<(usize, f32)> = None;
++    for (i, item) in hole.items.iter().enumerate() {
++        let (c, h, r) = item.bounds();
++        if let Some(t) = ray_box(o, d, c, h, &r) {
++            if best.is_none_or(|(_, bt)| t < bt) {
++                best = Some((i, t));
++            }
++        }
++    }
++    let hit = best.map(|(i, t)| (i, o + d * t));
++    // Placing lands on whatever the cursor touches, else on the course's ground level (y = 0).
++    let ground = if d.y.abs() > 1e-5 {
++        let t = -o.y / d.y;
++        (t > 0.0 && t < 400.0).then(|| o + d * t)
++    } else {
++        None
++    };
++    let place = hit.map(|(_, p)| p).or(ground);
++    (hit, place)
++}
++
++// ------------------------------------------------------------------------------------------------
++// Commands from the HUD
++
++pub(super) fn editor_command(ed: &mut Editor, golf: &mut Golf, w: &[&str], body: &str, origin: Option<(Vec3, f32)>) {
++    match w.first().copied() {
++        Some("on") => {
++            let course = if body.trim().is_empty() { None } else { golf::parse(body).ok() };
++            *ed = Editor { on: true, ..Editor::default() };
++            match course {
++                Some(c) => {
++                    ed.title = c.title.clone();
++                    ed.author = c.author.clone();
++                    ed.holes = c.holes.iter().map(EditHole::from_hole).collect();
++                }
++                None => ed.holes = vec![EditHole::starter(1)],
++            }
++            if let Some((o, yaw)) = origin {
++                golf.origin = o;
++                golf.yaw = yaw;
++            }
++            golf.zoom = 1.0;
++            ed.rebuild = true;
++            ed.msg = "Click to place, G to carry, Q/E to turn".into();
++        }
++        Some("off") => {
++            ed.on = false;
++            ed.rebuild = true;
++        }
++        Some("tool") => {
++            ed.tool = match w.get(1).copied() {
++                Some("tee") => Tool::Tee,
++                Some("cup") => Tool::Cup,
++                Some(k) => Kind::from_word(k).map(Tool::Piece).unwrap_or(Tool::Select),
++                None => Tool::Select,
++            };
++            ed.carry = None;
++        }
++        Some("hole") => {
++            if let Some(n) = w.get(1).and_then(|s| s.parse::<usize>().ok()) {
++                if n >= 1 && n <= ed.holes.len() {
++                    ed.hole = n - 1;
++                    ed.sel = None;
++                    ed.rebuild = true;
++                }
++            }
++        }
++        Some("addhole") => {
++            if ed.holes.len() < golf::MAX_HOLES {
++                ed.checkpoint();
++                let n = ed.holes.len() + 1;
++                ed.holes.push(EditHole::starter(n));
++                ed.hole = n - 1;
++                ed.sel = None;
++                ed.commit("A new hole");
++            }
++        }
++        Some("delhole") => {
++            if ed.holes.len() > 1 {
++                ed.checkpoint();
++                ed.holes.remove(ed.hole);
++                ed.hole = ed.hole.min(ed.holes.len() - 1);
++                ed.sel = None;
++                ed.commit("Hole removed");
++            } else {
++                ed.msg = "A course needs at least one hole".into();
++            }
++        }
++        Some("par") => {
++            if let Some(p) = w.get(1).and_then(|s| s.parse::<u32>().ok()).filter(|p| (1..=9).contains(p)) {
++                ed.checkpoint();
++                if let Some(h) = ed.cur() {
++                    h.par = p;
++                }
++                ed.commit("Par set");
++            }
++        }
++        Some("name") => {
++            let name = clean_name(&w[1..].join(" "), 40);
++            if !name.is_empty() {
++                ed.checkpoint();
++                if let Some(h) = ed.cur() {
++                    h.name = name;
++                }
++                ed.commit("Hole renamed");
++            }
++        }
++        Some("title") => {
++            let t = clean_name(&w[1..].join(" "), 48);
++            if !t.is_empty() {
++                ed.title = t;
++            }
++        }
++        Some("author") => ed.author = clean_name(&w[1..].join(" "), 32),
++        Some("grid") => {
++            if let Some(g) = w.get(1).and_then(|s| s.parse::<f32>().ok()).filter(|g| (0.0..=2.0).contains(g)) {
++                ed.grid = g;
++            }
++        }
++        Some("undo") => undo(ed, true),
++        Some("redo") => undo(ed, false),
++        Some("delete") => delete(ed),
++        Some("dup") => duplicate(ed),
++        Some("set") => {
++            let (Some(field), Some(v)) = (w.get(1).copied(), w.get(2).and_then(|s| s.parse::<f32>().ok())) else {
++                return;
++            };
++            let Some(i) = ed.sel else { return };
++            ed.checkpoint();
++            if let Some(item) = ed.cur().and_then(|h| h.items.get_mut(i)) {
++                match field {
++                    "speed" | "spin" | "travelx" => item.a = v,
++                    "travelz" => item.b = v,
++                    "seconds" => item.t = v,
++                    _ => {}
++                }
++            }
++            ed.commit("Changed");
++        }
++        _ => {}
++    }
++}
++
++fn undo(ed: &mut Editor, back: bool) {
++    let (from, to) = if back { (&mut ed.undo, &mut ed.redo) } else { (&mut ed.redo, &mut ed.undo) };
++    if let Some((holes, hole)) = from.pop() {
++        to.push((std::mem::replace(&mut ed.holes, holes), ed.hole));
++        ed.hole = hole.min(ed.holes.len().saturating_sub(1));
++        ed.sel = None;
++        ed.carry = None;
++        ed.rebuild = true;
++        ed.msg = if back { "Undone".into() } else { "Redone".into() };
++    }
++}
++
++fn delete(ed: &mut Editor) {
++    let Some(i) = ed.sel else { return };
++    ed.checkpoint();
++    if let Some(h) = ed.cur() {
++        if i < h.items.len() {
++            h.items.remove(i);
++        }
++    }
++    ed.sel = None;
++    ed.carry = None;
++    ed.commit("Removed");
++}
++
++fn duplicate(ed: &mut Editor) {
++    let Some(i) = ed.sel else { return };
++    ed.checkpoint();
++    let Some(h) = ed.cur() else { return };
++    let Some(item) = h.items.get(i).cloned() else { return };
++    // Beside itself, to its right: lanes and walls lay out in a row.
++    let (s, c) = benilla_mode::detmath::sin_cos_tenths(item.yaw + 900);
++    let step = item.h.x * 2.0 + if item.kind == Kind::Wall { 0.0 } else { 0.05 };
++    let copy = Item { c: item.c + V3::new(s * step, 0.0, c * step), ..item };
++    h.items.push(copy);
++    let n = h.items.len() - 1;
++    ed.sel = Some(n);
++    ed.commit("Duplicated");
++}
++
++// ------------------------------------------------------------------------------------------------
++// The editor's frame
++
++#[allow(clippy::too_many_arguments)]
++pub(super) fn editor_input(
++    mut ed: ResMut<Editor>,
++    mut golf: ResMut<Golf>,
++    keys: Res<ButtonInput<KeyCode>>,
++    buttons: Res<ButtonInput<MouseButton>>,
++    scroll: Res<bevy::input::mouse::AccumulatedMouseScroll>,
++    over_ui: Res<crate::ui_script::PointerOverUi>,
++    capture: Res<crate::ui_script::UiKeyboardCapture>,
++    window: Query<&Window, With<bevy::window::PrimaryWindow>>,
++    cams: Query<(&Camera, &GlobalTransform), With<FlyCam>>,
++) {
++    if !ed.on {
++        return;
++    }
++    let (Ok(window), Ok(cam)) = (window.single(), cams.single()) else {
++        return;
++    };
++    let hole_idx = ed.hole;
++    let Some(hole) = ed.holes.get(hole_idx).cloned() else {
++        return;
++    };
++    let ray = cursor_ray(&golf, window, cam);
++    let (hit, place) = ray.map(|(o, d)| pick(&hole, o, d)).unwrap_or((None, None));
++    let place = place.map(|p| V3::new(ed.snap(p.x), p.y, ed.snap(p.z)));
++    ed.cursor = place;
++    let typing = capture.typing;
++    let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
++    let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
++    let click = buttons.just_pressed(MouseButton::Left) && !over_ui.0;
++
++    // Carrying: the piece follows the cursor at its own height; a click or G drops it.
++    if let (Some(i), Some(_)) = (ed.sel, ed.carry.clone()) {
++        if let (Some(p), Some((o, d))) = (place, ray) {
++            let y = hole.items.get(i).map(|it| it.c.y).unwrap_or(0.0);
++            // Follow on the plane at the piece's own height, so lifting it doesn't make it run away.
++            let t = if d.y.abs() > 1e-5 { (y - o.y) / d.y } else { -1.0 };
++            let at = if t > 0.0 && t < 400.0 { o + d * t } else { p };
++            let snapped = V3::new(ed.snap(at.x), y, ed.snap(at.z));
++            if let Some(item) = ed.cur().and_then(|h| h.items.get_mut(i)) {
++                item.c = snapped;
++            }
++        }
++        if !typing && keys.just_pressed(KeyCode::Backspace) {
++            let before = ed.carry.take().expect("carrying");
++            if let Some(item) = ed.cur().and_then(|h| h.items.get_mut(i)) {
++                *item = before;
++            }
++            ed.undo.pop();
++            ed.msg = "Put back".into();
++            return;
++        }
++        if click || (!typing && keys.just_pressed(KeyCode::KeyG)) {
++            ed.carry = None;
++            ed.commit("Placed");
++        }
++        return;
++    }
++
++    if click {
++        match ed.tool {
++            Tool::Select => {
++                ed.sel = hit.map(|(i, _)| i);
++                ed.msg = match ed.sel {
++                    Some(i) => format!("Selected the {}", hole.items[i].kind.word()),
++                    None => String::new(),
++                };
++            }
++            Tool::Piece(kind) => {
++                if let Some(p) = place {
++                    ed.checkpoint();
++                    let item = Item::new(kind, p);
++                    if let Some(h) = ed.cur() {
++                        if h.items.len() < golf::MAX_PIECES {
++                            h.items.push(item);
++                            let n = h.items.len() - 1;
++                            ed.sel = Some(n);
++                        }
++                    }
++                    let word = kind.word();
++                    ed.commit(&format!("Placed a {word}"));
++                }
++            }
++            Tool::Tee | Tool::Cup => {
++                if let Some(p) = hit.map(|(_, p)| p).or(place) {
++                    ed.checkpoint();
++                    let tool = ed.tool;
++                    let snapped = V3::new(ed.snap(p.x), p.y, ed.snap(p.z));
++                    if let Some(h) = ed.cur() {
++                        if tool == Tool::Tee {
++                            h.tee = snapped;
++                        } else {
++                            h.cup = snapped;
++                        }
++                    }
++                    ed.commit(if tool == Tool::Tee { "Tee moved" } else { "Cup moved" });
++                }
++            }
++        }
++    }
++
++    if typing {
++        return;
++    }
++    if ctrl && keys.just_pressed(KeyCode::KeyZ) {
++        return undo(&mut ed, true);
++    }
++    if ctrl && keys.just_pressed(KeyCode::KeyY) {
++        return undo(&mut ed, false);
++    }
++    if keys.just_pressed(KeyCode::Delete) {
++        return delete(&mut ed);
++    }
++    if keys.just_pressed(KeyCode::KeyV) {
++        return duplicate(&mut ed);
++    }
++    let Some(i) = ed.sel else {
++        return;
++    };
++    if keys.just_pressed(KeyCode::KeyG) {
++        ed.checkpoint();
++        ed.carry = hole.items.get(i).cloned();
++        ed.msg = "Carrying: click or G to drop, Backspace to put back".into();
++        return;
++    }
++    // Small edits, each one undoable.
++    let turn = if shift { 10 } else { 150 };
++    let size = if shift { 0.05 } else { 0.25 };
++    let mut edit: Option<Box<dyn Fn(&mut Item)>> = None;
++    if keys.just_pressed(KeyCode::KeyQ) {
++        edit = Some(Box::new(move |it: &mut Item| it.yaw = (it.yaw - turn).rem_euclid(3600)));
++    } else if keys.just_pressed(KeyCode::KeyE) {
++        edit = Some(Box::new(move |it: &mut Item| it.yaw = (it.yaw + turn).rem_euclid(3600)));
++    } else if keys.just_pressed(KeyCode::KeyZ) {
++        edit = Some(Box::new(|it: &mut Item| if it.kind.is_block() { it.pitch = (it.pitch - 10).max(-450) }));
++    } else if keys.just_pressed(KeyCode::KeyX) {
++        edit = Some(Box::new(|it: &mut Item| if it.kind.is_block() { it.pitch = (it.pitch + 10).min(450) }));
++    } else if keys.just_pressed(KeyCode::ArrowRight) {
++        edit = Some(Box::new(move |it: &mut Item| it.h.x = (it.h.x + size * 0.5).min(30.0)));
++    } else if keys.just_pressed(KeyCode::ArrowLeft) {
++        edit = Some(Box::new(move |it: &mut Item| it.h.x = (it.h.x - size * 0.5).max(0.05)));
++    } else if keys.just_pressed(KeyCode::ArrowUp) {
++        edit = Some(Box::new(move |it: &mut Item| it.h.z = (it.h.z + size * 0.5).min(30.0)));
++    } else if keys.just_pressed(KeyCode::ArrowDown) {
++        edit = Some(Box::new(move |it: &mut Item| it.h.z = (it.h.z - size * 0.5).max(0.05)));
++    } else if keys.just_pressed(KeyCode::BracketRight) {
++        edit = Some(Box::new(move |it: &mut Item| it.h.y = (it.h.y + size * 0.2).min(10.0)));
++    } else if keys.just_pressed(KeyCode::BracketLeft) {
++        edit = Some(Box::new(move |it: &mut Item| it.h.y = (it.h.y - size * 0.2).max(0.02)));
++    } else if scroll.delta.y != 0.0 && !over_ui.0 {
++        let dy = scroll.delta.y.signum() * if shift { 0.25 } else { 0.05 };
++        edit = Some(Box::new(move |it: &mut Item| it.c.y = (it.c.y + dy).clamp(-20.0, 20.0)));
++    }
++    if let Some(f) = edit {
++        ed.checkpoint();
++        if let Some(item) = ed.cur().and_then(|h| h.items.get_mut(i)) {
++            f(item);
++            // Bumpers stay round.
++            if item.kind == Kind::Bump {
++                item.h.z = item.h.x;
++            }
++        }
++        ed.commit("Changed");
++    }
++    let _ = &mut golf;
++}
++
++/// Rebuilds the hole after a change, through the game's own course pipeline.
++pub(super) fn editor_rebuild(
++    mut ed: ResMut<Editor>,
++    mut golf: ResMut<Golf>,
++    mut commands: Commands,
++    mut meshes: ResMut<Assets<Mesh>>,
++    mut materials: ResMut<Assets<StandardMaterial>>,
++    time: Res<Time>,
++    mut player: ResMut<Player>,
++) {
++    if !ed.rebuild {
++        return;
++    }
++    ed.rebuild = false;
++    if !ed.on {
++        clear(&mut golf, &mut commands);
++        golf.course = None;
++        player.detached = false;
++        return;
++    }
++    // The free building camera, as edit mode's.
++    player.detached = true;
++    match golf::parse(&ed.text()) {
++        Ok(c) => {
++            golf.course = Some(c);
++            golf.hole = ed.hole;
++            build_hole(&mut golf, &mut commands, &mut meshes, &mut materials, time.elapsed_secs());
++            golf.flyover = None;
++            golf.cam = None;
++            // The tee ball, so the start is visible.
++            let tee = ed.holes[ed.hole].tee + V3::new(0.0, BALL_R, 0.0);
++            spawn_ball(&mut golf, &mut commands, &mut meshes, &mut materials, "tee", 0, tee);
++        }
++        Err(e) => ed.msg = format!("Can't show this hole: {e}"),
++    }
++}
++
++/// Keeps the edit camera near the course.
++pub(super) fn editor_camera(ed: Res<Editor>, golf: Res<Golf>, mut cams: Query<&mut Transform, With<FlyCam>>) {
++    if !ed.on {
++        return;
++    }
++    if let Ok(mut t) = cams.single_mut() {
++        let off = t.translation - golf.origin;
++        if off.length() > EDIT_REACH {
++            t.translation = golf.origin + off.normalize() * EDIT_REACH;
++        }
++    }
++}
++
++/// The ghost of what a click would place, the selection's outline, and the tee and cup markers.
++pub(super) fn editor_gizmos(ed: Res<Editor>, golf: Res<Golf>, mut gizmos: Gizmos) {
++    if !ed.on {
++        return;
++    }
++    let Some(hole) = ed.holes.get(ed.hole) else {
++        return;
++    };
++    let outline = |gizmos: &mut Gizmos, item: &Item, color: Color| {
++        let (c, h, r) = item.bounds();
++        let corners: Vec<Vec3> = [
++            (-1.0, -1.0, -1.0),
++            (1.0, -1.0, -1.0),
++            (1.0, 1.0, -1.0),
++            (-1.0, 1.0, -1.0),
++            (-1.0, -1.0, 1.0),
++            (1.0, -1.0, 1.0),
++            (1.0, 1.0, 1.0),
++            (-1.0, 1.0, 1.0),
++        ]
++        .iter()
++        .map(|(x, y, z)| golf.world(c + r.apply(V3::new(h.x * x, h.y * y, h.z * z))))
++        .collect();
++        for (a, b) in [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)] {
++            gizmos.line(corners[a], corners[b], color);
++        }
++    };
++    if let Some(item) = ed.sel.and_then(|i| hole.items.get(i)) {
++        let col = if ed.carry.is_some() { Color::srgb(0.3, 0.9, 1.0) } else { Color::srgb(1.0, 0.85, 0.2) };
++        outline(&mut gizmos, item, col);
++        // Facing: an arrow along the piece's +z.
++        let (s, c) = benilla_mode::detmath::sin_cos_tenths(item.yaw);
++        let top = item.c + V3::new(0.0, item.h.y + 0.05, 0.0);
++        gizmos.arrow(golf.world(top), golf.world(top + V3::new(s, 0.0, c) * (item.h.z + 0.4)), col);
++    }
++    if let (Some(p), Tool::Piece(kind)) = (ed.cursor, ed.tool) {
++        if ed.carry.is_none() {
++            outline(&mut gizmos, &Item::new(kind, p), Color::srgba(1.0, 1.0, 1.0, 0.55));
++        }
++    }
++    if let Some(p) = ed.cursor {
++        let flat = Quat::from_rotation_arc(Vec3::Z, Vec3::Y);
++        gizmos.circle(Isometry3d::new(golf.world(p) + Vec3::Y * 0.03, flat), 0.18, Color::srgba(1.0, 1.0, 1.0, 0.8)).resolution(16);
++        if ed.grid > 0.0 {
++            let faint = Color::srgba(0.85, 0.95, 1.0, 0.22);
++            for k in -4..=4 {
++                let o = k as f32 * ed.grid;
++                let n = 4.0 * ed.grid;
++                gizmos.line(golf.world(p + V3::new(o, 0.02, -n)), golf.world(p + V3::new(o, 0.02, n)), faint);
++                gizmos.line(golf.world(p + V3::new(-n, 0.02, o)), golf.world(p + V3::new(n, 0.02, o)), faint);
++            }
++        }
++    }
++    let flat = Quat::from_rotation_arc(Vec3::Z, Vec3::Y);
++    gizmos.circle(Isometry3d::new(golf.world(hole.tee) + Vec3::Y * 0.03, flat), 0.35, Color::srgb(0.4, 1.0, 0.5)).resolution(20);
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn the_editor_round_trips_the_shipped_course() {
++        let course = golf::parse(golf::MEADOW_NINE).unwrap();
++        let mut ed = Editor { on: true, ..Editor::default() };
++        ed.title = course.title.clone();
++        ed.author = course.author.clone();
++        ed.holes = course.holes.iter().map(EditHole::from_hole).collect();
++        let again = golf::parse(&ed.text()).expect("the editor's text parses");
++        for (a, b) in course.holes.iter().zip(&again.holes) {
++            let (sa, sb) = (golf::simulate(a, a.tee_ball(), Shot { angle_t: 40, power_m: 700 }, 5), golf::simulate(b, b.tee_ball(), Shot { angle_t: 40, power_m: 700 }, 5));
++            // Pieces may be reordered (water and boosts last), so compare where the ball ends up.
++            assert_eq!(sa.end, sb.end, "hole {}", a.number);
++            assert!((sa.rest - sb.rest).len() < 1e-3, "hole {}", a.number);
++        }
++    }
++
++    #[test]
++    fn a_ray_finds_the_nearest_box() {
++        let hole = EditHole::starter(1);
++        let (hit, place) = pick(&hole, V3::new(0.0, 5.0, 4.0), V3::new(0.0, -1.0, 0.0));
++        assert_eq!(hit.map(|h| h.0), Some(0), "straight down onto the turf");
++        assert!((place.unwrap().y - 0.0).abs() < 1e-4);
++    }
++
++    #[test]
++    fn numbers_read_cleanly() {
++        assert_eq!(num(1.5), "1.5");
++        assert_eq!(num(-0.0001), "0");
++        assert_eq!(num(2.0), "2");
++        assert_eq!(num(0.263), "0.263");
++    }
++}
+diff --git a/crates/benilla-app/src/golf.rs b/crates/benilla-app/src/golf/mod.rs
+similarity index 92%
+rename from crates/benilla-app/src/golf.rs
+rename to crates/benilla-app/src/golf/mod.rs
+index 1d8201c3..eccdd754 100644
+--- a/crates/benilla-app/src/golf.rs
++++ b/crates/benilla-app/src/golf/mod.rs
+@@ -17,8 +17,12 @@
+ //! LeylineGolf("phase <tick>")                   where spinners and sliders are now
+ //! LeylineGolf("end")                            remove everything
+ //! LeylineGolf("state")  -> "aiming=1 power=523 angle=1234 rolling=0 hole=3 charging=0"
++//! LeylineGolf("editor ...")                     the course editor ([`editor`])
+ //! ```
+ //!
++//! `load here` places the course a step in front of the player, facing the camera; `load keep`
++//! reuses the last spot (testing a hole from the editor plays it where it was built).
++//!
+ //! and calls back `WrathUnleashedUI.Golf.OnShoot(angle, power)` when the local player releases a
+ //! shot, and `WrathUnleashedUI.Golf.OnRest(name, end, x, y, z, hash)` when a roll finishes.
+ 
+@@ -34,6 +38,8 @@ use bevy::prelude::*;
+ use crate::player::camera::FlyCam;
+ use crate::player::Player;
+ 
++mod editor;
++
+ /// The course is drawn this far above where the session started, on a stone plinth, so uneven
+ /// ground doesn't poke through the turf. Only the drawing moves; the simulation is hole-local.
+ const LIFT: f32 = 0.35;
+@@ -62,9 +68,16 @@ const BALL_COLORS: [[f32; 3]; 8] = [
+ struct Bridge {
+     inbox: Vec<String>,
+     snapshot: String,
++    editor_text: String,
++    editor_state: String,
+ }
+ 
+-static BRIDGE: Mutex<Bridge> = Mutex::new(Bridge { inbox: Vec::new(), snapshot: String::new() });
++static BRIDGE: Mutex<Bridge> = Mutex::new(Bridge {
++    inbox: Vec::new(),
++    snapshot: String::new(),
++    editor_text: String::new(),
++    editor_state: String::new(),
++});
+ 
+ fn bridge() -> std::sync::MutexGuard<'static, Bridge> {
+     BRIDGE.lock().unwrap_or_else(|p| p.into_inner())
+@@ -81,8 +94,11 @@ fn install_bridge(script: Option<NonSend<benilla_ui::script::UiScript>>, mut ins
+     *installed = script.session();
+     let made = script.lua().create_function(|_, text: String| {
+         let mut b = bridge();
+-        if text == "state" {
+-            return Ok(b.snapshot.clone());
++        match text.as_str() {
++            "state" => return Ok(b.snapshot.clone()),
++            "editortext" => return Ok(b.editor_text.clone()),
++            "editorstate" => return Ok(if b.editor_state.is_empty() { "on=0".to_string() } else { b.editor_state.clone() }),
++            _ => {}
+         }
+         if text.len() <= golf::MAX_TEXT + 256 && b.inbox.len() < 256 {
+             b.inbox.push(text);
+@@ -580,33 +596,37 @@ fn drain_bridge(
+     mut meshes: ResMut<Assets<Mesh>>,
+     mut materials: ResMut<Assets<StandardMaterial>>,
+     time: Res<Time>,
+-    player: Res<Player>,
++    mut player: ResMut<Player>,
+     mut edit_cvars: Option<ResMut<crate::cvars::Cvars>>,
+     script: Option<NonSend<benilla_ui::script::UiScript>>,
+     cams: Query<&GlobalTransform, With<FlyCam>>,
++    mut ed: ResMut<editor::Editor>,
+ ) {
+     let now = time.elapsed_secs();
+     let inbox = std::mem::take(&mut bridge().inbox);
+     // Leaving the world (a logout, a character switch) ends the session here too.
+-    if !player.active && golf.active() {
++    if !player.active && (golf.active() || ed.on) {
+         clear(&mut golf, &mut commands);
+         golf.course = None;
++        ed.on = false;
+     }
++    // Where "here" is: a step in front of the player, facing the way the camera looks.
++    let here_spot = {
++        let f = cams.single().map(|t| t.forward().as_vec3()).unwrap_or(Vec3::NEG_Z);
++        let flat = Vec3::new(f.x, 0.0, f.z).try_normalize().unwrap_or(Vec3::NEG_Z);
++        (player.pos + flat * 1.6, (-flat.x).atan2(-flat.z))
++    };
++    let here = || here_spot;
+     for msg in inbox {
+         let (head, body) = msg.split_once('\n').unwrap_or((msg.as_str(), ""));
+         let w: Vec<&str> = head.split_whitespace().collect();
+         match w.first().copied() {
+             Some("load") => {
+-                // "load here": practice, a step in front of you, facing the way the camera looks.
+-                let here = (w.get(1) == Some(&"here")).then(|| {
+-                    let f = cams.single().map(|t| t.forward().as_vec3()).unwrap_or(Vec3::NEG_Z);
+-                    let flat = Vec3::new(f.x, 0.0, f.z).try_normalize().unwrap_or(Vec3::NEG_Z);
+-                    let yaw = (-flat.x).atan2(-flat.z);
+-                    (player.pos + flat * 1.6, yaw)
+-                });
+-                let at = match here {
+-                    Some(h) => Some(h),
+-                    None => nums::<4>(&w[1..]).map(|[x, y, z, o]| (benilla_assets::coords::wow_to_bevy([x, y, z]), o)),
++                // "load here": practice in front of you; "load keep": where the last course was.
++                let at = match w.get(1).copied() {
++                    Some("here") => Some(here()),
++                    Some("keep") => Some((golf.origin, golf.yaw)),
++                    _ => nums::<4>(&w[1..]).map(|[x, y, z, o]| (benilla_assets::coords::wow_to_bevy([x, y, z]), o)),
+                 };
+                 let Some((origin, yaw)) = at else {
+                     call_hud(script.as_deref(), "OnError(\"bad load line\")");
+@@ -695,10 +715,39 @@ fn drain_bridge(
+                 golf.course = None;
+                 golf.cam = None;
+             }
++            Some("editor") => {
++                if w.get(1) == Some(&"off") {
++                    // At once, so a "load" right behind it (testing a hole) isn't cleared afterwards.
++                    if ed.on {
++                        ed.on = false;
++                        clear(&mut golf, &mut commands);
++                        golf.course = None;
++                        player.detached = false;
++                    }
++                    continue;
++                }
++                let origin = match (w.get(1).copied(), w.get(2).copied()) {
++                    (Some("on"), Some("keep")) => Some((golf.origin, golf.yaw)),
++                    (Some("on"), _) => Some(here()),
++                    _ => None,
++                };
++                if golf.aim.is_some() || golf.roll.is_some() {
++                    golf.aim = None;
++                    golf.roll = None;
++                }
++                editor::editor_command(&mut ed, &mut golf, &w[1..], body, origin);
++            }
+             _ => warn!("golf: unknown command {head:?}"),
+         }
+     }
+-    // The snapshot `LeylineGolf("state")` answers with.
++    // The snapshots `LeylineGolf("state")`, ("editorstate") and ("editortext") answer with.
++    {
++        let mut b = bridge();
++        b.editor_state = ed.state();
++        if ed.on {
++            b.editor_text = ed.text();
++        }
++    }
+     let aim = golf.aim.as_ref();
+     bridge().snapshot = format!(
+         "aiming={} power={} angle={} rolling={} hole={} charging={}",
+@@ -982,9 +1031,10 @@ impl Plugin for GolfPlugin {
+     fn build(&self, app: &mut App) {
+         use benilla_world::schedule::WorldStage;
+         app.init_resource::<Golf>()
++            .init_resource::<editor::Editor>()
+             .add_systems(
+                 Update,
+-                (install_bridge, drain_bridge, aim_input, play_roll, animate_movers)
++                (install_bridge, drain_bridge, editor::editor_input, editor::editor_rebuild, aim_input, play_roll, animate_movers)
+                     .chain()
+                     .in_set(WorldStage::Input)
+                     .before(crate::player::PlayerControlSet)
+@@ -993,7 +1043,7 @@ impl Plugin for GolfPlugin {
+             // After the player's own camera, so the golf view wins while it is wanted.
+             .add_systems(
+                 Update,
+-                (golf_camera, golf_gizmos)
++                (golf_camera, golf_gizmos, editor::editor_camera, editor::editor_gizmos)
+                     .after(crate::player::PlayerControlSet)
+                     .in_set(WorldStage::Input)
+                     .in_set(crate::char_select::InWorldGated),

@@ -1,0 +1,43 @@
+# Leyline community relay: "Help the network: relay for others" (docs/LEYLINE-MESH.md). OFF unless you start it.
+#
+#   1. bash leyline / Realm tools: setup.py volunteer-relay --host <your public DNS name> [--region eu]
+#      (writes state/volunteer-relay.env)
+#   2. docker compose -f docker-compose.volunteer-relay.yml up -d      (stop: ... down)
+#
+# What it needs: a public DNS name pointing at this PC, and TCP 80, 443 and 41000-41051 reachable from the internet
+# (port forwarding or a public IP). Unlike hosting a realm, relaying for others needs open ports.
+# What it does: other hosts' realms may dial in and players reach them through this PC, inside the caps in the env
+# file (realms, KB/s per realm, GB per day per realm). Players' game traffic passes through it in the clear
+# (passwords never do: the game's login is SRP6). It joins the Leyline mesh and publishes a signed relay record.
+# What it never does: carry game data or game clients, or open anything to your home network (host networking is
+# not used; only the ports above are published).
+name: wu-volunteer-relay
+services:
+  relay:
+    build: { context: ./tools, dockerfile: Dockerfile.relay }
+    image: wu-volunteer-relay:1
+    restart: unless-stopped
+    env_file: [state/volunteer-relay.env]
+    environment:
+      RELAY_HTTP_BIND: "0.0.0.0:8080"
+      RELAY_GAME_BIND: "0.0.0.0"
+      RELAY_TRUSTED_PROXIES: "172.16.0.0/12,127.0.0.1/32"
+    ports: ["41000-41051:41000-41051"]
+    volumes: [relay-state:/var/lib/wu-relay]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    pids_limit: 64
+    logging: { driver: json-file, options: { max-size: "20m", max-file: "3" } }
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    env_file: [state/volunteer-relay.env]
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./tools/Caddyfile.volunteer:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+volumes:
+  relay-state:
+  caddy-data:

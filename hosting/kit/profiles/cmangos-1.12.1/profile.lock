@@ -1,0 +1,27 @@
+# Leyline host kit, "host any client": the cmangos-1.12.1 profile (a plain 1.12.1 realm on CMaNGOS Classic).
+# Read by profiles/host-profile.sh and "profiles/Host a profile realm.bat" (KEY=VALUE lines only; nothing in this
+# file is run) and passed to the Dockerfile as build args. Nothing here is ours and nothing here is game data: the
+# server is compiled on the host's PC from its authors' source at these commits, the world database is the
+# CMaNGOS project's own SQL at the pinned commit of its database repository (a git commit pins every byte).
+# Bumping: change both commits together, then run the hosting tests (python3 -m unittest discover -s hosting/tests).
+
+LL_PROFILE=cmangos-1.12.1
+LL_CORE=cmangos
+LL_BUILD=5875
+LL_VERSION=1.12.1
+LL_IMAGE=leyline-cmangos-1121
+LL_COMPOSE=docker-compose.cmangos-1.12.1.yml
+
+# The server (GPL-2.0): CMaNGOS Classic.
+LL_CORE_REPO=https://github.com/cmangos/mangos-classic
+LL_CORE_COMMIT=5731249195520323cb5fb9aa29761d4f033272ce
+# The world database (GPL-2.0, the project's InstallFullDB.sh): CMaNGOS classic-db.
+LL_DB_REPO=https://github.com/cmangos/classic-db
+LL_DB_COMMIT=603ece109099ce44a5447a1b1cffd65c7272d71c
+LL_EXPANSION=Classic
+
+# The host's own client: files that must be in the folder they pick, the world server's "ready" log line.
+LL_CLIENT_FILES=Data/dbc.MPQ,Data/terrain.MPQ
+LL_READY=World initialized
+LL_BUILD_TIME=40-90 minutes and about 5 GB of disk
+LL_EXTRACT_TIME=30-60 minutes, plus 1-3 hours for the monster paths

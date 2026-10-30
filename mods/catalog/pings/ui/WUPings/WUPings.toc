@@ -1,0 +1,8 @@
+## Interface: 30300
+## Title: Pings
+## Notes: Alt-click the world map, Alt-click in the world, or /ping: your party sees a marker and hears a sound. Part of the WrathUnleashed mod "pings".
+## Author: WrathUnleashed
+## Version: 0.1.0
+## X-License: MIT
+
+WUPings.lua

@@ -1,0 +1,132 @@
+{
+ "format": 1,
+ "note": "Left out of the index whatever the forges say. owners: a whole account; repos: one repo; patterns: a regex over the repo link, name, description and topics; review: held for a person to decide.",
+ "owners": [
+  {
+   "owner": "chumpton",
+   "reason": "the Chumpton account (never listed)"
+  },
+  {
+   "owner": "wowdecomp",
+   "reason": "wowdecomp: shut down after a cease-and-desist on 2026-10-29; nothing derived from it is listed"
+  },
+  {
+   "owner": "Jnnshschl",
+   "reason": "builds bots for automated play on other people's realms"
+  },
+  {
+   "owner": "MidnightZora737r",
+   "reason": "one of a cluster of look-alike repos with identical star counts (likely a fake-star or malware-lure campaign)"
+  },
+  {
+   "owner": "Aursolstice160913-alt",
+   "reason": "one of a cluster of look-alike repos with identical star counts (likely a fake-star or malware-lure campaign)"
+  },
+  {
+   "owner": "MasterSkyat57941",
+   "reason": "one of a cluster of look-alike repos with identical star counts (likely a fake-star or malware-lure campaign)"
+  },
+  {
+   "owner": "ForVoid48577",
+   "reason": "one of a cluster of look-alike repos with identical star counts (likely a fake-star or malware-lure campaign)"
+  },
+  {
+   "owner": "Aethixdryad140461-coder",
+   "reason": "one of a cluster of look-alike repos with identical star counts (likely a fake-star or malware-lure campaign)"
+  },
+  {
+   "owner": "XJadeum",
+   "reason": "one of a cluster of look-alike repos with identical star counts (likely a fake-star or malware-lure campaign)"
+  },
+  {
+   "owner": "Lordcaster",
+   "reason": "one of a cluster of look-alike repos with identical star counts (likely a fake-star or malware-lure campaign)"
+  },
+  {
+   "owner": "Gel88566ight",
+   "reason": "one of a cluster of look-alike repos with identical star counts (likely a fake-star or malware-lure campaign)"
+  },
+  {
+   "owner": "WithoutMyth",
+   "reason": "one of a cluster of look-alike repos with identical star counts (likely a fake-star or malware-lure campaign)"
+  },
+  {
+   "owner": "alseif0x",
+   "reason": "in the same cluster of repos with identical star counts; a person should check it before it is listed"
+  },
+  {
+   "owner": "olive-spore-734",
+   "reason": "account pattern of the same look-alike cluster; a person should check it before it is listed"
+  },
+  {
+   "owner": "suprepupre",
+   "reason": "injects code into the game client (realms ban these tools)"
+  }
+ ],
+ "repos": [
+  {
+   "repo": "https://github.com/francescoborzi/why-i-hate-wow-private-servers",
+   "reason": "an essay, not a mod or tool"
+  },
+  {
+   "repo": "https://github.com/dedinc/wrobot-auto-trial",
+   "reason": "a bot for automated play"
+  },
+  {
+   "repo": "https://github.com/kirazul/transmorpher",
+   "reason": "edits the game client's memory to change looks (a client hack)"
+  },
+  {
+   "repo": "https://github.com/xvitali2/addons-for-vanilla-1.12.1",
+   "reason": "a bundle of other people's addons re-uploaded, not a project of its own"
+  },
+  {
+   "repo": "https://github.com/nom0re/wow-3.3.5a-addons",
+   "reason": "a bundle of other people's addons re-uploaded, not a project of its own"
+  },
+  {
+   "repo": "https://github.com/kelsidavis/wowee",
+   "reason": "a whole replacement game client that answers anti-cheat; too close to the 2026-10-29 cease-and-desist to list without the owner's say"
+  },
+  {
+   "repo": "https://github.com/brian8544/arctium-launcher",
+   "reason": "patches current game clients in memory to reach other servers"
+  },
+  {
+   "repo": "https://github.com/pjerra/turtle-agent",
+   "reason": "a headless client for scripted or automated play"
+  },
+  {
+   "repo": "https://github.com/tench-rt/tentacli",
+   "reason": "a framework for automated game clients"
+  },
+  {
+   "repo": "https://github.com/the-kludge-bureau/hearthdb",
+   "reason": "a DLL plugin injected into the game client"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-npc-gambler",
+   "reason": "wagering, left out by choice (like mod-duel-bet)"
+  },
+  {
+   "repo": "https://github.com/azerothcore/mod-playerbots",
+   "reason": "an old placeholder (says it isn't ready); the module lives at mod-playerbots/mod-playerbots"
+  }
+ ],
+ "patterns": [
+  {
+   "pattern": "resocket|rpocket",
+   "reason": "a look-alike copy from a fake-star or malware-lure campaign"
+  }
+ ],
+ "review": [
+  {
+   "repo": "https://github.com/gslance/wow-custom-launcher",
+   "reason": "a launcher and patcher that hands out a server's client patches: check it can't carry game files"
+  },
+  {
+   "repo": "https://github.com/ssdeanx/tortoise-wow",
+   "reason": "restores another server's custom content: check where its data comes from"
+  }
+ ]
+}

@@ -1,0 +1,20 @@
+# Files the 2026-10-30 Dark/Light launcher redesign took out (the painted "paper" skin, Cinzel, rounded.css).
+launcher/ui/art/fonts/Cinzel-OFL.txt
+launcher/ui/art/fonts/cinzel-latin-700-normal.woff2
+launcher/ui/art/fonts/cinzel-latin-900-normal.woff2
+launcher/ui/art/kit/README.txt
+launcher/ui/art/kit/btn-bronze.png
+launcher/ui/art/kit/crest.png
+launcher/ui/art/kit/leyline-logo.png
+launcher/ui/art/kit/nav-item-selected.png
+launcher/ui/art/kit/nav-item.png
+launcher/ui/art/kit/parchment-news.png
+launcher/ui/art/kit/parchment-strip.png
+launcher/ui/art/kit/play.png
+launcher/ui/art/kit/row-gold.png
+launcher/ui/art/kit/stone-bar-long.png
+launcher/ui/art/kit/stone-panel-tall.png
+launcher/ui/art/kit/tab-normal.png
+launcher/ui/art/kit/tab-selected.png
+launcher/ui/art/kit/wordmark-leyline-launcher.png
+launcher/ui/themes/rounded.css

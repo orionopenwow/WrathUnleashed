@@ -1,0 +1,88 @@
+==== host
+vanilla-reloaded
+ 19:01:20 up 2 days, 14:05,  2 users,  load average: 2.34, 1.68, 1.46
+
+==== memory
+               total        used        free      shared  buff/cache   available
+Mem:           7.6Gi       6.1Gi       278Mi       4.6Mi       1.5Gi       1.5Gi
+Swap:          2.0Gi       2.0Gi        17Mi
+
+==== disk
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1        38G   24G   13G  67% /
+/dev/sda1        38G   24G   13G  67% /
+
+==== cpu
+4
+CPU(s):                                  4
+Model name:                              AMD EPYC-Genoa Processor
+BIOS Model name:                         NotSpecified  CPU @ 2.0GHz
+
+==== os
+$PRETTY_NAME
+
+==== docker
+Docker version 29.9.0, build f415da8
+Docker Compose version v5.6.0
+
+==== containers
+wenilla-realm-mangosd-1	ghcr.io/orionopenwow/openvanilla-mangos:latest	Up 3 hours (healthy)	
+wenilla-realm-realm-1	ghcr.io/orionopenwow/openvanilla-realm:latest	Up 19 hours (healthy)	8090/tcp
+owduels-mangosd-1	c28d642ec546	Up 20 hours (healthy)	127.0.0.1:17879->7878/tcp
+owduels-realm-1	ghcr.io/orionopenwow/openvanilla-realm:latest	Up 20 hours (healthy)	8090/tcp
+owduels-mariadb-1	mariadb:11.4	Up 40 hours (healthy)	3306/tcp
+owduels-realmd-1	ghcr.io/arnesen/wenilla-realm-mangos:latest	Up 40 hours (healthy)	
+openvanilla-support-mangosd	alpine/socat	Up 2 days	127.0.0.1:17878->7878/tcp
+openvanilla-support-mariadb	alpine/socat	Up 2 days	127.0.0.1:13306->3306/tcp
+wenilla-realm-caddy-1	caddy:2	Up 43 hours	0.0.0.0:80->80/tcp, [::]:80->80/tcp, 0.0.0.0:443->443/tcp, [::]:443->443/tcp, 0.0.0.0:443->443/udp, [::]:443->443/udp, 2019/tcp
+wenilla-realm-realmd-1	ghcr.io/arnesen/wenilla-realm-mangos:latest	Up 2 days (healthy)	
+wenilla-realm-mariadb-1	mariadb:11.4	Up 2 days (healthy)	3306/tcp
+
+==== compose projects
+NAME                STATUS              CONFIG FILES
+owduels             running(4)          /opt/wenilla-duels/compose.yaml,/opt/wenilla-duels/compose.override.yaml
+wenilla-realm       running(5)          /opt/wenilla-realm/compose.yaml,/opt/wenilla-realm/compose.override.yaml
+
+==== listening
+LISTEN 0      4096         0.0.0.0:443        0.0.0.0:*    users:(("docker-proxy",pid=1735761,fd=8))              
+LISTEN 0      4096         0.0.0.0:80         0.0.0.0:*    users:(("docker-proxy",pid=1735738,fd=8))              
+LISTEN 0      4096         0.0.0.0:22         0.0.0.0:*    users:(("sshd",pid=1000,fd=3),("systemd",pid=1,fd=175))
+LISTEN 0      5          127.0.0.1:8090       0.0.0.0:*    users:(("python3",pid=2168987,fd=3))                   
+LISTEN 0      4096            [::]:443           [::]:*    users:(("docker-proxy",pid=1735767,fd=8))              
+LISTEN 0      4096            [::]:80            [::]:*    users:(("docker-proxy",pid=1735743,fd=8))              
+LISTEN 0      4096            [::]:22            [::]:*    users:(("sshd",pid=1000,fd=4),("systemd",pid=1,fd=176))
+
+==== opt
+total 40
+drwxr-xr-x 10 root   root   4096 Oct 23 07:43 .
+drwxr-xr-x 24 root   root   4096 Oct 22 04:56 ..
+drwx--x--x  4 root   root   4096 Oct 14 05:59 containerd
+drwxr-xr-x  4 root   root   4096 Oct 24 17:39 openvanilla-bossfights
+drwxr-xr-x  5 root   root   4096 Oct 24 00:09 openvanilla-classicplus
+drwxr-xr-x  5 root   root   4096 Oct 24 00:09 openvanilla-duels
+drwxr-xr-x  6 herald herald 4096 Oct 23 22:32 openvanilla-herald
+drwxr-xr-x  5 herald herald 4096 Oct 20 03:08 openwow-herald
+drwxr-xr-x  4 root   root   4096 Oct 23 08:08 wenilla-duels
+drwxr-xr-x  8 root   root   4096 Oct 24 00:11 wenilla-realm
+
+==== caddy
+inactive
+wenilla-realm-caddy-1
+
+==== backups
+
+==== images
+ghcr.io/orionopenwow/openvanilla-mangos:latest	831MB
+ghcr.io/orionopenwow/openvanilla-realm:latest	529MB
+rust:1-bookworm	2.23GB
+ghcr.io/orionopenwow/openwow-realm:latest	534MB
+ghcr.io/orionopenwow/openwow-mangos:latest	829MB
+(old Vanilla realm image)	533MB
+(old Vanilla mangos image)	829MB
+alpine/socat:latest	23.6MB
+caddy:2	93.1MB
+debian:bookworm-slim	116MB
+ghcr.io/arnesen/wenilla-realm:latest	327MB
+mariadb:11.4	464MB
+ghcr.io/arnesen/wenilla-realm-mangos:latest	769MB
+curlimages/curl:8.10.1	32MB

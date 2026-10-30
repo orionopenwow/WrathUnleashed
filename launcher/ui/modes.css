@@ -1,0 +1,4 @@
+/* Leyline Launcher: the Modes page (modes.js). Uses style.css's tokens and its realm-card look. */
+.md-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.md-card .md-play { min-width: 76px; }
+.md-how { color: var(--muted); font-size: 12px; }

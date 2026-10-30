@@ -1,0 +1,591 @@
+// wrath-early.js — the WrathUnleashed page layer's first step: a classic script that www-patch.py puts
+// right before the page's module script, so it runs before boot.js asks for its prefetch list. It
+// does two things itself (the slim boot list, and linking wu-loading.css so boot.js's overlay is
+// styled from its first frame) and then loads wrath-page.js, which does the rest.
+//
+// A classic script on purpose: if this file is missing or fails, the browser carries on with the
+// page's module script exactly as before (a failed static import would stop the game from starting).
+//
+// Slim boot list: boot.js prefetches every name in /boot-manifest.json before the client starts.
+// Music and long sounds are only played, never read before the login screen (and with the page's
+// sign-in the login screen plays none: benilla-app startup_pace.rs, quiet login), so they are left
+// out of that rush; the client fetches a sound itself when it plays it. ?slimboot=0 turns it off.
+(function () {
+  'use strict';
+  // Missing-file and warning capture, from the first line of boot, for the smoke tests (the console
+  // keeps only its most recent lines). window.__wuMissing: each game file the client asked for and the
+  // slice does not have (Map name -> {t, what}); window.__wuWarn: the last 2000 warnings and errors;
+  // window.__wuMissingDump() lists the missing names, sorted. Only string tests on lines the client
+  // already prints, so it costs nothing in play.
+  try {
+    var missing = new Map();
+    var warn = [];
+    var notInChain = /file not in patch chain: ([^\s]+)/;
+    var notFound = /Path not found: ([^\s]+)/;
+    var bad = /WARN|ERROR|panicked|TIMED OUT/;
+    var keep = function (args) {
+      var s = args[0];
+      if (typeof s !== 'string' || !bad.test(s)) return;
+      var m = notInChain.exec(s) || notFound.exec(s);
+      if (m) {
+        var name = m[1].replace(/\//g, '\\').toLowerCase();
+        if (!missing.has(name)) missing.set(name, { t: Math.round(performance.now()), what: s.replace(/%c/g, '').slice(0, 160) });
+      }
+      warn.push({ t: Math.round(performance.now()), s: s.replace(/%c/g, '').slice(0, 300) });
+      if (warn.length > 2000) warn.splice(0, warn.length - 2000);
+    };
+    ['log', 'warn', 'error'].forEach(function (level) {
+      var orig = console[level];
+      if (typeof orig !== 'function') return;
+      console[level] = function () { try { keep(arguments); } catch (e) { /* never in the way */ } return orig.apply(console, arguments); };
+    });
+    window.__wuMissing = missing;
+    window.__wuWarn = warn;
+    window.__wuMissingDump = function () { return Array.from(missing.keys()).sort(); };
+  } catch (e) { /* the capture is optional */ }
+  // Retries for game files. A /data/ read that fails with a server error (5xx: a busy or restarting
+  // wu-play, a proxy hiccup) or a dropped connection used to cost the asset for the whole session (a
+  // 502 once left Stormwind City unbuilt). Async fetches retry up to 3 times (0.4 s, 1.2 s, 3 s);
+  // synchronous XHRs (the chain's sync reads) retry twice at once. A 404 (not in the slice) is never
+  // retried. window.__wuRetries counts what was retried and what still failed. ?noretry=1 turns it off.
+  // 410 Gone (the game data killswitch, stream/server/gamedata-switch.sh: this server streams no game data any
+  // more) is never retried either: the page says once "This realm needs your own game folder" and offers the
+  // game-folder page (/?ownfiles=1), instead of a black screen or endless retries. window.__wuGamedataOff is set.
+  var gamedataGone = function () {
+    if (window.__wuGamedataOff) return;
+    window.__wuGamedataOff = true;
+    try {
+      var show = function () {
+        if (!document.body || document.getElementById('wu-gamedata-off')) return;
+        var box = document.createElement('div');
+        box.id = 'wu-gamedata-off';
+        box.setAttribute('role', 'alertdialog');
+        box.setAttribute('style', 'position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;'
+          + 'background:rgba(0,0,0,.82);color:#eee;font:15px system-ui,sans-serif;text-align:center;padding:16px');
+        var card = document.createElement('div');
+        card.setAttribute('style', 'max-width:28rem;background:#15121c;border:1px solid #6b5a2e;border-radius:8px;padding:1.4rem');
+        var h = document.createElement('p');
+        h.setAttribute('style', 'font-size:18px;margin:0 0 .6rem');
+        h.textContent = 'This realm needs your own game folder.';
+        var p = document.createElement('p');
+        p.setAttribute('style', 'margin:0 0 1rem;color:#ccc');
+        p.textContent = 'It no longer streams game files. Drop your 3.3.5a game folder on the next page: it is read on your computer and never uploaded.';
+        var a = document.createElement('a');
+        a.href = '/?ownfiles=1';
+        a.textContent = 'Use my game folder';
+        a.setAttribute('style', 'display:inline-block;padding:.5rem 1rem;background:#c9a24a;color:#111;border-radius:4px;text-decoration:none;font-weight:600');
+        card.appendChild(h); card.appendChild(p); card.appendChild(a); box.appendChild(card);
+        document.body.appendChild(box);
+      };
+      if (document.body) show(); else document.addEventListener('DOMContentLoaded', show);
+    } catch (e) { /* the note is optional */ }
+  };
+  window.__wuGamedataGone = gamedataGone;
+  try {
+    if (!/[?&]noretry=1\b/.test(location.search)) {
+      var stats = { retried: 0, recovered: 0, failed: 0, last: [] };
+      window.__wuRetries = stats;
+      var isData = function (u) {
+        try { return new URL(String(u), location.href).pathname.indexOf('/data/') === 0 && String(u).indexOf('/data/__') < 0; } catch (e) { return false; }
+      };
+      var note = function (u, what) { stats.last.push(what + ' ' + String(u).slice(-120)); if (stats.last.length > 50) stats.last.shift(); };
+      var origFetch = window.fetch;
+      if (typeof origFetch === 'function') {
+        var waits = [400, 1200, 3000];
+        window.fetch = function (input, init) {
+          var url = typeof input === 'string' ? input : (input && input.url) || '';
+          var method = (init && init.method) || (input && input.method) || 'GET';
+          if (!isData(url) || String(method).toUpperCase() !== 'GET') return origFetch.apply(this, arguments);
+          var self = this, args = arguments;
+          var attempt = function (n) {
+            return origFetch.apply(self, args).then(function (res) {
+              if (res.status === 410) gamedataGone();
+              if (res.status < 500 || n >= waits.length) {
+                if (n > 0) { if (res.status < 500) stats.recovered++; else { stats.failed++; note(url, 'HTTP ' + res.status); } }
+                return res;
+              }
+              stats.retried++;
+              return new Promise(function (r) { setTimeout(r, waits[n]); }).then(function () { return attempt(n + 1); });
+            }, function (err) {
+              // a read the game cancelled itself (AbortController: a sound it no longer needs) is not a failure
+              var sig = (init && init.signal) || (input && input.signal);
+              if ((err && err.name === 'AbortError') || (sig && sig.aborted)) throw err;
+              if (n >= waits.length) { stats.failed++; note(url, 'network'); throw err; }
+              stats.retried++;
+              return new Promise(function (r) { setTimeout(r, waits[n]); }).then(function () { return attempt(n + 1); });
+            });
+          };
+          return attempt(0);
+        };
+      }
+      var XHR = window.XMLHttpRequest;
+      if (XHR && XHR.prototype) {
+        var origOpen = XHR.prototype.open, origSend = XHR.prototype.send;
+        XHR.prototype.open = function (method, url, async) {
+          this.__wuSync = (async === false) && String(method).toUpperCase() === 'GET' && isData(url) ? String(url) : null;
+          this.__wuMime = null;
+          return origOpen.apply(this, arguments);
+        };
+        var origMime = XHR.prototype.overrideMimeType;
+        if (origMime) XHR.prototype.overrideMimeType = function (m) { this.__wuMime = m; return origMime.apply(this, arguments); };
+        XHR.prototype.send = function () {
+          var out, thrown = null;
+          if (!this.__wuSync) return origSend.apply(this, arguments);
+          try { out = origSend.apply(this, arguments); } catch (e) { thrown = e; }
+          if (!thrown && this.status === 410) gamedataGone();
+          if (!thrown && this.status !== 0 && this.status < 500) return out;
+          var url = this.__wuSync, mime = this.__wuMime, rt = this.responseType;
+          for (var n = 0; n < 2; n++) {
+            stats.retried++;
+            var x = new XHR();
+            origOpen.call(x, 'GET', url, false);
+            if (mime && origMime) origMime.call(x, mime);
+            try { if (rt) x.responseType = rt; } catch (e) { /* sync XHR forbids most types */ }
+            try { origSend.call(x); } catch (e) { continue; }
+            if (x.status !== 0 && x.status < 500) {
+              stats.recovered++;
+              var good = x;
+              ['status', 'statusText', 'response', 'responseText', 'responseURL', 'readyState'].forEach(function (k) {
+                try { Object.defineProperty(this, k, { configurable: true, get: function () { return good[k]; } }); } catch (e) { /* keep the original */ }
+              }, this);
+              this.getResponseHeader = function (h) { return good.getResponseHeader(h); };
+              this.getAllResponseHeaders = function () { return good.getAllResponseHeaders(); };
+              return out;
+            }
+          }
+          stats.failed++; note(url, thrown ? 'sync network' : 'sync HTTP ' + this.status);
+          if (thrown) throw thrown;
+          return out;
+        };
+      }
+    }
+  } catch (e) { /* retries are optional */ }
+  // One game per browser. Two tabs signed in to the same account knock each other off the realm
+  // ("Disconnected", back to the login). The first tab holds a Web Lock for its whole life. A second tab
+  // goes to tab.html?m=busy (a small note page: no game starts) with "Play here", which tells the first
+  // tab to step aside (it goes to tab.html?m=moved) and comes back here once the lock is free.
+  // ?multitab=1 skips the guard (tests).
+  // window.__wuTabLock: a promise, true once this tab holds the game (or there is no guard), false
+  // for a tab that gives way. Whatever acts on the account (ownfiles.js's game-folder layer asks the
+  // realm to lift or restore the zone limit) waits for it, so a second tab never touches it.
+  var lockDone = null;
+  try { window.__wuTabLock = new Promise(function (r) { lockDone = r; }); } catch (e) { /* no promises */ }
+  var settle = function (v) { if (lockDone) { lockDone(v); lockDone = null; } };
+  try {
+    var here = location.pathname + location.search + location.hash;
+    // b=1: the Leyline brand switch is on (/__env.js), so the note page is flat even where it can't read the
+    // brand kept in localStorage (storage off). Off: the address is exactly as before.
+    var lyOn = (window.__wenilla_env || {}).brand === 'leyline';
+    var noteUrl = function (m) { return './tab.html?m=' + m + (lyOn ? '&b=1' : '') + '&r=' + encodeURIComponent(here); };
+    var locks = navigator.locks && typeof navigator.locks.request === 'function' ? navigator.locks : null;
+    if (locks && !/[?&]multitab=1\b/.test(location.search)) {
+      var chan = typeof BroadcastChannel === 'function' ? new BroadcastChannel('wu-game') : null;
+      locks.request('wu-game', { ifAvailable: true }, function (lock) {
+        if (!lock) { window.__wuStopped = true; settle(false); location.replace(noteUrl('busy')); return null; }
+        settle(true);
+        if (chan) chan.onmessage = function (e) { if (e.data === 'take-over') { window.__wuStopped = true; location.replace(noteUrl('moved')); } };
+        return new Promise(function () { /* held until this tab closes or navigates */ });
+      }).catch(function () { settle(true); });
+    } else settle(true);
+  } catch (e) { settle(true); console.warn('wrath-early.js tab guard', e); }
+  // The game-folder layer (ownfiles.js): a folder chosen in the world needs one page load (the client
+  // reads its name index once). The same character is seated again (the env's "char": the client's
+  // fast path), once, within 10 minutes of the choice. Never in a hop or a guest pass.
+  try {
+    var want = JSON.parse(sessionStorage.getItem('wu-layer') || 'null');
+    var env0 = window.__wenilla_env;
+    if (want && typeof want.char === 'string' && /^[A-Za-z\u00c0-\u024f]{2,12}$/.test(want.char) &&
+        Date.now() - (want.at || 0) < 600000 && env0 && typeof env0 === 'object' && !env0.char && !env0.hop &&
+        env0.demo !== '1' && env0.user) {
+      env0.char = want.char;
+      window.__wuLayerReseat = want.char;
+    }
+  } catch (e) { /* storage blocked */ }
+  // Keyboard Lock in fullscreen: Esc and browser shortcuts reach the game (hold Esc to leave fullscreen).
+  try {
+    document.addEventListener('fullscreenchange', function () {
+      var kb = navigator.keyboard;
+      if (!kb || typeof kb.lock !== 'function') return;
+      if (document.fullscreenElement) kb.lock().catch(function () {});
+      else if (typeof kb.unlock === 'function') kb.unlock();
+    });
+  } catch (e) { /* no Keyboard Lock */ }
+})();
+// "Your addons" (wu-addons.js): the addons a player dropped on this page, kept in this browser. The
+// client asks the page's body store (globalThis.__wenilla_prefetch, benilla-formats web.rs) first
+// for every /data read and for the name index /data/__index. This puts a layered store there before
+// anything else makes one: it answers Interface\AddOns\<Name>\... from the player's files and adds
+// their names to the index, so the client's own addon discovery finds them and runs them in its
+// addon sandbox. The page never runs them. A folder the realm already serves wins over a local one
+// of the same name. The client's start (the wasm download's response) waits for the files to be
+// read from browser storage, at most 5 s. ?localaddons=0 turns it off for one visit.
+(function () {
+  'use strict';
+  var g = typeof window !== 'undefined' ? window : globalThis;
+  if (g.__wuStopped || g.__wuAddonLayer) return;
+  try {
+    if (/[?&]localaddons=0\b/.test((g.location && g.location.search) || '')) return;
+    var PREFIX = 'interface\\addons\\';
+    var key = function (name) { return String(name).replace(/\//g, '\\').toLowerCase(); };
+    var addons = new Map();   // lower folder -> {name, files: Map(store key -> ArrayBuffer), names: [index names]}
+    var shadowed = new Set();
+    var merged = null;        // {base, out}: the last index merge
+    var owner = function (k) {
+      if (k.lastIndexOf(PREFIX, 0) !== 0) return null;
+      var rest = k.slice(PREFIX.length), j = rest.indexOf('\\');
+      return j <= 0 ? null : rest.slice(0, j);
+    };
+    var local = function (k) {
+      if (typeof k !== 'string') return undefined;
+      var o = owner(k);
+      if (!o || shadowed.has(o)) return undefined;
+      var a = addons.get(o);
+      return a ? a.files.get(k) : undefined;
+    };
+    var merge = function (base) {
+      if (!addons.size) return base;
+      if (merged && merged.base === base) return merged.out;
+      var names;
+      try { names = JSON.parse(new TextDecoder().decode(base)); } catch (e) { return base; }
+      if (!Array.isArray(names)) return base;
+      var server = new Set();
+      for (var i = 0; i < names.length; i++) { var o = owner(key(names[i])); if (o) server.add(o); }
+      shadowed = new Set();
+      var extra = [];
+      addons.forEach(function (a, o) {
+        if (server.has(o)) shadowed.add(o);
+        else for (var n = 0; n < a.names.length; n++) extra.push(a.names[n]);
+      });
+      var out = extra.length ? new TextEncoder().encode(JSON.stringify(names.concat(extra))).buffer : base;
+      merged = { base: base, out: out };
+      return out;
+    };
+    // The game-folder layer's name index (ownfiles.js: the slice's names plus the folder's) wins
+    // over the server's own as the base the addons are added to.
+    class AddonLayerStore extends Map {
+      get(k) {
+        var v = local(k);
+        if (v !== undefined) return v;
+        v = k === '__index' && g.__wuLayerIndex ? g.__wuLayerIndex : super.get(k);
+        return k === '__index' && v ? merge(v) : v;
+      }
+      has(k) { return local(k) !== undefined || (k === '__index' && !!g.__wuLayerIndex) || super.has(k); }
+      // web.rs drops a big body after one read: the player's files stay, for the next UI reload
+      delete(k) { return local(k) !== undefined ? false : super.delete(k); }
+    }
+    var store = new AddonLayerStore(g.__wenilla_prefetch instanceof Map ? g.__wenilla_prefetch : []);
+    g.__wenilla_prefetch = store;
+    var ready = null;
+    var layer = g.__wuAddonLayer = {
+      /** list: [{name, files: [[path inside the addon folder, ArrayBuffer]]}] */
+      set: function (list) {
+        addons = new Map();
+        shadowed = new Set();
+        merged = null;
+        (list || []).forEach(function (a) {
+          var lower = String(a.name).toLowerCase();
+          var files = new Map(), names = [];
+          a.files.forEach(function (f) {
+            var name = 'Interface\\AddOns\\' + a.name + '\\' + String(f[0]).replace(/\//g, '\\');
+            files.set(key(name), f[1]);
+            names.push(name);
+          });
+          addons.set(lower, { name: a.name, files: files, names: names });
+        });
+      },
+      /** what the client sees: the folders loaded, and those the realm's own copy hides */
+      info: function () {
+        var on = [], hidden = [];
+        addons.forEach(function (a, o) { (shadowed.has(o) ? hidden : on).push(a.name); });
+        return { loaded: on, shadowed: hidden, merged: !!merged };
+      },
+      ready: function () { return ready; },
+      store: store,
+    };
+    if (typeof g.fetch === 'function') {
+      var origFetch = g.fetch;
+      g.fetch = function (input) {
+        var p = origFetch.apply(this, arguments);
+        if (!ready) return p;
+        var path = '';
+        try {
+          var url = typeof input === 'string' ? input : (input instanceof URL ? input.href : input && input.url);
+          path = url ? new URL(url, g.location.href).pathname : '';
+        } catch (e) { /* not a URL */ }
+        if (!/\/wenilla_bg\.wasm$/.test(path)) return p;
+        var wait = new Promise(function (res) { setTimeout(res, 5000); });
+        return Promise.race([ready.catch(function () {}), wait]).then(function () { return p; });
+      };
+    }
+    ready = (g.__wuAddonsImport ? g.__wuAddonsImport() : import('./wu-addons.js'))
+      .then(function (m) { return m.boot(layer); })
+      .catch(function (e) { console.warn('wu-addons.js:', e); });
+    g.__wuAddonsReady = ready;
+  } catch (e) { console.warn('wrath-early.js your addons', e); }
+})();
+(function () {
+  'use strict';
+  if (window.__wuStopped) return;
+  var SKIP_AT_BOOT = /\.(mp3|wav|ogg)$/i;
+  try {
+    if (!window.__wuSlimBoot && !/[?&]slimboot=0\b/.test(location.search) && typeof window.fetch === 'function') {
+      window.__wuSlimBoot = true;
+      var orig = window.fetch;
+      window.fetch = function (input, init) {
+        var p = orig.apply(this, arguments);
+        var path = '';
+        try {
+          var url = typeof input === 'string' ? input : (input instanceof URL ? input.href : input && input.url);
+          path = url ? new URL(url, location.href).pathname : '';
+        } catch (e) { /* not a URL */ }
+        if (path !== '/boot-manifest.json') return p;
+        return p.then(function (r) {
+          if (!r.ok) return r;
+          return r.clone().json().then(function (j) {
+            if (!j || !Array.isArray(j.names)) return r;
+            var names = j.names.filter(function (n) { return !SKIP_AT_BOOT.test(n); });
+            if (names.length === j.names.length) return r;
+            var out = Object.assign({}, j, { names: names });
+            return new Response(JSON.stringify(out), { status: r.status, statusText: r.statusText, headers: r.headers });
+          }, function () { return r; });
+        });
+      };
+    }
+  } catch (e) { console.warn('wrath-early.js slim boot', e); }
+  // The loading screens' look, before boot.js draws its overlay (wu-loading.css).
+  try {
+    if (!document.getElementById('wu-loading-css')) {
+      var link = document.createElement('link');
+      link.id = 'wu-loading-css';
+      link.rel = 'stylesheet';
+      link.href = './wu-loading.css';
+      (document.head || document.documentElement).appendChild(link);
+    }
+    // The Leyline brand switch (/__env.js brand "leyline"): the flat look with the spinning mark (leyline-look.css)
+    // over the loading screens. Off: nothing is added.
+    var env = window.__wenilla_env || {};
+    if (env.brand === 'leyline' && !document.getElementById('ly-look-css')) {
+      document.documentElement.classList.add('ly-brand');
+      // until leyline-look.css arrives: none of wu-loading.css's painted art or its display font is drawn (or fetched)
+      var first = document.createElement('style');
+      first.textContent = 'html.ly-brand{--wu-load-art:none}'
+        + 'html.ly-brand body #wenilla-boot,html.ly-brand #wu-loading{background:#15181f!important}'
+        + 'html.ly-brand #wenilla-boot .box::before,html.ly-brand #wenilla-boot .box::after,'
+        + 'html.ly-brand #wu-loading .box::before,html.ly-brand #wu-loading .box::after,'
+        + 'html.ly-brand #wenilla-boot .stage,html.ly-brand #wu-loading .stage{background-image:none}'
+        + 'html.ly-brand body #wenilla-boot .err,html.ly-brand body #wenilla-boot .stage::after,'
+        + 'html.ly-brand #wu-loading .stage::after,html.ly-brand #wu-drop h2,html.ly-brand #wu-addons h2{font-family:system-ui,sans-serif}';
+      (document.head || document.documentElement).appendChild(first);
+      var look = document.createElement('link');
+      look.id = 'ly-look-css';
+      look.rel = 'stylesheet';
+      look.href = './leyline-look.css';
+      (document.head || document.documentElement).appendChild(look);
+    }
+  } catch (e) { console.warn('wrath-early.js loading style', e); }
+  try {
+    window.__wuPage = import('./wrath-page.js')
+      .then(function (m) { return m.install(); })
+      .catch(function (e) { console.warn('wrath-page.js:', e); });
+  } catch (e) { console.warn('wrath-early.js', e); }
+})();
+// >>> leyline-hop (realm hopping, 2026-10-25) ------------------------------------------------------
+// A Leyline hop session (the Leyline window's Join: /wrath?go=r:<realm id>, wrath_portal.py hop_env) gets an
+// env with hop, hop_ws (wss://<relay>/ws/<realm id>) and no login. Before the client starts, this:
+//   * points the client's connections at the relay's bridge: the client always dials {this page}/ws/<port>
+//     (benilla-app net/ws.rs); /ws/3724 becomes <hop_ws>/auth and any other port (the realm's world port, which
+//     its realm list names) <hop_ws>/world. Nothing else is touched.
+//   * fills in that realm's own login, kept in this browser only (localStorage wu.leyline.login.<realm id>, put
+//     there by the realm's join page through wrath-page.js), never the Wrath one and never sent to our servers.
+//     One exception: the Dalaran Hangout (env.hop_home "1") is Wrath itself through the relay, so the env keeps
+//     the player's own Wrath login there (the same account; SRP only, the password never crosses the wire).
+// wrath-page.js shows "Back to Wrath" and, with no login kept yet, the realm's join page.
+// Hero Key sign-in (the site's herokey_sso flag; docs/HERO-KEY-SSO.md): the env may instead carry hop_sso, a signed
+// assertion for this realm, with a one-time login for it in user/pass. This posts the assertion to the relay
+// (<relay>/api/realms/<id>/herokey; the realm's agent checks it and sets that login) and holds the client's start
+// (the wasm download) until the realm answered, at most 8 s. No join page, nothing kept in localStorage. A realm
+// that doesn't take it (or any failure) falls back to the login this browser keeps, else the join page.
+// "Use another account" turns it off for that realm in this browser (wu.leyline.sso.off.<id>).
+// window.__wuHop.status(): what this page did (the hop, the rewritten sockets, the hop watcher), for live tests;
+// never a password.
+(function (root) {
+  'use strict';
+  var ID = /^[a-z2-7]{16}$/;
+  var KEY = 'wu.leyline.login.';
+  var SSO_OFF = 'wu.leyline.sso.off.';
+  var SSO_WAIT = 8000;
+  var USER = /^[A-Za-z0-9]{3,16}$/, PASS = /^[\x21-\x7e]{1,16}$/;
+
+  /** hop_ws when it is the relay bridge for this very realm (wss:, or ws: on a plain-http dev page), else null. */
+  function hopBase(env, protocol) {
+    var b = env && typeof env.hop_ws === 'string' ? env.hop_ws : '';
+    var m = /^(wss?):\/\/[A-Za-z0-9.-]+(?::\d{1,5})?\/ws\/([a-z2-7]{16})$/.exec(b);
+    if (!m || m[2] !== env.hop || (m[1] === 'ws' && protocol !== 'http:')) return null;
+    return b;
+  }
+
+  /** The client's {page}/ws/<port> on this page's own host -> the bridge; anything else unchanged. */
+  function rewrite(url, base, pageHost) {
+    var m = /^wss?:\/\/([^/?#]+)\/ws\/(\d{1,5})(?:[?#].*)?$/.exec(String(url));
+    if (!m || m[1] !== pageHost) return url;
+    return base + (m[2] === '3724' ? '/auth' : '/world');
+  }
+
+  function savedLogin(storage, id) {
+    try {
+      var v = JSON.parse(storage.getItem(KEY + id) || 'null');
+      if (v && USER.test(v.user) && PASS.test(v.pass)) return { user: v.user.toUpperCase(), pass: v.pass };
+    } catch (e) { /* storage blocked or junk */ }
+    return null;
+  }
+
+  function saveLogin(storage, id, user, pass) {
+    if (!ID.test(id) || !USER.test(user || '') || !PASS.test(pass || '')) return false;
+    try { storage.setItem(KEY + id, JSON.stringify({ user: user.toUpperCase(), pass: pass })); return true; } catch (e) { return false; }
+  }
+
+  function forgetLogin(storage, id) { try { storage.removeItem(KEY + id); } catch (e) { /* blocked */ } }
+
+  /** Hero Key sign-in for this realm declined in this browser ("Use another account")? */
+  function ssoDeclined(storage, id) { try { return storage.getItem(SSO_OFF + id) === '1'; } catch (e) { return false; } }
+
+  function setSso(storage, id, on) {
+    try { if (on) storage.removeItem(SSO_OFF + id); else storage.setItem(SSO_OFF + id, '1'); } catch (e) { /* blocked */ }
+  }
+
+  /** The address to redeem env.hop_sso at, when it is well formed: the same relay as the bridge, this realm's
+   * herokey route, an assertion for this realm and a one-time login beside it. Else null. */
+  function ssoRedeem(env, base) {
+    var s = env.hop_sso;
+    if (!s || typeof s !== 'object' || !s.assertion || typeof s.assertion !== 'object' ||
+        typeof s.sig !== 'string' || !/^[0-9a-f]{128}$/.test(s.sig)) return null;
+    var m = /^(wss?):\/\/([A-Za-z0-9.-]+(?::\d{1,5})?)\/ws\/[a-z2-7]{16}$/.exec(base || '');
+    if (!m) return null;
+    var want = (m[1] === 'wss' ? 'https' : 'http') + '://' + m[2] + '/api/realms/' + env.hop + '/herokey';
+    if (s.redeem !== want || s.assertion.aud !== env.hop) return null;
+    if (!/^HK[A-Z2-7]{14}$/.test(env.user || '') || !PASS.test(env.pass || '')) return null;
+    return want;
+  }
+
+  /** POST the assertion; resolves {ok, code} (never rejects), within SSO_WAIT. */
+  function redeem(win, url, sso) {
+    return new Promise(function (done) {
+      var settled = false, timer = null;
+      var finish = function (ok, code) {
+        if (settled) return;
+        settled = true;
+        if (timer !== null && typeof clearTimeout === 'function') clearTimeout(timer);
+        done({ ok: ok, code: code });
+      };
+      timer = setTimeout(function () { finish(false, 'timeout'); }, SSO_WAIT);
+      try {
+        win.fetch(url, { method: 'POST', mode: 'cors', credentials: 'omit', referrerPolicy: 'no-referrer',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify({ assertion: sso.assertion, sig: sso.sig }) })
+          .then(function (r) {
+            if (r.ok) return finish(true, 'ok');
+            return r.json().then(function (j) { finish(false, String((j && j.code) || r.status).slice(0, 20)); },
+                                 function () { finish(false, String(r.status)); });
+          }, function () { finish(false, 'network'); });
+      } catch (e) { finish(false, 'network'); }
+    });
+  }
+
+  /** Hold the client's start (its wasm download) until `pending` settles. */
+  function holdStart(win, pending) {
+    var orig = win.fetch;
+    if (typeof orig !== 'function') return;
+    win.fetch = function (input) {
+      var path = '';
+      try {
+        var url = typeof input === 'string' ? input : (input && input.url) || '';
+        path = new URL(String(url), win.location.href).pathname;
+      } catch (e) { /* not a URL */ }
+      if (!/\/wenilla_bg\.wasm$/.test(path)) return orig.apply(this, arguments);
+      var self = this, args = arguments;
+      return pending.then(function () { return orig.apply(self, args); });
+    };
+  }
+
+  function apply(win) {
+    var env = win.__wenilla_env;
+    if (!env || typeof env !== 'object' || !ID.test(env.hop || '')) return null;
+    var base = hopBase(env, win.location.protocol);
+    if (!base) { console.warn('leyline hop: no usable relay address; staying put'); return null; }
+    var home = env.hop_home === '1' && USER.test(env.user || '') && PASS.test(env.pass || '');
+    var login = null, sso = null, pending = null, declined = false;
+    if (!home) {
+      var url = null;
+      if (env.hop_sso) {
+        try { declined = ssoDeclined(win.localStorage, env.hop); } catch (e) { declined = false; }
+        url = declined ? null : ssoRedeem(env, base);
+      }
+      var one = url ? { user: env.user, pass: env.pass } : null;
+      var ticket = env.hop_sso;
+      delete env.user; delete env.pass; delete env.hop_sso;   // only ever this realm's own login
+      var fallback = function () {
+        var saved = null;
+        try { saved = savedLogin(win.localStorage, env.hop); } catch (e) { saved = null; }
+        if (saved) { env.user = saved.user; env.pass = saved.pass; }
+        return saved;
+      };
+      if (url && typeof win.fetch === 'function') {
+        env.user = one.user; env.pass = one.pass;   // the one-time login, once the realm took the assertion
+        sso = 'pending';
+        pending = redeem(win, url, ticket).then(function (r) {
+          if (api.state) api.state.sso = r.ok ? 'ok' : 'failed:' + r.code;
+          if (!r.ok) {
+            delete env.user; delete env.pass;
+            var saved = fallback();
+            if (api.state) api.state.login = !!saved;
+          }
+          return r.ok;
+        });
+        holdStart(win, pending);
+      } else {
+        login = fallback();
+      }
+    }
+    var Orig = win.WebSocket;
+    if (typeof Orig === 'function' && !Orig.__wuHop) {
+      var host = win.location.host;
+      var Hop = function WebSocket(url, protocols) {
+        var to = rewrite(url, base, host);
+        try {
+          api.sockets.push({ at: Math.round((win.performance && win.performance.now()) || 0),
+                             from: String(url).split('?')[0], to: String(to).split('?')[0] });
+          if (api.sockets.length > 20) api.sockets.shift();
+        } catch (e) { /* the log is optional */ }
+        return protocols === undefined ? new Orig(to) : new Orig(to, protocols);
+      };
+      Hop.prototype = Orig.prototype;
+      ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'].forEach(function (k) { Hop[k] = Orig[k]; });
+      Hop.__wuHop = true;
+      win.WebSocket = Hop;
+    }
+    return { id: env.hop, name: String(env.hop_name || ''), base: base, login: !!login || home || !!pending, home: home,
+             sso: sso, ssoPending: pending, ssoOffer: declined };
+  }
+
+  /** For live tests: the hop (no secrets), the sockets the client opened and where they went, the hop watcher. */
+  function status() {
+    var w = api.watch || null;
+    var env = root.__wenilla_env || {};
+    return {
+      page: (root.location && root.location.host) || '',
+      hop: api.state ? { id: api.state.id, name: api.state.name, base: api.state.base, login: api.state.login,
+                         home: !!api.state.home, sso: api.state.sso || undefined } : null,
+      envHop: typeof env.hop === 'string' ? env.hop : null,
+      signedIn: !!(env.user && env.pass),
+      sockets: api.sockets.slice(),
+      watch: w ? { polls: w.polls || 0, taken: w.taken || null, gone: w.gone || null, error: w.error || null } : null,
+    };
+  }
+
+  var api = { KEY: KEY, SSO_OFF: SSO_OFF, hopBase: hopBase, rewrite: rewrite, savedLogin: savedLogin, saveLogin: saveLogin,
+              forgetLogin: forgetLogin, ssoDeclined: ssoDeclined, setSso: setSso, ssoRedeem: ssoRedeem, apply: apply,
+              state: null, sockets: [], watch: null, status: status };
+  root.__wuHop = api;
+  try { if (root.location) api.state = apply(root); } catch (e) { console.warn('wrath-early.js leyline hop', e); }
+})(typeof window !== 'undefined' ? window : globalThis);
+// <<< leyline-hop -----------------------------------------------------------------------------------

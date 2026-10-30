@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Join a realm</title>
+<style>
+  :root { --bg:#f6f4ef; --card:#fff; --ink:#1d1b18; --muted:#6b655c; --line:#e3ddd2; --accent:#2f5d8a; --ok:#2e7d4f; --bad:#a63d32; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#15171a; --card:#1e2125; --ink:#ece8e1; --muted:#a39d93; --line:#30343a; --accent:#7fb0e0; --ok:#6fcf97; --bad:#ef8a7f; } }
+  :root[data-theme="dark"] { --bg:#15171a; --card:#1e2125; --ink:#ece8e1; --muted:#a39d93; --line:#30343a; --accent:#7fb0e0; --ok:#6fcf97; --bad:#ef8a7f; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width:620px; margin:0 auto; padding:32px 16px 48px; }
+  h1 { font-size:1.6rem; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 24px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; margin:0 0 16px; }
+  .card h2 { font-size:1.05rem; margin:0 0 8px; }
+  code, .mono { font-family:ui-monospace, Consolas, monospace; }
+  .line { display:flex; gap:8px; align-items:center; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px 12px; overflow-x:auto; }
+  .line code { flex:1; white-space:nowrap; }
+  button { font:inherit; border:0; border-radius:8px; padding:9px 16px; background:var(--accent); color:#fff; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--accent); border:1px solid var(--line); padding:6px 10px; }
+  button:disabled { opacity:.5; cursor:default; }
+  label { display:block; font-size:.9rem; color:var(--muted); margin:10px 0 4px; }
+  input { font:inherit; width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--ink); }
+  .msg { margin-top:10px; min-height:1.5em; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); }
+  .pill { display:inline-block; font-size:.8rem; padding:2px 8px; border-radius:99px; border:1px solid var(--line); color:var(--muted); margin-left:6px; vertical-align:middle; }
+  ol { padding-left:20px; margin:8px 0 0; } li { margin:4px 0; }
+  .small { font-size:.88rem; color:var(--muted); }
+</style>
+</head>
+<body>
+<main data-hop-origins="">
+  <h1 id="name">Joining a realm…</h1>
+  <p class="sub" id="sub">A Beacon: a 3.3.5a realm hosted by a player, reached through the Leyline relay.</p>
+
+  <div class="card" id="state-card">
+    <h2>1. This computer is let in</h2>
+    <div id="knock-msg" class="msg">Checking the invite…</div>
+  </div>
+
+  <div class="card" id="account-card" hidden>
+    <h2>2. Make your game account on this realm</h2>
+    <p class="small">Your password never leaves this page: it is turned into a one-way login key here, and only that key is sent to the realm. The host can't read it.</p>
+    <form id="acct" autocomplete="off">
+      <label for="u">Account name (3–16 letters or digits)</label>
+      <input id="u" maxlength="16" pattern="[A-Za-z0-9]{3,16}" required autocapitalize="characters" spellcheck="false">
+      <label for="p">Password (8–16 characters)</label>
+      <input id="p" type="password" minlength="8" maxlength="16" required>
+      <div style="margin-top:14px"><button id="mk" type="submit">Make my account</button></div>
+      <div id="acct-msg" class="msg"></div>
+    </form>
+    <p class="small">Already have an account on this realm? Skip this step.</p>
+    <p class="small" id="host-note" hidden>This is the host's own link: make your account with the GM account name you chose when you set up the realm. It gets GM rights by itself within a few seconds. Don't share this link; send friends the invite link instead.</p>
+  </div>
+
+  <div class="card" id="signin-card" hidden>
+    <h2>Already have an account on this realm?</h2>
+    <p class="small">Sign in once: the game keeps this login in this browser, for this realm only, and uses it each time you hop here. It is never sent to Leyline's servers (the game proves it to the realm with SRP, so even the realm never sees the password).</p>
+    <form id="signin" autocomplete="off">
+      <label for="su">Account name</label>
+      <input id="su" maxlength="16" pattern="[A-Za-z0-9]{3,16}" required autocapitalize="characters" spellcheck="false">
+      <label for="sp">Password</label>
+      <input id="sp" type="password" minlength="1" maxlength="16" required>
+      <div style="margin-top:14px"><button id="si" type="submit">Use this account</button></div>
+      <div id="signin-msg" class="msg"></div>
+    </form>
+  </div>
+
+  <div class="card" id="play-card" hidden>
+    <h2>3. Play</h2>
+    <p id="client-note">Use your own 3.3.5a game files. In the game folder, open <code>Data\enUS\realmlist.wtf</code> (or your language's folder) and make it this one line:</p>
+    <div class="line"><code id="realmlist">set realmlist …</code><button class="ghost" data-copy="realmlist">Copy</button></div>
+    <ol class="small">
+      <li>Start the game and log in with the account from step 2.</li>
+      <li>Opening this page let your internet connection in for <span id="hours">24</span> hours. After that, open the invite link again.</li>
+      <li id="alt-line">If the shared address doesn't work for you, use this one instead:<br><code id="realmlist-port"></code></li>
+    </ol>
+  </div>
+
+  <p class="small">Leyline never sends game files. Your IP address is not shown to the host, and the host's is not shown to you.</p>
+</main>
+<script>
+"use strict";
+(() => {
+  const RELAY_DEFAULT = "https://relay.openvanilla.app";
+  const parts = location.pathname.split("/").filter(Boolean);
+  const qs = new URLSearchParams(location.search);
+  const realmId = (parts[0] === "join" && parts[1]) || qs.get("r") || "";
+  // #<invite secret>, or the host's own link: #<invite secret>~<host key> (lets the host make the GM account)
+  const frag = decodeURIComponent((location.hash || "").slice(1)).split("~");
+  const invite = frag[0] || "", hostKey = frag[1] || "";
+  const relay = (qs.get("relay") && /^https:\/\/[a-z0-9.-]+$/i.test(qs.get("relay"))) ? qs.get("relay")
+              : (location.hostname.startsWith("relay.") ? location.origin : RELAY_DEFAULT);
+  const $ = (id) => document.getElementById(id);
+  const say = (el, text, cls) => { el.textContent = text; el.className = "msg " + (cls || ""); };
+
+  // ---- Hop mode (?hop=1&from=<origin>): framed by the browser game on the first hop to this realm. The login
+  // made or typed here goes to the game page only (postMessage to `from`, which must be one of the relay's play
+  // origins: data-hop-origins, and the relay's frame-ancestors lets only those frame this page). Nothing else
+  // leaves the page; the game keeps it in its own localStorage for this realm.
+  const hopOrigins = (document.querySelector("main").getAttribute("data-hop-origins") || "").split(/\s+/).filter(Boolean);
+  const hopFrom = qs.get("from") || "";
+  const hop = qs.get("hop") === "1" && window.parent !== window && hopOrigins.indexOf(hopFrom) >= 0;
+  function handBack(user, pass) {
+    if (!hop) return false;
+    window.parent.postMessage({ type: "leyline-login", realm: realmId, user: user.toUpperCase(), pass }, hopFrom);
+    return true;
+  }
+  window.__wuHop = { hop, hopOrigins, handBack }; // for tests
+
+  // ---- SRP6 verifier, as AzerothCore stores it: x = SHA1(salt | SHA1(UPPER(user) ":" UPPER(pass))), v = 7^x mod N, little endian
+  const N = BigInt("0x894B645E89E1535BBDAD5B8B290650530801B18EBFBF5E8FAB3C82872A3E9BB7");
+  const sha1 = async (bytes) => new Uint8Array(await crypto.subtle.digest("SHA-1", bytes));
+  const leToBig = (b) => { let n = 0n; for (let i = b.length - 1; i >= 0; i--) n = (n << 8n) | BigInt(b[i]); return n; };
+  const bigToLe = (n, len) => { const out = new Uint8Array(len); for (let i = 0; i < len; i++) { out[i] = Number(n & 0xffn); n >>= 8n; } return out; };
+  const modpow = (b, e, m) => { let r = 1n; b %= m; while (e > 0n) { if (e & 1n) r = (r * b) % m; b = (b * b) % m; e >>= 1n; } return r; };
+  const hex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+  async function verifier(user, pass, salt) {
+    const inner = await sha1(new TextEncoder().encode(user.toUpperCase() + ":" + pass.toUpperCase()));
+    const cat = new Uint8Array(salt.length + inner.length); cat.set(salt); cat.set(inner, salt.length);
+    const x = leToBig(await sha1(cat));
+    return bigToLe(modpow(7n, x, N), 32);
+  }
+  window.__wuVerifier = verifier; // for tests
+
+  async function api(path, body) {
+    const r = await fetch(relay + path, body === undefined ? {} :
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    let doc = null; try { doc = await r.json(); } catch (_) {}
+    return { status: r.status, doc: doc || {} };
+  }
+
+  // Which client the realm needs (the host kit runs realms for 1.12.1, 2.4.3 and 3.3.5a clients for now), and
+  // where that client keeps its realm address.
+  // The newest build offered. Hidden by the owner on 2026-10-30: 4.3.4 and 5.4.8 are not offered for now. Set this
+  // back to 18414 (or window.LEYLINE_ALL_CLIENTS = true) to name them again.
+  const MAX_OFFERED_BUILD = 12340;
+  const CLIENTS = {
+    "1.12.1": [5875, "the 1.12 client", "<code>realmlist.wtf</code> in the game folder"],
+    "2.4.3": [8606, "the 2.4.3 client", "<code>Data\\enUS\\realmlist.wtf</code> (or your language's folder)"],
+    "4.3.4": [15595, "the 4.3.4 client", "<code>WTF\\Config.wtf</code> (the line starting with SET realmlist)"],
+    "5.4.8": [18414, "the 5.4.8 client", "<code>WTF\\Config.wtf</code> (the line starting with SET realmlist)"],
+  };
+  function forClient(build) {
+    const all = CLIENTS[build];
+    if (!all) return;   // 3.3.5a: the page as written
+    if (all[0] > MAX_OFFERED_BUILD && window.LEYLINE_ALL_CLIENTS !== true) {
+      $("sub").textContent = "A Beacon: a realm hosted by a player, reached through the Leyline relay.";
+      $("client-note").textContent = "This realm runs a client Leyline does not offer yet.";
+      return;
+    }
+    const c = all.slice(1);
+    $("sub").textContent = `A Beacon: a ${build} realm hosted by a player, reached through the Leyline relay. You need ${c[0]}.`;
+    $("client-note").innerHTML = `This realm needs ${c[0]}: use your own ${build} game files. Open ${c[1]} and make it this one line:`;
+  }
+
+  async function start() {
+    if (!/^[a-z2-7]{16}$/.test(realmId)) { $("name").textContent = "That isn't an invite link"; say($("knock-msg"), "Ask the host for the link again.", "bad"); return; }
+    let info;
+    try { info = await api("/api/realms/" + realmId); } catch (e) { say($("knock-msg"), "The relay can't be reached right now. Try again in a minute.", "bad"); return; }
+    if (info.status !== 200) { $("name").textContent = "Unknown realm"; say($("knock-msg"), "This realm isn't known to the relay. Ask the host for a new link.", "bad"); return; }
+    $("name").innerHTML = ""; $("name").append(document.createTextNode(info.doc.name || "A realm"));
+    const pill = document.createElement("span"); pill.className = "pill"; pill.textContent = info.doc.online ? (info.doc.visibility || "") : "offline"; $("name").append(pill);
+    if (!info.doc.online) { say($("knock-msg"), "The host's realm isn't running right now. Try again later.", "bad"); return; }
+    const k = await api("/api/realms/" + realmId + "/knock", invite ? { invite } : {});
+    if (k.status !== 200) { say($("knock-msg"), k.doc.error || "The relay refused this link.", "bad"); return; }
+    say($("knock-msg"), "Done: your internet connection may now reach this realm.", "ok");
+    api("/r/" + realmId + "/status.json").then((st) => forClient(st.doc.build)).catch(() => {});
+    $("realmlist").textContent = "set realmlist " + k.doc.realmlist;
+    $("realmlist-port").textContent = "set realmlist " + k.doc.realmlist_port;
+    $("alt-line").hidden = !k.doc.realmlist_port || k.doc.realmlist_port === k.doc.realmlist;   // no shared port: one address only
+    $("hours").textContent = k.doc.valid_hours || 24;
+    $("play-card").hidden = hop;   // in the browser game the realm list is already set
+    if (hop) { $("signin-card").hidden = false; $("sub").textContent = "Make an account on this realm, or sign in with one you have. Then you're in."; }
+    if (k.doc.signup !== "off" && (k.doc.signup === "open" || invite)) $("account-card").hidden = false;
+    if (hostKey) { $("account-card").hidden = false; $("host-note").hidden = false; }
+  }
+
+  $("acct").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const user = $("u").value.trim(), pass = $("p").value;
+    if (!/^[A-Za-z0-9]{3,16}$/.test(user)) return say($("acct-msg"), "Account names are 3–16 letters or digits.", "bad");
+    if (!/^[\x21-\x7e]{8,16}$/.test(pass)) return say($("acct-msg"), "Passwords are 8–16 plain characters: letters, digits and symbols, no spaces or accents (the 3.3.5a client's limit).", "bad");
+    $("mk").disabled = true; say($("acct-msg"), "Making your account…");
+    try {
+      const salt = crypto.getRandomValues(new Uint8Array(32));
+      if (!salt[31]) salt[31] = 1;   // 32 bytes on every core: the 1.12.1 and 2.4.3 servers drop leading zeros
+      const v = await verifier(user, pass, salt);
+      const body = { invite, username: user, salt: hex(salt), verifier: hex(v) };
+      if (hostKey) body.host = hostKey;
+      const r = await api("/api/realms/" + realmId + "/accounts", body);
+      if (r.status === 201) {
+        say($("acct-msg"), "Account " + r.doc.username + " is ready. " + (hop ? "Taking you in…" : "Log in with it in the game."), "ok");
+        handBack(user, pass);
+      }
+      else { say($("acct-msg"), r.doc.error || ("The realm said no (" + r.status + ")."), "bad"); $("mk").disabled = false; }
+    } catch (e) { say($("acct-msg"), "Something went wrong: " + e.message, "bad"); $("mk").disabled = false; }
+    $("p").value = "";
+  });
+
+  $("signin").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const user = $("su").value.trim(), pass = $("sp").value;
+    if (!/^[A-Za-z0-9]{3,16}$/.test(user)) return say($("signin-msg"), "Account names are 3–16 letters or digits.", "bad");
+    if (!/^[\x21-\x7e]{1,16}$/.test(pass)) return say($("signin-msg"), "That doesn't look like a 3.3.5a password (1–16 plain characters).", "bad");
+    say($("signin-msg"), handBack(user, pass) ? "Taking you in…" : "Open this from the game to sign in there.", "ok");
+    $("sp").value = "";
+  });
+
+  document.addEventListener("click", (ev) => {
+    const id = ev.target && ev.target.getAttribute("data-copy");
+    if (id && navigator.clipboard) navigator.clipboard.writeText($(id).textContent).then(() => { ev.target.textContent = "Copied"; });
+  });
+  start();
+})();
+</script>
+</body>
+</html>

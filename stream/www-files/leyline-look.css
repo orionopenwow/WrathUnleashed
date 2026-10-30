@@ -1,0 +1,105 @@
+/* leyline-look.css: the game page's loading screens in the Leyline look (owner 2026-10-30), only while the Leyline
+   brand switch is on: wrath-early.js links this file and puts class "ly-brand" on <html> when /__env.js says
+   brand "leyline" (wrath_portal.py LEYLINE_BRAND=1). Off: this file is never linked and the page is as before.
+
+   Flat and dark like the launcher, clean sans text, and the round Leyline mark as the loading logo: the swirl turns,
+   the crystal stays upright. It covers boot.js's overlay (#wenilla-boot), the world-loading cover (wu-loading.js
+   #wu-loading), the own-files cover (#wu-layer-cover) and the folder picker (#wu-ownfiles), and replaces every
+   painted piece wu-loading.css draws (the portal and Orion art, the gold corners, the dragons, the divider, Cinzel):
+   none of those files is fetched with the brand on.
+
+   .ly-spin is the same spinner as the launcher's ui/spin.css and the website's SPIN_CSS (only the paths differ). */
+
+.ly-spin {
+  --ly-spin-size: 18px; --ly-spin-turn: 7s;
+  position: relative; display: inline-block; flex: none; vertical-align: middle;
+  width: var(--ly-spin-size); height: var(--ly-spin-size);
+}
+.ly-spin::before, .ly-spin::after,
+html.ly-brand #wenilla-boot .box::before, html.ly-brand #wenilla-boot .box::after,
+html.ly-brand #wu-loading .box::before, html.ly-brand #wu-loading .box::after,
+html.ly-brand #wu-layer-cover::before, html.ly-brand #wu-layer-cover::after {
+  content: ""; position: absolute; inset: 0; background: center / contain no-repeat; pointer-events: none; filter: none;
+}
+.ly-spin::before,
+html.ly-brand #wenilla-boot .box::before, html.ly-brand #wu-loading .box::before, html.ly-brand #wu-layer-cover::before {
+  background-image: url("art/leyline-swirl-256.webp");
+  animation: ly-spin-turn var(--ly-spin-turn, 7s) linear infinite; will-change: transform;
+}
+.ly-spin::after,
+html.ly-brand #wenilla-boot .box::after, html.ly-brand #wu-loading .box::after, html.ly-brand #wu-layer-cover::after {
+  background-image: url("art/leyline-crystal-256.webp");
+}
+.ly-spin.slow { --ly-spin-turn: 16s; }
+@keyframes ly-spin-turn { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* -- the backdrop: flat, no art ---------------------------------------------------------------- */
+html.ly-brand { --wu-load-art: none; --lk-bg: #15181f; --lk-surface: #1e222b; --lk-surface-2: #252a35; --lk-border: #2c313c;
+  --lk-text: #eef0f4; --lk-muted: #9aa1ae; --lk-accent: #5b8def; --lk-accent-strong: #7aa3f5; --lk-accent-2: #8b6cf0;
+  --lk-font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+html.ly-brand body #wenilla-boot, html.ly-brand #wu-loading, html.ly-brand #wu-layer-cover {
+  background: var(--lk-bg) !important; color: var(--lk-text);
+}
+html.ly-brand #wenilla-boot::before, html.ly-brand #wu-loading::before { display: none; }
+
+/* -- the panel: no frame, the mark above the one line ------------------------------------------- */
+html.ly-brand body #wenilla-boot .box, html.ly-brand #wu-loading .box {
+  margin-top: 0; width: min(340px, 80vw); padding: 0; background: none; border: 0; box-shadow: none; text-align: center;
+}
+html.ly-brand body #wenilla-boot .box::before, html.ly-brand body #wenilla-boot .box::after,
+html.ly-brand #wu-loading .box::before, html.ly-brand #wu-loading .box::after {
+  inset: auto; left: 50%; right: auto; bottom: auto; top: -128px; width: 104px; height: 104px; margin-left: -52px;
+}
+html.ly-brand body #wenilla-boot .box::after, html.ly-brand #wu-loading .box::after {
+  filter: drop-shadow(0 0 14px rgba(91, 141, 239, .45));
+}
+html.ly-brand body #wenilla-boot .stage, html.ly-brand #wu-loading .stage { background: none; padding-bottom: 0; margin: 0 0 14px; }
+html.ly-brand body #wenilla-boot .stage::after, html.ly-brand #wu-loading .stage::after {
+  font: 600 15px var(--lk-font); letter-spacing: .01em; background: none; color: var(--lk-text);
+  -webkit-text-fill-color: currentColor; filter: none;
+}
+html.ly-brand body #wenilla-boot .bar, html.ly-brand #wu-loading .bar {
+  height: 4px; background: var(--lk-surface-2); border: 0; border-radius: 2px; box-shadow: none;
+}
+html.ly-brand body #wenilla-boot .bar > i, html.ly-brand #wu-loading .bar > i {
+  border-radius: 2px; background: linear-gradient(90deg, var(--lk-accent), var(--lk-accent-2)) !important; box-shadow: none;
+}
+html.ly-brand body #wenilla-boot .bar > i::after, html.ly-brand #wu-loading .bar > i::after { display: none; }
+html.ly-brand body #wenilla-boot .err { font: 600 14px var(--lk-font); color: #ff7f76; }
+
+/* -- the own-files cover: the mark above its words --------------------------------------------- */
+html.ly-brand #wu-layer-cover { font: 600 16px var(--lk-font); letter-spacing: .01em; }
+html.ly-brand #wu-layer-cover small { font-family: var(--lk-font); color: var(--lk-muted); }
+html.ly-brand #wu-layer-cover::before, html.ly-brand #wu-layer-cover::after {
+  inset: auto; left: 50%; top: calc(50% - 150px); width: 96px; height: 96px; margin-left: -48px;
+}
+
+/* -- the folder picker: flat card, the mark (still) by its title, blue not gold ----------------- */
+html.ly-brand #wu-ownfiles { background: rgba(21, 24, 31, .97); font-family: var(--lk-font); }
+html.ly-brand #wu-ownfiles .card { background: var(--lk-surface); border-color: var(--lk-border); border-radius: 14px; }
+html.ly-brand #wu-ownfiles h1 { color: var(--lk-text); display: flex; align-items: center; gap: 10px; }
+html.ly-brand #wu-ownfiles h1::before {
+  content: ""; flex: none; width: 30px; height: 30px;
+  background: url("art/leyline-crystal-128.png") center / contain no-repeat, url("art/leyline-swirl-128.png") center / contain no-repeat;
+}
+html.ly-brand #wu-ownfiles .zone { border-color: var(--lk-border); border-radius: 10px; }
+html.ly-brand #wu-ownfiles .zone.over { border-color: var(--lk-accent); background: rgba(91, 141, 239, .08); }
+html.ly-brand #wu-ownfiles button.primary { background: var(--lk-accent); color: #fff; }
+html.ly-brand #wu-ownfiles button.primary:hover { background: var(--lk-accent-strong); }
+html.ly-brand #wu-ownfiles .help:hover { border-color: var(--lk-accent); color: var(--lk-text); }
+html.ly-brand #wu-layer-toast { border-color: rgba(91, 141, 239, .55); background: rgba(21, 24, 31, .95); }
+html.ly-brand #wu-layer-toast a { color: var(--lk-accent-strong); }
+
+/* -- the addon drop target and the addons panel (wu-addons.js): flat, no gold --------------------- */
+html.ly-brand #wu-drop { background: rgba(21, 24, 31, .8); }
+html.ly-brand #wu-drop .box, html.ly-brand #wu-addons { background: var(--lk-surface); border-color: var(--lk-border); border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35); color: var(--lk-text); }
+html.ly-brand #wu-drop .box { border-color: var(--lk-accent); }
+html.ly-brand #wu-drop h2, html.ly-brand #wu-addons h2 { font-family: var(--lk-font); letter-spacing: 0; color: var(--lk-text); }
+html.ly-brand #wu-addons .row { border-top-color: var(--lk-border); }
+
+/* reduced motion: the mark stands still */
+@media (prefers-reduced-motion: reduce) {
+  .ly-spin::before, html.ly-brand #wenilla-boot .box::before, html.ly-brand #wu-loading .box::before,
+  html.ly-brand #wu-layer-cover::before { animation: none !important; }
+}

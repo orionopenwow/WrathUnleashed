@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leyline Launcher</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="spin.css"><!-- the spinning mark: the header logo and every loading state (spin.js) -->
+<!-- themes (themes agent): Dark (style.css) or Light; the Themes section; themes.js applies the theme before paint -->
+<link rel="stylesheet" href="themes/themes.css"><script src="themes.js"></script>
+<link rel="stylesheet" href="social.css">
+<link rel="stylesheet" href="modes.css">
+</head>
+<body class="ly">
+<div class="frame">
+
+<!-- Title bar: drag to move the window -->
+<header class="titlebar" data-tauri-drag-region>
+  <div class="brand" data-tauri-drag-region><div class="ly-spin slow" role="img" aria-label="Leyline" data-tauri-drag-region></div><span data-tauri-drag-region><b>Leyline</b><i>Launcher</i></span></div>
+  <form class="search" id="search-form" role="search">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+    <input id="search" type="search" placeholder="Search mods, realms and players" aria-label="Search mods, realms and players" autocomplete="off" spellcheck="false">
+  </form>
+  <div class="tb-fill" data-tauri-drag-region></div>
+  <button type="button" class="pill upd" id="tb-modupd" hidden title="Workshop mods with a newer version: open My Mods">Mod updates</button>
+  <button type="button" class="pill upd" id="tb-update" hidden title="A new Leyline is downloaded: restart to use it">Update ready, restart</button>
+  <div class="pill" id="tb-status"><span class="dot"></span><span id="tb-status-text">Checking…</span></div>
+  <button type="button" class="chip" id="tb-account" title="Your account lives on the website: sign in with Google or your Hero Key">
+    <span class="chip-crest"><b>L</b></span>
+    <span class="chip-txt"><span>Your account</span><i>Hero Key · on the web</i></span>
+  </button>
+  <div class="winbtns">
+    <button type="button" id="win-min" aria-label="Minimise"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+    <button type="button" id="win-max" aria-label="Maximise"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1.5"/></svg></button>
+    <button type="button" id="win-close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+</header>
+
+<aside class="side">
+  <nav aria-label="Pages">
+    <button class="nav" data-page="play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</button>
+    <button class="nav" data-page="mods"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>My Mods<span class="badge" id="nav-mods-count" hidden></span></button>
+    <button class="nav" data-page="discover"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg>Discover</button>
+    <button class="nav" data-page="realms"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>Realms</button>
+    <button class="nav" data-page="host"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>Host</button>
+    <button class="nav" data-page="community"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6M15 14.5c3 0 6 2 6 5"/></svg>Community Hub</button>
+    <button class="nav" data-page="news"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h13v14H6a2 2 0 0 1-2-2z"/><path d="M17 9h3v8a2 2 0 0 1-2 2M8 9h5M8 13h5"/></svg>News</button>
+  </nav>
+
+  <div class="side-label">YOUR REALMS</div>
+  <div class="realm-rows" id="realm-rows"></div>
+  <button type="button" class="realm-add" data-page-go="realms"><span class="plus">+</span>Add or find a server</button>
+
+  <div class="side-foot">
+    <button class="nav plain" data-link="support" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>Support the realm</button>
+    <button class="nav plain" data-page="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Settings</button>
+    <button class="nav plain" data-page="help"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg>Help</button>
+  </div>
+</aside>
+
+<main>
+  <!-- HOME -->
+  <section class="page" id="page-play">
+    <div class="home">
+      <article class="news">
+        <div class="news-top"><span id="news-tag"></span><span>WRATH · ON THE LEYLINE NETWORK</span></div>
+        <h1 id="news-title"></h1>
+        <ul id="news-items"></ul>
+        <button type="button" class="news-more" data-page-go="news">Read the patch notes ›</button>
+      </article>
+
+      <div class="cards-col">
+        <section class="card" aria-label="Server">
+          <div class="card-head"><span>SERVER</span><button type="button" class="link" data-page-go="realms">Change ›</button></div>
+          <div class="srv-name" id="srv-name">Official realm</div>
+          <div class="srv-state" id="srv-state"><span class="dot"></span><span id="srv-state-text">CHECKING…</span></div>
+          <div class="srv-detail" id="srv-detail"></div>
+        </section>
+
+        <section class="card" aria-label="Account">
+          <div class="card-head"><span>ACCOUNT</span><button type="button" class="btn small" data-link="account">MANAGE</button></div>
+          <div class="acct">
+            <span class="crest"><b>L</b></span>
+            <div><b>Your account</b><i>Google or Hero Key · on the web</i></div>
+          </div>
+        </section>
+
+        <section class="card" aria-label="Game client">
+          <div class="card-head"><span>GAME CLIENT</span></div>
+          <div id="play-empty" class="empty" hidden>Add your game client first. Leyline uses the client already on your PC; it never downloads game files.</div>
+          <div class="client-now" id="client-now"></div>
+          <button type="button" class="btn wide" id="client-change" data-page-go="clients">CHANGE GAME FOLDER</button>
+        </section>
+      </div>
+
+      <div class="strip">
+        <div class="mod-tiles" id="mod-tiles"></div>
+        <div class="community-btns">
+          <button type="button" class="btn" data-link="discord">JOIN THE DISCORD</button>
+          <button type="button" class="btn" data-link="support" hidden>SUPPORT THE REALM</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CLIENTS (from CHANGE GAME FOLDER) -->
+  <section class="page" id="page-clients">
+    <div class="panel">
+      <h2>Game Clients</h2>
+      <p class="lede">Point Leyline at a game folder you already have. It reads the build from the executable:
+        1.12.1 (5875), 2.4.3 (8606) or 3.3.5a (12340) for now. Any other build is listed as
+        "other": you can play realms with it, but Leyline offers no mods for it. Leyline never downloads a game client.</p>
+      <div class="row">
+        <button class="btn" id="cl-pick">CHOOSE A FOLDER…</button>
+        <input id="cl-path" placeholder="or paste a folder path" autocomplete="off" spellcheck="false">
+        <button class="btn" id="cl-add">ADD</button>
+      </div>
+      <p class="status" id="cl-status" role="status"></p>
+      <div id="cl-list" class="cards"></div>
+    </div>
+  </section>
+
+  <!-- MY MODS -->
+  <section class="page" id="page-mods">
+    <div class="panel wide">
+      <h2>My Mods</h2>
+      <div class="toolbar">
+        <label class="inline">Client <select class="client-pick" data-for="mods"></select></label>
+        <span class="hint" id="mods-client-note"></span>
+        <span class="toolbar-fill"></span>
+        <button type="button" class="btn small" id="mods-update-all" hidden>UPDATE ALL</button>
+        <button type="button" class="btn small" data-page-go="discover">FIND MODS</button>
+      </div>
+      <div class="drop" id="drop">
+        <b>Drop a mod here</b>
+        <span>a .zip, an addon folder, a client patch (.MPQ) or a native mod (.dll, .asi)</span>
+        <div class="row center">
+          <button type="button" class="btn small" id="mods-pick-file">CHOOSE A FILE…</button>
+          <button type="button" class="btn small" id="mods-pick-folder">CHOOSE A FOLDER…</button>
+        </div>
+      </div>
+      <p class="status" id="mods-status" role="status"></p>
+      <ul class="problems" id="mods-problems" hidden></ul>
+      <div id="mods-list" class="cards mods-grid"></div>
+      <p class="hint">Every mod is allowed: there is no review and no signing, so only add mods from people you trust.
+        Workshop downloads must match their sha256, and anything holding game data or secrets is refused.
+        Addons go to <code>Interface\AddOns</code>, patches to a free <code>Data\patch-X.MPQ</code> slot, native mods
+        (.dll, .asi) next to the game, after a one-time OK. Leyline never runs what it installs.
+        Removing a mod takes out exactly the files Leyline put in and you have not changed; an addon's saved
+        settings in <code>WTF</code> stay, as the game keeps them.</p>
+    </div>
+  </section>
+
+  <!-- DISCOVER: the Workshop catalog -->
+  <section class="page" id="page-discover">
+    <div class="panel wide">
+      <h2>Discover</h2>
+      <div class="toolbar">
+        <label class="inline">Install into <select class="client-pick" data-for="discover"></select></label>
+        <input id="cat-q" type="search" placeholder="Search the Workshop" autocomplete="off" spellcheck="false">
+        <label class="check"><input type="checkbox" id="cat-fit" checked> Only mods for this client</label>
+      </div>
+      <div class="chips cat-sorts" id="cat-sorts" role="tablist" aria-label="Sort">
+        <button type="button" class="chip-btn" role="tab" data-sort="hot">Hot</button>
+        <button type="button" class="chip-btn" role="tab" data-sort="rising">Rising</button>
+        <button type="button" class="chip-btn" role="tab" data-sort="top">Top rated</button>
+        <button type="button" class="chip-btn" role="tab" data-sort="installs">Most installed</button>
+        <button type="button" class="chip-btn" role="tab" data-sort="installs30">This month</button>
+        <button type="button" class="chip-btn" role="tab" data-sort="new">New</button>
+        <button type="button" class="chip-btn" role="tab" data-sort="updated">Updated</button>
+        <label class="inline cat-kind">Kind <select id="cat-kind">
+          <option value="">everything</option><option value="addon">Addons</option><option value="mod">Realm mods and tools</option>
+          <option value="mode">Game modes</option><option value="theme">Themes</option></select></label>
+      </div>
+      <div class="chips" id="cat-chips" role="group" aria-label="Categories"></div>
+      <p class="status" id="cat-status" role="status"></p>
+      <div class="mod-grid" id="cat-grid"></div>
+      <div class="row"><button type="button" class="btn" data-link="mods">OPEN THE WORKSHOP</button><button type="button" class="btn" data-link="modders">MAKE A MOD</button></div>
+    </div>
+  </section>
+
+  <!-- REALMS -->
+  <section class="page" id="page-realms">
+    <div class="panel wide">
+      <h2>Realms</h2>
+      <div class="toolbar">
+        <label class="inline">Play with <select class="client-pick" data-for="realms"></select></label>
+        <button type="button" class="btn small" id="rl-back">BACK TO WRATH</button>
+        <button type="button" class="btn small" id="rl-restore" title="Put back the realmlist you had before Leyline">MY OWN REALMLIST</button>
+        <button type="button" class="btn small" id="rl-refresh">REFRESH</button>
+        <label class="check inline"><input type="checkbox" id="rl-mine"> Only realms my clients can play</label>
+      </div>
+      <p class="net-line" id="rl-net" aria-live="polite"></p>
+      <div class="toolbar rl-filters" aria-label="Filter realms">
+        <label class="inline">Build <select id="rl-f-build"><option value="">any</option></select></label>
+        <label class="inline">Rules <select id="rl-f-tag"><option value="">any</option></select></label>
+        <label class="inline">Region <select id="rl-f-region"><option value="">any</option></select></label>
+        <label class="inline">Language <select id="rl-f-lang"><option value="">any</option></select></label>
+        <label class="check inline"><input type="checkbox" id="rl-f-now"> Has players now</label>
+      </div>
+      <p class="status" id="rl-status" role="status"></p>
+      <div class="realm-list" id="rl-list"></div>
+      <section class="card host-cta" id="rl-host-cta">
+        <!-- TODO(owner): the "Host your own" heading and lede -->
+        <div class="card-head"><span>HOST YOUR OWN</span></div>
+        <p class="lede">Community realms are the Leyline network. Anyone can run one from their own PC.</p>
+        <ol class="steps">
+          <li>Get the Host pack (on the Host page) and Docker.</li>
+          <li>Pick a profile, a name and your house rules. The realm runs on your PC.</li>
+          <li>Make it public: it shows up here for everyone, with no port forwarding. You are its GM.</li>
+        </ol>
+        <div class="row"><button type="button" class="btn" id="rl-host">OPEN HOST</button></div>
+      </section>
+      <h3>A private realm</h3>
+      <p class="lede">Got an invite link from a friend? Paste it here: Leyline opens the realm for this PC and points your client at it.
+        Make your account on the link's page in your browser first (your password never leaves it).</p>
+      <div class="row"><input id="rl-invite" placeholder="https://relay.openvanilla.app/join/…#…" autocomplete="off" spellcheck="false"><button type="button" class="btn" id="rl-join">JOIN</button></div>
+      <h3>Another realm</h3>
+      <div class="form">
+        <label>Play on
+          <select id="play-realm">
+            <option value="official">Leyline Sample Hangout (play.openvanilla.app)</option>
+            <option value="custom">Another realm address…</option>
+          </select>
+        </label>
+        <label id="play-custom-wrap" hidden>Realm address
+          <input id="play-custom" placeholder="realm.example.org or 1.2.3.4:3724" autocomplete="off" spellcheck="false">
+        </label>
+        <p class="hint" id="play-hint"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOST -->
+  <section class="page" id="page-host">
+    <div class="panel wide">
+      <h2>Host</h2>
+      <p class="lede">Run your own realm on this PC and let friends, or everyone, play on it. Your PC runs the server in Docker
+        using your own 3.3.5a game files; it talks out to the Leyline relay, and players reach it through the relay.
+        No port forwarding, and nobody sees your home address. We don't host realms for you: it runs only while your PC does.</p>
+      <ol class="steps">
+        <li><b>Make your realm on the website.</b> Sign in, pick a name, a ruleset and your house rules, then download your realm file.
+          <div class="row"><button type="button" class="btn" data-link="host">HOST A REALM</button></div></li>
+        <li><b>Get the host kit</b> and unzip it, then show Leyline where it is. You also need Docker Desktop.
+          <div class="row"><button type="button" class="btn" id="host-pick">CHOOSE THE KIT FOLDER…</button><button type="button" class="btn" data-link="hostguide">GET THE HOST KIT</button></div>
+          <p class="hint" id="host-kit"></p>
+          <ul class="problems" id="host-problems" hidden></ul></li>
+        <li><b>Start it.</b> The first start takes 5 to 20 minutes. Leave the window it opens running.
+          <div id="host-seeds" class="cards"></div>
+          <div class="row"><button type="button" class="btn" id="host-start" disabled>START MY REALM</button></div></li>
+      </ol>
+      <p class="status" id="host-status-line" role="status"></p>
+      <section class="card" id="host-card" hidden>
+        <div class="card-head"><span>YOUR REALM</span><button type="button" class="btn small" id="host-refresh">REFRESH</button></div>
+        <div class="srv-name" id="host-name"></div>
+        <div class="srv-state" id="host-state"><span class="dot"></span><span id="host-state-text">CHECKING…</span></div>
+        <div class="hint" id="host-detail"></div>
+      </section>
+    </div>
+  </section>
+
+  <!-- COMMUNITY -->
+  <section class="page" id="page-community">
+    <div class="panel">
+      <h2>Community Hub</h2>
+      <p class="lede">Find people to play with, share what you make, and follow what's coming.</p>
+      <div class="link-grid">
+        <button type="button" class="btn" data-link="discord">JOIN THE DISCORD</button>
+        <button type="button" class="btn" data-link="news">THE LEYLINE PAGE</button>
+        <button type="button" class="btn" data-link="mods">THE WORKSHOP</button>
+        <button type="button" class="btn" data-link="github">SOURCE ON GITHUB</button>
+        <button type="button" class="btn" data-link="support" hidden>SUPPORT THE REALM</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- NEWS -->
+  <section class="page" id="page-news">
+    <div class="panel">
+      <h2>News</h2>
+      <div id="news-full"></div>
+      <div class="row"><button type="button" class="btn" data-link="news">MORE ON THE WEBSITE</button></div>
+    </div>
+  </section>
+
+  <!-- HELP -->
+  <section class="page" id="page-help">
+    <div class="panel">
+      <h2>Help</h2>
+      <h3>Playing</h3>
+      <p class="lede">Add your game folder under CHANGE GAME FOLDER, pick a realm, press PLAY. Leyline writes the realm into
+        realmlist.wtf (your original is kept as realmlist.wtf.leyline-backup) and starts the game.
+        BROWSER plays Wrath in your web browser instead, with nothing to install.</p>
+      <h3>Mods</h3>
+      <p class="lede">Discover lists the Workshop. INSTALL puts a mod into the client you picked; My Mods turns it off and on,
+        updates it and removes it. You can also drop a .zip, an addon folder or a .MPQ patch on My Mods.</p>
+      <h3>Realms and hosting</h3>
+      <p class="lede">Realms lists the official realm and the community's Beacons. PLAY sets your realmlist and starts the game;
+        BACK TO WRATH points it at the official realm again. Host walks you through running your own.</p>
+      <h3>Guides</h3>
+      <div class="row"><button type="button" class="btn" data-link="docs">OPEN THE LEYLINE DOCS</button><button type="button" class="btn" data-link="discord">ASK ON DISCORD</button></div>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="page" id="page-settings">
+    <div class="panel">
+      <h2>Settings</h2>
+      <form id="set-form" class="form">
+        <fieldset id="wine-set">
+          <legend>Wine (macOS and Linux)</legend>
+          <p class="hint" id="wine-note"></p>
+          <label class="check"><input type="checkbox" id="wine-on"> Launch clients through Wine</label>
+          <label>Wine command
+            <input id="wine-cmd" placeholder="wine" autocomplete="off" spellcheck="false">
+          </label>
+          <label>Wine prefix (optional)
+            <input id="wine-prefix" placeholder="leave empty for the default" autocomplete="off" spellcheck="false">
+          </label>
+        </fieldset>
+        <div class="row"><button class="btn" type="submit">SAVE</button><button class="btn" type="button" data-page-go="clients">GAME CLIENTS</button></div>
+        <p class="status" id="set-status" role="status"></p>
+      </form>
+      <h3>Updates</h3>
+      <p class="lede">Leyline looks for a new version when it starts and every 6 hours. It downloads it in the background,
+        checks its signature, and installs it only when you press <b>Update ready, restart</b> in the title bar, never
+        while a game you started from Leyline is open.</p>
+      <div class="form">
+        <label>Channel
+          <select id="upd-channel">
+            <option value="stable">Stable: releases</option>
+            <option value="beta">Beta: early versions too</option>
+          </select>
+        </label>
+      </div>
+      <div class="row"><button type="button" class="btn" id="upd-check">CHECK NOW</button><button type="button" class="btn" id="upd-restart" hidden>RESTART TO UPDATE</button><button type="button" class="btn" id="upd-open" hidden>OPEN THE RELEASE PAGE</button></div>
+      <p class="status" id="upd-status" role="status"></p>
+      <h3>Privacy</h3>
+      <p class="lede">No telemetry and no accounts in the launcher. It fetches the Workshop catalog and the mods you install,
+        the mod rankings, the realm list and realm status, and GitHub's release list and Leyline's own updates; it keeps copies of the lists so it works offline, and opens
+        only pages it listed itself in your browser. Each request gives up after 8 seconds.</p>
+      <label class="check"><input type="checkbox" id="set-count"> Count my installs: after a Workshop install, tell the hub
+        "one more install" (the mod, your client's build and a random one-time number; no account, nothing about you or your PC).
+        It helps good mods rise in Hot and Most installed.</label>
+      <p class="status" id="count-status" role="status"></p>
+      <h3>Your data</h3>
+      <p class="lede">Settings and caches live in <code id="data-dir"></code>.</p>
+    </div>
+  </section>
+</main>
+
+<!-- The one-time notice for a mod with native code -->
+<dialog class="dlg" id="native-dlg" aria-labelledby="native-title">
+  <h3 id="native-title">Native code</h3>
+  <p><b id="native-name"></b> has native code. It runs inside your game, with full access to your PC.</p>
+  <ul id="native-files"></ul>
+  <p class="small">Leyline never runs it: the game loads it when you play. There is no review and no signing, so
+    only say yes if you trust its maker. Leyline asks once for each mod.</p>
+  <div class="row">
+    <button type="button" class="btn" id="native-yes">I TRUST IT: INSTALL</button>
+    <button type="button" class="btn" id="native-no">CANCEL</button>
+  </div>
+</dialog>
+
+<!-- The play bar, on every page -->
+<form id="play-form" class="playbar">
+  <div class="pb-left">
+    <div class="modes" role="radiogroup" aria-label="Play mode">
+      <button type="button" class="mode" role="radio" data-mode="online">ONLINE</button>
+      <button type="button" class="mode" role="radio" data-mode="solo" aria-disabled="true" title="Solo play on this PC arrives in a later Leyline release">SOLO</button>
+      <button type="button" class="mode" role="radio" data-mode="browser">BROWSER</button>
+    </div>
+    <label class="client-line">
+      <span class="sr">Client</span>
+      <select id="play-client"></select>
+      <span class="client-realm" id="pb-realm">Official realm</span>
+    </label>
+  </div>
+  <div class="pb-mid">
+    <div class="detail"><span id="pb-detail"></span><span id="play-status" class="status" role="status"></span><span class="ver" id="ver"></span></div>
+    <div class="bar"><span id="play-headline">READY TO PLAY</span></div>
+  </div>
+  <div class="pb-right">
+    <button type="submit" class="play" id="play-go"><span class="sr">Play</span></button>
+    <span class="caption" id="play-caption">ONLINE</span>
+  </div>
+</form>
+
+</div>
+<script src="spin.js"></script>
+<script src="social.js"></script>
+<script src="modes.js"></script>
+<script src="app.js"></script>
+<script src="host.js"></script>
+</body>
+</html>

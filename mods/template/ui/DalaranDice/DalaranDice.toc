@@ -1,0 +1,9 @@
+## Interface: 30300
+## Title: Dalaran Dice
+## Notes: Shows the last dice rolls near you. Part of the WrathUnleashed mod "dalaran-dice".
+## Author: WrathUnleashed
+## Version: 0.1.0
+## X-License: MIT
+
+DalaranDice.lua
+DalaranDice.xml
