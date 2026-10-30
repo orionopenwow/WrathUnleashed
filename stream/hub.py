@@ -1084,9 +1084,19 @@ class Hub:
         pv = (f'<div class="hb-rl-pv" role="note">' + (f"<p>{e(line)}</p>" if line else "")
               + (f'<p class="hb-rl-pt">{"".join(f"<span>{e(t)}</span>" for t in tags)}</p>' if tags else "")
               + "</div>") if line or tags else ""
-        return (f'<li class="hb-rl{" home" if r.get("home") else ""}{" pv" if pv else ""}"{data} data-client="{client}" '
-                f'data-live="{1 if live else 0}" data-players="{players or 0}"><div class="hb-rl-n"><b>{e(name)}</b>{"".join(bdg)}'
-                f'<span class="hb-rl-m">{e(" · ".join(meta))}</span></div>{count}'
+        # the client version (owner 2026-10-30: "list the client version number in the realm list too"): the one place
+        # the hub names a build, as a chip by the realm's name
+        ver = net.BUILDS.get(r.get("build", BROWSER_BUILD)) if hasattr(net, "BUILDS") else None
+        verchip = f'<span class="hb-ver" title="Game client version">{e(ver)}</span>' if ver else ""
+        hue = int(hashlib.sha1(name.encode()).hexdigest()[:4], 16) % 360
+        icon = (f'<span class="hb-rl-ic{" home" if r.get("home") else ""}" style="--h:{hue}" aria-hidden="true">'
+                + (self._crest(30) if r.get("home") else e(name[:1].upper())) + "</span>")
+        cap = r.get("max") if isinstance(r.get("max"), int) and r.get("max") > 0 else 100
+        fill = 0 if not live or not players else max(6, min(100, round(100 * players / cap)))
+        bar = (f'<span class="hb-rl-bar" aria-hidden="true"><i style="width:{fill}%"></i></span>' if live else "")
+        return (f'<li class="hb-rl{" home" if r.get("home") else ""}{" pv" if pv else ""}{"" if live else " off"}"{data} data-client="{client}" '
+                f'data-live="{1 if live else 0}" data-players="{players or 0}">{icon}<div class="hb-rl-n"><b>{e(name)}</b>{verchip}{"".join(bdg)}'
+                f'<span class="hb-rl-m">{e(" · ".join(meta))}</span></div>{count.replace("</div>", bar + "</div>", 1) if live else count}'
                 f'<div class="hb-rl-a">{"".join(acts)}</div>{pv}</li>')
 
     def realm_section(self, got=None) -> str:
@@ -2605,12 +2615,24 @@ color:var(--lk-text);font:14px var(--lk-font)}
 .hb-rf input{accent-color:var(--lk-accent)}
 .hb-rf button{min-height:34px;padding:0 12px;border-radius:var(--lk-r-sm);border:1px solid var(--lk-border-strong);background:var(--lk-raised);
 color:var(--lk-text);font:600 13.5px var(--lk-font);cursor:pointer}
-.hb-rlist{list-style:none;margin:0;padding:0;border:1px solid var(--lk-border);border-radius:var(--lk-r);background:var(--lk-surface);overflow:hidden}
-.hb-rl{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:6px 16px;padding:11px 14px;
-border-top:1px solid var(--lk-border);transition:background-color .15s}
-.hb-rl:first-child{border-top:0}.hb-rl:hover{background:var(--lk-surface-2)}
-.hb-rl.home{background:linear-gradient(90deg,var(--lk-accent-soft),transparent 70%)}
+.hb-rlist{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.hb-rl{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:6px 16px;padding:12px 14px;
+border:1px solid var(--lk-border);border-radius:14px;background:linear-gradient(180deg,rgba(32,36,47,.82),rgba(22,25,33,.82));
+-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);box-shadow:0 6px 18px rgba(0,0,0,.25);
+transition:transform .15s,border-color .15s,box-shadow .15s}
+.hb-rl:hover{transform:translateY(-1px);border-color:rgba(122,163,245,.45);box-shadow:0 10px 26px rgba(0,0,0,.35)}
+.hb-rl.home{border-color:rgba(122,163,245,.5);background:linear-gradient(90deg,rgba(91,141,239,.22),rgba(139,108,240,.10) 55%,rgba(22,25,33,.85));
+box-shadow:inset 3px 0 0 var(--lk-accent),0 8px 22px rgba(0,0,0,.3)}
+.hb-rl.off{opacity:.68}
+.hb-rl-ic{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;font-weight:800;font-size:18px;color:#fff;
+background:linear-gradient(135deg,hsl(var(--h) 55% 46%),hsl(calc(var(--h) + 40) 50% 30%));box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.hb-rl-ic.home{background:radial-gradient(circle at 50% 40%,#2a3352,#141826);box-shadow:inset 0 0 0 1px rgba(122,163,245,.45)}
+.hb-ver{padding:0 7px;border-radius:6px;background:rgba(217,164,65,.12);border:1px solid rgba(217,164,65,.45);color:#f1cf86;
+font:700 11px/18px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.02em}
+.hb-rl-bar{display:block;width:92px;height:4px;margin:5px 0 0 auto;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
+.hb-rl-bar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--lk-ok),#7fe0b0)}
 .hb-rl[hidden],.hb-rlist.cap>.hb-rl:nth-child(n+9){display:none}
+.hb-rl-n b{font-size:15.5px}
 .hb-rl-n{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px;min-width:0}
 .hb-rl-n b{font-weight:650;overflow-wrap:anywhere}
 .hb-rl-m{flex:1 0 100%;color:var(--lk-muted);font-size:12.5px}
@@ -2633,7 +2655,7 @@ code.hb-addr{padding:6px 8px;border-radius:8px;background:var(--lk-surface-2);co
 .hb-copy{min-height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--lk-border-strong);background:transparent;color:var(--lk-text-2);
 font:600 12.5px var(--lk-font);cursor:pointer}.hb-copy:hover{border-color:var(--lk-accent);color:var(--lk-text)}
 .hb-rl-none{padding:14px;color:var(--lk-muted);text-align:center}
-@media (max-width:640px){.hb-rl{grid-template-columns:minmax(0,1fr) auto;padding:11px 12px}.hb-rl-a{grid-column:1/-1;justify-content:flex-start}}
+@media (max-width:640px){.hb-rl{grid-template-columns:auto minmax(0,1fr) auto;padding:11px 12px}.hb-rl-a{grid-column:1/-1;justify-content:flex-start}}
 /* how it works: three steps in one slim strip */
 .hb-how{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin:22px 0;padding:0;list-style:none;counter-reset:hb-how;
 border:1px solid var(--lk-border);border-radius:var(--lk-r);background:var(--lk-chrome)}
@@ -2716,7 +2738,7 @@ color:var(--lk-text)!important;text-decoration:none;font-weight:600}
 .hb .host-cta .btn.primary{background:var(--lk-accent);border-color:var(--lk-accent);color:#fff!important}
 .hb .fine{color:var(--lk-muted);font-size:13.5px}
 /* the realm list: a hover / focus preview of the realm (its tagline and tags), laid over the rows below */
-.hb-rlist{overflow:visible}.hb-rl:first-child{border-radius:var(--lk-r) var(--lk-r) 0 0}.hb-rl:last-child,.hb-rlist.cap>.hb-rl:nth-child(8){border-radius:0 0 var(--lk-r) var(--lk-r)}
+.hb-rlist{overflow:visible}
 .hb-rl{position:relative}
 .hb-rl-pv{position:absolute;left:14px;top:calc(100% - 4px);z-index:6;width:min(420px,calc(100% - 28px));padding:10px 12px;border-radius:var(--lk-r-sm);
 background:var(--lk-raised);border:1px solid var(--lk-border-strong);box-shadow:0 12px 32px rgba(0,0,0,.5);pointer-events:none;
