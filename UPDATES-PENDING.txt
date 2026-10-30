@@ -294,3 +294,12 @@
 1094a signin  Leyline site (still hidden until the brand step): bigger hero, launcher-style top bar, ticker, gallery, cleaned game shots
 1094b ship  Save to GitHub (orionopenwow/WrathUnleashed): front page, gallery, Discord script, page step, brand switch shows the front page
 1094c fresh-check  What the fresh Leyline history would do (read-only dry run)
+1095a fresh-history  Fresh Leyline history: one commit on GitHub, the old history to a Desktop backup (owner's go, 03:19)
+1095b brand-leyline  Go live: the site and realm say Leyline / Dalaran Hangout, the new front page shows
+1095c page  The game page's Leyline look (keeps the live game build)
+1095d ovland  The old site and launcher's Leyline look to GitHub (Leyline-Launcher main)
+1096a signin  Leyline site: roomier header, project thumbnails and external packs on the Mods pages, new projects listed
+1096b ship  Save to GitHub (orionopenwow/WrathUnleashed): header, thumbnails, external packs, daily scout
+1096c thumbs  Fetch the projects' GitHub preview pictures for the Mods pages
+1096d ship  Save to GitHub (orionopenwow/WrathUnleashed): the preview pictures
+1096e signin  Leyline site: show the preview pictures

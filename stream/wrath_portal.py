@@ -912,15 +912,33 @@ GAMEDATA_ART = frozenset(n for n in ART_TYPES if n.startswith("leyline-shot-"))
 _theme_ver = {"key": None, "v": ""}
 
 
+# The hub's preview thumbnails (tools/hub-index/hub_index.py thumbs: a GitHub project's own preview image as a small
+# WebP, stream/www-files/art/hub-thumbs/): allowed by pattern, WebP only, nothing else from that folder.
+HUB_THUMB_RE = re.compile(r"hub-thumbs/[a-z0-9][a-z0-9._-]{0,99}__[a-z0-9][a-z0-9._-]{0,99}\.webp")
+HUB_THUMB_MAX = 200_000
+
+
+def art_type(name: str) -> str:
+    """The Content-Type of an allowed art name, "" for anything else (never a path from the URL)."""
+    if name in ART_TYPES:
+        return ART_TYPES[name]
+    if isinstance(name, str) and HUB_THUMB_RE.fullmatch(name) and ".." not in name:
+        return "image/webp"
+    return ""
+
+
 def art_bytes(name: str) -> bytes | None:
     """One file from the allow-list in ART_DIR, or None (not listed, or missing). Never a path from the URL."""
-    if name not in ART_TYPES:
+    if not art_type(name):
         return None
     try:
         with open(os.path.join(ART_DIR, name), "rb") as f:
-            return f.read(4_000_000)
+            body = f.read(4_000_000)
     except OSError:
         return None
+    if name not in ART_TYPES and (len(body) > HUB_THUMB_MAX or body[:4] != b"RIFF" or body[8:12] != b"WEBP"):
+        return None                                         # a hub thumbnail is a real WebP or nothing
+    return body
 
 
 def theme_version() -> str:
@@ -972,7 +990,7 @@ def art_url(name: str) -> str:
 
 
 def art_present(name: str) -> bool:
-    return name in ART_TYPES and os.path.isfile(os.path.join(ART_DIR, name))
+    return bool(art_type(name)) and os.path.isfile(os.path.join(ART_DIR, name))
 
 
 CARD_DESCRIPTION = ("Play Wrath in your browser, on the Leyline network. "
@@ -2408,9 +2426,9 @@ class PageHandler(BaseHTTPRequestHandler):
             self.send(404, b"not found\n", "text/plain")
             return
         self.send_response(200)
-        self.send_header("Content-Type", ART_TYPES[name])
+        self.send_header("Content-Type", art_type(name))
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", f"public, max-age={ART_MAX_AGE}")
+        self.send_header("Cache-Control", f"public, max-age={ART_MAX_AGE if name in ART_TYPES else 86400}")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Cross-Origin-Resource-Policy", "cross-origin")
         self.send_header("X-Content-Type-Options", "nosniff")

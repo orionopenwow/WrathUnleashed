@@ -11,6 +11,9 @@
 #   * hub-index/review  everything else: new entries, changed names/licences/builds/categories, entries that went
 #                       missing this run without breaking a rule. A person reviews and merges it; never automatic.
 # Discovery (the forge searches that grow the pool) runs on Mondays and on demand.
+# Preview thumbnails (hub_index.py thumbs, Pillow): the top 30 entries and every new one get their GitHub project's own
+# preview image as a small WebP (stream/www-files/art/hub-thumbs). New thumbnails are changes a person reviews: the
+# image files and the thumb fields only ever travel in the review PR, never in the daily one.
 name: Hub index
 
 on:
@@ -44,6 +47,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Pillow (the preview thumbnails)
+        run: python3 -m pip install --quiet --disable-pip-version-check pillow
       - name: Probe cache
         uses: actions/cache@v4
         with:
@@ -62,7 +67,8 @@ jobs:
       - name: Build the index
         # A forge that doesn't answer keeps its entries as they were; a run that would drop more than 20% of the
         # index writes nothing (exit 3) and the job stops here, with the report in the log.
-        run: python3 -I tools/hub-index/hub_index.py build --jobs 6 --report "$RUNNER_TEMP/hub-report.txt"
+        # Then the thumbnails (--thumbs 30: the top 30 and every entry never tried; one that can't be fetched is skipped).
+        run: python3 -I tools/hub-index/hub_index.py build --jobs 6 --thumbs 30 --report "$RUNNER_TEMP/hub-report.txt"
       - name: Gate (refreshes go live, the rest waits for review)
         run: |
           python3 -I tools/hub-index/hub_index.py gate --base "$RUNNER_TEMP/base.json" \
@@ -124,6 +130,7 @@ jobs:
           cp "$RUNNER_TEMP/full.json" stream/hub/community-index.json
           python3 -I tools/hub-index/hub_index.py check
           git add -- stream/hub/community-index.json
+          if [ -d stream/www-files/art/hub-thumbs ]; then git add -A -- stream/www-files/art/hub-thumbs; fi
           if git diff --cached --quiet; then
             echo "The review branch has nothing new."
             exit 0
@@ -134,7 +141,8 @@ jobs:
             echo "New and changed community index entries. Nothing here goes live until a person merges it."
             echo
             echo "Check: each new entry in stream/hub/community-index.json against the rules (docs/HUB-INDEX.md),"
-            echo "and the review list in tools/hub-index/holding.json."
+            echo "the review list in tools/hub-index/holding.json, and any new preview thumbnails in"
+            echo "stream/www-files/art/hub-thumbs (each is the project's own GitHub preview image)."
             echo
             echo '```'
             cat "$RUNNER_TEMP/hub-report.txt"

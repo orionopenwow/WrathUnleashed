@@ -270,8 +270,109 @@ def offered_tag(v) -> str:
 
 
 ENTRY_KEYS = {"id", "name", "author", "owner", "repo", "forge", "licence", "category", "type", "builds", "summary",
-              "description", "stars", "updated", "archived", "needs", "source", "score", "release"}
+              "description", "stars", "updated", "archived", "needs", "source", "score", "release", "thumb", "thumb_credit"}
 RELEASE_KEYS = {"tag", "date", "url"}
+
+# Preview thumbnails (tools/hub-index/hub_index.py thumbs): a GitHub project's own preview image, made a small WebP and
+# served from our site (the art route, /wrath/art/hub-thumbs/<owner>__<repo>.webp), never hotlinked. Always credited.
+THUMB_URL = "/wrath/art/hub-thumbs/"
+THUMB_CREDIT = "Preview image from the project's GitHub page"
+THUMB_PART = re.compile(r"[a-z0-9][a-z0-9._-]{0,99}")
+THUMB_FILE_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,99}__[a-z0-9][a-z0-9._-]{0,99}\.webp")
+
+
+def thumb_name(repo_url: str) -> str:
+    """"<owner>__<repo>.webp" for a GitHub repo link, "" when it isn't one or a part is odd."""
+    c = canonical(repo_url or "")
+    if not c or c["forge"] != "github":
+        return ""
+    owner, repo = c["owner"].lower(), c["repo"].lower()
+    if "/" in owner or not THUMB_PART.fullmatch(owner) or not THUMB_PART.fullmatch(repo) or ".." in owner + repo:
+        return ""
+    return f"{owner}__{repo}.webp"
+
+
+def thumb_problem(e: dict) -> str:
+    """"" when an entry's thumb fields are fine (or absent), else what is wrong."""
+    has = [k for k in ("thumb", "thumb_credit") if k in e]
+    if not has:
+        return ""
+    if len(has) != 2:
+        return "thumb and thumb_credit go together"
+    name = thumb_name(e.get("repo", ""))
+    if not name or e["thumb"] != THUMB_URL + name:
+        return f"thumb must be {THUMB_URL}<owner>__<repo>.webp for its own GitHub repo"
+    if e["thumb_credit"] != THUMB_CREDIT:
+        return "thumb_credit must be exactly: " + THUMB_CREDIT
+    return ""
+
+
+# External packs (the index's top-level "external" list; owner's decision 2026-10-30): HD graphics packs and the like,
+# made and hosted by their authors. Link-only: never an entry, never mirrored, never installable; each page says so.
+EXTERNAL_TYPE = "external-pack"
+EXTERNAL_NOTE = "External download, made and hosted by its authors; not checked or hosted by Leyline"
+EXTERNAL_KEYS = {"id", "name", "author", "url", "repo", "category", "type", "builds", "summary", "external", "note",
+                 "source_thread", "added", "thumb", "thumb_credit"}
+EXTERNAL_ID = re.compile(r"ext:[0-9a-f]{12}")
+EXTERNAL_FILE = re.compile(r"(?i)\.(zip|rar|7z|mpq|exe|msi|apk|dmg|torrent|tar(\.\w+)?|tgz)(\?|#|$)|/releases/download/|"
+                           r"[?&]download=|mega\.nz|mediafire\.com|drive\.google\.com|dropbox\.com/s|wetransfer\.com|"
+                           r"^leyline:")
+EXTERNAL_LABEL = "Graphics & external packs"
+
+
+def external_id(url: str) -> str:
+    return "ext:" + hashlib.sha256(str(url).strip().lower().encode("utf-8")).hexdigest()[:12]
+
+
+def external_problems(x) -> list[str]:
+    """Problems with one item of the index's "external" list ([] = fine). The pages show only items without any."""
+    if not isinstance(x, dict):
+        return ["not an object"]
+    out = []
+    extra = set(x) - EXTERNAL_KEYS
+    if extra:
+        out.append(f"unknown fields {sorted(extra)}")
+    url = x.get("url")
+    u = urllib.parse.urlsplit(url if isinstance(url, str) else "")
+    if not isinstance(url, str) or u.scheme != "https" or not u.hostname or u.username or u.password or len(url) > 400 \
+            or re.search(r"[\s<>\"']", url) or CTRL_RE.search(url):
+        out.append("url must be an https page")
+    elif EXTERNAL_FILE.search(url):
+        out.append("url must be the pack's own page, never a file or a file host")
+    if not isinstance(x.get("id"), str) or not EXTERNAL_ID.fullmatch(x["id"]) or x["id"] != external_id(url or ""):
+        out.append("id must be ext:<12 hex> of its url")
+    if x.get("type") != EXTERNAL_TYPE or x.get("external") is not True or x.get("note") != EXTERNAL_NOTE:
+        out.append("type, external flag and note are fixed")
+    if x.get("category") not in CATEGORY_IDS:
+        out.append(f"category {x.get('category')!r}")
+    b = x.get("builds")
+    if not isinstance(b, list) or not b or any(v not in BUILDS + ["any"] for v in b):
+        out.append(f"builds {b!r}")
+    for k in ("name", "summary"):
+        if not isinstance(x.get(k), str) or not x[k].strip():
+            out.append(f"{k} missing")
+    for k in ("name", "author", "summary", "added"):
+        if k in x and not isinstance(x[k], str):
+            out.append(f"{k} must be text")
+    vis = " ".join(str(x.get(k) or "") for k in ("name", "author", "summary", "note"))
+    if banned(vis):
+        out.append("a brand word in its visible text")
+    if "<" in vis or ">" in vis or CTRL_RE.search(vis):
+        out.append("markup or control characters")
+    if re.search(r"(?i)wowdecomp|waystone|decompil|chumpton|repack|\bleak", vis + " " + str(url) + " " + str(x.get("repo") or "")):
+        out.append("decompiled, leaked or repack material")
+    if "source_thread" in x and not _https(x["source_thread"]):
+        out.append("source_thread must be an https link")
+    if "repo" in x:
+        c = canonical(x["repo"])
+        if not c or c["url"] != x["repo"]:
+            out.append("repo is not a canonical forge link")
+    if "thumb" in x or "thumb_credit" in x:
+        if "repo" not in x:
+            out.append("thumb only from the pack's own GitHub repo")
+        elif thumb_problem(x):
+            out.append(thumb_problem(x))
+    return out
 
 
 def release_problem(r, repo: str) -> str:
@@ -348,7 +449,11 @@ def validate_index(doc) -> list[str]:
             out.append(f"{where}: score")
         if "release" in e and (p := release_problem(e["release"], e.get("repo", ""))):
             out.append(f"{where}: {p}")
-    ids = [e.get("id") for e in doc["entries"] if isinstance(e, dict)]
+        if (p := thumb_problem(e)):
+            out.append(f"{where}: {p}")
+    if "external" in doc and not isinstance(doc["external"], list):
+        out.append("external must be a list")
+    ids =[e.get("id") for e in doc["entries"] if isinstance(e, dict)]
     order = sorted(doc["entries"], key=entry_order) if all(isinstance(e, dict) for e in doc["entries"]) else None
     if order is not None and [e.get("id") for e in order] != ids:
         out.append("entries are not in the canonical order (category, name, id)")
@@ -561,12 +666,61 @@ class Hub:
         offered = offered_builds()
         return [x for x in (offered_only(i, offered) for i in out) if x is not None]
 
+    def external(self) -> list[dict]:
+        """The index's external packs (link-only, made and hosted by their authors), each checked on its own
+        (external_problems: a bad one is left out, the rest still show), in the catalog's item shape with
+        source "external". Never in items(): nothing that lists items can offer to install one."""
+        doc = self._json("community-index.json")
+        if not isinstance(doc, dict) or not isinstance(doc.get("external"), list) or validate_index(doc):
+            return []
+        out, seen = [], set()
+        offered = offered_builds()
+        for x in doc["external"]:
+            if external_problems(x) or x["id"] in seen:
+                continue
+            seen.add(x["id"])
+            i = {"id": x["id"], "source": "external", "name": clean_line(x["name"], 64), "summary": clean_line(x["summary"], 240),
+                 "description": "", "category": x["category"], "builds": list(x["builds"]),
+                 "author": clean_line(x.get("author") or "", 60), "licence": "", "url": x["url"],
+                 "repo": x.get("repo", ""), "forge": (canonical(x["repo"]) or {}).get("forge", "") if x.get("repo") else "",
+                 "type": EXTERNAL_TYPE, "external": True, "note": EXTERNAL_NOTE, "score": 0, "stars": None,
+                 "updated": "", "page": "", "download": None, "sha256": None, "packaged": False}
+            for k in ("thumb", "thumb_credit"):
+                if k in x:
+                    i[k] = x[k]
+            i = offered_only(i, offered)
+            if i is not None:
+                out.append(i)
+        return sorted(out, key=lambda i: (i["name"].lower(), i["id"]))
+
     def get_item(self, slug: str) -> dict | None:
-        m = re.fullmatch(r"(link|mod|theme)-([a-z0-9][a-z0-9-]{1,40})", slug or "")
+        m = re.fullmatch(r"(link|mod|theme|ext)-([a-z0-9][a-z0-9-]{1,40})", slug or "")
         if not m:
             return None
         want = f"{m.group(1)}:{m.group(2)}"
-        return next((i for i in self.items() if i["id"] == want), None)
+        pool = self.external() if m.group(1) == "ext" else self.items()
+        return next((i for i in pool if i["id"] == want), None)
+
+    def thumb_of(self, i: dict) -> str:
+        """The item's preview thumbnail URL (our own copy of its GitHub preview image) when it has one and the file is
+        on this site, else ""."""
+        if thumb_problem(i) or "thumb" not in i:
+            return ""
+        have = self.portal("art_present")
+        try:
+            ok = have is None or bool(have(i["thumb"][len("/wrath/art/"):]))
+        except Exception:   # noqa: BLE001
+            ok = False
+        return i["thumb"] if ok else ""
+
+    @staticmethod
+    def gen_art(i: dict, name: str, icon: str = "mods", cls: str = "hb-gt-art gen") -> str:
+        """The tile drawn from an item's id (the same id, the same tile): a gradient, its initial and a kind icon."""
+        h = hashlib.sha256(str(i["id"]).encode()).digest()
+        h1 = 200 + h[0] % 90
+        h2 = (h1 + 40 + h[1] % 80) % 360
+        return (f'<span class="{cls}" style="--h1:{h1};--h2:{h2};--a:{h[2] % 180}deg" aria-hidden="true">'
+                f'<b>{html.escape((name or "?")[:1].upper())}</b><svg viewBox="0 0 24 24">{NAV_ICONS.get(icon, NAV_ICONS["mods"])}</svg></span>')
 
     # ---------------------------------------------------------------- the launcher feed
     def feed(self) -> bytes:
@@ -642,7 +796,7 @@ class Hub:
         return f'<span class="ly-spin {cls}" style="--ly-spin-size:{int(size)}px" aria-hidden="true"></span>'
 
     def _wordmark(self) -> str:
-        return f'{self._spin(44, "slow hb-mark")}<span class="hb-word"><b>Leyline</b><i>Launcher</i></span>'
+        return f'{self._spin(52, "slow hb-mark")}<span class="hb-word"><b>Leyline</b><i>Launcher</i></span>'
 
     def nav_items(self) -> tuple[list, list]:
         """The header's items, the launcher's pages on the web (owner 2026-10-30: "it should have servers, mods, addons,
@@ -811,6 +965,9 @@ class Hub:
             shot = ""
             if self.shot_count(i):
                 shot = f'<img src="/wrath/mods/{e(i["id"][4:])}/shot/0" alt="" loading="lazy" width="160" height="100">'
+            elif self.thumb_of(i):
+                shot = (f'<img src="{e(self.thumb_of(i))}" alt="" loading="lazy" width="160" height="80" '
+                        f'title="{e(THUMB_CREDIT)}">')
             name = neutral(i["name"]) or "Untitled"
             pic = shot or f'<span class="hb-initial" aria-hidden="true">{e(name[:1].upper())}</span>'
             line = neutral(i.get("summary") or i.get("description") or "")
@@ -1111,17 +1268,21 @@ class Hub:
         rk = self.portal("hub_rank")
         inst = rk.installable(i) if rk is not None and hasattr(rk, "installable") else bool(i.get("packaged"))
         name = neutral(i["name"]) or "Untitled"
+        credit = ""
         if self.shot_count(i):
             pic = f'<img src="/wrath/mods/{e(i["id"][4:])}/shot/0" alt="A screenshot of {e(name)}" loading="lazy" width="320" height="200">'
+        elif self.thumb_of(i):
+            pic = f'<img src="{e(self.thumb_of(i))}" alt="The preview image of {e(name)}" loading="lazy" width="640" height="320">'
+            credit = f'<p class="hb-th-cr">{e(THUMB_CREDIT)}</p>'
         else:
-            pic = f'<span class="hb-initial" aria-hidden="true">{e(name[:1].upper())}</span>'
+            pic = self.gen_art(i, name, KIND_WORDS[self._kind(i)][2])
         line = neutral(i.get("summary") or i.get("description") or "", 160)
         return ('<section class="hb-motw hb-rv" id="mod-week" aria-labelledby="hb-motw-h">'
                 f'<div class="hb-motw-pic">{pic}</div><div class="hb-motw-t"><p class="hb-kick">Mod of the week</p>'
                 f'<h2 id="hb-motw-h">{e(name)}</h2><p class="hb-by">by {e(neutral(i["author"]) or "unknown")}</p>'
                 f'<p class="hb-motw-l">{e(line)}</p><p class="hb-fs-a">'
                 f'<a class="hb-cta sm" href="leyline://install/{e(i["id"])}">{"Install with Leyline" if inst else "Open in Leyline"}</a>'
-                f'<a class="hb-ghost" href="{BASE}/p/{_slug(i["id"])}">View</a></p></div></section>')
+                f'<a class="hb-ghost" href="{BASE}/p/{_slug(i["id"])}">View</a></p>{credit}</div></section>')
 
     def posters(self, got) -> str:
         """Hosted by the community: up to three live community realms as posters, each with its own backdrop made from
@@ -1307,7 +1468,7 @@ class Hub:
             order, _m = self._ranked(pool)
             # the Mod of the week, then the best with our own screenshot and the top of Hot taken in turn, then every
             # other item with our screenshot
-            shots = [i for i in order[1:] if self.shot_count(i)]
+            shots = [i for i in order[1:] if self.shot_count(i) or self.thumb_of(i)]
             hot = [i for i in order[1:4] if i not in shots[:3]]
             picks = [order[0]]
             for a, b in itertools.zip_longest(shots[:3], hot):
@@ -1321,20 +1482,32 @@ class Hub:
                 slug = _slug(i["id"])
                 inst = rk.installable(i) if rk is not None and hasattr(rk, "installable") else bool(i.get("packaged"))
                 view = f"{BASE}/p/{slug}"
-                img, art = None, ""
+                img, art, credit = None, "", "by " + author
                 if self.shot_count(i):
                     img = (f'/wrath/mods/{i["id"][4:]}/shot/0', 640, 360, f"A screenshot of {name}, {KIND_WORDS[kind][1]} by {author}")
+                elif self.thumb_of(i):
+                    img = (self.thumb_of(i), 640, 320, f"The preview image of {name}, {KIND_WORDS[kind][1]} by {author}")
+                    credit += " · " + THUMB_CREDIT
                 else:
-                    h = hashlib.sha256(i["id"].encode()).digest()
-                    h1 = 200 + h[0] % 90
-                    h2 = (h1 + 40 + h[1] % 80) % 360
-                    art = (f'<span class="hb-gt-art gen" style="--h1:{h1};--h2:{h2};--a:{h[2] % 180}deg" aria-hidden="true">'
-                           f'<b>{html.escape(name[:1].upper())}</b><svg viewBox="0 0 24 24">{NAV_ICONS[KIND_WORDS[kind][2]]}</svg></span>')
+                    art = self.gen_art(i, name, KIND_WORDS[kind][2])
                 mods.append({"k": "mods", "id": "m-" + slug, "title": name, "line": neutral(i.get("summary") or i.get("description") or "", 140),
-                             "credit": "by " + author, "label": ("Mod of the week · " if n == 0 else "") + KIND_WORDS[kind][0],
+                             "credit": credit, "label": ("Mod of the week · " if n == 0 else "") + KIND_WORDS[kind][0],
                              "img": img, "art": art, "href": view,
                              "acts": [(f"leyline://install/{i['id']}", "Install with Leyline" if inst else "Open in Leyline", True),
                                       (view, "View", False)]})
+        # External packs only with their own GitHub repo's preview image (no picture of theirs otherwise: we never pull
+        # images from their pages), never with an install action: the authors' page and ours.
+        for x in self.external():
+            src = self.thumb_of(x)
+            if not src or (canonical(x.get("repo") or "") or {}).get("forge") != "github":
+                continue
+            name = neutral(x["name"]) or "Untitled"
+            by = neutral(x["author"]) or "its authors"
+            mods.append({"k": "mods", "id": "x-" + _slug(x["id"]), "title": name, "line": neutral(x["summary"], 140),
+                         "credit": f"by {by} · {THUMB_CREDIT} · External: not checked or hosted by Leyline",
+                         "label": "External pack", "img": (src, 640, 320, f"The preview image of {name}, an external pack by {by}"),
+                         "art": "", "href": f"{BASE}/p/{_slug(x['id'])}", "ext": True,
+                         "acts": [(x["url"], "Visit the authors' page", True), (f"{BASE}/p/{_slug(x['id'])}", "View", False)]})
         out, lists = [], [game, mods, launcher]
         while any(lists) and (not want or len(out) < want):
             for lst in lists:
@@ -1369,8 +1542,9 @@ class Hub:
             pic = f'<img src="{e(src)}" alt="{e(alt)}" width="{int(w)}" height="{int(h)}" loading="lazy" decoding="async">'
         else:
             pic = t["art"]
+        off = ' rel="noopener nofollow ugc" target="_blank"' if t.get("ext") else ' rel="noopener noreferrer"'
         acts = "".join(f'<a class="{"hb-gt-i" if primary else "hb-gt-v"}" href="{e(h)}"'
-                       + (' rel="noopener noreferrer"' if h.startswith("http") else "") + f">{e(label)}</a>" for h, label, primary in t["acts"])
+                       + (off if h.startswith("http") else "") + f">{e(label)}</a>" for h, label, primary in t["acts"])
         cap = (f'<small>{e(t["label"])}</small><b>{e(t["title"])}</b>'
                + (f'<span class="hb-gt-l">{e(t["line"])}</span>' if t["line"] else "") + f'<i>{e(t["credit"])}</i>')
         aria = "" if t["img"] else f' aria-label="{e(t["title"])}: {e(t["label"])}"'
@@ -1415,8 +1589,10 @@ class Hub:
         body = ('<header class="hb-head"><h1>Gallery</h1><p>Screenshots from the game, the Leyline launcher and the mods people '
                 f'made. {n} picture{"" if n == 1 else "s"}.</p></header>'
                 f'<div class="hb-gal-hd page">{self.gallery_chips(f)}</div>{self.gallery_grid(tiles, not f)}'
-                '<p class="hb-fine">Every picture here is our own: taken on our realm, in our launcher, or uploaded to our Workshop '
-                'by the mod\'s authors. Each mod belongs to its authors, under the licence they chose.</p>')
+                '<p class="hb-fine">Every picture here is served from our own site: taken on our realm, in our launcher, uploaded to '
+                'our Workshop by the mod\'s authors, or a project\'s own preview image from its GitHub page (credited on the '
+                'picture). Each mod belongs to its authors, under the licence they chose. External packs are made and hosted by '
+                'their authors, not checked or hosted by Leyline.</p>')
         return self._shell("Gallery · Leyline", body, path, nonce, active="gallery")
 
     def featured_strip(self, items: list) -> str:
@@ -1613,17 +1789,43 @@ class Hub:
         badge = {"workshop": "Workshop", "index": "Community", "theme": "Theme"}[i["source"]]
         builds = " ".join(f'<span class="hb-tag">{e(CLIENT_LABEL.get(b, "Any client"))}</span>' for b in i["builds"])
         stars = f' · ★ {int(i["stars"])}' if isinstance(i.get("stars"), int) and not isinstance(i.get("stars"), bool) else ""
-        return (f'<article class="hb-card"><h3><a href="{BASE}/p/{_slug(i["id"])}">{e(neutral(i["name"]) or "Untitled")}</a></h3>'
+        return (f'<article class="hb-card">{self.card_pic(i)}<h3><a href="{BASE}/p/{_slug(i["id"])}">{e(neutral(i["name"]) or "Untitled")}</a></h3>'
                 f'<p class="hb-by">by {e(neutral(i["author"]) or "unknown")} · <span class="hb-src hb-{i["source"]}">{badge}</span></p>'
                 f'<p>{e(neutral(i.get("description") or i["summary"]))}</p><p class="hb-meta">{builds}'
                 f'<span class="hb-lic">{e(neutral(i.get("licence")) or "licence not stated")}{stars}</span></p>{rank}</article>')
+
+    def card_pic(self, i: dict) -> str:
+        """A card's picture: the Workshop screenshot, else the project's preview thumbnail (credited in its title), else
+        the tile drawn from its id. A link to the item page, skipped by keyboard and screen readers (the name links)."""
+        e = html.escape
+        name = neutral(i["name"]) or "Untitled"
+        href = f"{BASE}/p/{_slug(i['id'])}"
+        if self.shot_count(i):
+            pic = f'<img src="/wrath/mods/{e(i["id"][4:])}/shot/0" alt="" loading="lazy" width="640" height="360">'
+        elif self.thumb_of(i):
+            pic = f'<img src="{e(self.thumb_of(i))}" alt="" loading="lazy" width="640" height="320" title="{e(THUMB_CREDIT)}">'
+        else:
+            icon = "creators" if i.get("source") == "theme" else "mods" if i.get("source") == "external" else KIND_WORDS[self._kind(i)][2]
+            pic = self.gen_art(i, name, icon, "hb-gt-art gen hb-card-art")
+        return f'<a class="hb-card-pic" href="{href}" tabindex="-1" aria-hidden="true">{pic}</a>'
+
+    def ext_card(self, i: dict) -> str:
+        """An external pack in the catalog: the flag that we neither checked nor host it, and the authors' page. Never
+        an Install."""
+        e = html.escape
+        builds = " ".join(f'<span class="hb-tag">{e(CLIENT_LABEL.get(b, "Any client"))}</span>' for b in i["builds"])
+        return (f'<article class="hb-card hb-ext">{self.card_pic(i)}<h3><a href="{BASE}/p/{_slug(i["id"])}">{e(neutral(i["name"]) or "Untitled")}</a></h3>'
+                f'<p class="hb-by">by {e(neutral(i["author"]) or "its authors")} · <span class="hb-src hb-external">External</span></p>'
+                f'<p>{e(neutral(i["summary"]))}</p><p class="hb-ext-b" role="note">{e(EXTERNAL_NOTE)}</p>'
+                f'<p class="hb-meta">{builds}</p><p class="hb-ext-a"><a class="hb-ghost" href="{e(i["url"])}" '
+                f'rel="noopener nofollow ugc" target="_blank">Visit the authors\' page</a></p></article>')
 
     def catalog_page(self, query: dict) -> bytes:
         e = html.escape
         q1 = lambda k: (query.get(k) or [""])[0][:80]   # noqa: E731
         build, cat, source, text, sort = offered_tag(q1("build")), q1("cat"), q1("source"), clean_line(q1("q"), 60), q1("sort") or "score"
         cat = cat if cat in CATEGORY_IDS + ["themes"] else ""
-        source = source if source in ("workshop", "index", "theme") else ""
+        source = source if source in ("workshop", "index", "theme", "external") else ""
         rk = self.portal("hub_rank")
         rk = rk if rk is not None and getattr(rk, "store", None) is not None else None
         ranked_sorts = [s for s, _ in rk.SORT_LABELS] if rk else []
@@ -1634,18 +1836,25 @@ class Hub:
         except ValueError:
             page = 1
         items = self.items()
-        if build:
-            items = [i for i in items if build in i["builds"] or "any" in i["builds"]]
-        if cat:
-            items = [i for i in items if i["category"] == cat]
-        if source:
+        ext = self.external() if not kind and source in ("", "external") else []
+        if source == "external":
+            items = []
+
+        def keep(lst):
+            if build:
+                lst = [i for i in lst if build in i["builds"] or "any" in i["builds"]]
+            if cat:
+                lst = [i for i in lst if i["category"] == cat]
+            if text:
+                words = text.lower().split()
+                lst = [i for i in lst if all(w in (i["name"] + " " + i["summary"] + " " + i.get("description", "")
+                                                   + " " + i["author"]).lower() for w in words)]
+            return lst
+        items, ext = keep(items), keep(ext)
+        if source and source != "external":
             items = [i for i in items if i["source"] == source]
         if kind:
             items = [i for i in items if rk.kind_of(i) == kind]
-        if text:
-            words = text.lower().split()
-            items = [i for i in items if all(w in (i["name"] + " " + i["summary"] + " " + i.get("description", "")
-                                                   + " " + i["author"]).lower() for w in words)]
         metrics = rk.store.metrics(self.items()) if rk else {}
         if sort == "name":
             items.sort(key=lambda i: (i["name"].lower(), i["id"]))
@@ -1671,7 +1880,8 @@ class Hub:
                            + (' aria-current="true"' if v == cur else "") + f">{e(label)}</a>" for v, label in opts)
         f_build = chips("build", [("", "Every client")] + [(b, CLIENT_LABEL[b]) for b in offered_builds()], build)
         f_cat = chips("cat", [("", "All")] + CATEGORIES + [THEMES], cat)
-        f_src = chips("source", [("", "Everything"), ("workshop", "Workshop"), ("index", "Community"), ("theme", "Themes")], source)
+        f_src = chips("source", [("", "Everything"), ("workshop", "Workshop"), ("index", "Community"), ("theme", "Themes"),
+                                 ("external", EXTERNAL_LABEL)], source)
         if rk:
             f_sort = chips("sort", [("", "Best")] + rk.SORT_LABELS + [("name", "A to Z")], sort if sort != "score" else "")
             f_kind = "<p>" + chips("kind", [("", "Every kind")] + rk.KIND_LABELS, kind) + "</p>"
@@ -1687,8 +1897,18 @@ class Hub:
                    + f"<span>Page {page} of {pages}</span>"
                    + (f'<a href="{e(link(page=str(page + 1)))}">Next</a>' if page < pages else "") + "</nav>")
         grid = "".join(self.card(i, metrics.get(i["id"]) if rk else None, rk) for i in shown) or (
+            "" if source == "external" else
             '<p class="hb-empty">Nothing here yet. '
             + (f'<a href="{BASE}/submit">Submit a mod</a> to fill it.' if cat != "themes" else "Theme packs are on the way.") + "</p>")
+        group = ""
+        if ext and page == 1:
+            group = ('<section class="hb-ext-s" id="external" aria-labelledby="hb-ext-h">'
+                     f'<h2 id="hb-ext-h">{e(EXTERNAL_LABEL)}</h2><p class="hb-ext-lede">Packs made and hosted by their authors. '
+                     'Leyline only links to their own pages: it hasn\'t checked them, doesn\'t host them and can\'t install them.</p>'
+                     f'<div class="hb-grid">{"".join(self.ext_card(x) for x in ext)}</div></section>')
+        elif source == "external":
+            group = '<p class="hb-empty">No external packs here.</p>'
+        total += len(ext)
         body = (f'<header class="hb-head"><h1>Catalog</h1><p>{total} items'
                 + (f' for the {e(CLIENT_LABEL[build].lower())}' if build and build != "any" else "") + '</p></header>'
                 f'<form class="hb-search" method="get" action="{BASE}/catalog" role="search">{hidden}'
@@ -1697,7 +1917,7 @@ class Hub:
                 f'<div class="hb-filters"><p>{f_build}</p><p>{f_cat}</p><p>{f_src}</p>{f_kind}'
                 f'<p role="tablist" aria-label="Sort">{f_sort}</p></div>'
                 + (self.featured_strip(self.items()) if page == 1 and not (build or cat or source or kind or text) else "")
-                + f'<div class="hb-grid">{grid}</div>{nav}' + (f"<style>{rk.RANK_CSS}</style>" if rk else ""))
+                + (f'<div class="hb-grid">{grid}</div>' if grid else "") + f'{group}{nav}' + (f"<style>{rk.RANK_CSS}</style>" if rk else ""))
         return self._shell("Catalog · Leyline", body, BASE + "/catalog", active="addons" if cat == "addons" else "mods")
 
     def item_page(self, slug: str, handler=None, query: dict | None = None) -> tuple[int, bytes]:
@@ -1706,6 +1926,8 @@ class Hub:
         if i is None:
             return 404, self._shell("Not found · Leyline", '<section class="ly-panel"><h2>Not in the catalog</h2>'
                                     f'<p><a href="{BASE}/catalog">See everything</a></p></section>', BASE)
+        if i["source"] == "external":
+            return 200, self.external_page(i, slug)
         rows = [("Works with", ", ".join(CLIENT_LABEL.get(b, "Any client") for b in i["builds"])),
                 ("Category", dict(CATEGORIES + [THEMES]).get(i["category"], i["category"])),
                 ("Author", neutral(i["author"]) or "unknown"), ("Licence", neutral(i.get("licence")) or "not stated")]
@@ -1744,10 +1966,48 @@ class Hub:
             panel = rk.item_panel(handler, i, query) + f"<style>{rk.RANK_CSS}</style>" if rk is not None and handler is not None else ""
         except Exception:   # noqa: BLE001: the rankings never break the page
             panel = ""
-        body = (f'<article class="ly-panel hb-item"><h1>{e(name)}</h1><p class="hb-sum">{e(summary)}</p>{desc}'
+        body = (f'<article class="ly-panel hb-item">{self.item_pic(i)}<h1>{e(name)}</h1><p class="hb-sum">{e(summary)}</p>{desc}'
                 f'<table class="ly-table">{table}</table><p class="hb-actions">{" ".join(acts)}</p>'
                 f'<p class="hb-fine">{e(how)}</p></article>{panel}')
         return 200, self._shell(f"{name} · Leyline", body, BASE + "/p/" + slug)
+
+    def item_pic(self, i: dict) -> str:
+        """An item page's picture: the Workshop screenshot, else the preview thumbnail with its credit under it, else the
+        tile drawn from its id."""
+        e = html.escape
+        name = neutral(i["name"]) or "Untitled"
+        if self.shot_count(i):
+            return (f'<figure class="hb-item-pic"><img src="/wrath/mods/{e(i["id"][4:])}/shot/0" alt="A screenshot of {e(name)}" '
+                    'width="640" height="360"></figure>')
+        if self.thumb_of(i):
+            return (f'<figure class="hb-item-pic"><img src="{e(self.thumb_of(i))}" alt="The preview image of {e(name)}" '
+                    f'width="640" height="320"><figcaption>{e(THUMB_CREDIT)}</figcaption></figure>')
+        icon = "creators" if i.get("source") == "theme" else "mods" if i.get("source") == "external" else KIND_WORDS[self._kind(i)][2]
+        return f'<figure class="hb-item-pic">{self.gen_art(i, name, icon)}</figure>'
+
+    def external_page(self, i: dict, slug: str) -> bytes:
+        """An external pack's own page: what it is, the flag (made and hosted by its authors, not checked or hosted by
+        Leyline), the authors' page (a new tab, nofollow) and, when it has one, its source repo. Never an Install, never
+        a leyline://install link, never a download of ours."""
+        e = html.escape
+        name = neutral(i["name"]) or "Untitled"
+        rows = [("Works with", ", ".join(CLIENT_LABEL.get(b, "Any client") for b in i["builds"])),
+                ("Category", dict(CATEGORIES).get(i["category"], i["category"])),
+                ("Made by", neutral(i["author"]) or "its authors"), ("Where it comes from", "Its authors' own page")]
+        table = "".join(f"<tr><th>{e(k)}</th><td>{e(v)}</td></tr>" for k, v in rows)
+        acts = [f'<a class="ly-btn" href="{e(i["url"])}" rel="noopener nofollow ugc" target="_blank">Visit the authors\' page</a>']
+        if i.get("repo") and _https(i["repo"]):
+            acts.append(f'<a class="ly-btn hb-alt" href="{e(i["repo"])}" rel="noopener nofollow ugc" target="_blank">'
+                        f'View source on {e(FORGE_LABEL.get(i.get("forge", ""), "the forge"))}</a>')
+        body = (f'<article class="ly-panel hb-item hb-ext-item">{self.item_pic(i)}<h1>{e(name)}</h1>'
+                f'<p class="hb-ext-b" role="note"><b>External</b> {e(EXTERNAL_NOTE)}.</p>'
+                f'<p class="hb-sum">{e(neutral(i["summary"]))}</p><table class="ly-table">{table}</table>'
+                f'<p class="hb-actions">{" ".join(acts)}</p>'
+                '<p class="hb-fine">Leyline lists this pack as a link only: it is made, hosted and kept up to date by its authors. '
+                'We haven\'t checked what it contains and we don\'t host or install it. Download it from the authors\' page, the '
+                'way they describe, and only if you trust it.</p>'
+                f'<p class="hb-more"><a href="{BASE}/catalog?source=external">Every external pack</a></p></article>')
+        return self._shell(f"{name} · Leyline", body, BASE + "/p/" + slug)
 
     def creators_page(self) -> bytes:
         rules = "".join(f"<li>{x}</li>" for x in (
@@ -1894,7 +2154,7 @@ body.hb{margin:0;min-height:100vh;display:flex;flex-direction:column;background:
 .hb-skip:focus{top:8px}
 /* the header: the launcher's pages on the web. A sticky bar with a blur; a hairline and a shadow once the page scrolls
    (a scroll timeline where the browser has one, else .hb-scrolled from HUB_JS on the front page) */
-.hb-top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:8px 14px;padding:9px 20px;
+.hb-top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px 24px;padding:14px clamp(20px,2.6vw,48px);min-height:76px;
 background:rgba(24,27,35,.86);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid transparent}
 .hb-top.hb-scrolled{border-bottom-color:var(--lk-border);box-shadow:0 6px 22px rgba(0,0,0,.35)}
 @supports (animation-timeline:scroll()){.hb-top{animation:hb-edge linear both;animation-timeline:scroll(root);animation-range:0 56px}}
@@ -1902,17 +2162,17 @@ background:rgba(24,27,35,.86);-webkit-backdrop-filter:blur(10px);backdrop-filter
 .hb-brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none;color:var(--lk-text)!important;flex:none}
 .hb-mark{border-radius:50%;background:radial-gradient(circle at 50% 45%,rgba(91,141,239,.18),rgba(139,108,240,.06) 70%);box-shadow:0 0 0 1px var(--lk-border-strong)}
 .hb-mark::before,.hb-mark::after{inset:3px}
-.hb-word{display:grid;line-height:1.05}.hb-word b{font-size:19px;font-weight:700;letter-spacing:-.01em}
-.hb-word i{font-style:normal;font-weight:600;font-size:14px;color:var(--lk-accent)}
-.hb-nav{display:flex;align-items:center;gap:2px;margin:0 auto}
-.hb-ni,.hb-mi{position:relative;display:inline-flex;align-items:center;gap:7px;padding:8px 10px;border-radius:var(--lk-r-sm);color:var(--lk-text-2)!important;
-text-decoration:none;font-weight:600;font-size:14px;white-space:nowrap;cursor:pointer}
-.hb-ni svg,.hb-mi svg,.hb-dl svg{width:17px;height:17px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.hb-word{display:grid;line-height:1.05}.hb-word b{font-size:23px;font-weight:700;letter-spacing:-.01em}
+.hb-word i{font-style:normal;font-weight:600;font-size:15.5px;color:var(--lk-accent)}
+.hb-nav{display:flex;align-items:center;gap:clamp(2px,.6vw,12px);margin:0 auto}
+.hb-ni,.hb-mi{position:relative;display:inline-flex;align-items:center;gap:9px;padding:10px 14px;border-radius:var(--lk-r-sm);color:var(--lk-text-2)!important;
+text-decoration:none;font-weight:600;font-size:16px;white-space:nowrap;cursor:pointer}
+.hb-ni svg,.hb-mi svg,.hb-dl svg{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .hb-ni svg{opacity:.8}
 .hb-ni:hover,.hb-mi:hover{background:var(--lk-accent-soft);color:var(--lk-text)!important}
 .hb-ni.on{color:var(--lk-text)!important;background:var(--lk-accent-soft)}
 .hb-ni.on svg{opacity:1;color:var(--lk-accent-strong)}
-.hb-ni.on::after{content:"";position:absolute;left:10px;right:10px;bottom:-10px;height:2px;border-radius:2px;background:var(--lk-accent)}
+.hb-ni.on::after{content:"";position:absolute;left:14px;right:14px;bottom:-17px;height:2px;border-radius:2px;background:var(--lk-accent)}
 .hb-more-d{position:relative}
 .hb-more-d summary{list-style:none}.hb-more-d summary::-webkit-details-marker{display:none}
 .hb-more-d summary::after{content:"";width:6px;height:6px;margin-left:2px;border:solid currentColor;border-width:0 1.6px 1.6px 0;transform:translateY(-2px) rotate(45deg)}
@@ -1922,24 +2182,26 @@ text-decoration:none;font-weight:600;font-size:14px;white-space:nowrap;cursor:po
 background:var(--lk-surface);border:1px solid var(--lk-border-strong);box-shadow:0 14px 40px rgba(0,0,0,.45)}
 .hb-mi{padding:9px 10px}.hb-mi.on{color:var(--lk-text)!important;background:var(--lk-accent-soft)}
 .hb-nav-x,.hb-dl-x{display:none}
-.hb-end{display:flex;align-items:center;gap:8px;flex:none}
-.hb-dl{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 14px;border-radius:var(--lk-r-sm);background:var(--lk-accent);
-color:#fff!important;text-decoration:none;font-weight:700;font-size:14px;box-shadow:0 4px 14px rgba(91,141,239,.3)}
+.hb-end{display:flex;align-items:center;gap:12px;flex:none}
+.hb-dl{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 20px;border-radius:var(--lk-r-sm);background:var(--lk-accent);
+color:#fff!important;text-decoration:none;font-weight:700;font-size:15.5px;box-shadow:0 4px 14px rgba(91,141,239,.3)}
 .hb-dl:hover{background:var(--lk-accent-strong)}
-.hb-signin,.hb-acct{display:inline-flex;align-items:center;gap:4px;min-height:36px;padding:0 14px 0 6px;border-radius:var(--lk-r-sm);
-border:1px solid var(--lk-border-strong);background:transparent;color:var(--lk-text)!important;text-decoration:none;font-weight:600;font-size:14px}
+.hb-signin,.hb-acct{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px 0 8px;border-radius:var(--lk-r-sm);
+border:1px solid var(--lk-border-strong);background:transparent;color:var(--lk-text)!important;text-decoration:none;font-weight:600;font-size:15.5px}
 .hb-signin:hover,.hb-acct:hover{border-color:var(--lk-accent);background:var(--lk-accent-soft)}
 .hb-signin img{transform:scale(1.5)}
 .hb-acct{gap:8px;padding:0 12px 0 4px}.hb-acct-n{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.hb-av{display:grid;place-items:center;flex:none;width:28px;height:28px;border-radius:50%;font-weight:800;font-size:13px;color:#fff;
+.hb-av{display:grid;place-items:center;flex:none;width:32px;height:32px;border-radius:50%;font-weight:800;font-size:14px;color:#fff;
 background:linear-gradient(135deg,var(--lk-accent),var(--lk-accent-2))}
 .hb-menu-t{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
 .hb-menu-b{display:none;cursor:pointer;padding:7px 12px;border:1px solid var(--lk-border-strong);border-radius:var(--lk-r-sm);font-weight:600;font-size:14px}
 .hb-menu-t:focus-visible+.hb-menu-b{outline:2px solid var(--lk-accent-strong);outline-offset:2px}
 .hb-menu-t:checked+.hb-menu-b{background:var(--lk-accent-soft);border-color:var(--lk-accent)}
+@media (max-width:1500px){.hb-ni{padding:9px 9px;font-size:15px;gap:7px}.hb-ni svg{width:17px;height:17px}.hb-nav{gap:2px}.hb-top{gap:10px 16px}}
+@media (max-width:1320px){.hb-ni svg{display:none}.hb-ni{padding:9px 10px}}
 @media (max-width:1180px){.hb-ni svg{display:none}.hb-ni{padding:8px 8px}}
 /* tablets and phones: Menu opens a full-width sheet, the same items as a two-column grid of icon tiles */
-@media (max-width:1000px){.hb-top{flex-wrap:wrap;padding:9px 16px}
+@media (max-width:1080px){.hb-top{flex-wrap:wrap;padding:9px 16px}
 .hb-menu-b{display:inline-block;order:3}.hb-end{margin-left:auto;order:2}
 .hb-nav{display:none;order:4;flex:1 0 100%;margin:4px 0 6px;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .hb-menu-t:checked~.hb-nav{display:grid}
@@ -2050,6 +2312,20 @@ background:var(--lk-accent);color:#fff;font:600 14px var(--lk-font);cursor:point
 .hb-hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
 .hb-err{padding:10px;border:1px solid var(--lk-bad);border-radius:var(--lk-r-sm);color:var(--lk-bad)}
 .hb-pages{display:flex;gap:14px;justify-content:center;margin:16px 0}
+.hb-card-pic{display:block;margin:-14px -14px 10px;aspect-ratio:2/1;overflow:hidden;border-radius:var(--lk-r) var(--lk-r) 0 0;background:var(--lk-surface-2)}
+.hb-card-pic img,.hb-card-pic .hb-gt-art{display:grid;width:100%;height:100%;object-fit:cover}
+.hb-card-art.gen b{font-size:44px}
+.hb-src.hb-external{border-color:#e0a84a;color:#f0c27a}
+.hb-ext-b{margin:6px 0;padding:6px 10px;border-radius:var(--lk-r-sm);border:1px solid rgba(224,168,74,.55);background:rgba(224,168,74,.1);
+color:#f3d29a!important;font-size:13px!important}
+.hb-ext-b b{margin-right:6px;padding:1px 7px;border-radius:999px;background:#e0a84a;color:#1b1406;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.hb-ext-a{margin-top:8px!important}
+.hb-ext-s{margin:28px 0 8px}.hb-ext-s h2{margin:0 0 4px;font-size:20px}.hb-ext-lede{margin:0 0 12px;color:var(--lk-text-2)}
+.hb-item-pic{margin:0 0 14px;max-width:640px;border-radius:var(--lk-r-sm);overflow:hidden;background:var(--lk-surface-2)}
+.hb-item-pic img,.hb-item-pic .hb-gt-art{display:grid;width:100%;height:auto;aspect-ratio:2/1;object-fit:cover}
+.hb-item-pic figcaption,.hb-th-cr{padding:5px 10px;font-size:12px;color:var(--lk-muted)}
+.hb-th-cr{padding:0;margin:8px 0 0!important}
+.hb-motw-pic .hb-gt-art{width:100%;height:100%}
 .hb-item h1{text-align:left}.hb-sum{font-size:17px}.hb-repo{color:var(--lk-muted)}
 .hb-list li{margin:4px 0}.hb-empty{color:var(--lk-muted)}
 .hb .realm{background:var(--lk-surface)!important;border:1px solid var(--lk-border)!important;border-radius:var(--lk-r)!important;box-shadow:none!important}

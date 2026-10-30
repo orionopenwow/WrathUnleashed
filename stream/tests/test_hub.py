@@ -794,6 +794,158 @@ os.environ["WU_HUB"] = "0"
 check("WU_HUB=0: the preview is off", req("/wrath/leyline-preview")[0] == 404 and req("/wrath/leyline/catalog.json")[0] == 404)
 os.environ.pop("WU_HUB")
 
+# ---------------------------------------------------------------- preview thumbnails and external packs
+TCRED = "Preview image from the project's GitHub page"
+ENOTE = "External download, made and hosted by its authors; not checked or hosted by Leyline"
+gh = [e for e in INDEX["entries"] if e["forge"] == "github"]
+base_e = dict(gh[0])
+base_e.pop("thumb", None); base_e.pop("thumb_credit", None)
+tn = HB.thumb_name(base_e["repo"])
+good = dict(base_e, thumb="/wrath/art/hub-thumbs/" + tn, thumb_credit=TCRED)
+check("thumb: the entry's own /wrath/art/hub-thumbs/<owner>__<repo>.webp with the exact credit passes",
+      tn.endswith(".webp") and "__" in tn and not HB.thumb_problem(good))
+for why, bad in {"another repo's file": dict(good, thumb="/wrath/art/hub-thumbs/someone__else.webp"),
+                 "an outside link": dict(good, thumb="https://opengraph.githubassets.com/x/" + tn),
+                 "a png": dict(good, thumb="/wrath/art/hub-thumbs/" + tn[:-5] + ".png"),
+                 "another credit": dict(good, thumb_credit="From GitHub"),
+                 "no credit": {k: v for k, v in good.items() if k != "thumb_credit"}}.items():
+    doc = dict(INDEX, entries=[bad if e["id"] == bad["id"] else e for e in INDEX["entries"]])
+    check(f"thumb: {why} is refused (validate_index)", any("thumb" in p for p in HB.validate_index(doc)))
+gl = [e for e in INDEX["entries"] if e["forge"] != "github"]
+if gl:
+    check("thumb: only for a GitHub repo", HB.thumb_problem(dict(gl[0], thumb="/wrath/art/hub-thumbs/a__b.webp", thumb_credit=TCRED)))
+
+
+def ext(url, **kw):
+    x = {"id": HB.external_id(url), "name": "Crisp Ground Pack", "author": "Pack Folk", "url": url, "category": "graphics",
+         "type": "external-pack", "builds": ["3.3.5a"], "summary": "Sharper ground textures, from its authors' page.",
+         "external": True, "note": ENOTE}
+    x.update(kw)
+    return x
+
+
+EXT_REPO = ext("https://github.com/packfolk/crisp-ground", repo="https://github.com/packfolk/crisp-ground",
+               thumb="/wrath/art/hub-thumbs/packfolk__crisp-ground.webp", thumb_credit=TCRED)
+EXT_PAGE = ext("https://forum.example.org/t/sky-pack", name="Sky Pack", author="")
+check("external: a well-formed pack passes", HB.external_problems(EXT_REPO) == [] and HB.external_problems(EXT_PAGE) == [])
+for why, bad in {"a made-up id": dict(EXT_PAGE, id="ext:000000000000"), "an id that isn't ext:<12hex>": dict(EXT_PAGE, id="link:abc"),
+                 "http": ext("http://forum.example.org/t/x"), "a direct file": ext("https://cdn.example.org/pack.zip"),
+                 "a file host": ext("https://mega.nz/file/abc"), "an install link": ext("leyline://install/x"),
+                 "another type": dict(EXT_PAGE, type="addon"), "no flag": dict(EXT_PAGE, external=False),
+                 "another note": dict(EXT_PAGE, note="Fine to install"), "an install field": dict(EXT_PAGE, download="https://x.example/a"),
+                 "a brand word": dict(EXT_PAGE, name="WoW HD"), "markup": dict(EXT_PAGE, summary="<b>hi</b>"),
+                 "a thumb without a repo": dict(EXT_PAGE, thumb="/wrath/art/hub-thumbs/a__b.webp", thumb_credit=TCRED),
+                 "a repack": dict(EXT_PAGE, summary="A full repack")}.items():
+    check(f"external: {why} is refused", HB.external_problems(bad), why)
+EXT_BAD = ext("https://files.example.org/pack.7z", name="Bad Pack")
+fx = json.loads(json.dumps(INDEX))
+skip_thumb = gh[1]["id"]
+for e in fx["entries"]:
+    if e["forge"] == "github" and e["id"] != skip_thumb:
+        e.update(thumb="/wrath/art/hub-thumbs/" + HB.thumb_name(e["repo"]), thumb_credit=TCRED)
+fx["external"] = [EXT_REPO, EXT_PAGE, EXT_BAD]
+check("fixture index (thumbs on GitHub entries) passes the hub's rules", HB.validate_index(fx) == [], HB.validate_index(fx)[:3])
+json.dump(fx, open(os.path.join(HUBDIR, "community-index.json"), "w"))
+ART_TMP = tempfile.mkdtemp(prefix="wu-hub-art-")
+os.makedirs(os.path.join(ART_TMP, "hub-thumbs"))
+WEBP = b"RIFF" + (30).to_bytes(4, "little") + b"WEBPVP8 " + b"\0" * 22
+for e in fx["entries"] + [EXT_REPO]:
+    if "thumb" in e:
+        open(os.path.join(ART_TMP, e["thumb"][len("/wrath/art/"):]), "wb").write(WEBP)
+open(os.path.join(ART_TMP, "hub-thumbs", "fake__html.webp"), "wb").write(b"<html>not an image</html>")
+open(os.path.join(ART_TMP, "hub-thumbs", "x__y.png"), "wb").write(b"\x89PNG\r\n\x1a\n")
+open(os.path.join(ART_TMP, "wu-theme.css"), "w").write("body{}")
+ART_WAS2, wp.ART_DIR = wp.ART_DIR, ART_TMP
+thumb1 = fx["entries"][[e["id"] for e in fx["entries"]].index(gh[0]["id"])]["thumb"]
+st, h, b = req(thumb1)
+check("art route: a hub thumbnail is served (image/webp, nosniff)", st == 200 and h.get("content-type") == "image/webp" and b == WEBP
+      and h.get("x-content-type-options") == "nosniff", (st, h.get("content-type")))
+for p in ("/wrath/art/hub-thumbs/fake__html.webp", "/wrath/art/hub-thumbs/x__y.png", "/wrath/art/hub-thumbs/..%2Fwu-theme.css",
+          "/wrath/art/hub-thumbs/../wu-theme.css", "/wrath/art/hub-thumbs/Upper__Case.webp", "/wrath/art/hub-thumbs/nounderscore.webp",
+          "/wrath/art/hub-thumbs/", "/wrath/art/hub-thumbs/a__b.webp/x"):
+    check(f"art route: {p} is refused", req(p)[0] == 404)
+check("art_present: thumbnails by pattern only", wp.art_present(thumb1[len("/wrath/art/"):]) and not wp.art_present("hub-thumbs/x__y.png")
+      and not wp.art_present("../art/wu-theme.css"))
+catx = req("/wrath/leyline-preview/catalog?sort=name")[2].decode()
+cards = re.findall(r'<article class="hb-card(?: hb-ext)?">.*?</article>', catx, re.S)
+withth = [c for c in cards if '/wrath/art/hub-thumbs/' in c]
+check("catalog: GitHub entries show their thumbnail on the card (credited in its title)", withth and all(
+      re.search(r'<a class="hb-card-pic" href="/wrath/leyline-preview/p/[a-z0-9-]+" tabindex="-1" aria-hidden="true"><img src="/wrath/art/hub-thumbs/'
+                r'[a-z0-9._-]+__[a-z0-9._-]+\.webp" alt="" loading="lazy" width="640" height="320" title="Preview image from the project&#x27;s GitHub page">', c)
+      for c in withth), withth[:1])
+noth = next((c for c in cards if f'p/{skip_thumb.replace(":", "-")}"' in c), "")
+check("catalog: an entry without a thumbnail gets the tile drawn from its id", noth and 'class="hb-gt-art gen hb-card-art"' in noth
+      and "hub-thumbs" not in noth, noth[:300])
+grp = re.search(r'<section class="hb-ext-s" id="external".*?</section>', catx, re.S)
+grp = grp.group(0) if grp else ""
+check("catalog: a 'Graphics & external packs' group with the good packs only", "<h2 id=\"hb-ext-h\">Graphics &amp; external packs</h2>" in grp
+      and "Crisp Ground Pack" in grp and "Sky Pack" in grp and "Bad Pack" not in catx)
+ecards = re.findall(r'<article class="hb-card hb-ext">.*?</article>', grp, re.S)
+check("catalog: each external pack carries the badge and Visit the authors' page (new tab, noopener nofollow ugc)", len(ecards) == 2 and all(
+      f'<p class="hb-ext-b" role="note">{html.escape(ENOTE)}</p>' in c
+      and re.search(r'<a class="hb-ghost" href="https://[^"]+" rel="noopener nofollow ugc" target="_blank">Visit the authors. page</a>', c)
+      for c in ecards), ecards[:1])
+check("catalog: never an Install for an external pack", "leyline://install/ext:" not in catx and not any("Install" in c for c in ecards))
+check("catalog: the source chip 'Graphics & external packs' (?source=external) shows only them",
+      'href="/wrath/leyline-preview/catalog?source=external"' in req("/wrath/leyline-preview/catalog")[2].decode())
+only = req("/wrath/leyline-preview/catalog?source=external")[2].decode()
+check("catalog ?source=external: the two packs, nothing else", len(re.findall(r'<article class="hb-card hb-ext">', only)) == 2
+      and '<article class="hb-card">' not in only)
+check("catalog ?cat=addons: no external packs (they are graphics)", 'class="hb-ext-s"' not in req("/wrath/leyline-preview/catalog?cat=addons")[2].decode())
+check("catalog: search finds an external pack", "Sky Pack" in req("/wrath/leyline-preview/catalog?q=sky")[2].decode())
+st, h, b = req("/wrath/leyline-preview/p/" + EXT_REPO["id"].replace(":", "-"))
+xp = b.decode()
+check("external item page: 200, noindex, the badge, Visit the authors' page (new tab, nofollow) and the source repo",
+      st == 200 and h.get("x-robots-tag") and f"{html.escape(ENOTE)}" in xp and '<b>External</b>' in xp
+      and "<a class=\"ly-btn\" href=\"https://github.com/packfolk/crisp-ground\" rel=\"noopener nofollow ugc\" target=\"_blank\">Visit the authors' page</a>" in xp)
+check("external item page: never an Install, an install link or a download of ours", "leyline://" not in xp
+      and not re.search(r"(?i)\binstall with\b|>Install<|download=", xp))
+check("external item page: its thumbnail with the credit under it", '<img src="/wrath/art/hub-thumbs/packfolk__crisp-ground.webp"' in xp
+      and f"<figcaption>{html.escape(TCRED)}</figcaption>" in xp)
+xp2 = req("/wrath/leyline-preview/p/" + EXT_PAGE["id"].replace(":", "-"))[2].decode()
+check("external item page without a repo: the generated tile, 'its authors', no source button", 'class="hb-gt-art gen"' in xp2
+      and "its authors" in xp2 and "View source" not in xp2 and "hub-thumbs" not in xp2)
+check("external item page: a bad pack is not there", req("/wrath/leyline-preview/p/" + EXT_BAD["id"].replace(":", "-"))[0] == 404)
+check("external pages: no brand words or client numbers", not BANNED.findall(visible(xp + xp2 + grp)) and not NOPE.findall(shown(xp + xp2 + grp)))
+ip = req(re.search(r'href="(/wrath/leyline-preview/p/link-[a-z0-9]+)"', withth[0]).group(1) if withth else "/x")[2].decode()
+check("item page: the thumbnail with its credit", re.search(r'<figure class="hb-item-pic"><img src="/wrath/art/hub-thumbs/[^"]+\.webp" alt="The preview '
+      r'image of [^"]+" width="640" height="320"><figcaption>Preview image from the project&#x27;s GitHub page</figcaption></figure>', ip))
+galx = req("/wrath/leyline-preview/gallery")[2].decode()
+gt = {t[2]: t for t in GALS.findall(galx)}
+xt = gt.get("x-" + EXT_REPO["id"].replace(":", "-"))
+check("gallery: an external pack with its GitHub thumbnail is a tile, credited, flagged external, no Install",
+      xt and 'src="/wrath/art/hub-thumbs/packfolk__crisp-ground.webp"' in xt[3] and TCRED.replace("'", "&#x27;") in xt[3]
+      and "not checked or hosted by Leyline" in xt[3] and "leyline://" not in xt[3]
+      and 'rel="noopener nofollow ugc" target="_blank">Visit the authors&#x27; page</a>' in xt[3], xt[3][:400] if xt else list(gt)[:20])
+check("gallery: an external pack without a GitHub thumbnail is not", "x-" + EXT_PAGE["id"].replace(":", "-") not in gt)
+tm = [t for t in GALS.findall(galx) if t[1] == "mods" and "/hub-thumbs/" in t[3] and not t[2].startswith("x-")]
+check("gallery: mod tiles use the thumbnail, and the credit is in the caption the lightbox shows (.hb-gt-c i)", tm and all(
+      re.search(r'<img src="/wrath/art/hub-thumbs/[^"]+" alt="The preview image of [^"]+" width="640" height="320"', t[3])
+      and re.search(r"<i>by [^<]+ · Preview image from the project&#x27;s GitHub page</i>", t[3]) for t in tm)
+      and 'parts.c.textContent=txt(t,".hb-gt-c i")' in HB.HUB_JS, [t[2] for t in tm][:5])
+check("gallery page: the fine print says where the pictures come from", "preview image from its GitHub page" in galx)
+frontx = req("/wrath/leyline-preview")[2].decode()
+top = HB.hub._ranked([i for i in HB.hub.items() if i["source"] != "theme"])[0][0]
+motw = re.search(r'<section class="hb-motw.*?</section>', frontx, re.S).group(0)
+if top.get("thumb"):
+    check("Mod of the week: the thumbnail and its credit", top["thumb"] in motw and f'<p class="hb-th-cr">{html.escape(TCRED)}</p>' in motw)
+else:
+    check("Mod of the week: the generated tile when there's no thumbnail", 'class="hb-gt-art gen"' in motw)
+spot = re.search(r'id="community".*?</section>', frontx, re.S).group(0)
+check("Community Spotlight: thumbnails where there's no Workshop screenshot", "/wrath/art/hub-thumbs/" in spot)
+check("front page: never an install link for an external pack", "leyline://install/ext:" not in frontx)
+feedx = json.loads(req("/wrath/leyline/catalog.json")[2])
+check("launcher feed: no external packs (never installable)", not any(str(p.get("id", "")).startswith("ext:") for p in feedx["projects"]))
+wp.ART_DIR = ART_WAS2
+check("thumbnail file gone: the generated tile instead of a broken image",
+      "/wrath/art/hub-thumbs/" not in req("/wrath/leyline-preview/catalog")[2].decode())
+n_before = len(HB.hub.index())
+json.dump(dict(fx, external=[dict(EXT_PAGE, download="https://x.example/a")]), open(os.path.join(HUBDIR, "community-index.json"), "w"))
+check("a bad external list never takes the index down", 'class="hb-ext-s"' not in req("/wrath/leyline-preview/catalog")[2].decode()
+      and n_before > 0 and len(HB.hub.index()) == n_before)
+shutil.copy(os.path.join(HERE, "hub", "community-index.json"), HUBDIR)
+shutil.rmtree(ART_TMP, ignore_errors=True)
+
 # ---------------------------------------------------------------- shipping
 bat = open(os.path.join(HERE, "Update sign-in and warm-up.bat"), encoding="utf-8").read()
 fl = open(os.path.join(HERE, "fastloop.sh"), encoding="utf-8").read()
@@ -801,6 +953,10 @@ check("sign-in bat: packs hub.py and hub/", 'if exist hub.py if exist hub\\commu
       and " hub.py " in re.search(r"\$\(ls ([^)]*)\)", bat).group(0))
 check("fastloop.sh: installs hub.py and its data, backs them up, puts them back", 'install -m 644 hub.py "$WU/portal/hub.py"' in fl
       and '"$BK/hub.py"' in fl and 'install -m 644 hub/*.json "$WU/portal/hub/"' in fl)
+check("fastloop.sh: installs the art's files and the hub-thumbs folder (WebP only), never trips on the subfolder",
+      "install -m 644 www-files/art/*" not in fl and 'find www-files/art -maxdepth 1 -type f -exec install -m 644 {} "$WU/portal/art/"' in fl
+      and "find www-files/art/hub-thumbs -maxdepth 1 -type f -name '*.webp' -exec install -m 644 {} \"$WU/portal/art/hub-thumbs/\"" in fl)
+check("sign-in bat: packs the whole www-files/art folder (tar is recursive: hub-thumbs goes along)", " www-files/art " in bat)
 check("the index in the repo passes the hub's rules", HB.validate_index(json.load(open(os.path.join(HERE, "hub", "community-index.json")))) == [])
 
 srv.shutdown()
