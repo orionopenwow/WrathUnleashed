@@ -1,0 +1,79 @@
+# The Leyline hub's community index (tools/hub-index/hub_index.py): once a week, and on demand, search the forges
+# for open mods for every client build, check them against the rules, and open a pull request with the changes.
+# It never pushes to main: a person reviews and merges the PR. Only the built-in GITHUB_TOKEN is used.
+# Source copy: tools/github-workflows/hub-index.yml ("Turn on GitHub builds.bat" installs it as
+# .github/workflows/hub-index.yml in WrathUnleashed).
+name: Hub index
+
+on:
+  schedule:
+    - cron: "17 7 * * 1"          # Mondays 07:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write                  # push the refresh branch (never main)
+  pull-requests: write             # open the PR
+  issues: read                     # approved "Submit a mod" issues
+
+concurrency:
+  group: hub-index
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      HUB_APPROVED_URL: https://play.openvanilla.app/wrath/leyline-preview/approved.json
+      HUB_ISSUES_REPO: orionopenwow/Leyline
+      BRANCH: hub-index/refresh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Probe cache
+        uses: actions/cache@v4
+        with:
+          path: tools/hub-index/.cache
+          key: hub-index-${{ github.run_id }}
+          restore-keys: hub-index-
+      - name: Discover
+        run: python3 -I tools/hub-index/hub_index.py discover --max-pages 3
+      - name: Build the index
+        run: python3 -I tools/hub-index/hub_index.py build --jobs 6 --report "$RUNNER_TEMP/hub-report.txt"
+      - name: Check
+        run: |
+          python3 -I tools/hub-index/hub_index.py check
+          python3 -I tools/hub-index/test_hub_index.py
+      - name: Open or update the pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          paths="stream/hub tools/hub-index/candidates.json tools/hub-index/holding.json"
+          if git diff --quiet -- $paths; then
+            echo "No changes to the index."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add -- $paths
+          git commit -q -m "Hub index: weekly refresh"
+          git push -q -f origin "$BRANCH"
+          {
+            echo "The weekly community index refresh. Nothing goes live until this is merged."
+            echo
+            echo "Check before merging: new entries in stream/hub/community-index.json, and the review list in"
+            echo "tools/hub-index/holding.json. Rules: docs/HUB-INDEX.md."
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/hub-report.txt"
+            echo '```'
+          } > "$RUNNER_TEMP/pr-body.md"
+          if gh pr view "$BRANCH" --json state -q .state 2>/dev/null | grep -q OPEN; then
+            gh pr edit "$BRANCH" --body-file "$RUNNER_TEMP/pr-body.md"
+          else
+            gh pr create --base main --head "$BRANCH" --title "Hub index: weekly refresh" --body-file "$RUNNER_TEMP/pr-body.md"
+          fi
