@@ -1805,7 +1805,7 @@ GETS = {"/api/overview": api_overview, "/api/players": api_players, "/api/accoun
         "/api/reports": api_reports, "/api/health": api_health}
 EXPORT_PATH = "/api/export/new-reports"
 
-# The owner's tools on his PC (C:\Users\campw\Desktop\WrathUnleashed): uploads still come from these.
+# The owner's tools on his PC (the workspace, C:\Users\campw\Desktop\Leyline): uploads still come from these.
 BATS = [
     {"bat": r"realm\Update realm scripts.bat", "what": "Sends Lua scripts (default ov_main.lua) and runs reload ale. Backs up; a refused reload puts the old files back.",
      "when": "Lua-only realm changes. Nobody is disconnected.", "restart": "no"},

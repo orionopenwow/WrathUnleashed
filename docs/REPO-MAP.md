@@ -1,6 +1,7 @@
 # Repo map
 
-What every top-level folder is for, as of 2026-10-30. The owner's direction that day: Leyline is the mod launcher
+What every top-level folder is for, as of 2026-10-30. On the owner's PC the workspace is `Desktop\Leyline` (this
+repo, on GitHub as `orionopenwow/leyline-workspace`, formerly `WrathUnleashed`). The owner's direction that day: Leyline is the mod launcher
 and the P2P realm network where anyone can host a realm in one click, from the browser or the desktop. Our own
 realm is only the temporary **Dalaran Hangout** (3.3.5a), and it gets our client additions as we go. All tools
 we made are kept; the ones that are not part of the core today are in `labs/`.
@@ -29,6 +30,7 @@ we made are kept; the ones that are not part of the core today are in `labs/`.
 | `control/` | Autopilot's state files (`autopilot.json`, `claude-status.json`, `last-run.json`), read and written by `tools/control/control.py` | Ops | no |
 | `players/` | The old tester package (`Make player package.bat` builds the zip from `play/` and `addons/`) | Experimental, in place | no |
 | `labs/` | Paused tools and plans, kept for later: the 1.12 client repo maker, the 1.12 login carry-over, the sandbox roadmap. `labs/README.md` | Labs | no |
+| `.repos/` (not in git) | Working copies the steps manage: `leyline-public` (the public repo, `leyline` step), `leyline-launcher` (the Leyline-Launcher repo, `ovrename`/`ovland`) | Ops | no |
 | `.github/workflows/` | CI that runs here: hosting tests, realm images, hub index, scout. Mirrors in `tools/github-workflows/` | Ops | no |
 
 ## Root files
@@ -37,7 +39,8 @@ we made are kept; the ones that are not part of the core today are in `labs/`.
 |---|---|
 | `README.md` | This repo in short |
 | `UPDATE.bat`, `UPDATES-PENDING.txt`, `UPDATES-DONE.txt` | The update queue: Claude adds steps, `UPDATE.bat` or the control window runs them |
-| `WrathUnleashed Control.bat` | The control window with Autopilot (`tools/control/control.py`) |
+| `Leyline Control.bat` | The control window with Autopilot (`tools/control/control.py`); was `WrathUnleashed Control.bat` |
+| `Move to Leyline.bat` | Once: one workspace folder, `Desktop\Leyline`, with the other clones in `.repos\` (`tools/workspace-move/`) |
 | `Turn on Autopilot (start with Windows).bat` | Starts the control window at sign-in |
 | `Ship WrathUnleashed.bat` | Saves the repo to the private GitHub repo (Autopilot step `ship`) |
 | `Ship the Leyline launcher.bat`, `Turn on launcher updates.bat`, `Turn on GitHub builds.bat` | Launcher release: update key, save, public repo, tag |
@@ -99,6 +102,7 @@ we made are kept; the ones that are not part of the core today are in `labs/`.
 | `art/` | Share card and launcher screenshot renderers |
 | `creator-api/` | Writes `docs/CREATOR-API.md` and `docs/creator-api.html` from the Modes API |
 | `playerbots-specs/` | Turns playerbots talent specs into the realm's env lines |
+| `workspace-move/` | `move_to_leyline.py`, behind `Move to Leyline.bat`: the one-folder move and the repo rename |
 
 ## Experimental, in place
 

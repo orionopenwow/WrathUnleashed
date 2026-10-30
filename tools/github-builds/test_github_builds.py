@@ -363,5 +363,23 @@ class TurnOn(unittest.TestCase):
             self.assertTrue((src / "ISSUE_TEMPLATE" / f).is_file(), f)
 
 
+
+class LeylineDir(unittest.TestCase):
+    """Where the public repo's clone is: .repos/leyline-public in the workspace, else the old Desktop\\Leyline."""
+
+    def test_paths(self):
+        import tempfile
+        t = Path(tempfile.mkdtemp())
+        ws, old = t / "Desktop" / "WrathUnleashed", t / "Desktop" / "Leyline"
+        (old / ".git").mkdir(parents=True)
+        ws.mkdir(parents=True)
+        env = {"USERPROFILE": str(t)}
+        self.assertEqual(gb.default_leyline_dir(ws, env), old)                       # before the move
+        (ws / ".repos" / "leyline-public" / ".git").mkdir(parents=True)
+        self.assertEqual(gb.default_leyline_dir(ws, env), ws / ".repos" / "leyline-public")
+        # after the move the workspace IS Desktop\Leyline: never export into it
+        moved = old
+        self.assertEqual(gb.default_leyline_dir(moved, env), moved / ".repos" / "leyline-public")
+
 if __name__ == "__main__":
     unittest.main()

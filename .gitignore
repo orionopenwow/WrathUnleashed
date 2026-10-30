@@ -64,3 +64,6 @@ tools/fresh-history/CONFIRM
 
 # the sync bundle Claude drops beside the labs 1.12 client tool (never committed)
 labs/leyline-client-112/*.bundle
+
+# working copies the steps manage inside the workspace (Move to Leyline.bat): .repos\leyline-public, .repos\leyline-launcher
+/.repos/

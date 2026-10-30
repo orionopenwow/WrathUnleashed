@@ -2,7 +2,7 @@
 setlocal EnableDelayedExpansion
 title Leyline - update the public Leyline repo (github.com/orionopenwow/Leyline)
 rem Copies Leyline's parts of WrathUnleashed (the relay, the host kit and its tools, the Discord bridge, the
-rem hosting tests, the in-game Leyline window, share links, the Leyline art) into %USERPROFILE%\Desktop\Leyline
+rem hosting tests, the in-game Leyline window, share links, the Leyline art) into .repos\leyline-public
 rem with export.py (an allow-list; it refuses game data, secrets, logs and brand words), then commits and
 rem pushes that folder to the PUBLIC repo orionopenwow/Leyline. First run: makes the folder a git repo and
 rem creates the GitHub repo with gh if it isn't there yet.
@@ -10,7 +10,10 @@ rem Never force-pushes. Never touches the WrathUnleashed folder's own git (it on
 rem Safe to run again: nothing changed = nothing committed. The Autopilot step "leyline" runs this.
 set "WU=%~dp0..\.."
 for %%I in ("%WU%") do set "WU=%%~fI"
-set "LY=%USERPROFILE%\Desktop\Leyline"
+rem The public repo's working copy: .repos\leyline-public inside the workspace (since "Move to Leyline.bat");
+rem before the move it is still the separate Desktop\Leyline clone. Never the workspace itself.
+set "LY=%WU%\.repos\leyline-public"
+if not exist "%LY%\.git" if exist "%USERPROFILE%\Desktop\Leyline\.git" if /i not "%USERPROFILE%\Desktop\Leyline"=="%WU%" set "LY=%USERPROFILE%\Desktop\Leyline"
 if not "%LEYLINE_REPO_DIR%"=="" set "LY=%LEYLINE_REPO_DIR%"
 set "SLUG=orionopenwow/Leyline"
 set "URL=https://github.com/%SLUG%.git"

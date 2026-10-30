@@ -11,7 +11,7 @@
 3. The workflow files, copied from tools/github-workflows/ (the source copies) and pushed with gh's credential:
      WrathUnleashed (.github/workflows/): wu-images.yml, wu-hosting.yml, and realm-scripts.yml once the deploy
        secret exists ("Set up automatic deploys.bat"), so its deploy job can't fail for lack of it;
-     Leyline (the public repo, %USERPROFILE%\\Desktop\\Leyline): leyline-launcher.yml. Launcher releases go
+     Leyline (the public repo, <workspace>\\.repos\\leyline-public): leyline-launcher.yml. Launcher releases go
        there because players can't download release files from the private repo, and Actions minutes are free
        on a public repo.
    The commit is made on top of GitHub's own main in a throwaway worktree: the folders' branches, working
@@ -43,6 +43,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]          # the WrathUnleashed folder (a git clone of the repo)
 OWNER = "orionopenwow"
 WU_REPO = f"{OWNER}/WrathUnleashed"
+# "Move to Leyline.bat" renames the private repo to leyline-workspace; GitHub redirects the old name, so the calls
+# below keep working, and the folder check takes either origin.
+WU_REPO_NEW = f"{OWNER}/leyline-workspace"
 LY_REPO = f"{OWNER}/Leyline"
 SRC = ROOT / "tools" / "github-workflows"
 NEED_SCOPES = ("workflow", "write:packages", "admin:org")
@@ -398,12 +401,22 @@ def package_url(owner_type: str, name: str) -> str:
     return f"https://github.com/{who}/{OWNER}/packages/container/{name}/settings"
 
 
+def default_leyline_dir(root: Path = ROOT, env=None) -> Path:
+    """The public Leyline repo's clone: <workspace>/.repos/leyline-public (since "Move to Leyline.bat"), else the
+    old Desktop\\Leyline clone while it is still a separate folder (not the workspace itself)."""
+    env = os.environ if env is None else env
+    new = Path(root) / ".repos" / "leyline-public"
+    old = Path(env.get("USERPROFILE") or Path.home()) / "Desktop" / "Leyline"
+    if not (new / ".git").exists() and (old / ".git").exists() and old.resolve() != Path(root).resolve():
+        return old
+    return new
+
+
 # ------------------------------------------------------------------------------------------------ main
 def main(argv=None, gh: GitHub | None = None, sleep=time.sleep, now=time.time, opener=webbrowser.open) -> int:
     ap = argparse.ArgumentParser(description="Turn on the GitHub builds (images, host tests, launcher).")
     ap.add_argument("--repo-dir", default=str(ROOT))
-    ap.add_argument("--leyline-dir", default=os.environ.get("LEYLINE_REPO_DIR")
-                    or str(Path(os.environ.get("USERPROFILE") or Path.home()) / "Desktop" / "Leyline"))
+    ap.add_argument("--leyline-dir", default=os.environ.get("LEYLINE_REPO_DIR") or str(default_leyline_dir()))
     ap.add_argument("--no-wait", action="store_true", help="start the builds, don't wait for them")
     ap.add_argument("--wait-minutes", type=int, default=300)
     ap.add_argument("--no-browser", action="store_true")
@@ -440,8 +453,8 @@ def main(argv=None, gh: GitHub | None = None, sleep=time.sleep, now=time.time, o
         actions_on(gh, owner_type, todo)
 
         say("[3/5] Workflow files")
-        if not (wu / ".git").exists() or not origin_ok(gh, wu, WU_REPO):
-            raise Fail(f"{wu} is not the {WU_REPO} folder. Run this from the WrathUnleashed folder.")
+        if not (wu / ".git").exists() or not (origin_ok(gh, wu, WU_REPO) or origin_ok(gh, wu, WU_REPO_NEW)):
+            raise Fail(f"{wu} is not the {WU_REPO_NEW} folder. Run this from the workspace folder (Desktop\\Leyline).")
         files = list(WU_FILES)
         rc, out = gh.run(["gh", "secret", "list", "-R", WU_REPO, "--json", "name"])
         if rc == 0 and f'"{DEPLOY_SECRET}"' in out:

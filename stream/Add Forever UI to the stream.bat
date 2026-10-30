@@ -26,12 +26,12 @@ set "SSH=ssh -i "%KEY%" -o StrictHostKeyChecking=accept-new -o ServerAliveInterv
 set "KIT=%~dp0server"
 for %%f in (fui-install.sh fui-overlay.py slice-install.sh patch-index.sh) do if not exist "%KIT%\%%f" (echo server\%%f is missing next to this file. & goto fail)
 
-rem The WrathUnleashed folder (where Install Forever UI.bat keeps foreverui-installed.txt).
+rem The workspace folder (Desktop\Leyline, before the move Desktop\WrathUnleashed; where Install Forever UI.bat keeps foreverui-installed.txt).
 set "WU="
-for %%d in ("%~dp0." "%~dp0.." "%~dp0..\.." "%USERPROFILE%\Desktop\WrathUnleashed") do (
+for %%d in ("%~dp0." "%~dp0.." "%~dp0..\.." "%USERPROFILE%\Desktop\Leyline" "%USERPROFILE%\Desktop\WrathUnleashed") do (
   if not defined WU if exist "%%~fd\foreverui-installed.txt" set "WU=%%~fd"
 )
-for %%d in ("%~dp0." "%~dp0.." "%~dp0..\.." "%USERPROFILE%\Desktop\WrathUnleashed") do (
+for %%d in ("%~dp0." "%~dp0.." "%~dp0..\.." "%USERPROFILE%\Desktop\Leyline" "%USERPROFILE%\Desktop\WrathUnleashed") do (
   if not defined WU if exist "%%~fd\Install Forever UI.bat" set "WU=%%~fd"
 )
 
@@ -59,7 +59,7 @@ if not defined MODE if defined WU (
   )
 )
 if not defined MODE (
-  for %%t in ("!WU!\fui-src.tgz" "%USERPROFILE%\Desktop\WrathUnleashed\fui-src.tgz") do (
+  for %%t in ("!WU!\fui-src.tgz" "%USERPROFILE%\Desktop\Leyline\fui-src.tgz" "%USERPROFILE%\Desktop\WrathUnleashed\fui-src.tgz") do (
     if not defined MODE if exist "%%~t" (
       call :unpack "%%~t" || echo   ^(not Forever UI: trying the next place^)
     )

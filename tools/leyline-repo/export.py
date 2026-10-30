@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Leyline's own repo (github.com/orionopenwow/Leyline): copy the network's parts out of WrathUnleashed.
 
-    py -3 tools\\leyline-repo\\export.py "%USERPROFILE%\\Desktop\\Leyline"
+    py -3 tools\\leyline-repo\\export.py .repos\\leyline-public
     python3 tools/leyline-repo/export.py TARGET [--source REPO] [--dry-run] [--list-exec]
 
 Only the paths in ALLOW are copied, at the same paths as here (so the hosting tests run there as they do
@@ -428,8 +428,12 @@ def missing_includes(files: dict) -> list:
 
 def export(src: Path, target: Path, dry: bool = False, out=print) -> dict:
     src, target = src.resolve(), target.resolve()
-    if target == src or src in target.parents or target in src.parents:
-        raise Refused(f"the target {target} must be outside the WrathUnleashed folder (and not contain it)")
+    # Inside the workspace only under .repos/ (gitignored; "Move to Leyline.bat" puts the public clone at
+    # .repos/leyline-public). Never the workspace itself, a folder holding it, or anywhere else inside it.
+    in_repos = (src / ".repos") in target.parents
+    if target == src or target in src.parents or (src in target.parents and not in_repos):
+        raise Refused(f"the target {target} must be outside the workspace folder (or under its .repos/), "
+                      "and not contain it")
     files, refused, skipped = plan(src)
     files["README.md"] = (README.encode(), False)
     files["LICENSE"] = (license_text(src), False)

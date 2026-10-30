@@ -48,3 +48,6 @@ server/Carry over 1.12 logins.bat
 server/carry-112-logins.sh
 docs/sandbox-roadmap.md
 stream/wu-mod.py
+
+# 2026-10-30: the control window launcher is "Leyline Control.bat" now
+WrathUnleashed Control.bat

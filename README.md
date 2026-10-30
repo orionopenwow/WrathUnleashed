@@ -1,4 +1,4 @@
-# WrathUnleashed: the private Leyline monorepo
+# leyline-workspace (formerly WrathUnleashed): the private Leyline monorepo
 
 This is the private home of **Leyline**: a mod launcher and a peer-to-peer realm network. Anyone can host a
 realm in one click, from the browser or the desktop launcher, and it is listed for everyone. Players find realms
@@ -9,6 +9,11 @@ gets our client additions first. The public repo, github.com/orionopenwow/Leylin
 `tools/leyline-repo/export.py` (launcher, host kit, relay and their docs only). No game data is in either repo.
 
 Every folder, and what is core, ops or labs: **`docs/REPO-MAP.md`**.
+
+**One folder on the PC: `Desktop\Leyline`.** `Move to Leyline.bat` (once, from the old `Desktop\WrathUnleashed`)
+makes this workspace `Desktop\Leyline`, puts the public repo's copy at `.repos\leyline-public` (the `leyline`
+step) and the Leyline-Launcher clone at `.repos\leyline-launcher` (`ovrename`, `ovland`), and renames this GitHub
+repo to `orionopenwow/leyline-workspace`. `.repos/` is not part of this repo (gitignored).
 
 ## The parts
 
@@ -25,7 +30,7 @@ Every folder, and what is core, ops or labs: **`docs/REPO-MAP.md`**.
 
 ## Day to day
 
-- **Updates:** `WrathUnleashed Control.bat` (the control window, with Autopilot) or `UPDATE.bat` runs what Claude
+- **Updates:** `Leyline Control.bat` (the control window, with Autopilot) or `UPDATE.bat` runs what Claude
   queued in `UPDATES-PENDING.txt`. The steps are listed in `tools/control/control.py` (`STEPS`).
 - **Save to GitHub:** `Ship WrathUnleashed.bat` (the `ship` step); every ship also refreshes the public Leyline
   copy (`tools/leyline-repo/Update Leyline repo.bat`).
