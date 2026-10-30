@@ -321,7 +321,9 @@ local function info(text) if win then win.info:SetText(text) end end
 function L.OnWrath()
     if not GetRealmName then return true end
     local ok, name = pcall(GetRealmName)
-    return not ok or name == nil or name == HOME_REALM or (brand().on and name == brand().home)
+    -- Home is our realm under any of its names: today's, the Sample Hangout's, and the Leyline brand's.
+    return not ok or name == nil or name == HOME_REALM or name == "Leyline Sample Hangout"
+        or name == "Dalaran Hangout" or (brand().on and name == brand().home)
 end
 
 -- Ask the page to reload the game on target ("wrath" or a relay realm id). False for anything else.
