@@ -335,3 +335,5 @@
 1109b ship Save to GitHub: the forms fix
 1110a signin Front page: dimmer backdrop, glowing logo, thinner see-through header, the host console panel, the mod strip (gallery section gone)
 1110b ship Save to GitHub: the front page touches
+1111a signin Front page: drop shadow on the logo, the mod strip no longer widens the page
+1111b ship Save to GitHub: the logo shadow and the strip fix
