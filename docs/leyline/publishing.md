@@ -20,7 +20,7 @@ python3 wu-mod.py pack my-mod -o dist
 Today there is no upload form. To send a mod:
 
 1. Put the zip and its `.sha256` somewhere public, such as a release on your own GitHub repository.
-2. Send the link to the WrathUnleashed team. The Discord is at [discord.gg/hVeUxYwbkr](https://discord.gg/hVeUxYwbkr).
+2. Send the link to the Leyline team. The Discord is at [discord.gg/hVeUxYwbkr](https://discord.gg/hVeUxYwbkr).
 3. The team checks it with `wu-mod.py` and adds it to `mods/catalog/<your id>/` in the [repo](https://github.com/orionopenwow/WrathUnleashed/tree/main/mods).
 
 The modders' guide in the repo (`mods/README-modders.md`) says realm mods get a human look before they go on Wrath. A web form for submitting a link, at `/wrath/mods/submit`, is coming soon.

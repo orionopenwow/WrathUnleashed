@@ -161,6 +161,17 @@ env = json.loads(wp.env_js(hop).decode().split("window.__wenilla_env = ", 1)[1].
 check("/__env.js in a hop: the brand too", env.get("brand") == "leyline" and env.get("home_name") == "Dalaran Hangout", env)
 srv.shutdown()
 
+# the docs (renamed for the public repo): with the brand on the site shows them as written; off, docs.py's UNTIL_FLIP
+# table gives back the old words (test_docs.py runs off), and every entry still matches its page
+if wp.docs is not None:
+    stale = [(n, new) for n, new, old in wp.docs.UNTIL_FLIP
+             if new not in open(os.path.join(REPO, "docs", "leyline", n + ".md"), encoding="utf-8").read()]
+    check("docs UNTIL_FLIP: every entry matches its page", not stale, stale)
+    os.environ["LEYLINE_BRAND"] = "0"
+    off = wp.docs.site_text("publishing", "Send the link to the Leyline team.")
+    os.environ["LEYLINE_BRAND"] = "1"
+    check("docs off: the old words", off == "Send the link to the WrathUnleashed team.", off)
+
 # ---------------------------------------------------------------- 4. the stream page files
 WWW = os.path.join(STREAM, "www-files")
 page_js = open(os.path.join(WWW, "wrath-page.js"), encoding="utf-8").read()

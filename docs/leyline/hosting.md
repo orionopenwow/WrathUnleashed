@@ -11,8 +11,8 @@ Anyone can host a 3.3.5a realm (on AzerothCore) from their own PC. On Leyline a 
 
 ## Get the host kit
 
-1. Download the host kit: [WrathUnleashed-host-kit.zip](https://github.com/orionopenwow/Leyline/releases/download/host-kit/WrathUnleashed-host-kit.zip). The same link is on the site's host page, [play.openvanilla.app/wrath/host](https://play.openvanilla.app/wrath/host).
-2. Unzip it anywhere you keep things. You get a folder called `WrathUnleashed host`.
+1. Download the host kit: [the host kit zip](https://github.com/orionopenwow/Leyline/releases/download/host-kit/WrathUnleashed-host-kit.zip). The same link is on the site's host page, [play.openvanilla.app/wrath/host](https://play.openvanilla.app/wrath/host).
+2. Unzip it anywhere you keep things. You get the host kit's folder.
 3. Start Docker and wait until it says it is running.
 4. Windows: double-click `Host a Wrath realm.bat` in that folder. macOS or Linux: open a terminal in it and run `bash leyline host`. Made a realm on the site's host page first? Put its file (`leyline-<id>.bat` or `.sh`) in the folder and run that instead.
 

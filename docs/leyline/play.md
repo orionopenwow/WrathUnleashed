@@ -45,7 +45,7 @@ The Leyline window and the line under the Esc menu say **Whole world: your game 
 **If something goes wrong.**
 
 - *"No common.MPQ found"*: you gave a different folder. Give the game folder or its `Data` folder.
-- *"This is a 1.12 game folder"* or *"This folder is build …"*: it is not a 3.3.5a (12340) folder. The 1.12 game plays on Open Vanilla.
+- *"This is a 1.12 game folder"* or *"This folder is build …"*: it is not a 3.3.5a (12340) folder. The 1.12 game plays on the sibling 1.12 realm.
 - *"lichking.MPQ is missing"* or *"One archive is not enough"*: the folder is incomplete. Give the whole folder, not single files.
 - *"Your browser asks once more"*: press **Use my game folder** and allow reading the folder. If you said no by mistake, press **Choose folder** and pick it again.
 - *"Back to streamed play"*: the browser stopped reading the folder (it was moved, the game was patched while you played, or the permission was taken back). Reload the page to use it again.
@@ -69,9 +69,9 @@ You need your own 3.3.5a install (build 12340). We don't provide game files.
 3. Open `Data\enUS\realmlist.wtf` (or `Data\enGB\...`) in a text editor and change the line to `set realmlist play.openvanilla.app`.
 4. Delete the `Cache` folder next to the game, start it, and log in.
 
-The player package has a `Play WrathUnleashed.bat` that asks for your 3.3.5a folder once and opens the game in your browser. It only reads your own files, on your PC.
+The player package has a `Play` .bat file that asks for your 3.3.5a folder once and opens the game in your browser. It only reads your own files, on your PC.
 
-The 1.12 client plays on the sibling Open Vanilla realm, not on Wrath. The planned [Leyline Launcher](launcher.md) will pick a 3.3.5a or a 1.12 client from your own folders.
+The 1.12 client plays on the sibling 1.12 realm, not on Dalaran Hangout. The planned [Leyline Launcher](launcher.md) will pick a 3.3.5a or a 1.12 client from your own folders.
 
 ## Community realms
 
