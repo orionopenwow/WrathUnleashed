@@ -168,9 +168,9 @@ if wp.docs is not None:
              if new not in open(os.path.join(REPO, "docs", "leyline", n + ".md"), encoding="utf-8").read()]
     check("docs UNTIL_FLIP: every entry matches its page", not stale, stale)
     os.environ["LEYLINE_BRAND"] = "0"
-    off = wp.docs.site_text("publishing", "Send the link to the Leyline team.")
+    off = wp.docs.site_text("publishing", "2. Send the link to the Leyline team.")
     os.environ["LEYLINE_BRAND"] = "1"
-    check("docs off: the old words", off == "Send the link to the WrathUnleashed team.", off)
+    check("docs off: the old words", off == "2. Send the link to the WrathUnleashed team.", off)
 
 # ---------------------------------------------------------------- 4. the stream page files
 WWW = os.path.join(STREAM, "www-files")
