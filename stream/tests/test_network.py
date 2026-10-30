@@ -265,8 +265,9 @@ st, _, hub = req("GET", "/wrath/leyline-preview/realms")
 check("hub realms page: the same list, filters on the hub's own path", st == 200 and "Leyline Sample Hangout" in hub
       and "Busy Den" in hub and 'href="/wrath/leyline-preview/realms?tag=pvp"' in hub and 'id="host-your-own"' in hub)
 st, _, front = req("GET", "/wrath/leyline-preview")
-check("hub front page: Realms on the network, the network line", "Realms on the network" in front
-      and re.search(r"\d+ realms · \d+ players online", front) and "Host your own" in front)
+check("hub front page: Platform Status has the network line, linked to the hub's realm list", "Realm network" in front
+      and re.search(r"\d+ realms · \d+ players online", front) and 'href="/wrath/leyline-preview/realms"' in front
+      and "Host a Beacon" in front)
 st, _, beacon = req("GET", "/wrath/leyline-preview/beacon")
 check("hub Host a Beacon: the launcher's Host page and the website", 'href="/wrath/leyline">Get the launcher' in beacon
       and 'href="/wrath/host"' in beacon)

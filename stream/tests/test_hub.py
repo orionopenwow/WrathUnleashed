@@ -87,7 +87,14 @@ for p in pages:
           and '<meta name="robots" content="noindex">' in s)
     check(f"GET {p}: no script, no brand words", "<script" not in s and "script-src 'none'" in h.get("content-security-policy", "")
           and not BANNED.findall(visible(s)), BANNED.findall(visible(s))[:5])
-    check(f"GET {p}: the site nav and the hub's own", 'id="ly-site-nav"' in s and 'class="hb-sub"' in s)
+    front_p = p.rstrip("/") == "/wrath/leyline-preview"
+    check(f"GET {p}: the hub's own header (mark, wordmark, Sign In) and, below the front page, its sub-nav",
+          'class="hb-top"' in s and 'class="ly-spin slow hb-mark"' in s and "<b>Leyline</b><i>Launcher</i>" in s
+          and 'class="hb-signin" href="/login?next=%2Fwrath"' in s and ('class="hb-sub"' in s) != front_p
+          and 'id="ly-site-nav"' not in s and 'class="hb-foot"' in s)
+    check(f"GET {p}: the flat look, none of the painted art", 'data-look="leyline"' in s and "ly-spin-turn" in s and not re.search(
+          r"leyline-(?:bg|emblem|divider|corner)|wu-(?:theme|card|corner|dragon|divider)|Cinzel|Leyline Display", s))
+    check(f"GET {p}: no Support link, no other social sites", not re.search(r">\s*Support\s*<|facebook|twitter|instagram|x\.com", s, re.I))
 st, h, _ = req("/wrath/leyline-preview", method="HEAD")
 check("HEAD works", st == 200 and h.get("x-robots-tag"))
 for p in ("/wrath/leyline-preview/p/link-000000000000", "/wrath/leyline-preview/p/../../etc", "/wrath/leyline-preview/nope"):
@@ -109,6 +116,36 @@ check("offered_tag: a hidden build is no filter", HB.offered_tag("5.4.8") == "" 
 check("front page: the 12 categories and themes", all(f"catalog?cat={c}" in front for c in HB.CATEGORY_IDS + ["themes"]))
 check("front page: creators and Host a Beacon", "/wrath/leyline-preview/creators" in front and "/wrath/leyline-preview/beacon" in front)
 check("front page: a TODO(owner) for the tagline, no words in the owner's voice", "TODO(owner)" in front)
+# the owner's mockup (2026-10-30): header nav, the hero, Platform Status, Community Spotlight, the footer
+nav = re.search(r'<nav class="hb-nav"[^>]*>(.*?)</nav>', front, re.S).group(1)
+check("header: Features, Download, Community, Status, Docs", re.findall(r">([^<]+)</a>", nav) == ["Features", "Download", "Community", "Status", "Docs"], nav)
+check("hero: the crystal over the turning swirl, the heading, three bullets, Download Now",
+      'class="ly-spin slow hb-swirl"' in front and "leyline-crystal-512.png" in front and "Every client, every server" in front
+      and front.count("<li>", front.index('class="hb-bullets"'), front.index("</ul>", front.index('class="hb-bullets"'))) == 3
+      and "1.12.1, 2.4.3 and 3.3.5a" in front and "4.3.4" not in visible(front) and "5.4.8" not in visible(front)
+      and re.search(r'class="hb-cta" href="https://github\.com/orionopenwow/Leyline/releases"[^>]*>Download Now<', front))
+stats = re.search(r'<section class="hb-sec" id="status".*?</section>', front, re.S).group(0)
+check("Platform Status: the main realm online from realm_status, sign-in, the network, the relay, the mod catalog",
+      all(x in stats for x in ('Server: <em class="ok">OK</em> · 3 playing', "Sign-in", "Realm network", "Relay", "Mod catalog", " items · "))
+      and '<em class="ok">OK</em>' in stats, stats)
+check("Platform Status: a failing source is red, never a made-up OK", '<em class="bad">' in stats and "Game logins:" in stats)
+check("Platform Status: no client downloads (we never download clients)", "Client" not in stats and "download" not in stats.lower())
+spot = re.search(r'<section class="hb-sec" id="community".*?</section>', front, re.S).group(0)
+spots = re.findall(r'<a class="hb-spot" href="/wrath/leyline-preview/p/([^"]+)">.*?<b>([^<]+)</b><i>by ([^<]+)</i>', spot, re.S)
+names = {e["id"].replace(":", "-"): (e["name"], e["author"]) for e in INDEX["entries"]}
+check("Community Spotlight: two to four real items, with their own names and authors", 2 <= len(spots) <= 4
+      and all(names.get(slug) == (n, a) for slug, n, a in spots if slug in names) and any(slug in names for slug, _, _ in spots), spots)
+foot = re.search(r'<footer class="hb-foot">.*?</footer>', front, re.S).group(0)
+check("footer: Docs, Download, Community, Status, the wordmark, Discord and GitHub only",
+      all(f">{x}<" in foot for x in ("Docs", "Download", "Community", "Status", "Discord", "GitHub")) and "<b>Leyline</b>" in foot)
+os.environ["WU_LEYLINE_DIR"] = os.path.join(DATA, "leyline")
+os.makedirs(os.environ["WU_LEYLINE_DIR"], exist_ok=True)
+rel = "https://github.com/orionopenwow/Leyline/releases/tag/launcher-v0.4.0"
+json.dump({"stable": {"version": "0.4.0", "tag": "launcher-v0.4.0", "url": rel}}, open(os.path.join(os.environ["WU_LEYLINE_DIR"], "channel.json"), "w"))
+if wp.admin is not None and hasattr(wp.admin, "leyline_dir"):
+    check("Download Now: the stable release the admin console published", f'href="{rel}"' in req("/wrath/leyline-preview")[2].decode())
+json.dump({"stable": {"version": "0.4.0", "tag": "x", "url": "https://evil.example/x"}}, open(os.path.join(os.environ["WU_LEYLINE_DIR"], "channel.json"), "w"))
+check("Download Now: never a link off the releases page", "evil.example" not in req("/wrath/leyline-preview")[2].decode())
 cat = req("/wrath/leyline-preview/catalog?build=2.4.3")[2].decode()
 check("catalog: filtered by build", all(("2.4.3" in e["builds"] or "any" in e["builds"]) for e in INDEX["entries"]
                                       if f'/p/{e["id"].replace(":", "-")}"' in cat) and "2.4.3" in cat)
@@ -236,11 +273,11 @@ for d in (os.path.join(HERE, "www-files"), os.path.join(REPO, "docs", "leyline")
 check("no page file, doc or launcher page links to the preview", not leaks, leaks)
 check("the site nav and footer don't", "leyline-preview" not in wp.site_nav() + wp.site_footer())
 old = req("/wrath/leyline")[2].decode()
-check("switch off (default): /wrath/leyline is the current page", 'class="hb-sub"' not in old)
+check("switch off (default): /wrath/leyline is the current page", 'class="hb-top"' not in old)
 os.environ["WU_HUB_FRONT"] = "1"
 st, h, b = req("/wrath/leyline")
 s = b.decode()
-check("switch on: /wrath/leyline is the hub's front page, indexable", st == 200 and 'class="hb-sub"' in s
+check("switch on: /wrath/leyline is the hub's front page, indexable", st == 200 and 'class="hb-top"' in s
       and "x-robots-tag" not in h and 'content="noindex"' not in s and "Preview:" not in s)
 os.environ.pop("WU_HUB_FRONT")
 os.environ["WU_HUB"] = "0"
