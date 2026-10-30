@@ -21,6 +21,13 @@ stream/hub/community-index.json. Nothing of anyone's is mirrored or hosted; each
                                             (a person should look), excluded (with the reason)
         Probe results are cached in tools/hub-index/.cache/ by the repo's HEAD commit.
 
+    python3 -I tools/hub-index/hub_index.py gate --base FILE [--full-out FILE] [--summary FILE] [--report FILE]
+        The daily review gate (docs/HUB-RANKINGS.md): FILE is the index on main before this run. Entries already on
+        main take this run's stars, last change, archived flag, score and latest release; new entries, other changes
+        and removals that aren't a hard rule wait for a person (the full build goes to --full-out for the review PR).
+        A build never drops an entry because its forge didn't answer, and refuses to shrink the index by more than
+        20% at once (build --allow-shrink to override).
+
     python3 -I tools/hub-index/hub_index.py check
         Validate the index with the hub's own rules (stream/hub.py validate_index). Exit 1 on any problem.
 
@@ -235,26 +242,50 @@ class Api:
     """GitHub, GitLab and Codeberg REST calls. ok() is False when GitHub's API can't be reached at all (no
     network, a proxy that refuses it): the build then runs on git alone and the pool's last-known metadata."""
 
-    def __init__(self, token: str | None = None, timeout: float = 20.0, opener=None):
+    def __init__(self, token: str | None = None, timeout: float = 20.0, opener=None, sleep=time.sleep):
         self.token = token if token is not None else (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "")
         self.timeout = timeout
         self.opener = opener or urllib.request.urlopen
+        self.sleep = sleep
         self._ok = None
         self.calls = 0
+        self.limited = False          # GitHub said we are out of API calls: no more GitHub calls this run
+        self.lock = __import__("threading").Lock()
 
     def get(self, url: str, accept: str = "application/vnd.github+json"):
-        """(status, decoded JSON or None, headers)."""
+        """(status, decoded JSON or None, headers). One retry after a short wait for a 5xx or a dropped connection.
+        Once GitHub answers that the rate limit is used up (403/429 with X-RateLimit-Remaining: 0 or Retry-After),
+        every later GitHub call answers (429, None, {}) at once, and the build keeps last-known values."""
+        gh = url.startswith("https://api.github.com/")
         headers = {"Accept": accept, "User-Agent": "leyline-hub-index"}
-        if self.token and url.startswith("https://api.github.com/"):
+        if self.token and gh:
             headers["Authorization"] = "Bearer " + self.token
-        self.calls += 1
-        try:
-            with self.opener(urllib.request.Request(url, headers=headers), timeout=self.timeout) as r:
-                return r.status, json.loads(r.read(8_000_000).decode("utf-8")), dict(r.headers)
-        except urllib.error.HTTPError as e:
-            return e.code, None, dict(e.headers or {})
-        except (urllib.error.URLError, OSError, ValueError, UnicodeDecodeError):
-            return 0, None, {}
+        for attempt in (1, 2):
+            if gh and self.limited:
+                return 429, None, {}
+            with self.lock:
+                self.calls += 1
+            try:
+                with self.opener(urllib.request.Request(url, headers=headers), timeout=self.timeout) as r:
+                    return r.status, json.loads(r.read(8_000_000).decode("utf-8")), dict(r.headers)
+            except urllib.error.HTTPError as e:
+                hdr = dict(e.headers or {})
+                low = {k.lower(): v for k, v in hdr.items()}
+                if gh and e.code in (403, 429) and (low.get("x-ratelimit-remaining") == "0" or "retry-after" in low):
+                    if not self.limited:
+                        log(f"  GitHub's API rate limit is used up (HTTP {e.code}): last-known values are kept from here on")
+                    self.limited = True
+                    return e.code, None, hdr
+                if e.code >= 500 and attempt == 1:
+                    self.sleep(3)
+                    continue
+                return e.code, None, hdr
+            except (urllib.error.URLError, OSError, ValueError, UnicodeDecodeError):
+                if attempt == 1:
+                    self.sleep(3)
+                    continue
+                return 0, None, {}
+        return 0, None, {}
 
     def ok(self) -> bool:
         if self._ok is None:
@@ -267,6 +298,16 @@ class Api:
         if st in (404, 451):
             return {"missing": True}
         return gh_meta(d) if st == 200 and isinstance(d, dict) else None
+
+    def github_release(self, owner: str, repo: str) -> dict | None:
+        """The latest release ({tag, date, url}: its page on GitHub), {} when the repo has none, None when the API
+        didn't answer (keep what we had)."""
+        st, d, _ = self.get(f"https://api.github.com/repos/{urllib.parse.quote(owner)}/{urllib.parse.quote(repo)}/releases/latest")
+        if st == 404:
+            return {}
+        if st != 200 or not isinstance(d, dict):
+            return None
+        return release_meta(d, f"https://github.com/{owner}/{repo}")
 
     def search(self, q: str, pages: int, sleep=time.sleep) -> list[dict]:
         out = []
@@ -335,6 +376,20 @@ def gh_meta(d) -> dict | None:
             "licence_raw": lic.get("spdx_id") or "", "description": d.get("description") or "",
             "topics": sorted(t for t in d.get("topics") or [] if isinstance(t, str)), "archived": bool(d.get("archived")),
             "fork": bool(d.get("fork")), "pushed": (d.get("pushed_at") or "")[:10], "private": bool(d.get("private"))}
+
+
+def release_meta(d: dict, repo_url: str) -> dict:
+    """{tag, date, url} of a GitHub release document, {} when it isn't a usable one (a draft, odd text, a page off
+    the repo)."""
+    tag = d.get("tag_name") if isinstance(d.get("tag_name"), str) else ""
+    url = d.get("html_url") if isinstance(d.get("html_url"), str) else ""
+    if d.get("draft") or not tag:
+        return {}
+    tag = H.clean_line(tag, 40)
+    rel = {"tag": tag, "date": (d.get("published_at") or d.get("created_at") or "")[:10], "url": url}
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", rel["date"]):
+        rel["date"] = ""
+    return rel if tag and not H.release_problem(rel, repo_url) else {}
 
 
 def gitea_meta(d) -> dict | None:
@@ -745,6 +800,8 @@ def judge(cand: dict, facts: dict, meta: dict, block: dict) -> dict:
              "archived": bool(meta.get("archived")), "source": cand["origin"]}
     if needs:
         entry["needs"] = needs
+    if isinstance(meta.get("release"), dict) and meta["release"] and not H.release_problem(meta["release"], url):
+        entry["release"] = dict(meta["release"])
     return {"verdict": "listed", "entry": entry}
 
 
@@ -763,6 +820,9 @@ def score(e: dict, ref: datetime.date) -> float:
 
 # ------------------------------------------------------------------------------------------- build
 SKIP_RECHECK = re.compile(r"(?i)no licence|game-format|client patch files|licence is not open")
+# Reasons that mean "we couldn't look this time", not "it broke a rule": a listed entry is kept as it was.
+TRANSIENT = re.compile(r"^could not read the repo")
+SHRINK_FLOOR = 0.8                # a run that would drop more than 20% of the entries at once writes nothing
 
 
 def gather(approved: dict, issues: list[dict], only: list[str]) -> list[dict]:
@@ -822,7 +882,7 @@ def gather(approved: dict, issues: list[dict], only: list[str]) -> list[dict]:
 
 
 def build(jobs: int, approved_src: str, issues_repo: str, only: list[str], report: str, api: Api | None = None,
-          probe_fn=probe) -> int:
+          probe_fn=probe, allow_shrink: bool = False) -> int:
     api = api or Api()
     api_ok = api.ok()
     log(f"forge API: {'yes' if api_ok else 'no (git only, the pool keeps the last-known metadata)'}")
@@ -836,10 +896,15 @@ def build(jobs: int, approved_src: str, issues_repo: str, only: list[str], repor
 
     def work(c):
         meta = dict(c.get("pool") or {})
+        meta.pop("release", None)
         if api_ok and c["forge"] == "github":
             m = api.github_repo(c["owner"], c["name_raw"])
             if m:
                 meta.update({k: v for k, v in m.items() if v not in (None, "") or k in ("archived", "missing")})
+                if not m.get("missing") and hasattr(api, "github_release"):
+                    rel = api.github_release(c["owner"], c["name_raw"])
+                    if rel is not None:
+                        meta["release"] = rel             # {} = no release (known); missing = unknown, keep the old one
         return c, meta, probe_fn(c["url"], cache)
 
     results = []
@@ -854,6 +919,8 @@ def build(jobs: int, approved_src: str, issues_repo: str, only: list[str], repor
         write_json(CACHE, {k: cache[k] for k in sorted(cache)})
 
     listed, holding = [], {"needs_licence": [], "review": [], "excluded": []}
+    prev = {e["id"]: e for e in read_json(INDEX, {}).get("entries", []) if isinstance(e, dict) and "id" in e}
+    kept = []
     for c in cands:
         if c.get("skip"):
             holding["excluded"].append({"repo": c["url"], "reason": c["skip"]})
@@ -861,7 +928,15 @@ def build(jobs: int, approved_src: str, issues_repo: str, only: list[str], repor
         v = judge(c, facts, meta, block)
         if only:
             log(f"  {c['url']}: {v['verdict']} {v.get('reason', '')} {json.dumps(v.get('entry', ''))[:300]}")
+        old = prev.get("link:" + c["id"])
+        if v["verdict"] == "excluded" and old and TRANSIENT.search(v["reason"]):
+            # A forge that didn't answer this run never takes a listed entry off: it stays as it was.
+            listed.append(dict(old))
+            kept.append(f"{c['url']}: {v['reason']}")
+            continue
         if v["verdict"] == "listed":
+            if old and "release" not in meta and "release" in old and "release" not in v["entry"]:
+                v["entry"]["release"] = old["release"]          # the API didn't answer for it: keep the last-known release
             listed.append(v["entry"])
         elif v["verdict"] == "needs_licence":
             holding["needs_licence"].append({"repo": c["url"], "name": v["name"], "builds": v["builds"], "reason": v["reason"]})
@@ -871,6 +946,8 @@ def build(jobs: int, approved_src: str, issues_repo: str, only: list[str], repor
     ref = datetime.date.fromisoformat(max(dates)) if dates else datetime.date(2026, 1, 1)
     for e in listed:
         e["score"] = score(e, ref)
+    for line in kept:
+        log("  kept as it was (the repo didn't answer this run): " + line)
     # dedupe: one entry per display name and build set (mirrors and re-uploads), the best scored wins
     best: dict[tuple, dict] = {}
     for e in sorted(listed, key=lambda e: (-e["score"], e["id"])):
@@ -880,6 +957,11 @@ def build(jobs: int, approved_src: str, issues_repo: str, only: list[str], repor
             continue
         best[k] = e
     listed = sorted(best.values(), key=H.entry_order)
+    if not only and len(prev) >= 20 and len(listed) < SHRINK_FLOOR * len(prev) and not allow_shrink:
+        log(f"REFUSED: the index would shrink from {len(prev)} to {len(listed)} entries (more than "
+            f"{round(100 * (1 - SHRINK_FLOOR))}% at once). Nothing written; look at the report, or run with --allow-shrink.")
+        print(report_text({"entries": listed}, holding))
+        return 3
     if only:
         old = read_json(INDEX, {}).get("entries", [])
         mine = {e["id"] for e in listed}
@@ -910,6 +992,8 @@ def build(jobs: int, approved_src: str, issues_repo: str, only: list[str], repor
 
 def report_text(doc: dict, holding: dict) -> str:
     es = doc["entries"]
+    if not es or "category" not in es[0]:
+        return f"Community index: {len(es)} entries\n"
     lines = [f"Community index: {len(es)} entries", "", "By build:"]
     for b in H.BUILDS + ["any"]:
         n = sum(1 for e in es if b in e["builds"])
@@ -927,6 +1011,106 @@ def report_text(doc: dict, holding: dict) -> str:
     for r in holding["review"]:
         lines.append(f"  review  {r['repo']}: {r['reason']}")
     return "\n".join(lines) + "\n"
+
+
+# ------------------------------------------------------------------------------------------- the daily gate
+# What may go live without a person: refreshes of entries a person already merged. Everything else waits for review.
+REFRESH_FIELDS = ("stars", "updated", "archived", "score", "release")
+# Removals that may go live without a person: the entry now breaks a hard rule (or an admin delisted it).
+HARD_REMOVE = re.compile(r"(?i)game-format|binaries|decompil|chumpton|repo is gone|repack|client patch|bot, cheat|"
+                         r"sell things|paid|licence is not open|no open licence|delisted|left out|another client build|"
+                         r"current game")
+
+
+def gate(base: dict, new: dict, holding: dict) -> tuple[dict, dict]:
+    """(the index that may go live now, what waits for a person). base: the index on main (approved); new: this
+    run's full build; holding: this run's holding.json (for the reasons entries left).
+      * an entry in both: base's entry with REFRESH_FIELDS taken from new (other changes wait: "changed")
+      * an entry only in base: removed when its reason is a hard rule (HARD_REMOVE), else kept ("kept")
+      * an entry only in new: not added ("new")"""
+    reasons = {}
+    for k in ("excluded", "review"):
+        for r in holding.get(k) or []:
+            reasons[str(r.get("repo", "")).lower()] = r.get("reason", "")
+    for r in holding.get("needs_licence") or []:
+        reasons[str(r.get("repo", "")).lower()] = "no open licence: " + r.get("reason", "")
+    b = {e["id"]: e for e in base.get("entries", [])}
+    n = {e["id"]: e for e in new.get("entries", [])}
+    out, wait = [], {"new": [], "changed": [], "kept": [], "removed": []}
+    for i, e in b.items():
+        if i in n:
+            x = dict(e)
+            for k in REFRESH_FIELDS:
+                if k in n[i]:
+                    x[k] = n[i][k]
+                else:
+                    x.pop(k, None)
+            diff = sorted(k for k in set(e) | set(n[i]) if k not in REFRESH_FIELDS and e.get(k) != n[i].get(k))
+            if diff:
+                wait["changed"].append({"repo": e["repo"], "name": e["name"], "fields": diff})
+            out.append(x)
+            continue
+        why = reasons.get(e["repo"].lower(), "")
+        if why and HARD_REMOVE.search(why):
+            wait["removed"].append({"repo": e["repo"], "name": e["name"], "reason": why})
+        else:
+            out.append(dict(e))
+            wait["kept"].append({"repo": e["repo"], "name": e["name"], "reason": why or "not in this run"})
+    for i, e in n.items():
+        if i not in b:
+            wait["new"].append({"repo": e["repo"], "name": e["name"], "builds": e["builds"], "category": e["category"]})
+    doc = dict(new)
+    doc["entries"] = sorted(out, key=H.entry_order)
+    for k in wait:
+        wait[k].sort(key=lambda r: r["repo"].lower())
+    return doc, wait
+
+
+def gate_text(wait: dict) -> str:
+    lines = ["", "Daily gate: refreshed entries go live; these wait for a person (the review PR):",
+             f"  new entries: {len(wait['new'])}", f"  changed beyond a refresh: {len(wait['changed'])}",
+             f"  gone this run but kept (not a hard rule): {len(wait['kept'])}",
+             f"  taken off now (a hard rule): {len(wait['removed'])}"]
+    for r in wait["new"]:
+        lines.append(f"  new      {r['repo']} ({r['name']}, {', '.join(r['builds'])}, {r['category']})")
+    for r in wait["changed"]:
+        lines.append(f"  changed  {r['repo']}: {', '.join(r['fields'])}")
+    for r in wait["kept"]:
+        lines.append(f"  kept     {r['repo']}: {r['reason']}")
+    for r in wait["removed"]:
+        lines.append(f"  removed  {r['repo']}: {r['reason']}")
+    return "\n".join(lines) + "\n"
+
+
+def run_gate(base_path: str, full_out: str, summary: str, report: str) -> int:
+    """Read the base (main's index) and this run's build (INDEX), write the gated index to INDEX, the full build to
+    full_out, and {review: N, ...} to summary."""
+    base = read_json(base_path, None)
+    new = read_json(INDEX, None)
+    if not isinstance(base, dict) or not isinstance(new, dict):
+        log("gate: cannot read the base or the new index")
+        return 1
+    holding = read_json(HOLDING, {})
+    doc, wait = gate(base, new, holding)
+    problems = H.validate_index(doc)
+    if problems:
+        for p in problems:
+            log("PROBLEM  " + p)
+        return 1
+    if full_out:
+        write_json(full_out, new)
+    write_json(INDEX, doc)
+    holding["pending_new"] = wait["new"]
+    write_json(HOLDING, holding)
+    text = gate_text(wait)
+    print(text)
+    if report:
+        with open(report, "a", encoding="utf-8") as f:
+            f.write(text)
+    if summary:
+        write_json(summary, {"review": len(wait["new"]) + len(wait["changed"]) + len(wait["kept"]),
+                             **{k: len(v) for k, v in wait.items()}})
+    return 0
 
 
 def check() -> int:
@@ -952,6 +1136,12 @@ def main(argv: list[str]) -> int:
     b.add_argument("--issues", default=os.environ.get("HUB_ISSUES_REPO", ""))
     b.add_argument("--only", nargs="*", default=[])
     b.add_argument("--report", default="")
+    b.add_argument("--allow-shrink", action="store_true")
+    g = sub.add_parser("gate")
+    g.add_argument("--base", required=True)
+    g.add_argument("--full-out", default="")
+    g.add_argument("--summary", default="")
+    g.add_argument("--report", default="")
     sub.add_parser("check")
     a = ap.parse_args(argv)
     if a.cmd == "discover":
@@ -961,7 +1151,9 @@ def main(argv: list[str]) -> int:
             return 0
         return discover(api, a.max_pages)
     if a.cmd == "build":
-        return build(a.jobs, a.approved, a.issues, a.only, a.report)
+        return build(a.jobs, a.approved, a.issues, a.only, a.report, allow_shrink=a.allow_shrink)
+    if a.cmd == "gate":
+        return run_gate(a.base, a.full_out, a.summary, a.report)
     return check()
 
 

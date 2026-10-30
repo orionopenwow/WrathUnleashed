@@ -256,3 +256,5 @@
 1081b signin  Network flags gain mesh_realms, mesh_relays, relay_volunteer (all off)
 1081c hostkit  Host pack: the volunteer relay (help the network, off unless chosen)
 1081d ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline mesh (signed realm records, gossip, volunteer relays; all off)
+1082a signin  Mod hub rankings: installs, 1-5 star ratings, Hot/Rising/Top rated/Most installed/New/Updated, /wrath/leyline/mods.json
+1082b ship  Save to GitHub (orionopenwow/WrathUnleashed): hub rankings, daily index workflow source, launcher Discover tabs

@@ -221,6 +221,10 @@ if hostflow is not None:
 social = _load_module("wu_social", "social.py")   # Leyline friends and messages (stream/social.py)
 if social is not None:
     social.bind(lambda name: globals()[name])
+hub_rank = _load_module("wu_hub_rank", "hub_rank.py")   # mods.json, installs and ratings (stream/hub_rank.py)
+if hub_rank is not None:
+    hub_rank.bind(lambda name: globals()[name])
+    hub_rank.setup()
 network = _load_module("wu_network", "network.py")   # the realm browser, /wrath/realms.json, realm reports (stream/network.py)
 if network is not None:
     network.bind(lambda name: globals()[name])
@@ -2481,6 +2485,9 @@ class PageHandler(BaseHTTPRequestHandler):
         if social is not None and social.match(path):   # Leyline friends and messages (stream/social.py)
             social.post(self, path)
             return
+        if hub_rank is not None and hub_rank.match(path):   # POST /wrath/api/hub/install|rate (stream/hub_rank.py)
+            hub_rank.post(self, path)
+            return
         if hostflow is not None and hostflow.match(path):   # POST /wrath/host: make a realm (stream/hostflow.py)
             hostflow.post(self, path)
             return
@@ -2560,6 +2567,9 @@ class PageHandler(BaseHTTPRequestHandler):
                 return
         if admin is not None and admin.match(path):   # /wrath/admin and the /wrath/leyline/*.json feeds (stream/admin.py)
             admin.get(self, path, query)
+        if hub_rank is not None and hub_rank.match(path):   # /wrath/leyline/mods.json, /wrath/api/hub/me (stream/hub_rank.py)
+            hub_rank.get(self, path, query)
+            return
         if hub_mod is not None and hub_mod.match(path):   # the hidden Leyline hub and its launcher feed (stream/hub.py)
             hub_mod.get(self, path, query)
             return

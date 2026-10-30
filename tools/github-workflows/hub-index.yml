@@ -1,18 +1,26 @@
-# The Leyline hub's community index (tools/hub-index/hub_index.py): once a week, and on demand, search the forges
-# for open mods for every client build, check them against the rules, and open a pull request with the changes.
-# It never pushes to main: a person reviews and merges the PR. Only the built-in GITHUB_TOKEN is used.
-# Source copy: tools/github-workflows/hub-index.yml ("Turn on GitHub builds.bat" installs it as
-# .github/workflows/hub-index.yml in WrathUnleashed).
+# The Leyline hub's community index (tools/hub-index/hub_index.py): every day, and on demand, refresh the index of
+# open mods for every client build, check it against the rules, and propose the changes as pull requests.
+# Only the built-in GITHUB_TOKEN is used. Source copy: tools/github-workflows/hub-index.yml ("Turn on GitHub
+# builds.bat" installs it as .github/workflows/hub-index.yml in WrathUnleashed).
+#
+# The review gate (docs/HUB-RANKINGS.md, "The daily index"):
+#   * hub-index/daily   refreshes of entries a person already merged (stars, last change, archived, score, latest
+#                       release) and removals for a hard rule (game data, binaries, decompiled, paid, delisted, ...).
+#                       This PR is merged by the workflow itself (squash). If the repo's branch rules don't let it,
+#                       it stays open for a person.
+#   * hub-index/review  everything else: new entries, changed names/licences/builds/categories, entries that went
+#                       missing this run without breaking a rule. A person reviews and merges it; never automatic.
+# Discovery (the forge searches that grow the pool) runs on Mondays and on demand.
 name: Hub index
 
 on:
   schedule:
-    - cron: "17 7 * * 1"          # Mondays 07:17 UTC
+    - cron: "17 7 * * *"          # every day, 07:17 UTC (discovery: Mondays)
   workflow_dispatch:
 
 permissions:
-  contents: write                  # push the refresh branch (never main)
-  pull-requests: write             # open the PR
+  contents: write                  # push the refresh branches (never main directly)
+  pull-requests: write             # open and merge the daily PR
   issues: read                     # approved "Submit a mod" issues
 
 concurrency:
@@ -27,9 +35,12 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       HUB_APPROVED_URL: https://play.openvanilla.app/wrath/leyline-preview/approved.json
       HUB_ISSUES_REPO: orionopenwow/Leyline
-      BRANCH: hub-index/refresh
+      DAILY: hub-index/daily
+      REVIEW: hub-index/review
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -39,41 +50,98 @@ jobs:
           path: tools/hub-index/.cache
           key: hub-index-${{ github.run_id }}
           restore-keys: hub-index-
-      - name: Discover
-        run: python3 -I tools/hub-index/hub_index.py discover --max-pages 3
+      - name: Keep the approved index (main's) for the gate
+        run: cp stream/hub/community-index.json "$RUNNER_TEMP/base.json"
+      - name: Discover (Mondays and on demand)
+        run: |
+          if [ "$(date -u +%u)" = "1" ] || [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            python3 -I tools/hub-index/hub_index.py discover --max-pages 3
+          else
+            echo "Not Monday: the pool stays as it is."
+          fi
       - name: Build the index
+        # A forge that doesn't answer keeps its entries as they were; a run that would drop more than 20% of the
+        # index writes nothing (exit 3) and the job stops here, with the report in the log.
         run: python3 -I tools/hub-index/hub_index.py build --jobs 6 --report "$RUNNER_TEMP/hub-report.txt"
+      - name: Gate (refreshes go live, the rest waits for review)
+        run: |
+          python3 -I tools/hub-index/hub_index.py gate --base "$RUNNER_TEMP/base.json" \
+            --full-out "$RUNNER_TEMP/full.json" --summary "$RUNNER_TEMP/gate.json" --report "$RUNNER_TEMP/hub-report.txt"
       - name: Check
         run: |
           python3 -I tools/hub-index/hub_index.py check
           python3 -I tools/hub-index/test_hub_index.py
-      - name: Open or update the pull request
+      - name: Daily refresh PR (merged by the workflow)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           paths="stream/hub tools/hub-index/candidates.json tools/hub-index/holding.json"
-          if git diff --quiet -- $paths; then
-            echo "No changes to the index."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B "$BRANCH"
+          echo "merged=no" >> "$GITHUB_ENV"
+          if git diff --quiet -- $paths; then
+            echo "No refreshes today."
+            echo "merged=none" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          git checkout -B "$DAILY"
           git add -- $paths
-          git commit -q -m "Hub index: weekly refresh"
-          git push -q -f origin "$BRANCH"
+          git commit -q -m "Hub index: daily refresh"
+          git push -q -f origin "$DAILY"
           {
-            echo "The weekly community index refresh. Nothing goes live until this is merged."
-            echo
-            echo "Check before merging: new entries in stream/hub/community-index.json, and the review list in"
-            echo "tools/hub-index/holding.json. Rules: docs/HUB-INDEX.md."
+            echo "The daily refresh of entries already on the index (stars, last change, latest release, score), and"
+            echo "removals for a hard rule. New and changed entries are in the review PR ($REVIEW), not here."
             echo
             echo '```'
             cat "$RUNNER_TEMP/hub-report.txt"
             echo '```'
-          } > "$RUNNER_TEMP/pr-body.md"
-          if gh pr view "$BRANCH" --json state -q .state 2>/dev/null | grep -q OPEN; then
-            gh pr edit "$BRANCH" --body-file "$RUNNER_TEMP/pr-body.md"
+          } > "$RUNNER_TEMP/daily-body.md"
+          if gh pr view "$DAILY" --json state -q .state 2>/dev/null | grep -q OPEN; then
+            gh pr edit "$DAILY" --body-file "$RUNNER_TEMP/daily-body.md"
           else
-            gh pr create --base main --head "$BRANCH" --title "Hub index: weekly refresh" --body-file "$RUNNER_TEMP/pr-body.md"
+            gh pr create --base main --head "$DAILY" --title "Hub index: daily refresh" --body-file "$RUNNER_TEMP/daily-body.md"
+          fi
+          if gh pr merge "$DAILY" --squash --delete-branch; then
+            echo "merged=yes" >> "$GITHUB_ENV"
+          else
+            echo "The daily PR could not be merged by the workflow (branch rules?): it stays open for a person."
+          fi
+      - name: "Review PR (new and changed entries, a person merges it)"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          review=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['review'])" "$RUNNER_TEMP/gate.json")
+          if [ "$review" = "0" ]; then
+            echo "Nothing waits for review."
+            exit 0
+          fi
+          if [ "$merged" = "yes" ]; then
+            git fetch -q origin main
+            git checkout -B "$REVIEW" origin/main
+          else
+            git checkout -B "$REVIEW"
+          fi
+          cp "$RUNNER_TEMP/full.json" stream/hub/community-index.json
+          python3 -I tools/hub-index/hub_index.py check
+          git add -- stream/hub/community-index.json
+          if git diff --cached --quiet; then
+            echo "The review branch has nothing new."
+            exit 0
+          fi
+          git commit -q -m "Hub index: new and changed entries for review"
+          git push -q -f origin "$REVIEW"
+          {
+            echo "New and changed community index entries. Nothing here goes live until a person merges it."
+            echo
+            echo "Check: each new entry in stream/hub/community-index.json against the rules (docs/HUB-INDEX.md),"
+            echo "and the review list in tools/hub-index/holding.json."
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/hub-report.txt"
+            echo '```'
+          } > "$RUNNER_TEMP/review-body.md"
+          if gh pr view "$REVIEW" --json state -q .state 2>/dev/null | grep -q OPEN; then
+            gh pr edit "$REVIEW" --body-file "$RUNNER_TEMP/review-body.md"
+          else
+            gh pr create --base main --head "$REVIEW" --title "Hub index: new entries for review" --body-file "$RUNNER_TEMP/review-body.md"
           fi

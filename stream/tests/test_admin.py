@@ -409,7 +409,8 @@ def flag_sha_ok(d):
 
 st, hd, f = feed("flags.json")
 check("flags.json: the host-pack/P2P agent's format, all off, sha256", f.get("format") == 1 and f["flags"] == {
-      "p2p_hosting": False, "torrent_downloads": False, "torrent_seeding": False, "webrtc_presence": False}
+      "p2p_hosting": False, "torrent_downloads": False, "torrent_seeding": False, "webrtc_presence": False,
+      "mesh_realms": False, "mesh_relays": False, "relay_volunteer": False}
       and flag_sha_ok(f) and set(f) == {"format", "updated_at", "flags", "limits", "stun", "sha256"}
       and hd.get("Access-Control-Allow-Origin") == "*", f)
 r = act("modadm", "flag.set", "p2p_hosting", on="1", confirm="p2p_hosting")

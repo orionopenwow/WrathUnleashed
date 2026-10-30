@@ -35,6 +35,8 @@ struct Core {
     games: Mutex<Vec<Child>>,
     /// The launcher's own update: what the last check said, and a downloaded update waiting for "Restart".
     upd: Mutex<UpdState>,
+    /// A `leyline://install/<id>` link Leyline was started with, until the UI takes it (deeplink.rs).
+    deep_link: Mutex<Option<crate::deeplink::Link>>,
 }
 
 impl Core {
@@ -393,11 +395,73 @@ async fn mod_install(core: State<'_, Core>, client: String, project: String) -> 
     let lock = core.mods_lock.clone();
     let scratch = core.dir.clone();
     let ok_keys = core.snapshot().native_ok;
-    blocking(move || {
+    let (count, build, id) = (core.snapshot().count_installs, p.build, proj.id.clone());
+    let done = blocking(move || {
         let _g = lock.lock().map_err(|_| "mod lock poisoned")?;
         mods::install_project(&p.path, p.build, &proj, &origin, &scratch, &|k: &str| ok_keys.iter().any(|x| x == k))
     })
-    .await
+    .await;
+    if done.is_ok() && count {
+        // The anonymous install count (rankings.rs): best effort, never in the way of the install.
+        std::thread::spawn(move || {
+            let _ = crate::rankings::ping(&crate::rankings::site(), &id, build);
+        });
+    }
+    done
+}
+
+// ------------------------------------------------------------------------------------------------ rankings
+
+/// Discover's order: the catalog's project ids sorted and filtered (rankings.rs), with the numbers to show.
+/// `refresh` fetches mods.json again; otherwise the cached copy is used when there is one.
+#[tauri::command]
+async fn mods_ranked(
+    core: State<'_, Core>,
+    sort: String,
+    kind: String,
+    client: Option<String>,
+    refresh: bool,
+) -> Result<crate::rankings::Ranked, String> {
+    let dir = core.dir.clone();
+    let build = client.as_deref().and_then(|id| core.snapshot().client(id).map(|c| c.build));
+    let kind = if matches!(kind.as_str(), "addon" | "mod" | "mode" | "theme") { kind } else { String::new() };
+    let (metrics, from_cache, error) = blocking(move || {
+        let have = crate::rankings::cached(&dir);
+        Ok(if refresh || have.is_empty() { crate::rankings::fetch(&dir, &crate::rankings::site()) } else { (have, true, None) })
+    })
+    .await?;
+    let cat = catalog::cached(&core.dir, catalog::URL).unwrap_or_default();
+    let ids = crate::rankings::rank(&cat, &metrics, crate::rankings::Sort::parse(&sort), &kind, build);
+    Ok(crate::rankings::Ranked { ids, metrics, from_cache, error })
+}
+
+/// Rate a catalog project 1-5 (0 takes it back), signed in with the Friends sign-in. "signed_out" otherwise.
+#[tauri::command]
+async fn mod_rate(core: State<'_, Core>, project: String, stars: u8) -> Result<serde_json::Value, String> {
+    let dir = core.dir.clone();
+    blocking(move || crate::rankings::rate(&dir, &crate::rankings::site(), &project, stars)).await
+}
+
+/// The player's own rating of a project (0: none or not signed in).
+#[tauri::command]
+async fn mod_my_rating(core: State<'_, Core>, project: String) -> Result<u8, String> {
+    let dir = core.dir.clone();
+    blocking(move || Ok(crate::rankings::mine(&dir, &crate::rankings::site(), &project))).await
+}
+
+/// Settings › Count my installs.
+#[tauri::command]
+fn set_count_installs(core: State<Core>, on: bool) -> Result<(), String> {
+    core.update(|s| {
+        s.count_installs = on;
+        Ok(())
+    })
+}
+
+/// The `leyline://` link Leyline was started with, once (then None).
+#[tauri::command]
+fn deep_link_take(core: State<Core>) -> Option<crate::deeplink::Link> {
+    core.deep_link.lock().ok().and_then(|mut d| d.take())
 }
 
 /// Install a dropped or picked .zip, .MPQ, native file or folder.
@@ -726,6 +790,7 @@ pub fn run() {
             mods_lock: Arc::new(Mutex::new(())),
             games: Mutex::new(Vec::new()),
             upd: Mutex::new(UpdState::default()),
+            deep_link: Mutex::new(crate::deeplink::from_args(std::env::args())),
         })
         .setup(|app| {
             start_update_timer(app.handle().clone());
@@ -761,6 +826,11 @@ pub fn run() {
             mod_uninstall,
             mod_native_confirm,
             mods_updates,
+            mods_ranked, // Discover's sort tabs, ratings, leyline:// links (rankings.rs, deeplink.rs)
+            mod_rate,
+            mod_my_rating,
+            set_count_installs,
+            deep_link_take,
             pick_mod_file,
             pick_mod_folder,
             host_info,

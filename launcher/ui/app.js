@@ -73,11 +73,11 @@ $("tb-account").addEventListener("click", () => openLink("account"));
 // ------------------------------------------------------------------ navigation
 const loaders = { discover: () => loadCatalog(), mods: () => loadInstalled(), realms: () => loadRealms(), host: () => loadHost() };
 let currentPage = "play";
-function show(page) {
+function show(page, noLoad) {
   currentPage = page;
   document.querySelectorAll(".nav[data-page]").forEach((b) => b.classList.toggle("on", b.dataset.page === page));
   document.querySelectorAll(".page").forEach((p) => p.classList.toggle("on", p.id === "page-" + page));
-  if (loaders[page]) loaders[page]();
+  if (loaders[page] && !noLoad) loaders[page]();
   try { localStorage.setItem("leyline.page", page); } catch (_) { /* storage may be off */ }
 }
 document.querySelectorAll(".nav[data-page]").forEach((b) => b.addEventListener("click", () => show(b.dataset.page)));
@@ -444,7 +444,16 @@ function renderSettings() {
     ? "You are on Windows: clients start directly and these settings are not used."
     : "Clients are Windows programs. On this system Leyline starts them through Wine.";
   $("wine-set").disabled = state.windows;
+  $("set-count").checked = state.settings.count_installs !== false;
 }
+$("set-count").addEventListener("change", async () => {
+  const on = $("set-count").checked;
+  try {
+    await invoke("set_count_installs", { on });
+    state.settings.count_installs = on;
+    say("count-status", on ? "Your installs count toward the rankings." : "Your installs are not counted.", "ok");
+  } catch (e) { $("set-count").checked = !on; say("count-status", String(e), "bad"); }
+});
 $("set-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const wine = { enabled: $("wine-on").checked, command: $("wine-cmd").value.trim() || "wine", prefix: $("wine-prefix").value.trim() };
@@ -519,7 +528,37 @@ function linkBtn(label, url) {
 // ------------------------------------------------------------------ Discover: the Workshop catalog
 let catalog = { categories: [], projects: [] };
 let installed = [];          // the picked client's mods
-const catFilter = { cat: "" };
+const catFilter = { cat: "", sort: "hot", kind: "" };
+try { catFilter.sort = localStorage.getItem("leyline.catSort") || "hot"; } catch (_) { /* storage may be off */ }
+// The hub's rankings (rankings.rs: mods.json): the catalog ids in the chosen order, and each one's numbers.
+let ranked = null;
+let linkedId = "";            // a project a leyline:// link asked for: shown highlighted
+async function loadRanks(refresh) {
+  try {
+    ranked = await invoke("mods_ranked", { sort: catFilter.sort, kind: catFilter.kind, client: null, refresh: !!refresh });
+  } catch (_) { ranked = null; }
+}
+// Without rankings (offline on first start): the kind from the catalog's own fields, like rankings.rs kind_of.
+const kindOf = (p) => (p.category === "sandbox" ? "mode" : (p.kind === "ui" || p.category === "addons") ? "addon" : "mod");
+function renderSorts() {
+  document.querySelectorAll("#cat-sorts [data-sort]").forEach((b) => {
+    const on = b.dataset.sort === catFilter.sort;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  $("cat-kind").value = catFilter.kind;
+}
+document.querySelectorAll("#cat-sorts [data-sort]").forEach((b) => b.addEventListener("click", async () => {
+  catFilter.sort = b.dataset.sort;
+  try { localStorage.setItem("leyline.catSort", catFilter.sort); } catch (_) { /* fine */ }
+  await loadRanks(false);
+  renderCatalog();
+}));
+$("cat-kind").addEventListener("change", async () => {
+  catFilter.kind = $("cat-kind").value;
+  await loadRanks(false);
+  renderCatalog();
+});
 
 async function loadCatalog(quiet) {
   if (!quiet) say("cat-status", "Loading the Workshop…");
@@ -533,6 +572,7 @@ async function loadCatalog(quiet) {
   } catch (e) {
     say("cat-status", String(e), "bad");
   }
+  await loadRanks(true);
   renderModTiles();
   await loadInstalled(true);
   renderCatalog();
@@ -555,9 +595,17 @@ function renderCatalog() {
   chip("", "All", catalog.projects.length);
   for (const k of catalog.categories) chip(k.id, k.name, counts[k.id] || 0);
 
+  renderSorts();
   const grid = $("cat-grid");
   grid.replaceChildren();
-  const list = catalog.projects.filter((p) => {
+  let ordered = catalog.projects;
+  if (ranked && ranked.ids) {
+    const byId = new Map(catalog.projects.map((p) => [p.id, p]));
+    ordered = ranked.ids.map((id) => byId.get(id)).filter(Boolean);
+  } else if (catFilter.kind) {
+    ordered = catalog.projects.filter((p) => kindOf(p) === catFilter.kind);
+  }
+  const list = ordered.filter((p) => {
     if (catFilter.cat && p.category !== catFilter.cat) return false;
     if (fitOnly && c && !fitsClient(p, c)) return false;
     if (q && !(`${p.name} ${p.description} ${p.author} ${p.category}`.toLowerCase().includes(q))) return false;
@@ -573,8 +621,44 @@ function renderCatalog() {
   for (const p of list) grid.append(projectCard(p, c));
 }
 
+// A card's numbers and its rating stars. Rating needs the Friends sign-in (the same website sign-in).
+function statsLine(p) {
+  const m = ranked && ranked.metrics ? ranked.metrics[p.id] : null;
+  const st = el("div", "stats");
+  if (m) {
+    const r = m.rating || {};
+    st.append(el("span", "rating", r.n ? `★ ${Number(r.avg).toFixed(1)} · ${r.n} rating${r.n === 1 ? "" : "s"}` : "No ratings yet"));
+    st.append(el("span", "installs", `${m.installs.all} install${m.installs.all === 1 ? "" : "s"}`));
+    if (m.rising) st.append(el("span", "tag good", "Rising"));
+  }
+  const stars = el("span", "stars");
+  stars.setAttribute("role", "group");
+  stars.setAttribute("aria-label", `Rate ${p.name}`);
+  for (let n = 1; n <= 5; n++) {
+    const b = el("button", "", "★");
+    b.type = "button";
+    b.title = `${n} star${n > 1 ? "s" : ""}`;
+    b.setAttribute("aria-label", `Rate ${n} star${n > 1 ? "s" : ""}`);
+    b.addEventListener("click", () => rateProject(p, n, stars));
+    stars.append(b);
+  }
+  st.append(stars);
+  return st;
+}
+async function rateProject(p, n, box) {
+  try {
+    const r = await invoke("mod_rate", { project: p.id, stars: n });
+    box.querySelectorAll("button").forEach((b, i) => b.classList.toggle("on", i < n));
+    if (ranked && ranked.metrics && ranked.metrics[p.id] && r && r.rating) ranked.metrics[p.id].rating = r.rating;
+    say("cat-status", `Thanks: you rated ${p.name} ${n} star${n > 1 ? "s" : ""}.`, "ok");
+  } catch (e) {
+    say("cat-status", String(e) === "signed_out" ? "Sign in on the Friends page to rate mods (the same sign-in as the website)." : String(e), "bad");
+  }
+}
+
 function projectCard(p, c) {
-  const card = el("article", "mod-card");
+  const card = el("article", "mod-card" + (p.id === linkedId ? " linked" : ""));
+  card.dataset.id = p.id;
   const top = el("div", "top");
   top.append(el("b", "name", p.name));
   if (p.version) top.append(el("span", "ver-s", "v" + p.version));
@@ -588,7 +672,7 @@ function projectCard(p, c) {
   if (c && !fits) tags.append(el("span", "tag warn", `Not for ${c.build}`));
   card.append(top, tags, el("p", "desc", p.description || ""));
   const credit = el("p", "credit", p.credits || [p.author, p.licence || "licence not stated"].filter(Boolean).join(" · "));
-  card.append(credit);
+  card.append(credit, statsLine(p));
   const acts = el("div", "acts");
   const mine = installed.find((m) => m.key === p.id);
   if (p.source === "packaged" && p.download) {
@@ -665,6 +749,28 @@ async function installProject(p, btn) {
   }
   await loadInstalled(true);
   renderCatalog();
+}
+
+// A hub page's "Install with Leyline" (leyline://install/<id>): show that project with its INSTALL button. Nothing
+// installs until the player clicks INSTALL.
+async function handleDeepLink() {
+  let link = null;
+  try { link = await invoke("deep_link_take"); } catch (_) { return; }
+  if (!link || link.action !== "install" || typeof link.id !== "string") return;
+  const p = catalog.projects.find((x) => x.id === link.id);
+  show("discover", true);   // the catalog was just loaded
+  if (!p) { say("cat-status", "That mod is not in the Workshop catalog here yet. Try again after the catalog refreshes.", "warn"); return; }
+  linkedId = p.id;
+  catFilter.cat = "";
+  catFilter.kind = "";
+  $("cat-q").value = "";
+  const c = pickedClient();
+  if (c && !fitsClient(p, c)) $("cat-fit").checked = false;
+  await loadRanks(false);
+  renderCatalog();
+  const card = document.querySelector(`#cat-grid .mod-card[data-id="${CSS.escape(p.id)}"]`);
+  if (card) { card.scrollIntoView({ block: "center" }); const b = card.querySelector(".acts .btn"); if (b && !b.disabled) b.focus(); }
+  say("cat-status", c ? `From the hub: ${p.name}. Press INSTALL to put it in ${c.name}.` : `From the hub: ${p.name}. Add your game client first, then press INSTALL.`, "ok");
 }
 
 $("cat-q").addEventListener("input", renderCatalog);
@@ -1213,7 +1319,7 @@ renderNews();
 renderModTiles();
 refresh().then(() => {
   setMode(mode);
-  loadCatalog(true);
+  loadCatalog(true).then(handleDeepLink);
   loadRealms(true);
   loadUpdateState();
   setupDrop();

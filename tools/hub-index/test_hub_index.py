@@ -292,6 +292,160 @@ class Pipeline(unittest.TestCase):
         self.assertNotIn("generated", doc)
 
 
+def entry(repo, **kw):
+    c = H.canonical(repo)
+    e = {"id": "link:" + c["id"], "name": c["repo"], "author": c["owner"], "owner": c["owner"], "repo": c["url"],
+         "forge": "github", "licence": "MIT", "category": "addons", "type": "addon", "builds": ["3.3.5a"],
+         "summary": "An addon for the 3.3.5a client.", "description": "", "stars": 10, "updated": "2026-10-01",
+         "archived": False, "source": "discovered", "score": 10.0}
+    e.update(kw)
+    return e
+
+
+def index(*es):
+    return {"format": 2, "policy": "x", "builds": H.BUILDS, "categories": H.CATEGORY_IDS,
+            "entries": sorted(es, key=H.entry_order)}
+
+
+class DailyRefresh(Pipeline):
+    """The daily run: refreshes go live, new entries wait, a forge that doesn't answer never wipes an entry."""
+
+    def test_gate(self):
+        a, b, c, g = (f"https://github.com/o/{n}" for n in ("a", "b", "c", "g"))
+        rel = {"tag": "v2.0", "date": "2026-10-28", "url": a + "/releases/tag/v2.0"}
+        base = index(entry(a), entry(b), entry(c), entry(g, stars=3))
+        new = index(entry(a, stars=99, updated="2026-10-28", score=30.0, release=rel, name="Renamed"),
+                    entry(g, stars=4), entry("https://github.com/o/d"))
+        hold = {"excluded": [{"repo": b, "reason": "ships game-format files: x.mpq"},
+                             {"repo": c, "reason": "could not read the repo: timeout"}], "review": [], "needs_licence": []}
+        doc, wait = HI.gate(base, new, hold)
+        self.assertEqual(H.validate_index(doc), [])
+        by = {e["repo"]: e for e in doc["entries"]}
+        self.assertEqual(sorted(by), [a, c, g])                       # b off (hard rule), c kept, d not added yet
+        self.assertEqual((by[a]["stars"], by[a]["updated"], by[a]["score"], by[a]["release"]), (99, "2026-10-28", 30.0, rel))
+        self.assertEqual(by[a]["name"], "a", "a rename waits for review")
+        self.assertEqual(by[g]["stars"], 4)
+        self.assertEqual([r["repo"] for r in wait["new"]], ["https://github.com/o/d"])
+        self.assertEqual(wait["changed"], [{"repo": a, "name": "a", "fields": ["name"]}])
+        self.assertEqual([r["repo"] for r in wait["kept"]], [c])
+        self.assertEqual([r["repo"] for r in wait["removed"]], [b])
+        # a release that went away goes away with the refresh
+        doc2, _ = HI.gate(doc, index(entry(a, stars=99, updated="2026-10-28", score=30.0), entry(c), entry(g, stars=4)), hold)
+        self.assertNotIn("release", {e["repo"]: e for e in doc2["entries"]}[a])
+        # a licence that became non-open: off now
+        _, w3 = HI.gate(base, index(entry(a), entry(c), entry(g)), {"needs_licence": [{"repo": b, "reason": "no open licence file"}]})
+        self.assertEqual([r["repo"] for r in w3["removed"]], [b])
+
+    def test_run_gate_files(self):
+        base = os.path.join(self.tmp, "base.json")
+        HI.write_json(base, index(entry("https://github.com/o/a")))
+        HI.write_json(HI.INDEX, index(entry("https://github.com/o/a", stars=50), entry("https://github.com/o/new")))
+        HI.write_json(HI.HOLDING, {"format": 1, "needs_licence": [], "review": [], "excluded": []})
+        full, summ = os.path.join(self.tmp, "full.json"), os.path.join(self.tmp, "sum.json")
+        self.assertEqual(HI.run_gate(base, full, summ, ""), 0)
+        live = HI.read_json(HI.INDEX, {})
+        self.assertEqual([(e["name"], e["stars"]) for e in live["entries"]], [("a", 50)])
+        self.assertEqual(len(HI.read_json(full, {})["entries"]), 2)
+        self.assertEqual(HI.read_json(summ, {})["new"], 1)
+        self.assertEqual([r["repo"] for r in HI.read_json(HI.HOLDING, {})["pending_new"]], ["https://github.com/o/new"])
+
+    def test_a_forge_that_does_not_answer_keeps_the_entry(self):
+        doc = json.loads(self.run_build())
+        before = {e["repo"]: e for e in doc["entries"]}["https://github.com/alice/frame-kit"]
+
+        def flaky(url, cache):
+            return {"ok": False, "error": "connection timed out"} if url.endswith("/frame-kit") else self.probe(url, cache)
+        self.assertEqual(HI.build(1, self.approved, "", [], "", api=self.NoApi(), probe_fn=flaky), 0)
+        after = {e["repo"]: e for e in HI.read_json(HI.INDEX, {})["entries"]}
+        self.assertEqual(after["https://github.com/alice/frame-kit"], before)
+        self.assertNotIn("https://github.com/mirror/frame-kit", after, "the kept original still wins over its mirror")
+
+    def test_a_run_that_would_wipe_the_index_writes_nothing(self):
+        HI.write_json(HI.INDEX, index(*(entry(f"https://github.com/old/m{k}") for k in range(30))))
+        before = open(HI.INDEX, "rb").read()
+        self.assertEqual(HI.build(1, self.approved, "", [], "", api=self.NoApi(), probe_fn=self.probe), 3)
+        self.assertEqual(open(HI.INDEX, "rb").read(), before)
+        self.assertEqual(HI.build(1, self.approved, "", [], "", api=self.NoApi(), probe_fn=self.probe, allow_shrink=True), 0)
+
+    def test_release_kept_when_the_api_does_not_answer(self):
+        rel = {"tag": "v1.2", "date": "2026-10-20", "url": "https://github.com/alice/frame-kit/releases/tag/v1.2"}
+
+        class Api(self.NoApi):
+            def __init__(s, release):
+                s.release = release
+
+            def ok(s):
+                return True
+
+            def github_repo(s, owner, repo):
+                return {"stars": 41, "licence": "MIT", "description": "Frames.", "topics": [], "archived": False}
+
+            def github_release(s, owner, repo):
+                return s.release if repo == "frame-kit" else {}
+        self.assertEqual(HI.build(1, self.approved, "", [], "", api=Api(rel), probe_fn=self.probe), 0)
+        get = lambda: {e["repo"]: e for e in HI.read_json(HI.INDEX, {})["entries"]}["https://github.com/alice/frame-kit"]  # noqa: E731
+        self.assertEqual(get()["release"], rel)
+        self.assertEqual(get()["stars"], 41)
+        HI.build(1, self.approved, "", [], "", api=Api(None), probe_fn=self.probe)          # no answer: kept
+        self.assertEqual(get()["release"], rel)
+        HI.build(1, self.approved, "", [], "", api=Api({}), probe_fn=self.probe)            # no release any more: gone
+        self.assertNotIn("release", get())
+
+    def test_release_meta(self):
+        repo = "https://github.com/alice/frame-kit"
+        ok = HI.release_meta({"tag_name": "v1.0", "published_at": "2026-10-01T00:00:00Z",
+                              "html_url": repo + "/releases/tag/v1.0"}, repo)
+        self.assertEqual(ok, {"tag": "v1.0", "date": "2026-10-01", "url": repo + "/releases/tag/v1.0"})
+        self.assertEqual(HI.release_meta({"tag_name": "v1", "html_url": "https://evil.example/x"}, repo), {})
+        self.assertEqual(HI.release_meta({"tag_name": "v1", "draft": True, "html_url": repo + "/r"}, repo), {})
+        self.assertEqual(HI.release_meta({"tag_name": "<b>", "html_url": repo + "/r"}, repo), {})
+        bad = index(entry(repo, release={"tag": "v1", "url": "https://github.com/someone/else/releases"}))
+        self.assertTrue(any("release url" in p for p in H.validate_index(bad)))
+
+    def test_rate_limit_and_retry(self):
+        import io
+        import urllib.error
+        seen = []
+
+        def opener(req, timeout):
+            seen.append(req.full_url)
+            if "limited" in req.full_url:
+                raise urllib.error.HTTPError(req.full_url, 403, "rate", {"X-RateLimit-Remaining": "0"}, io.BytesIO(b""))
+            if "flaky" in req.full_url and seen.count(req.full_url) == 1:
+                raise urllib.error.HTTPError(req.full_url, 502, "bad gateway", {}, io.BytesIO(b""))
+
+            class R(io.BytesIO):
+                status = 200
+                headers = {}
+
+                def __enter__(s):
+                    return s
+
+                def __exit__(s, *a):
+                    return False
+            return R(b'{"full_name": "x"}')
+        api = HI.Api(token="t", opener=opener, sleep=lambda s: None)
+        self.assertEqual(api.get("https://api.github.com/repos/flaky/x")[0], 200, "one retry after a 5xx")
+        self.assertEqual(api.get("https://api.github.com/repos/limited/x")[0], 403)
+        self.assertTrue(api.limited)
+        n = len(seen)
+        self.assertEqual(api.get("https://api.github.com/repos/other/y")[0], 429)
+        self.assertEqual(len(seen), n, "no more GitHub calls once the limit is used up")
+        self.assertEqual(api.get("https://codeberg.org/api/v1/x")[0], 200, "other forges still answer")
+
+
+class Workflow(unittest.TestCase):
+    def test_daily_with_a_review_gate(self):
+        with open(os.path.join(HI.REPO, "tools", "github-workflows", "hub-index.yml"), encoding="utf-8") as f:
+            wf = f.read()
+        self.assertIn('cron: "17 7 * * *"', wf)
+        self.assertIn("hub_index.py gate --base", wf)
+        self.assertIn("hub-index/daily", wf)
+        self.assertIn("hub-index/review", wf)
+        merge = [l for l in wf.splitlines() if "gh pr merge" in l]
+        self.assertTrue(merge and all("hub-index/daily" in l or "$DAILY" in l for l in merge), merge)
+
+
 class CheckedIn(unittest.TestCase):
     """The index in the repo passes the rules, and every entry is spot-checked."""
 
@@ -315,7 +469,8 @@ class CheckedIn(unittest.TestCase):
             self.assertFalse(HI.REPACK_RE.search(e["name"] + " " + e.get("description", "")), e["repo"])
             self.assertIn(e["licence"], H.OPEN_LICENCES)
         hold = HI.read_json(HI.HOLDING, None)
-        self.assertEqual(set(hold), {"format", "needs_licence", "review", "excluded"})
+        self.assertLessEqual(set(hold), {"format", "needs_licence", "review", "excluded", "pending_new"})
+        self.assertLessEqual({"format", "needs_licence", "review", "excluded"}, set(hold))
         listed = {e["repo"] for e in es}
         for k in ("needs_licence", "review", "excluded"):
             self.assertFalse(listed & {r["repo"] for r in hold[k]}, k)
