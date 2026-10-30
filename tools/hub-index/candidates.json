@@ -990,6 +990,16 @@
    "description": "A character-focused LLM integration for AzerothCore/Playerbots"
   },
   {
+   "repo": "https://github.com/DMCK96/azeroth-world-editor",
+   "via": [
+    "web:github topic pages 2026-10-30"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 16
+  },
+  {
    "repo": "https://github.com/drfdev/turtle-wow-loot-navigator",
    "via": [
     "github-topic-page:turtle-wow"
@@ -1563,6 +1573,16 @@
    "description": "Run CMaNGOS using Docker!"
   },
   {
+   "repo": "https://github.com/kasperfriend/friends-graphics",
+   "via": [
+    "web:github topic pages 2026-10-30"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1
+  },
+  {
    "repo": "https://github.com/Kelsidavis/WoWee",
    "via": [
     "github-topic-page:tbc",
@@ -1630,6 +1650,16 @@
    ],
    "builds": [],
    "stars": 19
+  },
+  {
+   "repo": "https://github.com/LonelyIceProject/lonelyice",
+   "via": [
+    "web:github topic pages 2026-10-30"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 3
   },
   {
    "repo": "https://github.com/Lordcaster/resocket-wow-lk",
@@ -2238,6 +2268,16 @@
    "description": "A website to view your AzerothCore server's characters"
   },
   {
+   "repo": "https://github.com/r-o-b-o-t-o/mod-i-found-your-sword",
+   "via": [
+    "web:github topic pages 2026-10-30"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 2
+  },
+  {
    "repo": "https://github.com/RagedUnicorn/tf-aws-wow-vanilla-server",
    "via": [
     "github-topic-page:vanilla-wow"
@@ -2729,6 +2769,16 @@
    "description": "Derived from sunstrider-legacy and amied to provide fully open-sourced and playable trinity tbc core"
   },
   {
+   "repo": "https://github.com/tswow/tswow",
+   "via": [
+    "web:github topic pages 2026-10-30"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 125
+  },
+  {
    "repo": "https://github.com/vibecoder99-cmd/echoes-of-the-worldsoul",
    "via": [
     "github-topic-page:azerothcore-lua"
@@ -2977,6 +3027,16 @@
     "3.3.5a"
    ],
    "stars": 10
+  },
+  {
+   "repo": "https://github.com/Yuof/mod-rndbot-sync",
+   "via": [
+    "web:github topic pages 2026-10-30"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 14
   },
   {
    "repo": "https://github.com/ZhengPeiRu21/mod-challenge-modes",

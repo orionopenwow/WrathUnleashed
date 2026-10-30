@@ -61,6 +61,22 @@
   {
    "owner": "suprepupre",
    "reason": "injects code into the game client (realms ban these tools)"
+  },
+  {
+   "owner": "showard-4742",
+   "reason": "a look-alike cheat lure ('ESP', 'no-recoil', code only 'in Release'): one of a pair with identical text and stars (likely malware)"
+  },
+  {
+   "owner": "johnsonj-2416",
+   "reason": "a look-alike cheat lure ('ESP', 'no-recoil', code only 'in Release'): one of a pair with identical text and stars (likely malware)"
+  },
+  {
+   "owner": "Killm12321idgard",
+   "reason": "one of a cluster of look-alike repos with identical star counts (likely a fake-star or malware-lure campaign)"
+  },
+  {
+   "owner": "Krakenduke",
+   "reason": "one of a cluster of look-alike repos with identical star counts (likely a fake-star or malware-lure campaign)"
   }
  ],
  "repos": [
@@ -86,7 +102,7 @@
   },
   {
    "repo": "https://github.com/kelsidavis/wowee",
-   "reason": "a whole replacement game client that answers anti-cheat; too close to the 2026-10-29 cease-and-desist to list without the owner's say"
+   "reason": "a whole replacement game client (also the from-scratch one with an Android build); its licence is MIT plus an added restriction against any commercial game use (since 2026-07-21), which is not an open licence; also answers anti-cheat"
   },
   {
    "repo": "https://github.com/brian8544/arctium-launcher",
@@ -111,6 +127,30 @@
   {
    "repo": "https://github.com/azerothcore/mod-playerbots",
    "reason": "an old placeholder (says it isn't ready); the module lives at mod-playerbots/mod-playerbots"
+  },
+  {
+   "repo": "https://github.com/mranonymz/wow-imito",
+   "reason": "the Android port: release-only APK with no source in the repo (built from wow-mobile and Winlator), downloads a whole game client from a ZIP link and updates modified clients; no licence for the repo"
+  },
+  {
+   "repo": "https://github.com/outthislife/azeroth-survivors-re",
+   "reason": "its build script downloads the whole 1.12.1 game client (archive.org) into the build: a client download"
+  },
+  {
+   "repo": "https://github.com/ahmedalqamzi/azeroth-survivors-downloads",
+   "reason": "release-only Windows downloads that fetch the game's original Data (a client download); no source"
+  },
+  {
+   "repo": "https://github.com/dustinhendrickson/wowdecomp",
+   "reason": "decompiled client code (wowdecomp), with Android builds of it: never listed"
+  },
+  {
+   "repo": "https://github.com/mrgreencheezz/tswow-web-client",
+   "reason": "its host mode serves the client's own game files to other players over the network"
+  },
+  {
+   "repo": "https://github.com/fusionwowcms/fusioncms",
+   "reason": "ships donation and store modules (selling things), under a licence we don't recognise as open"
   }
  ],
  "patterns": [
@@ -127,6 +167,10 @@
   {
    "repo": "https://github.com/ssdeanx/tortoise-wow",
    "reason": "restores another server's custom content: check where its data comes from"
+  },
+  {
+   "repo": "https://github.com/marcocastignoli/wow-mobile",
+   "reason": "the open Android base of the mobile client (a Winlator fork, LGPL-2.1, no game data): it commits prebuilt Wine/Box64/driver and Windows-component archives (.tzst) and a bundled addon zip, so a person decides"
   }
  ]
 }

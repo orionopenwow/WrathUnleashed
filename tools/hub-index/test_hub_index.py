@@ -291,6 +291,25 @@ class Pipeline(unittest.TestCase):
         self.assertEqual(self.run_build(), first)
         self.assertNotIn("generated", doc)
 
+    def test_only_keeps_the_rest_of_holding_and_builds_keep_thumbs(self):
+        self.run_build()
+        doc = HI.read_json(HI.INDEX, {})
+        for e in doc["entries"]:
+            if e["repo"].endswith("/frame-kit"):
+                e.update(thumb="/wrath/art/hub-thumbs/alice__frame-kit.webp", thumb_credit=HI.THUMB_CREDIT)
+        HI.write_json(HI.INDEX, doc)
+        keys = H.ENTRY_KEYS
+        H.ENTRY_KEYS = set(keys) | set(HI.THUMB_FIELDS)
+        try:
+            self.assertEqual(HI.build(1, self.approved, "", ["alice/frame-kit"], "", api=self.NoApi(), probe_fn=self.probe), 0)
+        finally:
+            H.ENTRY_KEYS = keys
+        e = {e["repo"]: e for e in HI.read_json(HI.INDEX, {})["entries"]}["https://github.com/alice/frame-kit"]
+        self.assertEqual(e["thumb"], "/wrath/art/hub-thumbs/alice__frame-kit.webp")
+        hold = HI.read_json(HI.HOLDING, {})
+        self.assertIn("https://github.com/bob/tiny", {r["repo"] for r in hold["excluded"]}, "--only leaves other repos' places")
+        self.assertEqual([r["repo"] for r in hold["needs_licence"]], ["https://github.com/x/nolic"])
+
 
 def entry(repo, **kw):
     c = H.canonical(repo)
@@ -432,6 +451,249 @@ class DailyRefresh(Pipeline):
         self.assertEqual(api.get("https://api.github.com/repos/other/y")[0], 429)
         self.assertEqual(len(seen), n, "no more GitHub calls once the limit is used up")
         self.assertEqual(api.get("https://codeberg.org/api/v1/x")[0], 200, "other forges still answer")
+
+
+class LicencesAndWaivers(unittest.TestCase):
+    def test_a_rider_makes_a_licence_not_open(self):
+        mit = ("MIT License (with Additional Restriction)\n\nPermission is hereby granted, free of charge, to any person "
+               "obtaining a copy of this software...\n\nADDITIONAL RESTRICTION: the Software may not be used, in whole or "
+               "in part, as the basis for any commercial video game.")
+        self.assertEqual(HI.classify_licence(mit), "NONFREE")
+        self.assertEqual(HI.classify_licence("Permission is hereby granted, free of charge, to any person"), "MIT")
+        self.assertEqual(HI.classify_licence("Apache License\nVersion 2.0, January 2004\n... Commons Clause ..."), "NONFREE")
+        v = HI.judge(cand(), facts(**ADDON_335, licence="NONFREE"), META, {})
+        self.assertEqual(v["verdict"], "excluded")
+
+    def test_no_paid_features_is_not_a_paid_version(self):
+        self.assertFalse(HI.PAID_STRONG.search("It is free, with no ads and no paid features."))
+        self.assertFalse(HI.PAID_STRONG.search("without a paywall"))
+        self.assertTrue(HI.PAID_STRONG.search("The paid version adds more zones."))
+
+    def test_a_curated_waiver_covers_only_the_named_files(self):
+        c = cand(origin="seed", builds_given=["3.3.5a"],
+                 waive=[{"file": "src/scripts/decompile.ts", "why": "reads database script rows"},
+                        {"file": "docs/index.mdx", "why": "a docs page"}])
+        f = dict(ADDON_335, decomp_files=["src/scripts/decompile.ts"], game_data=["docs/index.mdx"])
+        self.assertEqual(HI.judge(c, facts(**f), META, {})["verdict"], "listed")
+        f2 = dict(f, game_data=["docs/index.mdx", "Art/x.blp"])
+        self.assertIn("game-format", HI.judge(c, facts(**f2), META, {})["reason"])
+        nowhy = cand(origin="seed", builds_given=["3.3.5a"], waive=[{"file": "src/scripts/decompile.ts"}])
+        self.assertIn("decompiled", HI.judge(nowhy, facts(**f), META, {})["reason"])
+        full = dict(ADDON_335, game_data=[f"a{i}.mdx" for i in range(5)])          # a capped list is never waived
+        many = cand(origin="seed", builds_given=["3.3.5a"], waive=[{"file": f"a{i}.mdx", "why": "docs"} for i in range(5)])
+        self.assertEqual(HI.judge(many, facts(**full), META, {})["verdict"], "excluded")
+
+
+class ExternalPacks(unittest.TestCase):
+    URL = "https://example.org/forum/thread/hd-pack"
+
+    def item(self, **kw):
+        x = {"id": HI.external_id(self.URL), "name": "HD Pack", "author": "", "url": self.URL, "category": "graphics",
+             "type": HI.EXTERNAL_TYPE, "builds": ["3.3.5a"], "summary": "Sharper textures, from its authors' page.",
+             "external": True, "note": HI.EXTERNAL_NOTE}
+        x.update(kw)
+        return x
+
+    def test_rules(self):
+        self.assertEqual(HI.external_problems(self.item()), [])
+        bad = {
+            "file": dict(url="https://example.org/files/pack.zip"),
+            "release asset": dict(url="https://github.com/a/b/releases/download/v1/pack.7z"),
+            "file host": dict(url="https://mega.nz/file/abc"),
+            "brand": dict(summary="HD textures for World of Warcraft."),
+            "number": dict(name="HD Pack 3.3.5a"),
+            "flag": dict(external=False),
+            "note": dict(note="hosted"),
+            "decomp": dict(summary="Built from wowdecomp output."),
+            "repack": dict(summary="A full client repack."),
+            "paid": dict(summary="Premium pack for donors."),
+            "thumb without repo": dict(thumb="/wrath/art/hub-thumbs/a__b.webp", thumb_credit=HI.THUMB_CREDIT),
+            "extra": dict(download="https://example.org/x"),
+        }
+        for why, kw in bad.items():
+            x = self.item(**kw)
+            if "url" in kw:
+                x["id"] = HI.external_id(kw["url"])
+            self.assertTrue(HI.external_problems(x), why)
+        blocked = {"repos": [{"repo": "https://github.com/bad/pack", "reason": "lure"}]}
+        self.assertTrue(HI.external_problems(self.item(repo="https://github.com/bad/pack"), blocked))
+
+    def test_built_from_the_curated_file_and_kept_apart(self):
+        tmp = tempfile.mkdtemp(prefix="hubext-")
+        saved = HI.EXTERNAL
+        try:
+            HI.EXTERNAL = os.path.join(tmp, "ext.json")
+            HI.write_json(HI.EXTERNAL, {"packs": [
+                {"name": "Zeta Pack", "url": self.URL, "summary": "Sharper textures.", "builds": ["3.3.5a"]},
+                {"name": "Alpha Pack", "url": "https://example.org/a", "summary": "Better water.",
+                 "repo": "https://github.com/Owner/alpha-pack.git"},
+                {"name": "Bad", "url": "https://example.org/dl/x.mpq", "summary": "Patch file."}]})
+            items, probs = HI.external_items({})
+            self.assertEqual([x["name"] for x in items], ["Alpha Pack", "Zeta Pack"])
+            self.assertEqual(items[0]["repo"], "https://github.com/Owner/alpha-pack")
+            self.assertTrue(all(x["external"] and x["note"] == HI.EXTERNAL_NOTE and x["type"] == "external-pack" for x in items))
+            self.assertEqual(len(probs), 1)
+            doc = index(entry("https://github.com/o/a"))
+            doc["external"] = items
+            self.assertEqual(HI.validate(doc), [])
+            self.assertEqual(H.validate_index(doc), [], "the hub's own check ignores the separate list")
+            doc["external"] = list(reversed(items))
+            self.assertTrue(any("canonical order" in p for p in HI.validate(doc)))
+        finally:
+            HI.EXTERNAL = saved
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _png(w=1200, h=600):
+    from PIL import Image
+    import io
+    buf = io.BytesIO()
+    Image.new("RGB", (w, h), (30, 60, 90)).save(buf, "PNG")
+    return buf.getvalue()
+
+
+def _have_encoder():
+    try:
+        import PIL  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+@unittest.skipUnless(_have_encoder(), "Pillow is needed to make test images")
+class Thumbs(unittest.TestCase):
+    """The thumbs command against a local fake GitHub: host allow-list, magic bytes, size cap, file name, fields."""
+
+    @classmethod
+    def setUpClass(cls):
+        import http.server
+        import threading
+        png = _png()
+        routes = {}
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                r = routes.get(self.path)
+                if r is None:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                code, ctype, body, extra = r
+                self.send_response(code)
+                self.send_header("Content-Type", ctype)
+                for k, v in extra.items():
+                    self.send_header(k, v)
+                if code == 200 and self.headers.get("If-None-Match") and extra.get("ETag") == self.headers.get("If-None-Match"):
+                    pass
+                self.end_headers()
+                self.wfile.write(body)
+
+        cls.srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        cls.port = cls.srv.server_address[1]
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{cls.port}"
+        other = f"http://localhost:{cls.port}"
+
+        def page(img, title="o/r", desc="A tool."):
+            return (200, "text/html", (f'<html><head><meta property="og:image" content="{img}" />'
+                                       f'<meta property="og:title" content="{title}"><meta property="og:description" '
+                                       f'content="{desc}"></head></html>').encode(), {})
+        routes.update({
+            "/o/good": page(base + "/img/good.png"),
+            "/o/offlist": page(other + "/img/good.png"),
+            "/o/html": page(base + "/img/fake.png"),
+            "/o/big": page(base + "/img/big.png"),
+            "/o/hop": page(base + "/img/hop"),
+            "/o/brand": page(base + "/img/good.png", title="o/brand: a World of Warcraft addon"),
+            "/img/good.png": (200, "image/png", png, {"ETag": '"v1"'}),
+            "/img/fake.png": (200, "image/png", b"<html><script>alert(1)</script></html>", {}),
+            "/img/big.png": (200, "image/png", png[:8] + b"\0" * (HI.THUMB_MAX_IN + 10), {}),
+            "/img/hop": (302, "text/plain", b"", {"Location": other + "/img/good.png"}),
+        })
+        cls.base = base
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="hubthumb-test-")
+        self.saved = {k: getattr(HI, k) for k in ("INDEX", "THUMBS_CACHE", "GENERATED_CARD_HOST")}
+        HI.INDEX = os.path.join(self.tmp, "index.json")
+        HI.THUMBS_CACHE = os.path.join(self.tmp, "cache.json")
+        self.keys = H.ENTRY_KEYS
+        H.ENTRY_KEYS = set(H.ENTRY_KEYS) | set(HI.THUMB_FIELDS)
+        self.dir = os.path.join(self.tmp, "thumbs")
+        self.fetcher = HI.Fetcher(page_base=self.base, page_hosts={"127.0.0.1"}, image_hosts={"127.0.0.1"},
+                                  schemes=("http",), timeout=5)
+
+    def tearDown(self):
+        for k, v in self.saved.items():
+            setattr(HI, k, v)
+        H.ENTRY_KEYS = self.keys
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def run_thumbs(self, *names, refresh=False):
+        HI.write_json(HI.INDEX, index(*(entry(f"https://github.com/o/{n}") for n in names)))
+        self.assertEqual(HI.thumbs(0, [f"o/{n}" for n in names], refresh, self.fetcher, self.dir), 0)
+        return {e["repo"].rsplit("/", 1)[1]: e for e in HI.read_json(HI.INDEX, {})["entries"]}
+
+    def test_a_good_image_becomes_a_small_webp_with_its_fields(self):
+        es = self.run_thumbs("good")
+        path = os.path.join(self.dir, "o__good.webp")
+        with open(path, "rb") as f:
+            data = f.read()
+        self.assertEqual(HI.image_kind(data), "webp")
+        self.assertLessEqual(len(data), HI.THUMB_MAX_OUT)
+        from PIL import Image
+        with Image.open(path) as im:
+            self.assertEqual(im.size, HI.THUMB_SIZE)
+        self.assertEqual(es["good"]["thumb"], "/wrath/art/hub-thumbs/o__good.webp")
+        self.assertEqual(es["good"]["thumb_credit"], "Preview image from the project's GitHub page")
+        self.assertEqual(HI.validate(HI.read_json(HI.INDEX, {}), self.dir), [])
+        mtime = os.path.getmtime(path)
+        self.run_thumbs("good", refresh=True)                         # same image (ETag): the file isn't rewritten
+        self.assertEqual(os.path.getmtime(path), mtime)
+
+    def test_only_allowed_hosts_and_real_images_are_kept(self):
+        es = self.run_thumbs("offlist", "html", "big", "hop")
+        for n in ("offlist", "html", "big", "hop"):
+            self.assertNotIn("thumb", es[n], n)
+            self.assertFalse(os.path.exists(os.path.join(self.dir, f"o__{n}.webp")), n)
+        st, _, _ = self.fetcher.get("https://evil.example/x.png", self.fetcher.image_hosts, 10)
+        self.assertEqual(st, 0)
+        self.assertFalse(self.fetcher.allowed("http://user:pw@127.0.0.1/x", {"127.0.0.1"}))
+
+    def test_generated_card_text_must_be_clean(self):
+        HI.GENERATED_CARD_HOST = "127.0.0.1"
+        es = self.run_thumbs("brand", "good")
+        self.assertNotIn("thumb", es["brand"])
+        self.assertIn("thumb", es["good"])
+
+    def test_fields_wait_until_the_hub_accepts_them(self):
+        H.ENTRY_KEYS = self.keys - set(HI.THUMB_FIELDS)
+        es = self.run_thumbs("good")
+        self.assertNotIn("thumb", es["good"])
+        self.assertTrue(os.path.exists(os.path.join(self.dir, "o__good.webp")))
+
+    def test_names_magic_and_field_checks(self):
+        self.assertEqual(HI.thumb_name("https://github.com/Some-Owner/My.Repo"), "some-owner__my.repo.webp")
+        self.assertEqual(HI.thumb_name("https://gitlab.com/a/b"), "")
+        self.assertEqual(HI.thumb_name("https://example.org/a/b"), "")
+        self.assertEqual(HI.image_kind(b"\x89PNG\r\n\x1a\nxxxx"), "png")
+        self.assertEqual(HI.image_kind(b"\xff\xd8\xff\xe0"), "jpeg")
+        self.assertEqual(HI.image_kind(b"RIFF\0\0\0\0WEBPVP8 "), "webp")
+        self.assertEqual(HI.image_kind(b"<svg xmlns="), "")
+        self.assertEqual(HI.image_kind(b"MZ\x90\0"), "")
+        e = entry("https://github.com/o/a", thumb="/wrath/art/hub-thumbs/o__other.webp", thumb_credit=HI.THUMB_CREDIT)
+        self.assertTrue(HI.thumb_problems(e))
+        self.assertTrue(HI.thumb_problems(entry("https://github.com/o/a", thumb="/wrath/art/hub-thumbs/o__a.webp")))
+        ok = entry("https://github.com/o/a", thumb="/wrath/art/hub-thumbs/o__a.webp", thumb_credit=HI.THUMB_CREDIT)
+        self.assertEqual(HI.thumb_problems(ok), [])
+        self.assertIn("missing", " ".join(HI.thumb_problems(ok, self.dir)))
 
 
 class Workflow(unittest.TestCase):
