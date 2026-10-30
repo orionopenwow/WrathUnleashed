@@ -111,6 +111,11 @@ STEPS = {
     "sampler": ("realm/Sample hangout - on.bat", "Leyline Sample Hangout on: lighter realm, browser fence (5-min restart)", False),
     "sampler-off": ("realm/Sample hangout - off.bat", "Leyline Sample Hangout off: back to the full realm (5-min restart)", False),
     "slice-sampler": ("stream/Make sampler slice.bat", "Sample Hangout streamed game files (30-60 min)", False),
+    # The Leyline brand switch (realm/brand.sh; owner 2026-10-30: "wait for the site to change on my command"). Only
+    # when the owner says so. No restart, nobody kicked; brand-off is the rollback.
+    "brand-check": ("realm/Leyline brand - check.bat", "Leyline brand: what would change (read-only)", False),
+    "brand-leyline": ("realm/Leyline brand - on.bat", "Leyline brand ON: site, game and realm list say Leyline / Dalaran Hangout", False),
+    "brand-off": ("realm/Leyline brand - off.bat", "Leyline brand off: every name back as it was", False),
     "builds-why": ("tools/github-builds/Why did the build fail.bat", "Why the last GitHub build failed (read-only)", False),
     # The older Python launcher's repo (owner 2026-10-29: "rename repo to Leyline Launcher"): rename, then land the branch.
     "ovrename": ("tools/ov-rename/Rename OpenVanilla repo.bat", "Rename GitHub repo OpenVanilla to Leyline-Launcher", False),
