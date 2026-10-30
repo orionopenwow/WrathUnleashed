@@ -783,6 +783,7 @@ pub fn run() {
             crate::p2p::cmds::host_invite,
             crate::p2p::cmds::host_new_invite,
             crate::p2p::cmds::host_listing, // the realm list details (host.rs ListingDetails)
+            crate::p2p::cmds::host_volunteer_relay, // Leyline mesh: relay for others (host.rs volunteer_relay)
             crate::p2p::cmds::host_listing_set,
             crate::p2p::cmds::p2p_flags,
             crate::p2p::cmds::p2p_set_flag,

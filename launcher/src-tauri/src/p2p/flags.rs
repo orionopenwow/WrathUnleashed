@@ -24,6 +24,9 @@ pub const KNOWN: &[(&str, &str)] = &[
     ("torrent_downloads", "Download packages over BitTorrent, with the website as fallback"),
     ("torrent_seeding", "Share downloaded packages back (uses your upload)"),
     ("webrtc_presence", "See friends online over a direct browser link"),
+    ("mesh_realms", "Read the realm list from the Leyline network (signed records), with our site as fallback"),
+    ("mesh_relays", "Play through community relays when they are closer (our relay stays the fallback)"),
+    ("relay_volunteer", "Help the network: relay for others (only when you turn it on for this PC)"),
 ];
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,6 +46,13 @@ pub struct Flags {
     pub torrent_downloads: bool,
     pub torrent_seeding: bool,
     pub webrtc_presence: bool,
+    /// The Leyline mesh (`mesh.rs`, docs/LEYLINE-MESH.md): the realm list from signed records.
+    pub mesh_realms: bool,
+    /// Community relays may carry this PC's game traffic when they are closer than ours.
+    pub mesh_relays: bool,
+    /// "Help the network: relay for others" is offered. It never starts on the site's word alone: see
+    /// `volunteer_allowed`.
+    pub relay_volunteer: bool,
     pub limits: Limits,
     /// STUN servers for the NAT check (`host:port`), only used when `p2p_hosting` is on.
     pub stun: Vec<String>,
@@ -55,6 +65,9 @@ impl Flags {
             "torrent_downloads" => self.torrent_downloads,
             "torrent_seeding" => self.torrent_seeding,
             "webrtc_presence" => self.webrtc_presence,
+            "mesh_realms" => self.mesh_realms,
+            "mesh_relays" => self.mesh_relays,
+            "relay_volunteer" => self.relay_volunteer,
             _ => return None,
         })
     }
@@ -64,6 +77,9 @@ impl Flags {
             "torrent_downloads" => self.torrent_downloads = on,
             "torrent_seeding" => self.torrent_seeding = on,
             "webrtc_presence" => self.webrtc_presence = on,
+            "mesh_realms" => self.mesh_realms = on,
+            "mesh_relays" => self.mesh_relays = on,
+            "relay_volunteer" => self.relay_volunteer = on,
             _ => {}
         }
     }
@@ -186,6 +202,12 @@ fn save_local(app_dir: &Path, l: &Local) -> Result<(), String> {
     crate::settings::write_atomic(&local_path(app_dir), &b).map_err(|e| format!("Could not save: {e}"))
 }
 
+/// Relaying for others needs both: the site offers it (`relay_volunteer` on the site, so the owner can stop the
+/// whole community relay network) and this PC's own "On" (a local override). The site alone never makes a PC relay.
+pub fn volunteer_allowed(site: &Flags, local: &Local) -> bool {
+    site.relay_volunteer && local.overrides.get("relay_volunteer") == Some(&true)
+}
+
 /// Site flags with this PC's overrides on top.
 pub fn effective(site: &Flags, local: &Local) -> Flags {
     let mut f = site.clone();
@@ -272,7 +294,7 @@ pub mod tests {
     fn site_file_is_hash_checked() {
         let good = doc(&[("torrent_downloads", true)]);
         // The same document from stream/leyline_net.py make_doc() (stream/tests/test_leyline_net.py checks it too).
-        assert_eq!(good["sha256"], "9a48f487b97315c24a01ebc948d1d71cd98409a7ece1d294897c7649d29b38c7");
+        assert_eq!(good["sha256"], "eff5c094c2e8e1fb66c46eec8a20068320eb11a76746d3e91f60e96845df00e7");
         assert!(check(&good).is_ok());
         let f = from_doc(&good);
         assert!(f.torrent_downloads && !f.p2p_hosting);
@@ -288,6 +310,20 @@ pub mod tests {
         let v = load(d.path(), &format!("{base}/f.json"));
         assert!(v.effective.torrent_downloads && !v.from_cache);
         assert!(current(d.path()).torrent_downloads, "cached for offline use");
+    }
+
+    #[test]
+    fn mesh_flags_default_off_and_volunteering_needs_this_pc() {
+        let site = from_doc(&doc(&[("mesh_realms", true), ("relay_volunteer", true)]));
+        assert!(site.mesh_realms && !site.mesh_relays);
+        let d = tempfile::tempdir().unwrap();
+        assert!(!volunteer_allowed(&site, &load_local(d.path())), "the site alone never makes a PC relay");
+        set_local(d.path(), "relay_volunteer", Some(true)).unwrap();
+        assert!(volunteer_allowed(&site, &load_local(d.path())));
+        assert!(!volunteer_allowed(&Flags::default(), &load_local(d.path())), "the site took the offer away");
+        set_local(d.path(), "relay_volunteer", Some(false)).unwrap();
+        assert!(!volunteer_allowed(&site, &load_local(d.path())));
+        assert!(!Flags::default().mesh_realms && !Flags::default().relay_volunteer);
     }
 
     #[test]

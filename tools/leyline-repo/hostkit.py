@@ -106,6 +106,12 @@ def collect(kit: Path, realm: Path) -> dict[str, bytes]:
     files[f"{rf}build/fetch.sh"] = (realm / "custom" / "fetch.sh").read_bytes()
     for p in sorted((realm / "custom" / "patches").glob("*.patch")):
         files[f"{rf}build/patches/{p.name}"] = p.read_bytes()
+    # the relay code, for the community relay (docker-compose.volunteer-relay.yml, tools/Dockerfile.relay)
+    wurelay = kit.parent / "relay" / "wurelay"
+    if wurelay.is_dir():
+        for p in sorted(wurelay.rglob("*")):
+            if p.is_file() and not export.JUNK.search(p.name) and "__pycache__" not in p.parts:
+                files[f"tools/wurelay/{p.relative_to(wurelay).as_posix()}"] = p.read_bytes()
     files = {rel: text_fix(rel, data) for rel, data in files.items()}
     manifest = "".join(f"{hashlib.sha256(files[r]).hexdigest()}  ./{r[len(rf):]}\n"
                        for r in sorted(files) if r.startswith(rf))
