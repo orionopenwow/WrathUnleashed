@@ -347,3 +347,5 @@
 1117a ship Save to GitHub: the last launcher test fix (GitHub then builds Leyline.exe)
 1118a signin Front page: backdrop centred with the logo, side menu without a scroll bar, no hero buttons
 1118b ship Save to GitHub: the front page touches
+1119a signin Side menu: Modes, Gallery and Status out
+1119b ship Save to GitHub: the side menu
