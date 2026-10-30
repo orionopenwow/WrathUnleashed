@@ -819,7 +819,7 @@ class Hub:
         def item(key, label, href, icon, cls="hb-ni"):
             on = key == active
             return (f'<a class="{cls}{" on" if on else ""}" href="{e(href)}"' + (' aria-current="page"' if on else "")
-                    + f'><svg viewBox="0 0 24 24" aria-hidden="true">{NAV_ICONS[icon]}</svg><span>{e(label)}</span></a>')
+                    + f' title="{e(label)}"><svg viewBox="0 0 24 24" aria-hidden="true">{NAV_ICONS[icon]}</svg><span>{e(label)}</span></a>')
         more_on = any(k == active for k, *_ in more)
         drop = (f'<details class="hb-more-d"><summary class="hb-ni{" on" if more_on else ""}">'
                 f'<svg viewBox="0 0 24 24" aria-hidden="true">{NAV_ICONS["more"]}</svg><span>More</span></summary>'
@@ -836,7 +836,14 @@ class Hub:
         dl = self._download()
         dl_a = (f'<a class="hb-dl" href="{e(dl)}" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true">'
                 f'{NAV_ICONS["download"]}</svg>Download</a>')
-        return (f'<header class="hb-top"><a class="hb-brand" href="{home}" aria-label="Leyline Launcher">{self._wordmark()}</a>'
+        # On a wide screen the header is the launcher's sidebar (owner 2026-10-30: "make all the tools come from the side by
+        # default and can collapse if wanted"): open by default, the arrow folds it to an icon rail (no script needed;
+        # HUB_JS remembers the choice). On a phone it stays the top bar with the Menu sheet.
+        return ('<input type="checkbox" id="hb-side" class="hb-side-t" aria-label="Fold the side menu">'
+                f'<header class="hb-top"><a class="hb-brand" href="{home}" aria-label="Leyline Launcher">{self._wordmark()}</a>'
+                '<label for="hb-side" class="hb-side-b" title="Fold or open the side menu" aria-hidden="true">'
+                '<svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></label>'
+
                 '<input type="checkbox" id="hb-menu" class="hb-menu-t" aria-label="Menu">'
                 '<label for="hb-menu" class="hb-menu-b" aria-hidden="true">Menu</label>'
                 f'<nav class="hb-nav" aria-label="Leyline">{"".join(item(*m) for m in main)}{drop}{extra}'
@@ -2915,7 +2922,7 @@ background:rgba(16,18,24,.78);color:#fff;cursor:pointer;font:600 20px/1 var(--lk
 .hb-lb-pic img{max-height:62vh}.hb-lb-cap{padding:16px}.hb-lb-x{top:8px;right:8px}}
 /* the featured modpack (Hub.featured_mod): full-bleed picture, soft vignette, the words on a glass panel; eases on scroll */
 body.hb{overflow-x:clip}
-.hb-coa{position:relative;width:100vw;margin:34px 0 16px calc(50% - 50vw);min-height:clamp(440px,50vw,620px);display:flex;align-items:center;
+.hb-coa{position:relative;width:calc(100vw - var(--hb-side,0px));margin:34px 0 16px calc(50% - (100vw - var(--hb-side,0px)) / 2);min-height:clamp(440px,50vw,620px);display:flex;align-items:center;
 overflow:hidden;isolation:isolate;background:#0b0d12;scroll-margin-top:72px}
 .hb-coa-pic{position:absolute;inset:0;z-index:-1;overflow:hidden}
 .hb-coa-pic img{display:block;width:100%;height:100%;object-fit:cover;object-position:62% 42%;
@@ -3051,6 +3058,44 @@ margin:-16px -16px 6px;border-bottom:1px solid var(--lk-border)}
 .hb-shot{transform:none!important}.hb-thread path{stroke-dasharray:none!important}
 .hb-coa-pic img{transform:scale(1.03)!important}.hb-rlx-r{transition:none}
 .hb-gt :is(img,.hb-gt-art),.hb-lb-in{transform:none!important}.hb-gt-c{transform:none}.hb-lb{-webkit-backdrop-filter:none;backdrop-filter:none}}
+
+/* the sidebar (wide screens): the launcher's layout, the page as it is beside it; folds to an icon rail */
+@media (min-width:1081px){
+body.hb{--hb-side:236px}
+body.hb:has(#hb-side:checked){--hb-side:72px}
+.hb-side-t{position:fixed;opacity:0;width:1px;height:1px;pointer-events:none}
+body.hb .hb-top{position:fixed;inset:0 auto 0 0;width:var(--hb-side);min-height:0;flex-direction:column;align-items:stretch;gap:4px;
+padding:16px 12px 14px;overflow-y:auto;overflow-x:hidden;border-right:1px solid var(--lk-border);border-bottom:0;animation:none;box-shadow:none;
+background:rgba(18,21,29,.78);transition:width .2s ease}
+body.hb .hb-brand{padding:2px 6px 12px;margin-bottom:6px;border-bottom:1px solid var(--lk-border)}
+body.hb .hb-nav{flex-direction:column;align-items:stretch;gap:2px;margin:0}
+body.hb .hb-ni{justify-content:flex-start;width:100%;padding:9px 12px;border-radius:10px;font-size:15px;gap:12px;white-space:nowrap}
+body.hb .hb-ni svg{display:block;width:20px;height:20px}
+body.hb .hb-ni.on{background:var(--lk-accent-soft);box-shadow:inset 3px 0 0 var(--lk-accent)}
+body.hb .hb-ni.on::after{display:none}
+body.hb .hb-more-d{display:none}
+body.hb .hb-nav-x{display:flex;flex-direction:column;gap:2px;margin-top:10px;padding-top:10px;border-top:1px solid var(--lk-border)}
+body.hb .hb-end{flex-direction:column;align-items:stretch;gap:8px;margin-top:auto;padding-top:14px}
+body.hb .hb-dl,body.hb .hb-signin,body.hb .hb-acct{justify-content:center;white-space:nowrap;overflow:hidden}
+body.hb{padding-left:var(--hb-side);transition:padding-left .2s ease}
+.hb-side-b{position:absolute;top:22px;right:10px;display:grid;place-items:center;width:28px;height:28px;border-radius:8px;cursor:pointer;
+color:var(--lk-muted);border:1px solid var(--lk-border)}
+.hb-side-b:hover{color:var(--lk-text);border-color:var(--lk-accent)}
+.hb-side-b svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:rotate .2s}
+.hb-side-t:focus-visible~.hb-top .hb-side-b{outline:2px solid var(--lk-accent-strong);outline-offset:2px}
+/* folded: icons only, the labels as tooltips */
+body.hb:has(#hb-side:checked) .hb-top{padding:16px 10px 14px}
+body.hb:has(#hb-side:checked) :is(.hb-ni span,.hb-word,.hb-acct-n){display:none}
+body.hb:has(#hb-side:checked) .hb-ni{justify-content:center;padding:10px 0;gap:0}
+body.hb:has(#hb-side:checked) .hb-brand{justify-content:center;padding:2px 0 44px}
+body.hb:has(#hb-side:checked) .hb-side-b{top:64px;left:50%;right:auto;translate:-50% 0}
+body.hb:has(#hb-side:checked) .hb-side-b svg{rotate:180deg}
+body.hb:has(#hb-side:checked) .hb-dl{font-size:0;gap:0;padding:0}
+body.hb:has(#hb-side:checked) .hb-signin{font-size:0;padding:0}
+body.hb:has(#hb-side:checked) .hb-acct{padding:0 4px}
+}
+@media (max-width:1080px){.hb-side-t,.hb-side-b{display:none}}
+@media (prefers-reduced-motion:reduce){body.hb,body.hb .hb-top,.hb-side-b svg{transition:none}}
 """
 
 # The hub's only script (front page and realm list; every other hub page has none). Plain and small: it adds
@@ -3058,6 +3103,10 @@ margin:-16px -16px 6px;border-bottom:1px solid var(--lk-border)}
 # /wrath/realms.json and /wrath/status.json every 30 s (the page's own numbers stay when they don't answer), and
 # the section reveal. Everything works without it: the addresses are selectable text, the filter is a GET form.
 HUB_JS = r"""(function(){
+// the side menu: remember folded or open in this browser (the page works without it)
+var side=document.getElementById("hb-side");
+if(side){try{if(localStorage.getItem("leyline.side")==="folded")side.checked=true;}catch(e){}
+side.addEventListener("change",function(){try{localStorage.setItem("leyline.side",side.checked?"folded":"open");}catch(e){}});}
 "use strict";
 var d=document,root=d.documentElement;root.classList.add("hb-js");
 var still=!!(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches);
