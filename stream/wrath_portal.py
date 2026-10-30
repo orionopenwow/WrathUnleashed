@@ -275,7 +275,7 @@ _BRAND_SKIP = (r'<script\b.*?</script>|<style\b.*?</style>'
                r'|\b(?:href|src|action|id|class|name|for|data-[\w-]+)="[^"]*"|https?://[^\s"\'<>]+')
 _BRAND_OLD = r'(?<![\w/.-])(?:Wrath ?Unleashed|Open ?Vanilla)(?!\w|\.\w)'
 _BRAND_HTML = re.compile(f"({_BRAND_SKIP})|({_BRAND_OLD})", re.S)
-_BRAND_JSON = re.compile(r'(?<=")(?:WrathUnleashed|Wrath Unleashed|Open Vanilla|OpenVanilla)(?=")|(?<=by )WrathUnleashed\b')
+_BRAND_JSON = re.compile(f"(https?://[^\\s\"'<>]+)|({_BRAND_OLD})")
 
 
 def brand_body(body: bytes, ctype: str) -> bytes:
@@ -292,7 +292,7 @@ def brand_body(body: bytes, ctype: str) -> bytes:
     if kind == "text/html":
         out = _BRAND_HTML.sub(lambda m: m.group(1) or "Leyline", text)
     else:
-        out = _BRAND_JSON.sub("Leyline", text)
+        out = _BRAND_JSON.sub(lambda m: m.group(1) or "Leyline", text)
     return body if out == text else out.encode("utf-8")
 
 

@@ -8,6 +8,8 @@
 #   fui-install.sh reapply-slice <name> [<dir>]   slice-install.sh: lay it over a freshly uploaded slice
 #   fui-install.sh reapply-www               patch-index.sh: back into a freshly uploaded client's boot list
 #   fui-install.sh status
+#   fui-install.sh brand on|off             the Leyline brand switch (realm/brand.sh): WrathUnleashedUI's addon-list
+#                                           Title/Notes/Author, re-laid over every slice; wu-play restarted
 #
 # Layout: $ST/overlays/foreverui/ holds Forever UI in game-path layout (the one real copy). Every
 # slice in $ST/slices/ gets hard links to it (fui-overlay.py: files the slice lacks, plus
@@ -91,6 +93,8 @@ case "$cmd" in
     rm -rf "$OV.old"
     [ -d "$OV" ] && mv "$OV" "$OV.old"
     mv "$U/foreverui" "$OV"
+    # the Leyline brand switch is on (realm/brand.sh): the addon list says Leyline in this upload too
+    if grep -qx 'LEYLINE_BRAND=1' "$WU/portal.env" 2>/dev/null; then fui brand-toc "$OV" on; fi
     n=0
     while read -r s; do
       [ -n "$s" ] || continue
@@ -122,10 +126,19 @@ case "$cmd" in
     [ -d "$OV" ] || exit 0
     www_apply
     ;;
+  brand)
+    mode="${2:-}"; case "$mode" in on|off) ;; *) die "usage: fui-install.sh brand on|off" ;; esac
+    [ -d "$OV" ] || { echo "  no Forever UI overlay on the server: nothing to rename (the next install follows portal.env)"; exit 0; }
+    log "Forever UI overlay: the Leyline brand $mode"
+    fui brand-toc "$OV" "$mode"
+    while read -r s; do [ -n "$s" ] && fui apply-slice "$OV" "$s"; done < <(slice_dirs)
+    www_apply
+    restart_play 1
+    ;;
   status)
     [ -d "$OV" ] && fui check "$OV" || echo "  no Forever UI overlay on the server"
     while read -r s; do [ -n "$s" ] && fui status "$s"; done < <(slice_dirs)
     if [ -f "$ST/www/boot-manifest.json" ] && [ -n "$(served_slice)" ]; then fui status "$(served_slice)" "$ST/www" | tail -1; fi
     ;;
-  *) die "usage: fui-install.sh install <dir> | remove | reapply-slice <name> [<dir>] | reapply-www | status" ;;
+  *) die "usage: fui-install.sh install <dir> | remove | reapply-slice <name> [<dir>] | reapply-www | status | brand on|off" ;;
 esac

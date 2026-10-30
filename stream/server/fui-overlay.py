@@ -6,6 +6,7 @@ Run by fui-install.sh on the server (python3 -I, standard library only):
   fui-overlay.py check         <overlay>            what the overlay holds
   fui-overlay.py apply-slice   <overlay> <slice>    (re)lay it over a slice folder
   fui-overlay.py unapply-slice <slice>              take it off again, exactly
+  fui-overlay.py brand-toc     <overlay> on|off     the Leyline brand switch: our addons' .toc Title/Notes/Author
   fui-overlay.py apply-www     <slice> <www>        its text files (+ some login art) into boot-manifest.json
   fui-overlay.py unapply-www   <www>
   fui-overlay.py status        <slice> [<www>]
@@ -165,6 +166,55 @@ def patched_toc(stock: bytes, extra=()) -> bytes:
     else:
         lines[at:at] = entries + [""]
     return nl.join(lines).encode("latin-1")
+
+
+# The Leyline brand switch (realm/brand.sh; fui-install.sh / mods-install.sh brand on|off): the addon list's
+# Title, Notes and Author lines of our own two addons, swapped both ways. Folder names, saved variables and every
+# other line stay. Only these .toc files are touched (folder name, lower case).
+BRAND_TOCS = {"wrathunleashedui": "WrathUnleashedUI.toc", "wumodcatalog": "WUModCatalog.toc"}
+BRAND_SWAPS = [("## Title: WrathUnleashed UI", "## Title: Leyline UI"),
+               ("## Notes: WrathUnleashed's ", "## Notes: Leyline's "),
+               ("## Title: Mod list (WrathUnleashed)", "## Title: Mod list (Leyline)"),
+               ("## Author: WrathUnleashed", "## Author: Leyline")]
+
+
+def brand_toc_text(text: str, on: bool) -> str:
+    out = []
+    for line in text.split("\n"):
+        cr = "\r" if line.endswith("\r") else ""
+        body = line[:-1] if cr else line
+        for old, new in BRAND_SWAPS:
+            a, b = (old, new) if on else (new, old)
+            if body == a or (a.endswith(" ") and body.startswith(a)):   # a whole line, or a prefix ending in a space
+                body = b + body[len(a):]
+                break
+        out.append(body + cr)
+    return "\n".join(out)
+
+
+def brand_toc(overlay, mode):
+    """Rewrites our addons' .toc header lines in the overlay (a new file each, so the slices keep the old one until
+    apply-slice lays the overlay again). Prints what changed; 0 files is fine (the addon is not in this overlay)."""
+    if mode not in ("on", "off"):
+        die("brand-toc: on or off")
+    n = 0
+    for d, _, files in os.walk(overlay):
+        folder = os.path.basename(d).lower()
+        want = BRAND_TOCS.get(folder)
+        if not want:
+            continue
+        for f in files:
+            if f.lower() != want.lower():
+                continue
+            p = os.path.join(d, f)
+            text = open(p, "rb").read().decode("utf-8", "replace")
+            new = brand_toc_text(text, mode == "on")
+            if new != text:
+                write_atomic(p, new.encode("utf-8"), like=p)
+                n += 1
+                print(f"  {os.path.relpath(p, overlay)}: the {'Leyline' if mode == 'on' else 'old'} names")
+    print(f"  brand {mode}: {n} addon list entr{'y' if n == 1 else 'ies'} changed")
+    return n
 
 
 def state_dir(slice_dir):
@@ -466,6 +516,8 @@ def main(argv):
         check(args[0])
     elif cmd == "apply-slice" and len(args) == 2:
         apply_slice(args[0], args[1])
+    elif cmd == "brand-toc" and len(args) == 2:
+        brand_toc(args[0], args[1])
     elif cmd == "unapply-slice" and len(args) == 1:
         unapply_slice(args[0])
     elif cmd == "apply-www" and len(args) in (2, 3):

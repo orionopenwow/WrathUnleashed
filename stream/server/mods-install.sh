@@ -5,6 +5,8 @@
 #   mods-install.sh reapply-slice <name> [<dir>]   slice-install.sh: lay the mods over a freshly uploaded slice
 #   mods-install.sh reapply-www              patch-index.sh: back into a freshly uploaded client's boot list
 #   mods-install.sh status
+#   mods-install.sh brand on|off             the Leyline brand switch (realm/brand.sh): WUModCatalog's addon-list
+#                                            Title/Author, re-laid over every slice; wu-play restarted
 #
 # install, in order; nothing changes until the whole catalog passes wu-mod.py:
 #   1. check + pack: wu-mod.py catalog (every mod checked, zips + catalog.json + the WUModCatalog addon).
@@ -125,6 +127,8 @@ case "$cmd" in
     O="$U/out"; rm -rf "$O"; mkdir -p "$O/files" "$O/addons"
 
     log "1. check and pack the catalog"
+    # the Leyline brand switch (realm/brand.sh): WUModCatalog's addon-list entry follows portal.env
+    LEYLINE_BRAND=$(grep -m1 '^LEYLINE_BRAND=' "$WU/portal.env" 2>/dev/null | cut -d= -f2 | tr -d '\r"' || true) \
     python3 -I "$U/kit/wu-mod.py" catalog "$U/catalog" -o "$O/catalog.json" --dist "$O/files" --lua "$O/addons" \
       || die "a mod in the catalog does not pass wu-mod.py: nothing changed"
     python3 -I "$U/kit/mods-overlay.py" build "$O/catalog.json" "$U/catalog" "$O/addons" "$O/overlay" >/dev/null
@@ -223,10 +227,21 @@ PY
     [ -d "$OV" ] || exit 0
     www_apply
     ;;
+  brand)
+    mode="${2:-}"; case "$mode" in on|off) ;; *) die "usage: mods-install.sh brand on|off" ;; esac
+    [ -d "$OV" ] || { echo "  no mods overlay on the server: nothing to rename (the next mods step follows portal.env)"; exit 0; }
+    log "mods overlay: the Leyline brand $mode"
+    n=$(ovl brand-toc "$OV" "$mode" | tee /dev/stderr | grep -c ': the ' || true)
+    if [ "$n" -gt 0 ]; then
+      while read -r s; do [ -n "$s" ] && ovl apply-slice "$OV" "$s"; done < <(slice_dirs)
+      www_apply
+      restart_play
+    fi
+    ;;
   status)
     [ -f "$PUB/installed.json" ] && echo "  on the site: $(tr -d '\n' < "$PUB/installed.json")" || echo "  no mods on the site"
     [ -d "$MODS_LUA" ] && echo "  realm: $(ls "$MODS_LUA" | tr '\n' ' ')" || echo "  realm: no mod scripts"
     while read -r s; do [ -n "$s" ] && ovl status "$s"; done < <(slice_dirs)
     ;;
-  *) die "usage: mods-install.sh install <dir> | reapply-slice <name> [<dir>] | reapply-www | status" ;;
+  *) die "usage: mods-install.sh install <dir> | reapply-slice <name> [<dir>] | reapply-www | status | brand on|off" ;;
 esac
