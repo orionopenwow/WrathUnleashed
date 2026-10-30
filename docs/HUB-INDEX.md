@@ -15,7 +15,7 @@ other page. One switch makes it the front door later (below).
 | The index (output) | `stream/hub/community-index.json` |
 | Holding list (output) | `tools/hub-index/holding.json`: `needs_licence`, `review`, `excluded` |
 | Hub pages, submissions, launcher feed | `stream/hub.py` (tests: `stream/tests/test_hub.py`) |
-| Weekly refresh | `tools/github-workflows/hub-index.yml` → `.github/workflows/hub-index.yml` |
+| Daily refresh | `tools/github-workflows/hub-index.yml` → `.github/workflows/hub-index.yml` |
 | Issue form | `tools/github-workflows/ISSUE_TEMPLATE/submit-mod.yml` → Leyline's `.github/ISSUE_TEMPLATE/` |
 
 ## The rules
@@ -138,21 +138,32 @@ JSON object per line, appended; the last line for an id wins:
 * `build` and `category` on an approve override the submitter's.
 * `GET /wrath/leyline-preview/approved.json` publishes what the pipeline needs, and nothing else (no notes, no
   times, no names): `{"format": 1, "approved": [{id, repo, build, category}], "delisted": [{id, repo}]}`. The
-  weekly workflow reads it from the live site.
+  daily workflow reads it from the live site.
 
 **On GitHub:** the "Submit a mod" issue form in the public Leyline repo (labels `mod-submission`). A
-maintainer adds the label `approved`; the next weekly run picks it up (issues with both labels). Closing or
+maintainer adds the label `approved`; the next daily run picks it up (into the review PR) (issues with both labels). Closing or
 removing the label takes it back out.
 
-## The weekly refresh
+## The daily refresh
 
-`.github/workflows/hub-index.yml` in WrathUnleashed: Mondays 07:17 UTC and on manual dispatch. It runs
-`discover`, `build`, `check` and the tests, and when the index, the pool or the holding list changed it pushes
-the branch `hub-index/refresh` and opens (or updates) a pull request with the report. It never pushes to main and
-never merges: a person reviews the new entries and the review list, then merges. It uses only the built-in
-`GITHUB_TOKEN` (repo search 30 a minute, code search where the token allows it, issues read from the public
-Leyline repo). The repo setting "Allow GitHub Actions to create and approve pull requests" must be on: "Turn on
-GitHub builds.bat" sets it, or puts it on its checklist.
+`.github/workflows/hub-index.yml` in WrathUnleashed: every day at 07:17 UTC and on manual dispatch (`discover`
+only on Mondays and on dispatch). It runs `build`, then `gate`, `check` and the tests, and splits the result in
+two pull requests:
+
+* `hub-index/daily`: refreshes of entries already on main (stars, last change, archived, score, latest release)
+  and removals for a hard rule. The workflow merges this one itself (squash); when the repo's branch rules don't
+  allow that, it stays open for a person.
+* `hub-index/review`: new entries, other changes to listed entries, and entries that went missing without
+  breaking a rule. Never merged automatically: a person reviews it, then merges.
+
+A forge that doesn't answer (a timeout, GitHub's rate limit) never takes an entry off: the entry stays as it was,
+with its last-known stars and release. A run that would drop more than 20% of the index at once writes nothing
+and fails the job. The details and the gate's exact rules: `docs/HUB-RANKINGS.md`.
+
+It uses only the built-in `GITHUB_TOKEN` (repo search 30 a minute, code search where the token allows it, one
+repo and one latest-release call per GitHub entry, issues read from the public Leyline repo). The repo setting
+"Allow GitHub Actions to create and approve pull requests" must be on: "Turn on GitHub builds.bat" sets it, or
+puts it on its checklist.
 
 Once merged, the "signin" step ships the new `stream/hub/` to the portal.
 

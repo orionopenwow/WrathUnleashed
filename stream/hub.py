@@ -806,9 +806,9 @@ class Hub:
                 '<li><a href="/wrath/mods">The Workshop</a>: what is packaged today.</li>'
                 f'<li><a href="{BASE}/submit">Submit a mod</a>: add your repo to the index.</li></ul></section>'
                 '<section class="ly-panel"><h2>How the index works</h2>'
-                '<p>Once a week a script searches the forges for open projects for each client build (1.12.1, 2.4.3, '
-                '3.3.5a, 4.3.4, 5.4.8), reads each repo\'s licence, files and addon TOC, and proposes an update that a '
-                'person reviews before it goes live. The short description is written from the repo\'s own one-line '
+                '<p>Every day a script checks the forges for open projects for each client build (1.12.1, 2.4.3, '
+                '3.3.5a, 4.3.4, 5.4.8), reads each repo\'s licence, files and addon TOC, and refreshes the stars and '
+                'latest releases of what is listed. New projects wait until a person has looked at them. The short description is written from the repo\'s own one-line '
                 'description and facts.</p>'
                 f'<h3>What gets listed</h3><ul class="hb-list">{rules}</ul>'
                 '<p>Want your project taken off? Open an issue on the Leyline repo or use Report on its page, and it '
@@ -841,7 +841,7 @@ class Hub:
         form = form or {}
         if done:
             body = ('<section class="ly-panel"><h1>Thank you</h1><p>Your submission is in the queue. A person checks '
-                    'it against the rules, and the weekly index update picks it up once it is approved.</p>'
+                    'it against the rules, and the daily index update picks it up once it is approved.</p>'
                     f'<p><a href="{BASE}/catalog">Back to the catalog</a></p></section>')
             return self._shell("Submitted · Leyline", body, BASE + "/submit")
         opt = lambda v, label, cur: f'<option value="{e(v)}"{" selected" if v == cur else ""}>{e(label)}</option>'  # noqa: E731
