@@ -241,8 +241,18 @@ def slug(name):
     return re.sub(r"[\s_]+", "-", s).strip("-")
 
 
+# One emoji per channel (owner 2026-10-30: "dress these channels with emojis not dots or stars"); a channel not in
+# the table falls back to its category's glyph. --plain turns them all off.
+EMOJI = {"welcome": "👋", "announcements": "📣", "general": "💬", "help": "🛟", "looking-for-group": "🤝",
+         "Hangout": "🎧", "mods-and-workshop": "🧩", "host-a-beacon": "🏰", "showcase": "📸",
+         "bug-reports": "🐞", "ideas": "💡"}
+
+
 def styled(cat, name, plain):
-    return name if plain or not GLYPHS.get(cat) else f"{GLYPHS[cat]}{GLYPH_SEP}{name}"
+    if plain:
+        return name
+    mark = EMOJI.get(name) or GLYPHS.get(cat)
+    return f"{mark}{GLYPH_SEP}{name}" if mark else name
 
 
 def okey(o):
@@ -357,6 +367,8 @@ class Rebrand:
         self.do_channels()
         self.do_guild()
         self.do_archive()
+        if self.opts.wipe_history:
+            self.do_wipe_history()
         self.do_order()
         if self.opts.delete_old_roles:
             self.do_delete_roles()
@@ -686,6 +698,34 @@ class Rebrand:
         for r, _ in out:
             self.act("deleted", f"role {r['name']}", "DELETE", f"/guilds/{self.gid}/roles/{r['id']}")
 
+    def do_wipe_history(self):
+        """--wipe-history (owner 2026-10-30: "wipe all chat histories"): every Leyline channel is replaced by a fresh
+        copy (same name, topic, category, permissions, slowmode) and the old one deleted, so its messages go with it.
+        Discord has no "clear channel"; deleting messages one by one takes hours and can't touch ones older than 14 days
+        in bulk. The backup (made first) keeps the last --backup-messages messages of each."""
+        keep = ("name", "type", "topic", "parent_id", "position", "rate_limit_per_user", "nsfw", "bitrate",
+                "user_limit", "permission_overwrites")
+        for cat, chans in LAYOUT:
+            for name, *_ in chans:
+                cid = self.chan_ids.get(name)
+                c = next((x for x in self.channels if x["id"] == cid), None)
+                if c is None:
+                    continue
+                body = {k: c[k] for k in keep if c.get(k) is not None}
+                body["parent_id"] = self.cat_ids.get(cat, body.get("parent_id"))
+                new = self.act("wiped", f"{body['name']}: a fresh copy (the old one and its messages deleted)",
+                               "POST", f"/guilds/{self.gid}/channels", body)
+                nid = (new or {}).get("id") or self.new_id()
+                for key in ("system_channel_id", "rules_channel_id", "public_updates_channel_id"):
+                    if self.guild.get(key) == cid:
+                        self.act("wiped", f"server setting {key} -> the fresh {body['name']}", "PATCH",
+                                 f"/guilds/{self.gid}", {key: nid})
+                        self.guild[key] = nid
+                self.act("wiped", f"delete the old {c['name']}", "DELETE", f"/channels/{cid}")
+                self.channels = [x for x in self.channels if x["id"] != cid] + [dict(body, id=nid)]
+                self.chan_ids[name] = nid
+                self.used.add(nid)
+
     def do_delete_archived(self):
         if not self.arch_id:
             self.note("deleted", "nothing archived to delete")
@@ -893,6 +933,8 @@ def main(argv=None):
                     help="messages to back up per text channel (default 1000; 0 skips messages)")
     ap.add_argument("--delete-archived", action="store_true",
                     help="after the backup, delete the archived channels (asks you to type the server name)")
+    ap.add_argument("--wipe-history", action="store_true",
+                    help="replace every Leyline channel with a fresh copy, deleting all its messages (asks you to type WIPE)")
     ap.add_argument("--delete-old-roles", action="store_true",
                     help="delete roles that aren't in the new set (asks you to type DELETE ROLES)")
     ap.add_argument("--token-file", default=str(HERE / "token.txt"), help=argparse.SUPPRESS)
@@ -932,6 +974,12 @@ def main(argv=None):
         if o.delete_old_roles:
             if ask("You asked to DELETE the old roles listed above. Type DELETE ROLES to confirm: ").strip() \
                     != "DELETE ROLES":
+                say("Stopped. Nothing changed.")
+                return 1
+        if o.wipe_history:
+            say("You asked to WIPE every channel's messages. The backup keeps only the last "
+                f"{o.backup_messages} messages of each channel.")
+            if ask("Type WIPE to confirm: ").strip() != "WIPE":
                 say("Stopped. Nothing changed.")
                 return 1
         if o.delete_archived:
