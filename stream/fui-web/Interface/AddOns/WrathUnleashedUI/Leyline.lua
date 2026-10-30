@@ -61,7 +61,7 @@ local RULESETS = {
     casual = "Casual", dalaran = "Dalaran hangout", custom = "Custom rules",
 }
 
-local TAGS = { blizzlike = "Blizzlike", boosted = "Boosted", custom = "Custom", pvp = "PvP", rp = "RP",
+local TAGS = { blizzlike = "Original rules", boosted = "Boosted", custom = "Custom", pvp = "PvP", rp = "RP",
     hangout = "Hangout", bots = "Bots" }
 local TAG_ORDER = { "blizzlike", "boosted", "custom", "pvp", "rp", "hangout", "bots" }
 local BUILDS = { [5875] = "1.12.1", [8606] = "2.4.3", [12340] = "3.3.5a", [15595] = "4.3.4", [18414] = "5.4.8" }

@@ -48,7 +48,7 @@ H.REGION_LABEL = { [""] = "not set", ["na-east"] = "NA east", ["na-west"] = "NA 
     africa = "Africa", me = "Middle East", asia = "Asia", oce = "Oceania" }
 H.LANGS = { "", "en", "de", "fr", "es", "pt-BR", "ru", "it", "pl", "zh", "ko" }
 H.TAGS = { "blizzlike", "boosted", "custom", "pvp", "rp", "hangout" }
-H.TAG_LABEL = { blizzlike = "Blizzlike", boosted = "Boosted", custom = "Custom", pvp = "PvP", rp = "RP", hangout = "Hangout" }
+H.TAG_LABEL = { blizzlike = "Original rules", boosted = "Boosted", custom = "Custom", pvp = "PvP", rp = "RP", hangout = "Hangout" }
 H.MANAGE = { bots = "Bots", rates = "Rates", signup = "Sign-up", list = "Leyline list", invite = "Invite link" }
 H.MANAGE_ORDER = { "bots", "rates", "signup", "list", "invite" }
 
