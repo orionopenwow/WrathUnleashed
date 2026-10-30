@@ -133,15 +133,22 @@ check("/leyline and /realms", SLASH_WULEYLINE1 == "/leyline" and SLASH_WULEYLINE
 check("one public base for links", L.PUBLIC_BASE == "https://play.openvanilla.app"
     and L.Link("abcdefghijklmnop") == "https://play.openvanilla.app/r/abcdefghijklmnop")
 
--- Esc > Mods & Workshop > Leyline realms
+-- Esc > Realm List (its own button, independent of Mods & Workshop)
+local realmBtn = _G.GameMenuButtonRealmList
+check("the Esc menu has Realm List and keeps Mods & Workshop", realmBtn and realmBtn.text == "Realm List"
+    and GameMenuButtonAddOns and GameMenuButtonAddOns.text == "Mods & Workshop" and realmBtn.parent == GameMenuFrame)
 GameMenuButtonAddOns:Fire("OnClick")
 local mods = _G.WrathUnleashedModsFrame
-local hop
-for _, f in ipairs(created) do if f.parent == mods and f.text == "Leyline realms" then hop = f end end
-check("Mods & Workshop has a Leyline realms button", mods and mods:IsShown() and hop)
-hop:Fire("OnClick")
+local dup
+for _, f in ipairs(created) do if f.parent == mods and f.text == "Leyline realms" then dup = f end end
+check("Mods & Workshop no longer has its own Leyline realms button", mods and mods:IsShown() and not dup)
+mods:Hide()
+GameMenuFrame:Show()
+realmBtn:Fire("OnClick")
 local win = L.Window()
-check("it opens the Leyline window and closes the panel", win and win:IsShown() and not mods:IsShown())
+check("Realm List opens the Leyline window and closes the game menu", win and win:IsShown() and not GameMenuFrame:IsShown())
+realmBtn:Fire("OnClick")
+check("Realm List again keeps it open (it shows, never toggles off)", win:IsShown())
 check("Esc closes it", UISpecialFrames[#UISpecialFrames] == "WrathUnleashedLeylineFrame")
 check("asked the realm once (WULY L, whispered to self)", #sent == 1 and sent[1][1] == "WULY" and sent[1][2] == "L"
     and sent[1][3] == "WHISPER" and sent[1][4] == "Tester")
@@ -311,8 +318,9 @@ check("and back to everyone", #L.realms == 5 and win.filters.now:GetText() == "E
 
 -- Host your own and Report
 win.host:Fire("OnClick")
-check("Host your own: the three steps and the link", win.info:GetText():find("Host your own realm: 1%.") and
-    win.copy:GetText() == "https://play.openvanilla.app/wrath/realms#host-your-own")
+check("Host your own: opens the Host window (Host.lua), the realm window steps aside",
+    _G.WrathUnleashedHostFrame and _G.WrathUnleashedHostFrame:IsShown() and not win:IsShown() and W.Host.tab == 1)
+_G.WrathUnleashedHostFrame:Hide(); win:Show()
 L.selected = nil
 win.report:Fire("OnClick")
 check("Report with nothing picked: says how", win.info:GetText():find("^Pick a community realm"))
@@ -325,6 +333,36 @@ check("a malformed M line is ignored", (function()
     list({ "B:1:0", "R:hhhhhhhhhhhhhhhh:1:1:0:main:X", "M:hhhhhhhhhhhhhhhh:<script>:1:1:1:x:y:z:w", "E:1" })
     return #L.realms == 1 and not L.realms[1].featured and L.realms[1].build == nil end)())
 L.filter = {}
+
+-- this realm's own relay listing is the same realm: one row (by the realm's S line, or by name from an older realm)
+list({ "B:3:0", "R:this:1:4:0:main:Dalaran Hangout", "M:this:-:0:-:12340:-:-:-:",
+    "R:kkkkkkkkkkkkkkkk:1:4:0:dalaran:Dalaran Hangout", "M:kkkkkkkkkkkkkkkk:N:40:-:12340:-:-:-:hangout",
+    "R:cccccccccccccccc:1:9:0:main:Plain", "M:cccccccccccccccc:-:30:88:12340:na-east:en:-:pvp", "E:3" })
+ids = {}
+for _, r in ipairs(L.realms) do ids[#ids + 1] = r.id end
+check("by name: Dalaran Hangout (you are here) once, its listing not a second row",
+    table.concat(ids, " ") == "this cccccccccccccccc" and L.realms[1].relayId == "kkkkkkkkkkkkkkkk")
+rows = shown()
+check("this row: You're here in the browser game (a page)", (function()
+    WUUI_GAMEFOLDER = { page = true }
+    L.Refresh()
+    local t = shown()[1].join:GetText()
+    WUUI_GAMEFOLDER = nil
+    return t == "You're here" end)())
+L.Refresh()
+check("this row: Join through the relay in the desktop client (listed, live, no page)",
+    shown()[1].join:GetText() == "Join through the relay")
+shown()[1].copyBtn:Fire("OnClick")
+check("desktop: Copy link gives the relay link", win.copy:GetText() == "https://play.openvanilla.app/r/kkkkkkkkkkkkkkkk")
+list({ "B:3:0", "R:this:1:4:0:main:Dalaran Hangout", "M:this:-:0:-:12340:-:-:-:",
+    "R:kkkkkkkkkkkkkkkk:0:0:0:dalaran:Dalaran Hangout", "M:kkkkkkkkkkkkkkkk:N:40:-:12340:-:-:-:hangout", "E:3" })
+check("listing offline: no Join through the relay", #L.realms == 1 and shown()[1].join:GetText() == "You're here")
+list({ "B:3:0", "R:this:1:4:0:main:Dalaran Hangout", "M:this:-:0:-:12340:-:-:-:", "S:mmmmmmmmmmmmmmmm:1",
+    "R:kkkkkkkkkkkkkkkk:1:4:0:dalaran:Dalaran Hangout", "M:kkkkkkkkkkkkkkkk:N:40:-:12340:-:-:-:hangout", "E:3" })
+check("the realm's S line wins: only that id is this realm (a same-name realm elsewhere stays)",
+    #L.realms == 2 and L.realms[1].relayId == "mmmmmmmmmmmmmmmm" and L.realms[2].id == "kkkkkkkkkkkkkkkk")
+check("names match without case, spaces or punctuation", L.SameName("Dalaran  hangout!", "dalaran hangout")
+    and not L.SameName("Dalaran", "Dalaran Hangout") and not L.SameName("", ""))
 
 -- nothing the window shows names the game or its maker
 local bad

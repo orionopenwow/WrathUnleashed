@@ -161,6 +161,7 @@ local function label(parent, text, font, ...)
 end
 
 local function button(parent, text, w, onClick, ...)
+    if W.Style then local b = W.Style.Button(parent, text, w, onClick, nil, ...); b:SetHeight(22); return b end
     local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     b:SetWidth(w); b:SetHeight(22)
     b:SetText(text)
@@ -277,8 +278,8 @@ local function buildHud()
     local top = CreateFrame("Frame", nil, hud)
     top:SetWidth(560); top:SetHeight(54)
     top:SetPoint("TOP", 0, -14)
-    top:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true, tileSize = 16, edgeSize = 14, insets = { left = 4, right = 4, top = 4, bottom = 4 } })
+    if W.Style then W.Style.Backdrop(top, W.Style.C.bg2) else top:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 14, insets = { left = 4, right = 4, top = 4, bottom = 4 } }) end
     top:SetBackdropColor(0.04, 0.08, 0.04, 0.82)
     top:SetBackdropBorderColor(0.55, 0.85, 0.4, 0.9)
     hud.title = top:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -290,8 +291,8 @@ local function buildHud()
     local meter = CreateFrame("Frame", nil, hud)
     meter:SetWidth(320); meter:SetHeight(22)
     meter:SetPoint("BOTTOM", 0, 150)
-    meter:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true, tileSize = 16, edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
+    if W.Style then W.Style.Backdrop(meter, W.Style.C.bg2) else meter:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 } }) end
     meter:SetBackdropColor(0, 0, 0, 0.75)
     local fill = meter:CreateTexture(nil, "ARTWORK")
     fill:SetTexture("Interface\\TargetingFrame\\UI-StatusBar")
@@ -319,8 +320,8 @@ local function buildHud()
     local card = CreateFrame("Frame", nil, hud)
     card:SetWidth(300); card:SetHeight(150)
     card:SetPoint("TOPRIGHT", -18, -90)
-    card:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true, tileSize = 16, edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
+    if W.Style then W.Style.Backdrop(card, W.Style.C.bg2) else card:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 } }) end
     card:SetBackdropColor(0.03, 0.05, 0.03, 0.78)
     card:SetBackdropBorderColor(0.4, 0.6, 0.3, 0.8)
     label(card, "Scorecard", "GameFontNormalSmall", "TOPLEFT", 10, -8)
@@ -381,16 +382,18 @@ local function showResults(text)
         results:SetWidth(360); results:SetHeight(240)
         results:SetPoint("CENTER", 0, 60)
         results:SetFrameStrata("DIALOG")
-        results:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+        if not W.Style then   -- Style.lua draws the window (S.Window, at its title)
+            results:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
             edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32,
             insets = { left = 11, right = 12, top = 12, bottom = 11 } })
+        end
         results:SetBackdropColor(0.05, 0.06, 0.08, 0.95)   -- solid: the dialog texture draws see-through in the browser client
         do   -- a colour fill the engine draws itself (no texture file; the backdrop fill needs one)
             local bg = results:CreateTexture(nil, "BACKGROUND")
-            bg:SetTexture(0.05, 0.06, 0.08, 0.95)
+            bg:SetTexture(0.094, 0.106, 0.137, 0.97)   -- #181b23 (Style.lua)
             bg:SetPoint("TOPLEFT", 10, -10); bg:SetPoint("BOTTOMRIGHT", -10, 10)
         end
-        results.title = label(results, "", "GameFontNormalLarge", "TOP", 0, -20)
+        results.title = W.Style and W.Style.Window(results, "") or label(results, "", "GameFontNormalLarge", "TOP", 0, -20)
         results.body = label(results, "", "GameFontHighlight", "TOPLEFT", 26, -52)
         results.body:SetWidth(310)
         button(results, "Close", 90, function() results:Hide() end, "BOTTOM", 0, 16)
@@ -829,8 +832,8 @@ local function buildBar()
     bar:SetPoint("BOTTOM", 0, 14)
     bar:SetFrameStrata("HIGH")
     bar:EnableMouse(true)
-    bar:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true, tileSize = 16, edgeSize = 14, insets = { left = 4, right = 4, top = 4, bottom = 4 } })
+    if W.Style then W.Style.Backdrop(bar, W.Style.C.bg2) else bar:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 14, insets = { left = 4, right = 4, top = 4, bottom = 4 } }) end
     bar:SetBackdropColor(0.04, 0.06, 0.04, 0.88)
     bar:SetBackdropBorderColor(0.55, 0.85, 0.4, 0.9)
     bar.tools = {}
@@ -1078,17 +1081,19 @@ local function build()
     win:RegisterForDrag("LeftButton")
     win:SetScript("OnDragStart", win.StartMoving)
     win:SetScript("OnDragStop", win.StopMovingOrSizing)
-    win:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    if not W.Style then   -- Style.lua draws the window (S.Window, at its title)
+        win:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32,
         insets = { left = 11, right = 12, top = 12, bottom = 11 } })
+    end
     win:SetBackdropColor(0.05, 0.06, 0.08, 0.95)   -- solid: the dialog texture draws see-through in the browser client
     do   -- a colour fill the engine draws itself (no texture file; the backdrop fill needs one)
         local bg = win:CreateTexture(nil, "BACKGROUND")
-        bg:SetTexture(0.05, 0.06, 0.08, 0.95)
+        bg:SetTexture(0.094, 0.106, 0.137, 0.97)   -- #181b23 (Style.lua)
         bg:SetPoint("TOPLEFT", 10, -10); bg:SetPoint("BOTTOMRIGHT", -10, 10)
     end
-    label(win, "Minigolf", "GameFontNormalLarge", "TOP", 0, -18)
-    local close = CreateFrame("Button", nil, win, "UIPanelCloseButton")
+    local _ = (W.Style and W.Style.Window(win, "Minigolf") or label(win, "Minigolf", "GameFontNormalLarge", "TOP", 0, -18))
+    local close = (W.Style and W.Style.Close(win) or CreateFrame("Button", nil, win, "UIPanelCloseButton"))
     close:SetPoint("TOPRIGHT", -6, -6)
     tinsert(UISpecialFrames, "LeylineGolfFrame")
     win.listTitle = label(win, "Courses on this realm", "GameFontNormal", "TOPLEFT", 22, -48)

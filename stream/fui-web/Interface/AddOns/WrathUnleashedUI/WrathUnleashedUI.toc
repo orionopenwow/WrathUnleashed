@@ -6,6 +6,7 @@
 ## SavedVariables: WrathUnleashedUIDB
 ## SavedVariablesPerCharacter: WrathUnleashedUIChar
 WrathUnleashedUI.lua
+Style.lua
 ModsPanel.lua
 Collections.lua
 BarLayout.lua
@@ -21,4 +22,5 @@ GameFolder.lua
 Workshop.lua
 Companions.lua
 Social.lua
+Host.lua
 Leyline.lua
