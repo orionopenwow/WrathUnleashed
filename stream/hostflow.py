@@ -100,6 +100,39 @@ TAGS = ("blizzlike", "boosted", "custom", "pvp", "rp", "hangout")
 LANG_RE = re.compile(r"^[a-z]{2,3}(-[A-Z]{2})?$")
 NO_BOTS = ("dalaran",)                     # setup.py PROFILE_BOTS: 0 (and the other cores: none yet)
 OPTION_KEYS = ("type", "xp", "loot", "rep", "start", "bots", "signup", "herokey", "region", "lang", "tags", "max")
+# Ready-made realms (owner 2026-10-30: "recommend more server types ... maybe a Duels Server with simple rules, example
+# build and mod servers"): each fills the form from presets and options the kit already has (nothing new on the host's
+# PC); the host still names it and presses Start server. id -> (label, one line, preset, options, tagline, rules).
+RECIPES = {
+    "duels": ("Duels", "Level 80 in Dalaran, everything unlocked, duels reset health and cooldowns, 1v1 arena.",
+              "brawl", {"bots": "0", "type": "normal", "tags": "pvp,hangout", "max": "40", "signup": "open", "herokey": "on"},
+              "Duels in Dalaran: level 80, everything unlocked, rematch freely.",
+              ("Be kind: no harassment, hate speech or spam.",
+               "Duel only players who accept; never attack or pull mobs onto anyone who didn't.",
+               "Health and cooldowns reset after every duel: rematch freely.",
+               "Queue 1v1 arena for ranked fights.",
+               "No cheats, exploits or automation.",
+               "The host's word is final.")),
+    "modtest": ("Mod and mode test", "A private Dalaran for trying addons, realm scripts and modes with your friends.",
+                "dalaran", {"bots": "0", "signup": "invite", "herokey": "on", "tags": "custom"},
+                "A test realm for mods and modes.",
+                ("Things may break: that's the point.", "Report what you find to the host.", "The host's word is final.")),
+    "event": ("Event night", "A private Dalaran for a night of games: minigolf, modes, a raid of friends.",
+              "dalaran", {"bots": "0", "signup": "invite", "herokey": "on", "max": "40", "tags": "hangout"},
+              "Event night: games and modes with friends.",
+              ("Be kind: no harassment, hate speech or spam.", "Follow the host's calls during events.",
+               "The host's word is final.")),
+    "rp": ("Roleplay hangout", "Dalaran for roleplay: in character in public, out of character in whispers.",
+           "dalaran", {"type": "rp", "tags": "rp,hangout", "herokey": "on"},
+           "A roleplay hangout in Dalaran.",
+           ("Stay in character in public channels; out of character goes in whispers or brackets.",
+            "Be kind: no harassment, hate speech or spam.", "No cheats, bots or exploits.", "The host's word is final.")),
+    "smallgroup": ("Small-group levelling", "The full world from level 1 at double speed, with bots to fill your party.",
+                   "main", {"xp": "2", "start": "level1", "bots": "20", "max": "20", "herokey": "on"},
+                   "Small-group levelling at double speed.",
+                   ("Be kind: no harassment, hate speech or spam.", "No cheats, bots or exploits.",
+                    "The host's word is final.")),
+}
 
 
 def options(form: dict, preset: str) -> tuple[dict, dict]:
@@ -186,6 +219,10 @@ def prefill(query: str) -> tuple[dict, list[str]]:
         return {}, ["everything"]
     one = {k: v[0] for k, v in q.items() if v}
     vals, dropped = {}, []
+    rec = RECIPES.get(one.pop("recipe", ""))
+    if rec:   # a ready-made realm: its preset, options, tagline and rules; anything else in the query still wins
+        one = {"preset": rec[2], **rec[3], **one}
+        vals["tagline"], vals["rules"] = rec[4], list(rec[5])
     for k in one:
         if k not in ("core", "preset", "name", "vis") + OPTION_KEYS:
             dropped.append(k)
@@ -611,6 +648,11 @@ border-radius:5px;padding:10px 12px;font:15px/1.4 system-ui,sans-serif}
 background:rgba(18,22,54,.6);font-weight:400;margin:0;cursor:pointer}
 .hf .opt b{display:block;color:var(--ly-cyan)}.hf .opt span{font-size:14px;color:var(--ly-dim)}
 .hf .opt input{margin-top:4px;accent-color:#5fe3ff}
+.hf .recipes-l{list-style:none;margin:0 0 8px;padding:0;display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+.hf .recipes-l a{display:grid;gap:2px;height:100%;padding:10px 12px;border:1px solid var(--ly-line);border-radius:8px;
+background:rgba(18,22,54,.6);text-decoration:none;color:var(--ly-ink)}
+.hf .recipes-l a:hover{border-color:var(--ly-cyan)}
+.hf .recipes-l b{color:var(--ly-cyan)}.hf .recipes-l span{font-size:13.5px;color:var(--ly-dim)}
 .hf .err{color:#ff9a8a;font-size:14px;margin:4px 0 0}
 .hf .go{margin-top:20px;display:flex;justify-content:center}
 .hf button,.hf a.dl{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;padding:10px 26px;
@@ -737,6 +779,9 @@ def form_page(owner: str, display: str, vals: dict | None = None, errs: dict | N
         + mine_html +
         ('<section class="ly-panel"><p>You have made the most realms one account can for now '
          f'({PER_ACCOUNT}). Open one above to start it.</p></section>' if full else
+         '<section class="ly-panel recipes"><h2>Start from a ready-made realm</h2><ul class="recipes-l">'
+         + "".join(f'<li><a href="/wrath/host?recipe={k}"><b>{e(r[0])}</b><span>{e(r[1])}</span></a></li>' for k, r in RECIPES.items())
+         + '</ul><p class="hint">Each fills the form below; name it and press Start server.</p></section>'
          '<section class="ly-panel"><h2>New realm</h2>'
          + (f'<p class="note" role="status">{e(note)}</p>' if note else "")
          + (f'<p class="err">{e(errs["_"])}</p>' if "_" in errs else "") +

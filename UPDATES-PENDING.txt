@@ -353,3 +353,5 @@
 1120b ship Save to GitHub: the Download link
 1121a bots-off No roaming bots on the Dalaran Hangout (5-minute warning in game, then a restart)
 1121b ship Save to GitHub: the bots switch
+1122a signin Host page: ready-made realms (Duels, Mod test, Event night, Roleplay, Small-group levelling)
+1122b ship Save to GitHub: the ready-made realms
