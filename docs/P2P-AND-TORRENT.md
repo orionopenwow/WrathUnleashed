@@ -28,7 +28,8 @@ Everything ships **off**. Two layers decide:
    {
     "format": 1,
     "updated_at": "2026-10-29T00:00:00Z",
-    "flags": {"p2p_hosting": false, "torrent_downloads": false, "torrent_seeding": false, "webrtc_presence": false},
+    "flags": {"p2p_hosting": false, "torrent_downloads": false, "torrent_seeding": false, "webrtc_presence": false,
+              "mesh_realms": false, "mesh_relays": false, "relay_volunteer": false},
     "limits": {"seed_upload_kbps": 0, "seed_ratio_pct": 0, "max_peers": 0},
     "stun": ["stun.cloudflare.com:3478"],
     "sha256": "<hex>"
@@ -55,6 +56,9 @@ Everything ships **off**. Two layers decide:
 | `torrent_downloads` | **BitTorrent downloads** for our packages: first the swarm, then the torrent's HTTP web seeds (checked piece by piece), then plain HTTPS. | Metainfo, web seeds, piece check and fallback built and tested. There is no peer-wire engine yet (see below). |
 | `torrent_seeding` | **Sharing downloaded packages back.** | Needs `torrent_downloads`, this flag, an upload cap above 0 and a ratio above 0. It can do nothing until a peer engine is plugged in. |
 | `webrtc_presence` | **Friends online over a direct browser link.** | Flag only: reserved for the social agent's work. |
+| `mesh_realms` | **The realm list from the Leyline mesh**: signed records from peers and the seed relays, verified in the launcher. Falls back to today's listings. | Built and tested (`p2p/mesh.rs`, docs/LEYLINE-MESH.md). |
+| `mesh_relays` | **Community relays** may carry this PC's game traffic when closer. Off: only our seeds and each realm's own relay. | Built and tested. Relays see game traffic in the clear until the sealed path exists (docs/LEYLINE-MESH.md section 9). |
+| `relay_volunteer` | **"Help the network: relay for others" is offered.** A PC relays only when this PC is also set to "On". | Built (Host pack compose file, `host_volunteer_relay`). |
 
 ### For the admin console
 

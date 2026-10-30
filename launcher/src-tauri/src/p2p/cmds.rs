@@ -97,6 +97,18 @@ pub fn p2p_set_limits(limits: Option<Limits>) -> Result<Local, String> {
     flags::set_local_limits(&settings::app_dir(), limits)
 }
 
+/// "Help the network: relay for others": start (`on`) or stop the Host pack's community relay. Needs the site's
+/// `relay_volunteer` offer and this PC's own "On" (`flags::volunteer_allowed`).
+#[tauri::command]
+pub async fn host_volunteer_relay(on: bool, public_host: Option<String>, region: Option<String>) -> Result<String, String> {
+    blocking(move || {
+        let dir = settings::app_dir();
+        let site = flags::load(&dir, flags::URL).site;
+        host::volunteer_relay(&kit()?, &site, &flags::load_local(&dir), on, public_host.as_deref(), region.as_deref())
+    })
+    .await
+}
+
 /// The NAT check, only when direct connections are on.
 #[tauri::command]
 pub async fn p2p_nat_check() -> Result<NatReport, String> {

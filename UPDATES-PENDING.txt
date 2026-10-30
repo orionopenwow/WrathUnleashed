@@ -252,3 +252,7 @@
 1079c ovland  Leyline Launcher 1.57.0 changes to GitHub (main, fast-forward only; support and tips hidden)
 1079d ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline launcher support buttons hidden
 1080a ship  Save to GitHub (orionopenwow/WrathUnleashed): Clean deployments tool (the owner runs it himself)
+1081a relay  Leyline mesh in the relay (inert until RELAY_MESH=1 in relay.env), volunteer relay profile
+1081b signin  Network flags gain mesh_realms, mesh_relays, relay_volunteer (all off)
+1081c hostkit  Host pack: the volunteer relay (help the network, off unless chosen)
+1081d ship  Save to GitHub (orionopenwow/WrathUnleashed): Leyline mesh (signed realm records, gossip, volunteer relays; all off)
