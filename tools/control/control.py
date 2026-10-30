@@ -99,6 +99,7 @@ STEPS = {
     "ov112-check": ("tools/ov112-off/Turn off 1.12 jobs - dry run.bat", "1.12 Open Vanilla jobs: what would be turned off (read-only)", False),
     "ov112-off": ("tools/ov112-off/Turn off 1.12 jobs - do it.bat", "Turn off the 1.12 Open Vanilla jobs (crons, timers, containers; backup in /root)", False),
     "ov112-on": ("tools/ov112-off/Turn 1.12 jobs back on.bat", "Undo: turn the 1.12 Open Vanilla jobs back on", False),
+    "ovsite": ("tools/launcher-site/Land Leyline-Launcher site.bat", "openvanilla.app: land the site and repo cleanup on Leyline-Launcher main (Pages publishes it)", False),
     "ghclean-check": ("tools/github-cleanup/GitHub cleanup - dry run.bat", "What the GitHub cleanup would delete (read-only)", False),
     "ghclean": ("tools/github-cleanup/GitHub cleanup - do it.bat", "GitHub cleanup: old releases and packages (owner's choices, 2026-10-30)", False),
     "scripts": ("realm/Server pass - finder 10 and bug reports.bat", "Realm scripts (live reload)", False),
