@@ -116,7 +116,7 @@ for p in ("/wrath/leyline-preview/p/link-000000000000", "/wrath/leyline-preview/
     check(f"GET {p}: 404, still noindex", st == 404 and h.get("x-robots-tag") == "noindex, nofollow", st)
 
 front = req("/wrath/leyline-preview")[2].decode()
-check("front page: no Browse by client chips (no client numbers on the hub)", "catalog?build=" not in front and "Browse by category" in front)
+check("front page: no Browse by client chips (no client numbers on the hub)", "catalog?build=" not in front)
 # 4.3.4 and 5.4.8 are not offered for now (the owner, 2026-10-30): no chips, no items made only for them
 check("offered builds: capped at 3.3.5a", HB.offered_builds({}) == ["1.12", "2.4.3", "3.3.5a"]
       and HB.offered_builds({"LEYLINE_ALL_CLIENTS": "1"}) == HB.BUILDS)
@@ -127,7 +127,7 @@ check("offered_only: hidden-only items go, mixed ones keep the offered builds",
       and HB.offered_only({"builds": ["4.3.4"]}, HB.offered_builds({"LEYLINE_ALL_CLIENTS": "1"})) is not None)
 check("offered_tag: a hidden build is no filter", HB.offered_tag("5.4.8") == "" and HB.offered_tag("cata") == ""
       and HB.offered_tag("1.12.1") == "1.12" and HB.build_tag("5.4.8") == "5.4.8")
-check("front page: the 12 categories and themes", all(f"catalog?cat={c}" in front for c in HB.CATEGORY_IDS + ["themes"]))
+check("catalog page: the 12 categories and themes", all(f"catalog?cat={c}" in req("/wrath/leyline-preview/catalog")[2].decode() for c in HB.CATEGORY_IDS + ["themes"]))
 check("front page: creators and Host a Beacon", "/wrath/leyline-preview/creators" in front and "/wrath/leyline-preview/beacon" in front)
 check("front page: a TODO(owner) for the tagline, no words in the owner's voice", "TODO(owner)" in front)
 # the owner's mockup (2026-10-30): header nav, the hero, Platform Status, Community Spotlight, the footer
@@ -541,10 +541,10 @@ def portal_with(name):
 HB.hub.portal = portal_with
 fp = req("/wrath/leyline-preview")[2].decode()
 order = [fp.find(x) for x in ('class="hb-hero"', 'class="hb-tick"', 'id="realms"', 'class="hb-how', 'class="hb-nums', 'id="features"',
-                              'id="f-agents"', 'id="gallery"', 'id="hosted"', 'id="mod-week"', 'id="herokey"', 'id="creators-top"', 'id="news"',
-                              'id="status"', 'id="community"', 'Browse by category')]
-check("front page order: hero, ticker, realms, how it works, numbers, features, gallery, hosted, mod of the week, Hero Key, creators, "
-      "news, status, spotlight, categories", -1 not in order and order == sorted(order), order)
+                              'id="f-agents"', 'id="hosted"', 'id="mod-week"', 'id="herokey"', 'id="creators-top"', 'id="news"',
+                              'id="status"', 'id="community"')]
+check("front page order: hero, ticker, realms, how it works, numbers, features, hosted, mod of the week, Hero Key, creators, "
+      "news, status, spotlight", -1 not in order and order == sorted(order), order)
 tick = re.search(r'<section class="hb-tick".*?</section>', fp, re.S).group(0)
 plain = re.search(r'<ul class="hb-tick-l">(.*?)</ul>', tick, re.S).group(1)
 lis = re.findall(r"<li[^>]*>(.*?)</li>", plain)
@@ -658,7 +658,7 @@ def portal_gal(name):
 
 HB.hub.portal = portal_gal
 check("gallery: a game shot missing from the art folder is never a broken image (the flat tile instead)",
-      'id="g-leyline"' in req("/wrath/leyline-preview")[2].decode() and not os.path.isdir(wp.ART_DIR))
+      'id="g-leyline"' in req("/wrath/leyline-preview/gallery")[2].decode() and not os.path.isdir(wp.ART_DIR))
 check("modes page: a mode's key art missing from the art folder is no picture at all (never a broken image)",
       'id="mode-azeroth-survivors"' in req("/wrath/leyline-preview/modes")[2].decode()
       and 'class="hb-mode-art"' not in req("/wrath/leyline-preview/modes")[2].decode())
@@ -666,13 +666,25 @@ check("featured modpack: missing from the art folder, no section and no tile", '
 ART_WAS = wp.ART_DIR
 wp.ART_DIR = os.path.join(HERE, "www-files", "art")
 fp = req("/wrath/leyline-preview")[2].decode()
-gsec = re.search(r'<section class="hb-sec hb-gal-s hb-rv" id="gallery".*?</section>', fp, re.S)
-check("gallery: on the front page, after the feature sections, before Hosted by the community",
-      gsec and fp.find('id="f-agents"') < fp.find('id="gallery"') < fp.find('id="hosted"') and '<h2 id="hb-gal-h">Gallery</h2>' in gsec.group(0))
-gsec = gsec.group(0) if gsec else ""
-tiles = GALS.findall(gsec)
+# the front page no longer has the gallery section (owner 2026-10-30: "remove gallery at bottom"); its place near the foot
+# is the sliding strip of mod and in-game pictures ("this place should show sliding gallery of mod images")
+check("front page: no gallery section, no Browse by category, no For creators / Host a Beacon boxes",
+      'id="gallery"' not in fp and "Browse by category" not in fp and 'class="hb-two' not in fp)
+ms = re.search(r'<section class="hb-ms hb-rv" aria-labelledby="hb-ms-h">.*?</section>', fp, re.S)
+ms = ms.group(0) if ms else ""
+ms_imgs = re.findall(r'<li><a class="hb-ms-t" href="[^"]+"(?: rel="noopener noreferrer")?><img src="([^"]+)" alt="[^"]+" width="\d+" height="\d+" loading="lazy"', ms)
+check("mod strip: near the foot (after the spotlight, before the fine print), real pictures only (mods and in game, no launcher "
+      "shots, no drawn tiles), twice for the loop with the copy hidden from screen readers",
+      ms and fp.find('id="community"') < fp.find('class="hb-ms ') < fp.find('class="hb-fine"') and len(ms_imgs) >= 6
+      and not any("leyline-ui-" in u for u in ms_imgs) and '<ul class="hb-ms-l dup" aria-hidden="true" inert>' in ms
+      and ms.count("<li>") == 2 * ms.split('class="hb-ms-l dup"')[0].count("<li>"), ms_imgs)
+check("mod strip: stops on hover and focus, does not move with reduced motion",
+      ".hb-ms:hover .hb-ms-run,.hb-ms:focus-within .hb-ms-run{animation-play-state:paused}" in fp
+      and "@media (prefers-reduced-motion:reduce){.hb-ms{overflow-x:auto}.hb-ms-run{animation:none" in fp)
+gsec = req("/wrath/leyline-preview/gallery")[2].decode()
+tiles = GALS.findall(gsec)[:12]
 kinds = [t[1] for t in tiles]
-check("gallery: 8 to 12 tiles, in game, mods and launcher taken in turn", 8 <= len(tiles) <= 12
+check("gallery: the first tiles are in game, mods and launcher taken in turn", len(tiles) >= 8
       and kinds[:6] == ["game", "mods", "launcher"] * 2 and {"game", "mods", "launcher"} <= set(kinds), kinds)
 check("gallery: the first tile is the big featured modpack shot, with its authors' credit and a link out (no Install)",
       tiles and "big" in tiles[0][0] and tiles[0][2] == "g-coa-ultrahd"
@@ -754,13 +766,13 @@ os.environ["WU_GAMEDATA_FLAG"] = FLAG
 open(FLAG, "w").close()
 fk = req("/wrath/leyline-preview")[2].decode()
 gk = req("/wrath/leyline-preview/gallery?f=game")[2].decode()
-fk_tiles = GALS.findall(re.search(r'id="gallery".*?</section>', fk, re.S).group(0))
+fk_tiles = GALS.findall(req("/wrath/leyline-preview/gallery")[2].decode())
 check("killswitch on: no in-game screenshot anywhere on the front page or the gallery", "leyline-shot-" not in fk
       and "leyline-shot-" not in req("/wrath/leyline-preview/gallery")[2].decode() and req("/wrath/art/leyline-shot-city.webp")[0] == 410)
 check("killswitch on: one flat Leyline tile with the mark instead, still In game, Play in your browser",
       [t[2] for t in fk_tiles if t[1] == "game"] == ["g-leyline"] and [t[2] for t in GALS.findall(gk)] == ["g-leyline"]
-      and re.search(r'<figure class="hb-gt big flat" data-k="game" id="g-leyline"><a class="hb-gt-a" href="/wrath" data-lb aria-label="[^"]+">'
-                    r'<span class="hb-gt-art flat" aria-hidden="true"><span class="ly-spin slow"', fk)
+      and re.search(r'<figure class="hb-gt[a-z ]* flat" data-k="game" id="g-leyline"><a class="hb-gt-a" href="/wrath" data-lb aria-label="[^"]+">'
+                    r'<span class="hb-gt-art flat" aria-hidden="true"><span class="ly-spin slow"', gk)
       and fk_tiles[1][1] == "mods" and fk_tiles[2][1] == "launcher", [t[:3] for t in fk_tiles][:4])
 check("killswitch on: no featured modpack section and no modpack tile; its picture answers 410",
       'id="featured-mod"' not in fk and "g-coa-ultrahd" not in fk and req("/wrath/art/leyline-shot-coa-ultrahd.webp")[0] == 410)
@@ -805,30 +817,24 @@ kc = importlib.util.module_from_spec(cspec)
 cspec.loader.exec_module(kc)
 kit_live = {"azerothcore"} | {p["core"] for p in kc.offered_profiles({}).values()}
 kit_any = kit_live | {p["core"] for p in kc.PROFILES.values()}
-sw = re.search(r'<div class="hb-sw" role="group".*?</ul></div>', fp, re.S)
+sw = re.search(r'<div class="hb-sw" role="group".*?<ul class="hb-sw-cores">.*?</ul></div>', fp, re.S)
 sw = sw.group(0) if sw else ""
-cores = re.findall(r'<li class="hb-sw-c[^"]*" data-core="([a-z]+)" data-status="([a-z]+)"><p class="hb-sw-h"><b>([^<]+)</b>(.*?)</li>', sw, re.S)
-check("server software: AzerothCore, TrinityCore, CMaNGOS, vMaNGOS and Your own, in the Host a server section",
+cores = re.findall(r'<li class="hb-sw-core[^"]*" data-core="([a-z]+)" data-status="([a-z]+)" title="([^"]+)"><b>([^<]+)</b><span>([^<]+)</span></li>', sw)
+check("host console (owner: \"the server GM console / health etc ... all in one host server package\"): in the hosting section",
       'id="f-host"' in fp and sw and fp.find('id="f-host"') < fp.find('class="hb-sw"') < fp.find('id="f-realms"')
-      and sorted(c[0] for c in cores) == ["azerothcore", "cmangos", "own", "trinitycore", "vmangos"], [c[:3] for c in cores])
-check("server software: One click to host only for what the host pack runs today (cores.py), the rest Coming",
-      {c[0] for c in cores if c[1] == "live"} == kit_live and all(c[1] == "coming" for c in cores if c[0] not in kit_live | {"own"})
-      and all("One click to host" in c[3] for c in cores if c[1] == "live") and all("Coming" in c[3] and "One click" not in c[3]
-                                                                                    for c in cores if c[1] == "coming"), (kit_live, [c[:2] for c in cores]))
-ERA = {5875: "Classic era", 8606: "Second era", 12340: "Third era", 15595: "Fourth era"}
-kit_eras = {"azerothcore": {"Third era"}}
-for p in kc.PROFILES.values():
-    kit_eras.setdefault(p["core"], set()).add(ERA[p["build"]])
-row_eras = {c[0]: set(re.findall(r"<span>([^<]+)</span>", re.search(r'<p class="hb-sw-eras">(.*?)</p>', c[3]).group(1)))
-            for c in cores if c[0] != "own"}
-check("server software: the eras each live core covers match its host kit profiles (words, never client numbers)",
-      all(row_eras[k] == kit_eras[k] for k in kit_live) and all(re.fullmatch(r"[A-Z][a-z]+ era", x) for v in row_eras.values() for x in v),
-      (row_eras, kit_eras))
-check("server software: each core says what it is for, its scripting and its bots",
-      all(re.search(r'<p class="hb-sw-l">[^<]{20,}</p>', c[3]) and "<dt>Scripting</dt><dd>" in c[3] and "<dt>Bots</dt><dd>" in c[3]
-          for c in cores if c[0] != "own") and "Player bots built in" in sw and "No bots in the kit&#x27;s build" in sw)
-check("server software: the realm console strip (database, login server, world server, relay agent)",
-      re.findall(r"<li><i></i>([^<]+)<span>", sw) == ["Database", "Login server", "World server", "Relay agent"])
+      and "Your realm console" in sw and "Online · listed" in sw)
+check("host console: health tiles (the four services, players, uptime)",
+      re.findall(r"<li><i></i>([^<]+)<span>", sw) == ["Database", "Login server", "World server", "Relay agent", "Players", "Uptime"])
+check("host console: the GM controls of the in-game Your realm window, restart with its five-minute warning",
+      re.findall(r"<li><b>([^<]+)</b><span>", sw) == [a for a, _ in HB.HOST_GM]
+      and "with a five-minute warning" in sw and "announce" in open(os.path.join(REPO, "realm", "custom", "lua_scripts", "ov_hostctl.lua")).read().lower())
+check("host console: Check my realm's checks and Realm tools' jobs",
+      all(html.escape(x) in sw for x in HB.HOST_CHECKS) and all(f"<li>{html.escape(x)}</li>" in sw for x in HB.HOST_TOOLS))
+check("host console: the cores it runs, One click only for what the host pack runs today (cores.py), the rest Coming, and Your own",
+      sorted(c[0] for c in cores) == ["azerothcore", "cmangos", "own", "trinitycore", "vmangos"]
+      and {c[0] for c in cores if c[1] == "live"} == kit_live and all(c[4] == "One click" for c in cores if c[1] == "live")
+      and all(c[4] == "Coming" for c in cores if c[1] == "coming") and [c[4] for c in cores if c[0] == "own"] == ["Relay agent"],
+      (kit_live, [c[:2] for c in cores]))
 check("server software: our own crest (the Leyline crystal) and a rune rule drawn in SVG, no pictures, no game words, no numbers",
       '<svg class="hb-crest"' in sw and sw.count('class="hb-rune"') == 2 and "<img" not in sw and "url(" not in sw
       and not BANNED.findall(visible(sw)) and not NOPE.findall(shown(sw)), NOPE.findall(shown(sw)))
@@ -952,9 +958,9 @@ s = b.decode()
 check("switch on: /wrath/leyline is the hub's front page, indexable", st == 200 and 'class="hb-top"' in s
       and "x-robots-tag" not in h and 'content="noindex"' not in s and "Preview:" not in s)
 st, h, b = req("/wrath/leyline/gallery")
-check("switch on: /wrath/leyline/gallery is the gallery, indexable, linked from More and the front page's filters",
+check("switch on: /wrath/leyline/gallery is the gallery, indexable, linked from More",
       st == 200 and "<h1>Gallery</h1>" in b.decode() and "x-robots-tag" not in h and 'content="noindex"' not in b.decode()
-      and 'href="/wrath/leyline/gallery"' in s and 'href="/wrath/leyline/gallery?f=game"' in s)
+      and 'href="/wrath/leyline/gallery"' in s)
 # the front door is the main site (owner 2026-10-30: "make this our main one"): every hub page at /wrath/leyline/<page>
 check("switch on: no link on the front page says leyline-preview", "leyline-preview" not in s)
 for pg in ("/realms", "/catalog?cat=addons", "/modes", "/news", "/creators", "/beacon", "/submit", "/forge", "/agents",
