@@ -12,7 +12,7 @@ wenilla-host build.**
    slice or client upload.
 2. Run **`Add Forever UI to the stream.bat`**. It takes Forever UI from the first place it finds:
    - a folder or zip you pass to it;
-   - your WoW folder (`foreverui-installed.txt` / `wow-folder.txt`), which **Install Forever UI.bat**
+   - your WoW folder (`foreverui-installed.txt` / `wow-folder.txt`), which **play\Install Forever UI.bat**
      already filled;
    - `fui-src.tgz`;
    - the GitHub zip.

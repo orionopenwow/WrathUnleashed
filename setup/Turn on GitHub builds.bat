@@ -8,9 +8,11 @@ rem   2. asks GitHub for the permissions the builds need (workflow, write:packag
 rem   3. turns on Actions, pushes the workflow files, starts the image build and the launcher tag;
 rem   4. opens the pages GitHub has no API for (package visibility: Public) and prints the checklist.
 rem Never run by Autopilot: the sign-in needs you in the browser.
-cd /d "%~dp0"
+rem In setup\ since 2026-10-30: everything below runs from the workspace folder one level up.
+cd /d "%~dp0.."
+set "ROOT=%CD%"
 if not exist logs mkdir logs
-set "LOG=%~dp0logs\github-builds.log"
+set "LOG=%ROOT%\logs\github-builds.log"
 >>"%LOG%" echo %date% %time% bat started
 set "PY="
 where py >nul 2>&1 && set "PY=py -3"
@@ -48,7 +50,7 @@ gh auth status >>"%LOG%" 2>&1 || (
   pause & exit /b 1
 )
 >>"%LOG%" echo %date% %time% running github_builds.py
-%PY% "%~dp0tools\github-builds\github_builds.py" %*
+%PY% "%ROOT%\tools\github-builds\github_builds.py" %*
 set "RC=%ERRORLEVEL%"
 >>"%LOG%" echo %date% %time% github_builds.py exited %RC%
 echo.

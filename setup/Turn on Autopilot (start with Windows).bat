@@ -4,15 +4,18 @@ rem One time. Puts a small launcher in your Windows Startup folder, so the contr
 rem starts minimised every time you sign in to this PC. Claude's updates then go live without you pressing
 rem anything. To undo: delete "Leyline Control.bat" from the Startup folder this opens at the end.
 rem (Older entries were called "WrathUnleashed Control.bat": this replaces one if it is there.)
-cd /d "%~dp0"
+rem In setup\ since 2026-10-30: everything below runs from the workspace folder one level up.
+cd /d "%~dp0.."
+set "ROOT=%CD%"
 set "SU=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
 set "L=%SU%\Leyline Control.bat"
 if exist "%SU%\WrathUnleashed Control.bat" del "%SU%\WrathUnleashed Control.bat"
 set "PYEXE=python"
 where py >nul 2>&1 && set "PYEXE=py -3"
 > "%L%" echo @echo off
->> "%L%" echo cd /d "%~dp0"
+>> "%L%" echo cd /d "%ROOT%"
 >> "%L%" echo start "Leyline Control" /min %PYEXE% tools\control\control.py --quiet
+if not exist control mkdir control
 echo {"on": true, "changed": "set by Start with Windows"}> control\autopilot.json
 rem Close the old control window (it has no Autopilot) so the new one can take its place.
 for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:"127.0.0.1:8097 .*LISTENING"') do taskkill /f /pid %%p >nul 2>&1

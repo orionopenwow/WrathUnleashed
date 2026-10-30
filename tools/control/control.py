@@ -100,7 +100,7 @@ STEPS = {
     "realm":   ("realm/Server pass - finder 10 and bug reports.bat", "Realm settings (5-min restart)", False),
     "foreverui": ("stream/Add Forever UI to the stream.bat", "Forever UI look (menus and character select)", False),
     "slice":   ("stream/Make mini slice.bat", "Streamed game files (30-60 min)", False),
-    "ship":    ("Ship WrathUnleashed.bat", "Save everything to GitHub", True),
+    "ship":    ("Ship to GitHub.bat", "Save everything to GitHub", True),
     "check":   ("realm/Server check.bat", "Server check (read-only)", False),
     "gm":      ("gmconsole/Install GM Console.bat", "GM console update (game keeps running)", False),
     "lean":    ("realm/Lean server.bat", "Lean server: fewer bots, idle areas unload (5-min restart)", False),
@@ -125,9 +125,8 @@ STEPS = {
     "remove-files": ("tools/cleanup/Remove listed files.bat", "Remove the files a change took out (tools/cleanup/REMOVE.txt)", False),
     "fresh-check": ("tools/fresh-history/Fresh history - dry run.bat", "Fresh Leyline history: what it would do (read-only)", False),
     "fresh-history": ("tools/fresh-history/Fresh history - do it.bat", "Fresh Leyline history: one commit, old history to a Desktop backup", False),
-    # The older Python launcher's repo (owner 2026-10-29: "rename repo to Leyline Launcher"): rename, then land the branch.
-    "ovrename": ("tools/ov-rename/Rename OpenVanilla repo.bat", "Rename GitHub repo OpenVanilla to Leyline-Launcher", False),
-    "ovland": ("tools/ov-rename/Land Leyline Launcher branch.bat", "Leyline Launcher changes to GitHub (main, fast-forward only)", False),
+    # ovrename / ovland (the OpenVanilla repo's rename to Leyline-Launcher, 2026-10-29) are done for good: the tool is in
+    # labs/done/ov-rename/ (labs/README.md says how to run it again).
     # The game data killswitch (docs/GAME-DATA-ON-OUR-SERVER.md): only when the owner asks for it.
     "gamedata-off": ("stream/Game data killswitch ON.bat", "Game data OFF: our server serves no game data (players use their own game folder)", False),
     "gamedata-on": ("stream/Game data killswitch OFF.bat", "Game data back ON: stream the slim sampler again", False),
@@ -259,7 +258,7 @@ def autopilot_loop() -> None:
             items = pending()
             failed = state.get("auto_failed")
             if items and not (failed and failed == pending_stamp()):
-                start_run("Updates from Claude (autopilot)", title="Autopilot")
+                start_run("", title="Autopilot")
             elif time.time() >= next_check:
                 next_check = time.time() + 3 * 3600
                 item = {"id": "check-auto-" + time.strftime("%Y%m%d-%H%M%S"), "step": "check",
@@ -299,14 +298,19 @@ def run_all(ship_message: str, items=None, record=True) -> None:
                 state["running"] = item
             emit("step", item)
             emit("line", f"===== {title} ({item['id']}) =====")
-            # The step's own "press any key" lines get an empty answer; ship gets yes + the message.
-            # Nothing is answered through stdin (git can swallow it); steps with a question get a hands-free
-            # switch instead (Ship: WU_SHIP_AUTO / WU_SHIP_MSG). Empty lines only clear "press any key".
+            # The step's own "press any key" lines get an empty answer. Nothing is answered through stdin (git can
+            # swallow it); Ship to GitHub asks nothing and gets the hands-free switch (LEYLINE_SHIP_AUTO, and the older
+            # WU_SHIP_AUTO) plus the owner's note, if he typed one (LEYLINE_SHIP_MSG / WU_SHIP_MSG); without a note
+            # it commits as "Leyline update <date> <time>". Empty lines only clear "press any key".
             feed = "\n" * 8
             env = dict(os.environ)
             if interactive:
-                env["WU_SHIP_AUTO"] = "1"
-                env["WU_SHIP_MSG"] = (ship_message or "Updates from Claude").replace("!", "").replace("%", "")
+                env["WU_SHIP_AUTO"] = env["LEYLINE_SHIP_AUTO"] = "1"
+                note = (ship_message or "").replace("!", "").replace("%", "").replace('"', "'").strip()
+                for k in ("WU_SHIP_MSG", "LEYLINE_SHIP_MSG"):
+                    env.pop(k, None)
+                if note:
+                    env["WU_SHIP_MSG"] = env["LEYLINE_SHIP_MSG"] = note
             log = LOGS / f"{item['id']}-{item['step']}.log"
             with open(log, "w", encoding="utf-8") as lf:
                 p = subprocess.Popen(["cmd", "/c", "call", str(ROOT / bat)], cwd=str(ROOT), env=env,
@@ -336,7 +340,7 @@ def run_all(ship_message: str, items=None, record=True) -> None:
                     d.write(item["id"] + "\n")
             emit("line", f"== {title}: done")
             ran.append(item["id"])
-            # Every save to WrathUnleashed's GitHub also refreshes the public Leyline copy (owner
+            # Every save to GitHub (the private workspace repo) also refreshes the public Leyline copy (owner
             # 2026-10-25: "make sure it works with ... all changes we make"), unless a Leyline step
             # is already queued after it. A Leyline failure stops the run like any other step.
             if item["step"] == "ship" and not any(q["step"] == "leyline" for q in queue[i:]):

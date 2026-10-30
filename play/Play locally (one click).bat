@@ -1,12 +1,14 @@
 @echo off
 setlocal EnableDelayedExpansion
-title Open Vanilla - WotLK 3.3.5a (private test)
+title Leyline - play locally (private test)
 rem One click: Docker, your own game data, the local AzerothCore realm, your login, the page.
 rem Everything stays on this PC (127.0.0.1). Close the "Open Vanilla host" window to stop the page;
 rem realm\stop-realm.bat stops the server.
-cd /d "%~dp0"
+rem In play\ since 2026-10-30 (was "Play WotLK (one click).bat" at the top): R is the workspace folder one level up.
+for %%I in ("%~dp0..") do set "R=%%~fI\"
+cd /d "%R%"
 set "WOW=C:\Users\campw\Downloads\World of Warcraft 3.3.5a"
-set "COMPOSE=docker compose -f "%~dp0realm\docker-compose.yml""
+set "COMPOSE=docker compose -f "%R%realm\docker-compose.yml""
 set "DB=docker exec ov-ac-database mysql -uroot -pov-local-test -N -s"
 
 echo [1/6] Docker
@@ -35,12 +37,12 @@ docker volume create ov-client-data >nul
 docker run --rm -v ov-client-data:/d acore/ac-wotlk-tools:master test -d /d/dbc >nul 2>&1
 if errorlevel 1 (
   echo       extracting dbc + maps, a few minutes...
-  docker run --rm --user root -v "%WOW%:/wow:ro" -v ov-client-data:/out -w /out acore/ac-wotlk-tools:master /azerothcore/env/dist/bin/map_extractor -i /wow -o /out >"%~dp0realm\extract.log" 2>&1
+  docker run --rm --user root -v "%WOW%:/wow:ro" -v ov-client-data:/out -w /out acore/ac-wotlk-tools:master /azerothcore/env/dist/bin/map_extractor -i /wow -o /out >"%R%realm\extract.log" 2>&1
   docker run --rm -v ov-client-data:/d acore/ac-wotlk-tools:master test -d /d/dbc >nul 2>&1 || (echo       extraction failed, see realm\extract.log & goto fail)
 )
 
 echo [3/6] Realm (first start imports the databases, several minutes)
-%COMPOSE% up -d >"%~dp0realm\up.log" 2>&1 || (echo       the realm did not start, see realm\up.log & goto logs)
+%COMPOSE% up -d >"%R%realm\up.log" 2>&1 || (echo       the realm did not start, see realm\up.log & goto logs)
 set /a waited=0
 :wait_world
 docker logs ov-ac-worldserver 2>&1 | findstr /c:"ready..." >nul && goto world_ok
@@ -62,7 +64,7 @@ if "!count!"=="0" (
   echo       No account yet: choose a name and password for this test realm.
   set /p U=      Account name: 
   set /p P=      Password: 
-  docker run --rm -v "%~dp0realm:/w:ro" python:3.12-alpine python /w/make_account.py "!U!" "!P!" > "%TEMP%\ov-account.sql" || goto fail
+  docker run --rm -v "%R%realm:/w:ro" python:3.12-alpine python /w/make_account.py "!U!" "!P!" > "%TEMP%\ov-account.sql" || goto fail
   docker exec -i ov-ac-database mysql -uroot -pov-local-test acore_auth < "%TEMP%\ov-account.sql" 2>nul && echo       account !U! created.
   del "%TEMP%\ov-account.sql"
 ) else (
@@ -71,16 +73,16 @@ if "!count!"=="0" (
 
 echo [5/6] Local page host
 rem A new client build arrives as wasm.part.* pieces (and wenilla.js.new); put it together.
-if exist "%~dp0play\dist\wasm.part.00" (
+if exist "%R%play\dist\wasm.part.00" (
   echo       installing the new client build...
-  powershell -NoProfile -Command "$d='%~dp0play\dist'; $ms=New-Object IO.MemoryStream; foreach($p in (Get-ChildItem (Join-Path $d 'wasm.part.*') | Sort-Object Name)){ $b=[IO.File]::ReadAllBytes($p.FullName); $ms.Write($b,0,$b.Length) }; $ms.Position=0; $o=[IO.File]::Create((Join-Path $d 'wenilla_bg.wasm.new')); $gz=New-Object IO.Compression.GZipStream($ms,[IO.Compression.CompressionMode]::Decompress); $gz.CopyTo($o); $o.Close(); Move-Item -Force (Join-Path $d 'wenilla_bg.wasm.new') (Join-Path $d 'wenilla_bg.wasm'); New-Item -ItemType Directory -Force (Join-Path $d '..\..\_unused') | Out-Null; Move-Item -Force (Join-Path $d 'wasm.part.*') (Join-Path $d '..\..\_unused')"
+  powershell -NoProfile -Command "$d='%R%play\dist'; $ms=New-Object IO.MemoryStream; foreach($p in (Get-ChildItem (Join-Path $d 'wasm.part.*') | Sort-Object Name)){ $b=[IO.File]::ReadAllBytes($p.FullName); $ms.Write($b,0,$b.Length) }; $ms.Position=0; $o=[IO.File]::Create((Join-Path $d 'wenilla_bg.wasm.new')); $gz=New-Object IO.Compression.GZipStream($ms,[IO.Compression.CompressionMode]::Decompress); $gz.CopyTo($o); $o.Close(); Move-Item -Force (Join-Path $d 'wenilla_bg.wasm.new') (Join-Path $d 'wenilla_bg.wasm'); New-Item -ItemType Directory -Force (Join-Path $d '..\..\_unused') | Out-Null; Move-Item -Force (Join-Path $d 'wasm.part.*') (Join-Path $d '..\..\_unused')"
 )
-if exist "%~dp0play\dist\wenilla.js.new" move /y "%~dp0play\dist\wenilla.js.new" "%~dp0play\dist\wenilla.js" >nul
+if exist "%R%play\dist\wenilla.js.new" move /y "%R%play\dist\wenilla.js.new" "%R%play\dist\wenilla.js" >nul
 rem Restart the host each time so a new build (play\wenilla-host.new.exe) is picked up.
 taskkill /im wenilla-host.exe /f >nul 2>&1
 timeout /t 1 >nul
-if exist "%~dp0play\wenilla-host.new.exe" move /y "%~dp0play\wenilla-host.new.exe" "%~dp0play\wenilla-host.exe" >nul
-start "Open Vanilla host" /min "%~dp0play\wenilla-host.exe" --www "%~dp0play\dist" --data "%WOW%\Data"
+if exist "%R%play\wenilla-host.new.exe" move /y "%R%play\wenilla-host.new.exe" "%R%play\wenilla-host.exe" >nul
+start "Open Vanilla host" /min "%R%play\wenilla-host.exe" --www "%R%play\dist" --data "%WOW%\Data"
 timeout /t 3 >nul
 
 echo [6/6] Opening the browser
@@ -92,7 +94,7 @@ timeout /t 15
 exit /b 0
 
 :logs
-call "%~dp0realm\collect-logs.bat" >nul
+call "%R%realm\collect-logs.bat" >nul
 echo       logs written to realm\logs.txt
 :fail
 echo.

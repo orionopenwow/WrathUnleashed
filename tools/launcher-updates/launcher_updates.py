@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Turn on Leyline's own updates: everything "Turn on launcher updates.bat" does, on the owner's PC.
+"""Turn on Leyline's own updates: everything "setup\\Turn on launcher updates.bat" does, on the owner's PC.
 
     py -3 tools\\launcher-updates\\launcher_updates.py [--new-key]
 
@@ -170,9 +170,9 @@ def main(argv=None, r: Runner | None = None, conf: Path = CONF) -> int:
         say("  done. It goes out with the next Ship and Leyline steps.")
         say()
         say("Next, in this order:")
-        say("  1. Ship (Autopilot step 'ship'): commits tauri.conf.json with the public key.")
+        say("  1. Ship to GitHub (Autopilot step 'ship'): commits tauri.conf.json with the public key.")
         say("  2. Leyline (Autopilot step 'leyline'): copies the launcher to the public Leyline repo.")
-        say("  3. Turn on GitHub builds.bat: pushes the tag launcher-v<version>; GitHub builds the signed release.")
+        say("  3. setup\\Turn on GitHub builds.bat: pushes the tag launcher-v<version>; GitHub builds the signed release.")
         say("\nLAUNCHER UPDATES OK")
         return 0
     except Fail as e:

@@ -1,20 +1,22 @@
 @echo off
 setlocal EnableDelayedExpansion
-title Forever UI for WrathUnleashed
+title Forever UI for the browser client
 rem One click: puts Forever UI (github.com/Adrestie/mod-forever-ui, GPL-2.0, by Adrestie) into
 rem YOUR OWN WoW 3.3.5a folder and turns on its login screens in the browser client.
 rem We do not ship Forever UI: its art comes from the modern WoW client, so it is fetched from its
 rem author's page (or taken from a copy you already have) onto your PC only.
 rem
-rem   Install Forever UI.bat [WoW folder] [mod-forever-ui folder or zip]
+rem   play\Install Forever UI.bat [WoW folder] [mod-forever-ui folder or zip]
 rem
 rem Turn it off any time: add ?foreverui=0 to the page address, or type /console foreverUI 0.
 rem Remove it: delete Interface\AddOns\ForeverUI and Interface\ForeverUI in your WoW folder and
-rem patch\Interface\GlueXML here.
-cd /d "%~dp0"
+rem patch\Interface\GlueXML in the workspace folder.
+rem In play\ since 2026-10-30: it works in the workspace folder one level up (patch\, foreverui-installed.txt).
+cd /d "%~dp0.."
 
 set "WOW=%~1"
 if "!WOW!"=="" if exist wow-folder.txt set /p WOW=<wow-folder.txt
+if "!WOW!"=="" if exist labs\players\wow-folder.txt set /p WOW=<labs\players\wow-folder.txt
 if "!WOW!"=="" if exist players\wow-folder.txt set /p WOW=<players\wow-folder.txt
 if not exist "!WOW!\Data\common.MPQ" (
   echo Where is your World of Warcraft 3.3.5a folder? ^(the one with Wow.exe and Data^)
@@ -30,7 +32,7 @@ if exist "!TMPD!" rmdir /s /q "!TMPD!"
 mkdir "!TMPD!"
 if "!SRC!"=="" (
   echo Downloading Forever UI from github.com/Adrestie/mod-forever-ui ...
-  powershell -NoProfile -Command "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -UseBasicParsing 'https://github.com/Adrestie/mod-forever-ui/archive/refs/heads/main.zip' -OutFile '!TMPD!\fui.zip'" || (echo The download failed. Download the repository as a zip yourself and pass it: "Install Forever UI.bat" "!WOW!" path\to\mod-forever-ui-main.zip & goto fail)
+  powershell -NoProfile -Command "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -UseBasicParsing 'https://github.com/Adrestie/mod-forever-ui/archive/refs/heads/main.zip' -OutFile '!TMPD!\fui.zip'" || (echo The download failed. Download the repository as a zip yourself and pass it: "play\Install Forever UI.bat" "!WOW!" path\to\mod-forever-ui-main.zip & goto fail)
   set "SRC=!TMPD!\fui.zip"
 )
 if /i "!SRC:~-4!"==".zip" (
@@ -56,7 +58,7 @@ copy /y "!SRC!\data\glue\Interface\GlueXML\GlueXML.toc" patch\Interface\GlueXML\
 if exist "!TMPD!" rmdir /s /q "!TMPD!"
 >foreverui-installed.txt echo !WOW!
 echo.
-echo Done. Forever UI is on: reload the page (or start "Play WrathUnleashed.bat").
+echo Done. Forever UI is on: reload the page, or start "play\Play locally (one click).bat".
 echo Stock look instead: add ?foreverui=0 to the address, or /console foreverUI 0 then /reload.
 exit /b 0
 

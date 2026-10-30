@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Turn on GitHub builds: everything "Turn on GitHub builds.bat" does, on the owner's PC, with his own gh sign-in.
+"""Turn on GitHub builds: everything "setup\\Turn on GitHub builds.bat" does, on the owner's PC, with his own gh sign-in.
 
     py -3 tools\\github-builds\\github_builds.py [--no-wait] [--no-browser] [--leyline-dir DIR]
 
@@ -10,7 +10,7 @@
    its "selected" list) and both repos (WrathUnleashed, Leyline).
 3. The workflow files, copied from tools/github-workflows/ (the source copies) and pushed with gh's credential:
      WrathUnleashed (.github/workflows/): wu-images.yml, wu-hosting.yml, and realm-scripts.yml once the deploy
-       secret exists ("Set up automatic deploys.bat"), so its deploy job can't fail for lack of it;
+       secret exists ("setup\\Set up automatic deploys.bat"), so its deploy job can't fail for lack of it;
      Leyline (the public repo, <workspace>\\.repos\\leyline-public): leyline-launcher.yml. Launcher releases go
        there because players can't download release files from the private repo, and Actions minutes are free
        on a public repo.
@@ -43,7 +43,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]          # the WrathUnleashed folder (a git clone of the repo)
 OWNER = "orionopenwow"
 WU_REPO = f"{OWNER}/WrathUnleashed"
-# "Move to Leyline.bat" renames the private repo to leyline-workspace; GitHub redirects the old name, so the calls
+# The move to Leyline (tools/workspace-move) renamed the private repo to leyline-workspace; GitHub redirects the old name, so the calls
 # below keep working, and the folder check takes either origin.
 WU_REPO_NEW = f"{OWNER}/leyline-workspace"
 LY_REPO = f"{OWNER}/Leyline"
@@ -402,7 +402,7 @@ def package_url(owner_type: str, name: str) -> str:
 
 
 def default_leyline_dir(root: Path = ROOT, env=None) -> Path:
-    """The public Leyline repo's clone: <workspace>/.repos/leyline-public (since "Move to Leyline.bat"), else the
+    """The public Leyline repo's clone: <workspace>/.repos/leyline-public (since the move to Leyline), else the
     old Desktop\\Leyline clone while it is still a separate folder (not the workspace itself)."""
     env = os.environ if env is None else env
     new = Path(root) / ".repos" / "leyline-public"
@@ -460,7 +460,7 @@ def main(argv=None, gh: GitHub | None = None, sleep=time.sleep, now=time.time, o
         if rc == 0 and f'"{DEPLOY_SECRET}"' in out:
             files.append(DEPLOY_FILE)
         else:
-            say(f"  realm-scripts.yml waits for 'Set up automatic deploys.bat' (no {DEPLOY_SECRET} secret yet)")
+            say(f"  realm-scripts.yml waits for 'setup\\Set up automatic deploys.bat' (no {DEPLOY_SECRET} secret yet)")
         changed, _ = put_workflows(gh, wu, WU_REPO, files, "Turn on GitHub builds: image build and hosting tests")
         pr_ok(gh, WU_REPO, todo)
 
@@ -482,7 +482,7 @@ def main(argv=None, gh: GitHub | None = None, sleep=time.sleep, now=time.time, o
                 ly_ok = True
                 rc, out = gh.run(["gh", "secret", "list", "-R", LY_REPO, "--json", "name"])
                 if rc == 0 and '"TAURI_SIGNING_PRIVATE_KEY"' not in out:
-                    todo.append("Launcher self-updates are off until you run 'Turn on launcher updates.bat' once "
+                    todo.append("Launcher self-updates are off until you run 'setup\\Turn on launcher updates.bat' once "
                                 "(then Ship, the Leyline step, and this again for the next launcher-v tag).")
                 _, ly_rev = put_workflows(gh, ly, LY_REPO, LY_TEMPLATES, "Hub index: the Submit a mod issue form",
                                           dest=".github/ISSUE_TEMPLATE", src=SRC / "ISSUE_TEMPLATE")

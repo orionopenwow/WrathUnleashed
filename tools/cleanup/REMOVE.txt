@@ -51,3 +51,21 @@ stream/wu-mod.py
 
 # 2026-10-30: the control window launcher is "Leyline Control.bat" now
 WrathUnleashed Control.bat
+
+# 2026-10-30 root cleanup (docs/REPO-MAP.md "Root files"): the old places of the files that moved off the top of the
+# workspace, and the finished ov-rename tool (now labs/done/ov-rename/). Ship WrathUnleashed.bat is Ship to GitHub.bat.
+Ship WrathUnleashed.bat
+Turn on Autopilot (start with Windows).bat
+Turn on GitHub builds.bat
+Turn on launcher updates.bat
+Set up automatic deploys.bat
+Move to Leyline.bat
+Play WotLK (one click).bat
+Install Forever UI.bat
+Make player package.bat
+players/Play WrathUnleashed.bat
+players/README.txt
+tools/ov-rename/Land Leyline Launcher branch.bat
+tools/ov-rename/Rename OpenVanilla repo.bat
+tools/ov-rename/leyline_rename.py
+tools/ov-rename/test_leyline_rename.py
