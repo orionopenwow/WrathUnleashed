@@ -265,7 +265,10 @@ mod tests {
             return; // the exported launcher repo has no hosting/ folder
         }
         for p in PROFILES.iter().filter(|p| p.own_folder) {
-            let lock = fs::read_to_string(dir.join(p.id).join("profile.lock")).unwrap_or_else(|_| panic!("{} has no folder", p.id));
+            // a Windows checkout may give the file CRLF line ends
+            let lock = fs::read_to_string(dir.join(p.id).join("profile.lock"))
+                .unwrap_or_else(|_| panic!("{} has no folder", p.id))
+                .replace("\r\n", "\n");
             assert!(lock.contains(&format!("\nLL_BUILD={}\n", p.build.number())), "{}: build", p.id);
             assert!(lock.contains(&format!("\nLL_CORE={}\n", p.core)), "{}: core", p.id);
         }

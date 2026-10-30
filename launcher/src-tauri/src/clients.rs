@@ -276,14 +276,26 @@ impl From<io::Error> for DetectError {
 
 /// `dir/name`, matching the name without regard to case (installs copied from Windows keep odd casing).
 pub fn find_ci(dir: &Path, name: &str) -> Option<PathBuf> {
-    let exact = dir.join(name);
-    if exact.exists() {
-        return Some(exact);
-    }
+    // The name as it is on disk: on Windows (and macOS) `dir.join(name).exists()` is true for any casing, and the
+    // folder's own spelling is the one to keep (an existing "interface\addons" stays as it is).
     let want = name.to_ascii_lowercase();
-    fs::read_dir(dir).ok()?.flatten().find_map(|e| {
-        (e.file_name().to_string_lossy().to_ascii_lowercase() == want).then(|| e.path())
-    })
+    if let Ok(rd) = fs::read_dir(dir) {
+        let mut ci = None;
+        for e in rd.flatten() {
+            let n = e.file_name().to_string_lossy().to_string();
+            if n == name {
+                return Some(e.path());
+            }
+            if ci.is_none() && n.to_ascii_lowercase() == want {
+                ci = Some(e.path());
+            }
+        }
+        if ci.is_some() {
+            return ci;
+        }
+    }
+    let exact = dir.join(name);
+    exact.exists().then_some(exact)
 }
 
 /// A path relative to `root`, each part matched without regard to case.
