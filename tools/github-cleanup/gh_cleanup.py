@@ -89,10 +89,10 @@ class GitHub:
         return self.r(["gh", "api", "-X", "DELETE", f"{kind}/{OWNER}/packages/container/{name}"])
 
 
-def plan_now(gh: GitHub) -> dict:
+def plan_now(gh: GitHub, keep_also=()) -> dict:
     rels = gh.releases()
     keep = gh.latest() or (rels[0].get("tag_name", "") if rels else "")
-    go = [r for r in rels if r.get("tag_name") != keep]
+    go = [r for r in rels if r.get("tag_name") != keep and r.get("tag_name") not in keep_also]
     return {"keep_release": keep, "releases": [(r["id"], r.get("tag_name", ""), r.get("name") or "") for r in go]}
 
 
@@ -107,8 +107,10 @@ def main(argv=None, gh: GitHub | None = None, out=print, plan_file: str | None =
         if who.lower() != OWNER:
             raise Stop(f"gh is signed in as {who}, not {OWNER}: nothing done")
         out(f"[1/4] signed in as {who}")
-        now = plan_now(gh)
-        out(f"[2/4] {REPO}: keep the newest release '{now['keep_release']}'; {len(now['releases'])} other release(s) and their tags would go:")
+        plan = json.load(open(plan_file, encoding="utf-8")) if os.path.isfile(plan_file) else {}
+        keep_also = tuple(plan.get("keep_also", ("engine",)))   # the "engine" pre-release feeds release builds
+        now = plan_now(gh, keep_also)
+        out(f"[2/4] {REPO}: keep the newest release '{now['keep_release']}' (and {', '.join(keep_also)}); {len(now['releases'])} other release(s) and their tags would go:")
         for _, tag, name in now["releases"]:
             out(f"      - {tag}  {name}")
         try:
@@ -122,7 +124,6 @@ def main(argv=None, gh: GitHub | None = None, out=print, plan_file: str | None =
             return 0
         if not os.path.isfile(plan_file):
             raise Stop(f"{plan_file} is missing: nothing done (Claude writes it after the dry run)")
-        plan = json.load(open(plan_file, encoding="utf-8"))
         want_tags = sorted(plan.get("delete_release_tags", []))
         if plan.get("keep_release") != now["keep_release"] or want_tags != sorted(t for _, t, _ in now["releases"]):
             raise Stop("GitHub's releases changed since the plan was written: nothing done (run the dry run again)")

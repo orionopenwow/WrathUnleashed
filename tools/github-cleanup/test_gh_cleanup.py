@@ -5,7 +5,7 @@ import gh_cleanup as g
 class Fake:
     def __init__(self, who="orionopenwow", pk_ok=True):
         self.who, self.pk_ok, self.calls = who, pk_ok, []
-        self.rels = [{"id": i, "tag_name": f"v1.{i}", "name": f"R {i}"} for i in range(56, 50, -1)]
+        self.rels = [{"id": i, "tag_name": f"v1.{i}", "name": f"R {i}"} for i in range(56, 50, -1)] + [{"id": 9, "tag_name": "engine", "name": "Engine"}]
     def __call__(self, args):
         self.calls.append(args); s = " ".join(args)
         if s.endswith("user --jq .login"): return 0, self.who
@@ -36,7 +36,7 @@ class T(unittest.TestCase):
         f = Fake(); plan = {"keep_release": "v1.56", "delete_release_tags": [f"v1.{i}" for i in range(51, 56)], "delete_packages": ["openwow-realm", "openvanilla-realm", "gone-one"]}
         rc, o = go(f, plan, ["--go"]); self.assertEqual(rc, 0, o)
         dels = [" ".join(a) for a in f.calls if "DELETE" in a]
-        self.assertFalse(any("releases/56" in d for d in dels)); self.assertEqual(sum("git/refs/tags" in d for d in dels), 5)
+        self.assertFalse(any("releases/56" in d or "releases/9" in d for d in dels), "newest and engine kept"); self.assertEqual(sum("git/refs/tags" in d for d in dels), 5)
         self.assertTrue(any("container/openwow-realm" in d for d in dels)); self.assertIn("gone-one: already gone", o)
     def test_no_scope(self):
         f = Fake(pk_ok=False); plan = {"keep_release": "v1.56", "delete_release_tags": [f"v1.{i}" for i in range(51, 56)], "delete_packages": ["openwow-realm"]}
