@@ -28,6 +28,7 @@ pub const KNOWN: &[(&str, &str)] = &[
     ("mesh_relays", "Play through community relays when they are closer (our relay stays the fallback)"),
     ("relay_volunteer", "Help the network: relay for others (only when you turn it on for this PC)"),
     ("herokey_sso", "Sign in to community realms with your Hero Key (no account per realm)"),
+    ("magnet_links", "Open shared magnet links, only for Leyline's own checked packages"),
 ];
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,6 +57,9 @@ pub struct Flags {
     pub relay_volunteer: bool,
     /// Hero Key sign-in on Beacons (`crate::herokey`, docs/HERO-KEY-SSO.md): "Sign in with your Hero Key" on join.
     pub herokey_sso: bool,
+    /// Shared `magnet:` links (`p2p::magnet`): opened only when the info-hash is one of Leyline's own checked
+    /// packages in the catalog. Off: every magnet link is ignored.
+    pub magnet_links: bool,
     pub limits: Limits,
     /// STUN servers for the NAT check (`host:port`), only used when `p2p_hosting` is on.
     pub stun: Vec<String>,
@@ -72,6 +76,7 @@ impl Flags {
             "mesh_relays" => self.mesh_relays,
             "relay_volunteer" => self.relay_volunteer,
             "herokey_sso" => self.herokey_sso,
+            "magnet_links" => self.magnet_links,
             _ => return None,
         })
     }
@@ -85,6 +90,7 @@ impl Flags {
             "mesh_relays" => self.mesh_relays = on,
             "relay_volunteer" => self.relay_volunteer = on,
             "herokey_sso" => self.herokey_sso = on,
+            "magnet_links" => self.magnet_links = on,
             _ => {}
         }
     }
@@ -299,7 +305,7 @@ pub mod tests {
     fn site_file_is_hash_checked() {
         let good = doc(&[("torrent_downloads", true)]);
         // The same document from stream/leyline_net.py make_doc() (stream/tests/test_leyline_net.py checks it too).
-        assert_eq!(good["sha256"], "7e272c43782845c39be73543e62f7d095792b4529ca9c8b063f94e09f5ab725c");
+        assert_eq!(good["sha256"], "20affec29fa6541d09d81479ec436d351671096f3a8c6cfe0c50245724b7c39a");
         assert!(check(&good).is_ok());
         let f = from_doc(&good);
         assert!(f.torrent_downloads && !f.p2p_hosting);
@@ -330,6 +336,18 @@ pub mod tests {
         assert!(!volunteer_allowed(&site, &load_local(d.path())));
         assert!(!Flags::default().mesh_realms && !Flags::default().relay_volunteer);
         assert!(!Flags::default().herokey_sso && !from_doc(&doc(&[])).herokey_sso, "Hero Key sign-in ships off");
+    }
+
+    #[test]
+    fn magnet_links_ship_off_and_follow_the_layers() {
+        assert!(!Flags::default().magnet_links && !from_doc(&doc(&[])).magnet_links, "magnet links ship off");
+        let site = from_doc(&doc(&[("magnet_links", true)]));
+        assert!(site.magnet_links && site.get("magnet_links") == Some(true));
+        let d = tempfile::tempdir().unwrap();
+        set_local(d.path(), "magnet_links", Some(false)).unwrap();
+        assert!(!effective(&site, &load_local(d.path())).magnet_links, "this PC can switch it off");
+        set_local(d.path(), "magnet_links", Some(true)).unwrap();
+        assert!(effective(&Flags::default(), &load_local(d.path())).magnet_links, "or try it early");
     }
 
     #[test]

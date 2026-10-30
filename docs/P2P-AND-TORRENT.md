@@ -29,7 +29,8 @@ Everything ships **off**. Two layers decide:
     "format": 1,
     "updated_at": "2026-10-29T00:00:00Z",
     "flags": {"p2p_hosting": false, "torrent_downloads": false, "torrent_seeding": false, "webrtc_presence": false,
-              "mesh_realms": false, "mesh_relays": false, "relay_volunteer": false, "herokey_sso": false},
+              "mesh_realms": false, "mesh_relays": false, "relay_volunteer": false, "herokey_sso": false,
+              "magnet_links": false},
     "limits": {"seed_upload_kbps": 0, "seed_ratio_pct": 0, "max_peers": 0},
     "stun": ["stun.cloudflare.com:3478"],
     "sha256": "<hex>"
@@ -60,6 +61,7 @@ Everything ships **off**. Two layers decide:
 | `mesh_relays` | **Community relays** may carry this PC's game traffic when closer. Off: only our seeds and each realm's own relay. | Built and tested. Relays see game traffic in the clear until the sealed path exists (docs/LEYLINE-MESH.md section 9). |
 | `relay_volunteer` | **"Help the network: relay for others" is offered.** A PC relays only when this PC is also set to "On". | Built (Host pack compose file, `host_volunteer_relay`). |
 | `herokey_sso` | **Hero Key sign-in on Beacons**: a hop or the launcher signs in to a community realm with the website account, no join page and no kept password. Off: the realm's own join page. | Built and tested (docs/HERO-KEY-SSO.md). Realms also need their own opt-in and a kit with the site key pinned. |
+| `magnet_links` | **Shared `magnet:` links** open in Leyline, but only for Leyline's own checked packages: the info-hash must be a catalog entry's `btih`. Anything else: "Leyline only opens shared links to its own checked packages." | Built and tested (`p2p/magnet.rs`). Hidden: no UI yet, and the OS `magnet:` handler is not registered. |
 
 ### For the admin console
 
@@ -104,6 +106,37 @@ launcher. We would also be shipping an engine nobody can switch on yet. The plan
 feature (`torrent-engine`) as a `Swarm` implementation once the flag is going to be switched on. It would use
 the upload cap, ratio and peer limits from `flags::Limits`, and seed only files that passed the checks above.
 
+## Shared magnet links (`magnet_links`, off, hidden)
+
+A player can be sent a `magnet:` link to one of Leyline's packages. `p2p/magnet.rs`:
+
+* **Reads it strictly.** Exactly one `xt=urn:btih:` (40 hex or 32 base32), at most one `dn` (200 characters) and
+  one `xl`, up to 8 `tr` (http, https, udp) and 8 `ws` (https only), 2048 characters in all. Any other part
+  (`as`, `x.pe`, `xt.1`, `btmh`, a fragment, bad escapes, user info in a URL) and the link is refused.
+* **Opens only Leyline's own packages.** The info-hash must be the `btih` of an entry in the cached catalog
+  (`all.json`, no network): a packaged mod, a theme pack (category `themes`) or the Host pack (category `tools`, kind
+  `hostpack`), each with its sha256 and a download on the catalog's own site. An info-hash listed twice is ignored.
+  An `xl` that is not the catalog's size is refused. Anything else gets one answer: **"Leyline only opens shared
+  links to its own checked packages."** Nothing is fetched or started for it.
+* **Never uses the link's addresses.** Its trackers and web seeds are checked for shape, then ignored. The download
+  is the catalog's own: its HTTPS address, and its `.torrent` (catalog site only, used when `torrent_downloads` is
+  on, and only when that torrent's info-hash is the link's). It goes through `transfer::fetch`, so the refusal list
+  and the sha256 apply as for any other download.
+* **Downloads nothing on its own.** Opening a link only queues it (`magnet_pending`); the player's click fetches.
+
+Catalog fields a package needs to be shareable: `"btih": "<40 hex info-hash of its torrent>"` and optionally
+`"torrent": "<https address of its .torrent on the catalog's site>"`.
+
+The app's commands (`p2p/cmds.rs`): `magnet_open(uri)` answers `{"status":"off"}`, `{"status":"refused","reason":..}`
+or `{"status":"accepted","package":{info_hash,kind,id,name,version,size},"open":{"action":"install","id":..}}`;
+`magnet_pending()`, `magnet_dismiss(info_hash?)`, `magnet_fetch(info_hash)` (into `<app data>/downloads/magnet/`).
+With the flag off they answer "off", an empty list, and do nothing. A `magnet:` link in Leyline's arguments is
+opened the same way at start.
+
+**Not on yet:** the OS does not send `magnet:` links to Leyline. Turning that on later is one line in
+`launcher/src-tauri/tauri.conf.json`: `"plugins": {"deep-link": {"desktop": {"schemes": ["leyline", "magnet"]}}}`.
+It would make Leyline a `magnet:` handler on the player's PC, which is visible, so it waits for the owner.
+
 ## Direct connections: the rule
 
 Today every player reaches a hosted realm through the relay. The relay hides the host's home address and
@@ -139,6 +172,7 @@ runs only when `p2p_hosting` is on. The STUN server sees the PC's public IP addr
 * sha256 required and checked;
 * STUN against local fake servers (endpoint-independent, symmetric, one answer, none);
 * the direct rule;
-* the flags hash, tamper detection, cache and local overrides.
+* the flags hash, tamper detection, cache and local overrides;
+* magnet links: good and bad links, off means off, unknown info-hashes refused, the download path.
 
-The flags hash vector (`9a48f487…`) is the same in the Rust and Python tests.
+The flags hash vector (`20affec2…`) is the same in the Rust and Python tests.
