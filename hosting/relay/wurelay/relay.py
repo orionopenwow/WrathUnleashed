@@ -1034,6 +1034,8 @@ class Relay:
             return httpd.response(504, {"error": "the realm did not answer"}, headers=h)
         if res.get("error") == "reserved":
             return httpd.response(403, {"error": "that account name is kept for the realm's host"}, headers=h)
+        if res.get("error") == "bad_salt":   # an old copy of the join page: a new one draws a salt every core takes
+            return httpd.response(409, {"error": "please reload this page and try again"}, headers=h)
         if not res.get("ok"):
             return httpd.response(409 if res.get("error") == "taken" else 502,
                                   {"error": "that account name is taken" if res.get("error") == "taken"
@@ -1060,6 +1062,8 @@ class Relay:
             doc = dict(base, **{k: v for k, v in (res.get("status") or {}).items()
                                 if k in ("online", "players", "bots", "uptime_s", "realm", "queue",
                                          "bots_method", "claim", "profile")})
+            if (res.get("status") or {}).get("build") in ("1.12.1", "2.4.3", "3.3.5a", "4.3.4", "5.4.8"):
+                doc["build"] = res["status"]["build"]   # the client the realm needs (the host kit's profile)
         except (asyncio.TimeoutError, ConnectionError, ws.WSClosed):
             doc = dict(base, online=True)  # the tunnel is up but the realm did not answer in time
         doc["realm"] = s.name

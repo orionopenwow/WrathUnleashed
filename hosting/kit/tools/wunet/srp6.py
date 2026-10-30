@@ -45,9 +45,18 @@ def calc_x(user: str, password: str, salt: bytes) -> int:
     return le(sha1(salt, inner))
 
 
+def new_salt() -> bytes:
+    """32 random bytes whose most significant (last) byte is not 0: the MaNGOS-family cores (the host kit's 1.12.1
+    and 2.4.3 profiles) store and send the salt without leading zeros, so such a salt would come out 31 bytes."""
+    while True:
+        s = os.urandom(32)
+        if s[-1]:
+            return s
+
+
 def make_verifier(user: str, password: str, salt: bytes | None = None) -> tuple[bytes, bytes]:
     """(salt, verifier) for acore_auth.account, as AzerothCore's account create makes them."""
-    salt = salt or os.urandom(32)
+    salt = salt or new_salt()
     v = pow(G, calc_x(user, password, salt), N)
     return salt, to32(v)
 

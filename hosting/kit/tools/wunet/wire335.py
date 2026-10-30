@@ -90,9 +90,13 @@ def header_crypt(session_key: bytes, server: bool):
 
 
 # ---------------------------------------------------------------------------- packets
+VERSIONS = {12340: (3, 3, 5), 5875: (1, 12, 1)}   # build -> the version bytes a stock client of that build sends
+VERSIONS.update({8606: (2, 4, 3), 15595: (4, 3, 4), 18414: (5, 4, 8)})   # the host kit's other profiles (cores.py)
+
+
 def logon_challenge(user: str, build: int = BUILD) -> bytes:
     I = user.upper().encode()
-    body = (b"WoW\x00" + bytes([3, 3, 5]) + struct.pack("<H", build) + b"68x\x00" + b"niW\x00"
+    body = (b"WoW\x00" + bytes(VERSIONS.get(build, (3, 3, 5))) + struct.pack("<H", build) + b"68x\x00" + b"niW\x00"
             + b"SUne" + struct.pack("<II", 0, 0x0100007F) + bytes([len(I)]) + I)
     return bytes([0x00, 0x08]) + struct.pack("<H", len(body)) + body
 
@@ -194,13 +198,14 @@ async def logon(host: str, port: int, user: str, password: str, timeout: float =
         writer.close()
 
 
-async def logon_probe(host: str, port: int, timeout: float = 10, opener=None) -> int:
+async def logon_probe(host: str, port: int, timeout: float = 10, opener=None, build: int = BUILD) -> int:
     """Send a logon challenge for a made-up account; return the result code (0x04 from a real
     authserver: 'unknown account'). Proves the whole path to the authserver works, no login needed."""
     opener = opener or asyncio.open_connection
     reader, writer = await asyncio.wait_for(opener(host, port), timeout)
     try:
-        writer.write(logon_challenge("WUPROBE" + "".join(random.choice("ABCDEFGHJKLMNPQRSTUVWXYZ") for _ in range(6))))
+        writer.write(logon_challenge("WUPROBE" + "".join(random.choice("ABCDEFGHJKLMNPQRSTUVWXYZ") for _ in range(6)),
+                                     build))
         await writer.drain()
         head = await _read(reader, 3, timeout)
         if head[0] != 0x00:

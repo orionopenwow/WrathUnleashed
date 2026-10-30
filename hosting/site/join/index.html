@@ -58,7 +58,7 @@
 
   <div class="card" id="play-card" hidden>
     <h2>3. Play</h2>
-    <p>Use your own 3.3.5a game files. In the game folder, open <code>Data\enUS\realmlist.wtf</code> (or your language's folder) and make it this one line:</p>
+    <p id="client-note">Use your own 3.3.5a game files. In the game folder, open <code>Data\enUS\realmlist.wtf</code> (or your language's folder) and make it this one line:</p>
     <div class="line"><code id="realmlist">set realmlist …</code><button class="ghost" data-copy="realmlist">Copy</button></div>
     <ol class="small">
       <li>Start the game and log in with the account from step 2.</li>
@@ -106,6 +106,21 @@
     return { status: r.status, doc: doc || {} };
   }
 
+  // Which client the realm needs (the host kit runs realms for 1.12.1, 2.4.3, 3.3.5a and 4.3.4 clients), and
+  // where that client keeps its realm address.
+  const CLIENTS = {
+    "1.12.1": ["the 1.12 client", "<code>realmlist.wtf</code> in the game folder"],
+    "2.4.3": ["the 2.4.3 client", "<code>Data\\enUS\\realmlist.wtf</code> (or your language's folder)"],
+    "4.3.4": ["the 4.3.4 client", "<code>WTF\\Config.wtf</code> (the line starting with SET realmlist)"],
+    "5.4.8": ["the 5.4.8 client", "<code>WTF\\Config.wtf</code> (the line starting with SET realmlist)"],
+  };
+  function forClient(build) {
+    const c = CLIENTS[build];
+    if (!c) return;   // 3.3.5a: the page as written
+    $("sub").textContent = `A Beacon: a ${build} realm hosted by a player, reached through the Leyline relay. You need ${c[0]}.`;
+    $("client-note").innerHTML = `This realm needs ${c[0]}: use your own ${build} game files. Open ${c[1]} and make it this one line:`;
+  }
+
   async function start() {
     if (!/^[a-z2-7]{16}$/.test(realmId)) { $("name").textContent = "That isn't an invite link"; say($("knock-msg"), "Ask the host for the link again.", "bad"); return; }
     let info;
@@ -117,6 +132,7 @@
     const k = await api("/api/realms/" + realmId + "/knock", invite ? { invite } : {});
     if (k.status !== 200) { say($("knock-msg"), k.doc.error || "The relay refused this link.", "bad"); return; }
     say($("knock-msg"), "Done: your internet connection may now reach this realm.", "ok");
+    api("/r/" + realmId + "/status.json").then((st) => forClient(st.doc.build)).catch(() => {});
     $("realmlist").textContent = "set realmlist " + k.doc.realmlist;
     $("realmlist-port").textContent = "set realmlist " + k.doc.realmlist_port;
     $("hours").textContent = k.doc.valid_hours || 24;
@@ -133,6 +149,7 @@
     $("mk").disabled = true; say($("acct-msg"), "Making your account…");
     try {
       const salt = crypto.getRandomValues(new Uint8Array(32));
+      if (!salt[31]) salt[31] = 1;   // 32 bytes on every core: the 1.12.1 and 2.4.3 servers drop leading zeros
       const v = await verifier(user, pass, salt);
       const body = { invite, username: user, salt: hex(salt), verifier: hex(v) };
       if (hostKey) body.host = hostKey;
