@@ -125,7 +125,7 @@ def main(argv=None, gh: GitHub | None = None, out=print, plan_file: str | None =
         if not os.path.isfile(plan_file):
             raise Stop(f"{plan_file} is missing: nothing done (Claude writes it after the dry run)")
         want_tags = sorted(plan.get("delete_release_tags", []))
-        if plan.get("keep_release") != now["keep_release"] or want_tags != sorted(t for _, t, _ in now["releases"]):
+        if plan.get("keep_release") != now["keep_release"] or not {t for _, t, _ in now["releases"]} <= set(want_tags):
             raise Stop("GitHub's releases changed since the plan was written: nothing done (run the dry run again)")
         want_pkgs = [p for p in plan.get("delete_packages", []) if not p.lower().startswith("leyline")]
         out("[4/4] deleting")
