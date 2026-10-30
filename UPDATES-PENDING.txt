@@ -226,3 +226,4 @@
 1071a scripts  Player messages say [Leyline] instead of [Open Vanilla]
 1071b client  Play page: no Open Vanilla mention for 1.12 folders (the browser build is unchanged)
 1071c ship  Save to GitHub (orionopenwow/WrathUnleashed): client patch comments describe behaviour only; the Leyline export refuses binary citations; old names out of player text
+1072a ship  Save to GitHub (orionopenwow/WrathUnleashed): the private Leyline 1.12 client repo maker, benilla sync workflow (off)

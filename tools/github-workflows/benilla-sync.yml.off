@@ -1,0 +1,115 @@
+# benilla-sync: merge upstream benilla into the Leyline 1.12 client (orionopenwow/wenilla), build,
+# test, and open a pull request with the result. A person merges it, with a merge commit, never a
+# squash (docs/UPSTREAM.md, "Why a real merge matters").
+#
+# SHIPPED OFF (owner, 2026-10-29: "merge now, then pause"). The file ends in .off, so GitHub ignores
+# it, and it has no schedule. To turn it on:
+#   1. copy it into the fork as .github/workflows/benilla-sync.yml (drop the .off);
+#   2. it then runs only by hand: Actions -> benilla-sync -> Run workflow;
+#   3. for the weekly run, uncomment the two `schedule` lines below.
+# It needs only the built-in token, with "Read and write" and "Allow GitHub Actions to create pull
+# requests" ticked under the fork's Settings -> Actions -> General.
+name: benilla-sync
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: "benilla ref to merge (default: main)"
+        default: main
+  # schedule:
+  #   - cron: "23 5 * * 2"   # weekly, Tuesday 05:23 UTC
+permissions:
+  contents: write
+  pull-requests: write
+concurrency:
+  group: benilla-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+      - name: Fetch benilla and look for anything new
+        id: up
+        run: |
+          git remote add upstream https://github.com/samwhosung/benilla.git
+          git fetch -q upstream "${{ inputs.upstream_ref || 'main' }}"
+          UP=$(git rev-parse FETCH_HEAD)
+          N=$(git rev-list --count HEAD..$UP)
+          echo "sha=$UP" >> "$GITHUB_OUTPUT"; echo "count=$N" >> "$GITHUB_OUTPUT"
+          echo "benilla $UP: $N commits not in main"
+          if [ "$N" = 0 ]; then echo "### Nothing new upstream" >> "$GITHUB_STEP_SUMMARY"; fi
+      - name: Merge (a real merge commit)
+        id: merge
+        if: steps.up.outputs.count != '0'
+        run: |
+          git config user.name "Orion"
+          git config user.email "orionopenwow@users.noreply.github.com"
+          B="sync/benilla-$(date -u +%Y-%m-%d)-${{ github.run_number }}"
+          echo "branch=$B" >> "$GITHUB_OUTPUT"
+          git switch -c "$B"
+          if git merge --no-ff --no-edit -m "Merge upstream benilla (${{ steps.up.outputs.count }} commits, through ${{ steps.up.outputs.sha }})" "${{ steps.up.outputs.sha }}"; then
+            echo "clean=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "clean=false" >> "$GITHUB_OUTPUT"
+            git diff --name-only --diff-filter=U | tee conflicts.txt
+            git merge --abort
+          fi
+      - name: Conflicts -> an issue for a person (nothing pushed)
+        if: steps.merge.outputs.clean == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo "benilla \`${{ steps.up.outputs.sha }}\` (${{ steps.up.outputs.count }} commits) does not merge cleanly into \`main\`."
+            echo; echo "Conflicted files:"; echo; sed 's/^/- `/; s/$/`/' conflicts.txt
+            echo; echo "Resolve by hand following docs/UPSTREAM.md (\"Where the conflicts will be\"), then open the PR."
+          } > body.md
+          gh issue create --title "benilla sync needs a hand: $(wc -l < conflicts.txt) conflicted files" --body-file body.md
+          exit 1
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.merge.outputs.clean == 'true'
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Build tools
+        if: steps.merge.outputs.clean == 'true'
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libasound2-dev libudev-dev pkg-config clang lld
+      - name: Check, sweep and test
+        id: test
+        if: steps.merge.outputs.clean == 'true'
+        run: |
+          set -o pipefail
+          rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal --target wasm32-unknown-unknown || true
+          (
+            rc=0
+            echo "== native check"; cargo check --workspace --all-targets || rc=1
+            echo "== wasm check"; cargo check --target wasm32-unknown-unknown -p wenilla --no-default-features --features webgpu || rc=1
+            echo "== the wasm clock sweep (std Instant/SystemTime in files the merge touched)"
+            git diff --name-only HEAD^1 HEAD -- '*.rs' | xargs -r grep -ln 'std::time::\(Instant\|SystemTime\)::now\|use std::time::.*Instant\|use std::time::{[^}]*\(Instant\|SystemTime\)' | tee sweep.txt
+            [ -s sweep.txt ] && echo "(each hit above needs bevy::platform::time::Instant or web_time; read it)"
+            echo "== tests"; cargo test -p benilla-protocol -p wenilla-realm || rc=1
+            cargo test -p benilla-app net:: || rc=1
+            echo "$rc" > rc.txt
+          ) 2>&1 | tee test.log
+          echo "rc=$(cat rc.txt)" >> "$GITHUB_OUTPUT"
+      - name: Push the branch and open the pull request
+        if: steps.merge.outputs.clean == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git push -q origin "${{ steps.merge.outputs.branch }}"
+          verdict="checks and tests passed"; [ "${{ steps.test.outputs.rc }}" = 0 ] || verdict="CHECKS OR TESTS FAILED: see the log"
+          {
+            echo "## What comes in"; echo
+            echo "benilla through \`${{ steps.up.outputs.sha }}\`: ${{ steps.up.outputs.count }} commits."; echo
+            echo "## Conflicts"; echo; echo "None: a clean merge."; echo
+            echo "## Verification"; echo; echo "$verdict."; echo
+            echo "Still needed by a person: a browser boot (login, world entry, sound, a zone line); the sweep's hits; then merge **with a merge commit**."
+            echo; echo "<details><summary>Log (last 300 lines)</summary>"; echo; echo '```'; tail -300 test.log; echo '```'; echo "</details>"
+          } > body.md
+          gh pr create --base main --head "${{ steps.merge.outputs.branch }}" \
+            --title "Merge upstream benilla (${{ steps.up.outputs.count }} commits)" --body-file body.md
