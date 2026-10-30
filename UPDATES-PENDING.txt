@@ -331,3 +331,5 @@
 1107c ship Save to GitHub: the main site, the backdrop, the export keeps the backdrop private
 1108a signin Forms work in Chrome again (Referrer-Policy same-origin): Start server on the host page
 1108b ship Save to GitHub: the forms fix
+1109a signin Forms work in Chrome: Start server on the host page (and the other site forms)
+1109b ship Save to GitHub: the forms fix

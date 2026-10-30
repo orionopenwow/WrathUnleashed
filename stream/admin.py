@@ -2392,7 +2392,7 @@ def post(h, path: str) -> None:
         return
     origin = h.headers.get("Origin", "")
     host = P("PUBLIC_HOST") or "play.openvanilla.app"
-    if origin and origin != f"https://{host}":
+    if origin and origin != f"https://{host}" and not (origin == "null" and h.headers.get("Sec-Fetch-Site", "") == "same-origin"):
         h.send(403, page_simple("Refused", "That form came from another site."), headers=NOINDEX)
         return
     form = read_form(h)
