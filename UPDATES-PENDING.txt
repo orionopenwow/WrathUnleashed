@@ -307,3 +307,4 @@
 1097b ship  Save to GitHub (orionopenwow/WrathUnleashed): site showcase and the launcher's Survivors banner
 1098a signin  Leyline site: header mark without its ring, new launcher Home screenshot
 1098b ship  Save to GitHub (orionopenwow/WrathUnleashed): launcher Home art fills the hero card, header mark, window buttons
+1099a ship  Save to GitHub (orionopenwow/WrathUnleashed): purple chat icon in the launcher's Discord buttons
