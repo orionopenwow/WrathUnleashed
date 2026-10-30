@@ -150,7 +150,7 @@ check("side menu (owner 2026-10-30: \"make all the tools come from the side by d
       front.count('<input type="checkbox" id="hb-side" class="hb-side-t" aria-label="Fold the side menu"><header class="hb-top">') == 1
       and '<label for="hb-side" class="hb-side-b"' in hd and "@media (min-width:1081px){" in front
       and "body.hb .hb-top{position:fixed;inset:0 auto 0 0;width:var(--hb-side)" in front
-      and "body.hb:has(#hb-side:checked){--hb-side:72px}" in front and 'localStorage.setItem("leyline.side"' in HB.HUB_JS
+       and ":root:has(#hb-side:checked){--hb-side:72px}" in front and 'localStorage.setItem("leyline.side"' in HB.HUB_JS
       and "@media (max-width:1080px){.hb-side-t,.hb-side-b{display:none}}" in front)
 check("header: Play, Realms, Mods, Addons, Modes, Host, Community, More", labels == NAV_ORDER, labels)
 hrefs = dict(re.findall(r'<a class="hb-ni[^"]*" href="([^"]+)"[^>]*><svg.*?</svg><span>([^<]+)</span>', nav, re.S)[i][::-1] for i in range(7))
@@ -180,7 +180,7 @@ check("hero: the whole mark leads, crisp (the 512px layers), big (~400px, 220px 
       and "hb-crystal" not in front
       and "Every client, every server" in front and "One launcher for every classic client and every server" in front
       and "hb-bullets" not in front and "TODO(owner): the hero heading" in front
-      and re.search(r'class="hb-cta" href="https://github\.com/orionopenwow/Leyline/releases"[^>]*>Download Now<', front))
+      and 'class="hb-hero-a"' not in front and 'class="hb-dl" href="https://github.com/orionopenwow/Leyline/releases"' in front)
 stats = re.search(r'<section class="hb-sec" id="status".*?</section>', front, re.S).group(0)
 check("Platform Status: the main realm online from realm_status, sign-in, the network, the relay, the mod catalog",
       all(x in stats for x in ('Server: <em class="ok">OK</em> · 3 playing', "Sign-in", "Realm network", "Relay", "Mod catalog", " items · "))
