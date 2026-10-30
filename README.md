@@ -41,9 +41,9 @@ deploys); local play is in `play\`.
   main, checks for secrets and game data, commits as "Leyline update <date> <time>" and pushes to main; it
   closes by itself when done and stays open on a problem. In Autopilot every ship also refreshes the public
   Leyline copy (`tools/leyline-repo/Update Leyline repo.bat`).
-- **Open the launcher:** double-click `Open Leyline Launcher.bat`. It opens the installed launcher, else the copy built
-  here, else installs the newest launcher release from GitHub, else builds it from `launcher\` once (Node.js and
-  Rust; it says how to get them) and opens it. `Open Leyline Launcher.bat rebuild` builds again after launcher changes.
+- **Open the launcher:** double-click `Open Leyline Launcher.bat`. No installer: it keeps one file, `.launcher\Leyline.exe`,
+  fresh from the `launcher-latest` release (GitHub builds it after every launcher change) and opens it.
+  `Open Leyline Launcher.bat rebuild` builds it on this PC instead (Node.js and Rust).
 - **Release the launcher:** `Ship the Leyline launcher.bat`.
 - **Host a realm:** `hosting/kit/Host a Leyline realm.bat`, or `/wrath/host` on the site. Guide:
   `hosting/INSTALL-OPERATE.md`.

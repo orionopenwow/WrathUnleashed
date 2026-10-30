@@ -48,6 +48,48 @@ jobs:
         working-directory: launcher/src-tauri
         run: cargo test --no-default-features
 
+  # The simple way in (owner 2026-10-30: "why do we have to go through an installer? lets make this way simpler"):
+  # every push to main builds one portable Leyline.exe (no installer: double-click and it runs; Windows 10 and 11 already
+  # have the WebView2 it uses) and puts it on the rolling release "launcher-latest", always at the same address:
+  #   https://github.com/orionopenwow/Leyline/releases/download/launcher-latest/Leyline.exe
+  # "Open Leyline Launcher.bat" fetches it from there (the website can link it once the first build is up).
+  portable:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: core-tests
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: launcher/src-tauri
+      - name: Build Leyline.exe (no installer)
+        working-directory: launcher
+        shell: bash
+        run: |
+          npm install --no-audit --no-fund
+          npx tauri build --no-bundle
+          cp src-tauri/target/release/leyline.exe ../Leyline.exe
+      - name: Put it on launcher-latest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          ver=$(python -c "import json;print(json.load(open('launcher/src-tauri/tauri.conf.json'))['version'])")
+          notes="The newest Leyline launcher for Windows, built from main ($GITHUB_SHA, version $ver). One file, no installer: download Leyline.exe and double-click it. Not code-signed yet: Windows may ask once (More info, Run anyway). Leyline uses the game client you already have; it never downloads one."
+          if gh release view launcher-latest -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit launcher-latest -R "$GITHUB_REPOSITORY" --title "Leyline launcher (latest, $ver)" --notes "$notes" --prerelease=false
+          else
+            gh release create launcher-latest -R "$GITHUB_REPOSITORY" --title "Leyline launcher (latest, $ver)" --notes "$notes" --target "$GITHUB_SHA" --latest=false
+          fi
+          gh release upload launcher-latest Leyline.exe -R "$GITHUB_REPOSITORY" --clobber
+
   create-release:
     if: startsWith(github.ref, 'refs/tags/launcher-v')
     needs: core-tests

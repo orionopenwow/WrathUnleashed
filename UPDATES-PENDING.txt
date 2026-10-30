@@ -340,3 +340,4 @@
 1112a signin Realm list: client version on every row, nicer cards
 1112b ship Save to GitHub: the realm list, Open Leyline Launcher.bat
 1113a ship Save to GitHub: Open Leyline Launcher.bat skips old launcher copies (opens the current dark launcher)
+1114a ship Save to GitHub: the launcher without an installer (Open Leyline Launcher.bat, the launcher-latest build)
