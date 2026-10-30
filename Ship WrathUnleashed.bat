@@ -10,7 +10,6 @@ rem A cancel exits with code 2, so the panel never marks a cancelled save as don
 cd /d "%~dp0"
 set GIT_TERMINAL_PROMPT=1
 where git >nul 2>&1 || (echo Git is not installed: https://git-scm.com/download/win & pause & exit /b 1)
-if not exist .gitignore copy /y gitignore-template .gitignore >nul
 if not exist .git (
   git init -q -b main || (echo git init failed. & pause & exit /b 1)
   echo New local repo made here.

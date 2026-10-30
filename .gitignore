@@ -58,3 +58,6 @@ tools/fresh-history/CONFIRM
 
 # client source checkout made by client/get-source.sh (its own git repo)
 /client/benilla-wotlk/
+
+# a copy of mods/wu-mod.py that "Update sign-in and warm-up.bat" makes beside the portal before upload
+/stream/wu-mod.py
