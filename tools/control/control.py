@@ -117,6 +117,7 @@ STEPS = {
     "brand-leyline": ("realm/Leyline brand - on.bat", "Leyline brand ON: site, game and realm list say Leyline / Dalaran Hangout", False),
     "brand-off": ("realm/Leyline brand - off.bat", "Leyline brand off: every name back as it was", False),
     "builds-why": ("tools/github-builds/Why did the build fail.bat", "Why the last GitHub build failed (read-only)", False),
+    "remove-files": ("tools/cleanup/Remove listed files.bat", "Remove the files a change took out (tools/cleanup/REMOVE.txt)", False),
     "fresh-check": ("tools/fresh-history/Fresh history - dry run.bat", "Fresh Leyline history: what it would do (read-only)", False),
     "fresh-history": ("tools/fresh-history/Fresh history - do it.bat", "Fresh Leyline history: one commit, old history to a Desktop backup", False),
     # The older Python launcher's repo (owner 2026-10-29: "rename repo to Leyline Launcher"): rename, then land the branch.
