@@ -169,7 +169,7 @@ anchor = "\thandle {\n\t\treverse_proxy ovlive-realm:8090"
 if mark not in s:
     if anchor not in s: sys.exit("anchor not found in Caddyfile")
     block = ("\t" + mark + ": the Wrath sign-in page; the old play page sends players there.\n"
-             "\tredir / /wrath 302\n\tredir /play /wrath 302\n"
+             "\tredir / /wrath/leyline 302\n\tredir /play /wrath 302\n"
              "\thandle /wrath* {\n\t\treverse_proxy wu-portal:8091 {\n"
              "\t\t\theader_up X-Real-IP {remote_host}\n\t\t\theader_up X-Forwarded-For {remote_host}\n\t\t}\n\t}\n\n")
     s = s.replace(anchor, block + anchor, 1)
