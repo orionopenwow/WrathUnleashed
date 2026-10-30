@@ -180,6 +180,7 @@ def scrub(text: str) -> str:
         if "blizzard" in w:
             return "the publisher"
         return "the game"
+    s = re.sub(r"(?i)\b(?:blizzard|world\s*of\s*warcraft|wow|warcraft)\s+(?=fans?\b|players?\b|community\b|veterans?\b)", "", s)
     s = BANNED_RE.sub(rep, s)
     s = re.sub(r"\bthe game(\s+the game)+\b", "the game", s)
     s = re.sub(r"\b([Aa]) (?=[aeiouAEIOU][a-z])", r"\1n ", s)
