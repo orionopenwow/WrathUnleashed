@@ -349,3 +349,5 @@
 1118b ship Save to GitHub: the front page touches
 1119a signin Side menu: Modes, Gallery and Status out
 1119b ship Save to GitHub: the side menu
+1120a signin Download goes straight to Leyline.exe (one file, no installer)
+1120b ship Save to GitHub: the Download link

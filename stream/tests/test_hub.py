@@ -168,7 +168,7 @@ check("header: the phone sheet has the same items as tiles, and the download", r
 check("header: a line icon by every item (inline SVG, currentColor)", nav.count('<svg viewBox="0 0 24 24" aria-hidden="true">') == 6 + 1 + 5 + 5
       and "stroke:currentColor" in front)
 check("header: Download (primary) and Sign In (the crystal) on the right, no item active on the front page",
-      re.search(r'<div class="hb-end"><a class="hb-dl" href="https://github\.com/orionopenwow/Leyline/releases"[^>]*>.*?Download</a>'
+      re.search(r'<div class="hb-end"><a class="hb-dl" href="https://github\.com/orionopenwow/Leyline/releases/download/launcher-latest/Leyline\.exe"[^>]*>.*?Download</a>'
                 r'<a class="hb-signin" href="/login\?next=%2Fwrath"><img src="/wrath/art/leyline-crystal-128.png"', hd, re.S)
       and on == [] and 'aria-current="page"' not in hd)
 check("header: sticky with a blur, a hairline once scrolled, none of it moving with reduced motion",
@@ -180,7 +180,7 @@ check("hero: the whole mark leads, crisp (the 512px layers), big (~400px, 220px 
       and "hb-crystal" not in front
       and "Every client, every server" in front and "One launcher for every classic client and every server" in front
       and "hb-bullets" not in front and "TODO(owner): the hero heading" in front
-      and 'class="hb-hero-a"' not in front and 'class="hb-dl" href="https://github.com/orionopenwow/Leyline/releases"' in front)
+      and 'class="hb-hero-a"' not in front and 'class="hb-dl" href="https://github.com/orionopenwow/Leyline/releases/download/launcher-latest/Leyline.exe"' in front)
 stats = re.search(r'<section class="hb-sec" id="status".*?</section>', front, re.S).group(0)
 check("Platform Status: the main realm online from realm_status, sign-in, the network, the relay, the mod catalog",
       all(x in stats for x in ('Server: <em class="ok">OK</em> · 3 playing', "Sign-in", "Realm network", "Relay", "Mod catalog", " items · "))
@@ -285,7 +285,8 @@ junk = req("/wrath/leyline-preview/catalog?q=%3Cscript%3E")[2].decode()
 check("catalog: the query is escaped", "<script>" not in junk and "&lt;script&gt;" in junk)
 item = req("/wrath/leyline-preview/p/" + first["id"].replace(":", "-"))[2].decode()
 check("item: View source, credit, licence, no Install", "View source on GitHub" in item and first["licence"] in item
-      and 'rel="noopener noreferrer nofollow ugc"' in item and ">Install<" not in item and "/download" not in item)
+      and 'rel="noopener noreferrer nofollow ugc"' in item and ">Install<" not in item
+      and "/download" not in re.sub(r'<header class="hb-top">.*?</header>|<footer class="hb-foot">.*?</footer>', "", item, flags=re.S))   # the menu's own Download is the launcher
 check("item: the repo URL is a link, never shown as text", first["repo"] not in visible(item))
 theme = req("/wrath/leyline-preview/p/theme-night-sky")[2].decode()
 check("themes: listed, bad ones dropped", "Night Sky" in theme and "WoW theme" not in req("/wrath/leyline-preview/catalog?cat=themes")[2].decode())
