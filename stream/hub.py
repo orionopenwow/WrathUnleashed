@@ -192,7 +192,25 @@ def build_tag(v) -> str:
 
 
 ENTRY_KEYS = {"id", "name", "author", "owner", "repo", "forge", "licence", "category", "type", "builds", "summary",
-              "description", "stars", "updated", "archived", "needs", "source", "score"}
+              "description", "stars", "updated", "archived", "needs", "source", "score", "release"}
+RELEASE_KEYS = {"tag", "date", "url"}
+
+
+def release_problem(r, repo: str) -> str:
+    """"" when an entry's latest-release record ({tag, date, url}: the release's page on the repo's own forge) is
+    fine, else what is wrong. The daily index refresh writes it (tools/hub-index/hub_index.py)."""
+    if not isinstance(r, dict) or set(r) - RELEASE_KEYS or not {"tag", "url"} <= set(r):
+        return "release must be {tag, date, url}"
+    if not isinstance(r["tag"], str) or not r["tag"].strip() or len(r["tag"]) > 40 or CTRL_RE.search(r["tag"]) \
+            or "<" in r["tag"] or ">" in r["tag"]:
+        return "release tag"
+    if r.get("date") not in (None, "") and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(r.get("date"))):
+        return "release date"
+    url = r["url"]
+    if not isinstance(url, str) or not url.startswith(repo + "/") or len(url) > 400 or re.search(r"[\s<>\"']", url) \
+            or CTRL_RE.search(url):
+        return "release url must be on the entry's own repo"
+    return ""
 
 
 def visible_text(e: dict) -> str:
@@ -250,6 +268,8 @@ def validate_index(doc) -> list[str]:
                 out.append(f"{where}: {k} has markup or control characters")
         if not isinstance(e.get("score"), (int, float)) or isinstance(e.get("score"), bool):
             out.append(f"{where}: score")
+        if "release" in e and (p := release_problem(e["release"], e.get("repo", ""))):
+            out.append(f"{where}: {p}")
     ids = [e.get("id") for e in doc["entries"] if isinstance(e, dict)]
     order = sorted(doc["entries"], key=entry_order) if all(isinstance(e, dict) for e in doc["entries"]) else None
     if order is not None and [e.get("id") for e in order] != ids:
@@ -627,15 +647,19 @@ class Hub:
                                 base=BASE + "/realms", sample=si() if (si := self.portal("sample_info")) else None))
         return self._shell("Realms · Leyline", body, BASE + "/realms")
 
-    def card(self, i: dict) -> str:
+    def card(self, i: dict, m: dict | None = None, rk=None) -> str:
         e = html.escape
+        rank = ""
+        if m is not None and rk is not None:
+            rank = (f'<p class="hb-rk">{e(rk.stars_text(m["rating"]))} · {m["installs"]["all"]} installs'
+                    + (" · Install with Leyline" if rk.installable(i) else "") + "</p>")
         badge = {"workshop": "Workshop", "index": "Community", "theme": "Theme"}[i["source"]]
         builds = " ".join(f'<span class="hb-tag">{e(BUILD_LABEL.get(b, b))}</span>' for b in i["builds"])
         stars = f' · ★ {int(i["stars"])}' if isinstance(i.get("stars"), int) and not isinstance(i.get("stars"), bool) else ""
         return (f'<article class="hb-card"><h3><a href="{BASE}/p/{_slug(i["id"])}">{e(i["name"])}</a></h3>'
                 f'<p class="hb-by">by {e(i["author"] or "unknown")} · <span class="hb-src hb-{i["source"]}">{badge}</span></p>'
                 f'<p>{e(i.get("description") or i["summary"])}</p><p class="hb-meta">{builds}'
-                f'<span class="hb-lic">{e(i.get("licence") or "licence not stated")}{stars}</span></p></article>')
+                f'<span class="hb-lic">{e(i.get("licence") or "licence not stated")}{stars}</span></p>{rank}</article>')
 
     def catalog_page(self, query: dict) -> bytes:
         e = html.escape
@@ -643,7 +667,11 @@ class Hub:
         build, cat, source, text, sort = build_tag(q1("build")), q1("cat"), q1("source"), clean_line(q1("q"), 60), q1("sort") or "score"
         cat = cat if cat in CATEGORY_IDS + ["themes"] else ""
         source = source if source in ("workshop", "index", "theme") else ""
-        sort = sort if sort in ("score", "name", "updated") else "score"
+        rk = self.portal("hub_rank")
+        rk = rk if rk is not None and getattr(rk, "store", None) is not None else None
+        ranked_sorts = [s for s, _ in rk.SORT_LABELS] if rk else []
+        sort = sort if sort in ("score", "name", "updated") or sort in ranked_sorts else "score"
+        kind = q1("kind") if rk and q1("kind") in rk.KINDS else ""
         try:
             page = max(1, min(500, int(q1("page") or 1)))
         except ValueError:
@@ -655,12 +683,17 @@ class Hub:
             items = [i for i in items if i["category"] == cat]
         if source:
             items = [i for i in items if i["source"] == source]
+        if kind:
+            items = [i for i in items if rk.kind_of(i) == kind]
         if text:
             words = text.lower().split()
             items = [i for i in items if all(w in (i["name"] + " " + i["summary"] + " " + i.get("description", "")
                                                    + " " + i["author"]).lower() for w in words)]
+        metrics = rk.store.metrics(self.items()) if rk else {}
         if sort == "name":
             items.sort(key=lambda i: (i["name"].lower(), i["id"]))
+        elif sort in ranked_sorts:
+            items.sort(key=lambda i: rk.sort_key(sort, metrics[i["id"]], i))
         elif sort == "updated":
             items.sort(key=lambda i: (i.get("updated") or "", i["name"].lower()), reverse=True)
         else:
@@ -671,7 +704,7 @@ class Hub:
         shown = items[(page - 1) * self.PER_PAGE: page * self.PER_PAGE]
 
         def link(**over):
-            cur = {"build": build, "cat": cat, "source": source, "q": text, "sort": sort if sort != "score" else ""}
+            cur = {"build": build, "cat": cat, "source": source, "kind": kind, "q": text, "sort": sort if sort != "score" else ""}
             cur.update(over)
             qs = urllib.parse.urlencode({k: v for k, v in cur.items() if v})
             return f"{BASE}/catalog" + (f"?{qs}" if qs else "")
@@ -682,16 +715,21 @@ class Hub:
         f_build = chips("build", [("", "All builds")] + [(b, BUILD_LABEL[b]) for b in BUILDS], build)
         f_cat = chips("cat", [("", "All")] + CATEGORIES + [THEMES], cat)
         f_src = chips("source", [("", "Everything"), ("workshop", "Workshop"), ("index", "Community"), ("theme", "Themes")], source)
-        f_sort = chips("sort", [("", "Best"), ("name", "A to Z"), ("updated", "Recently updated")], sort if sort != "score" else "")
+        if rk:
+            f_sort = chips("sort", [("", "Best")] + rk.SORT_LABELS + [("name", "A to Z")], sort if sort != "score" else "")
+            f_kind = "<p>" + chips("kind", [("", "Every kind")] + rk.KIND_LABELS, kind) + "</p>"
+        else:
+            f_sort = chips("sort", [("", "Best"), ("name", "A to Z"), ("updated", "Recently updated")], sort if sort != "score" else "")
+            f_kind = ""
         hidden = "".join(f'<input type="hidden" name="{k}" value="{e(v)}">' for k, v in
-                         (("build", build), ("cat", cat), ("source", source)) if v)
+                         (("build", build), ("cat", cat), ("source", source), ("kind", kind), ("sort", sort if sort != "score" else "")) if v)
         nav = ""
         if pages > 1:
             nav = ('<nav class="hb-pages" aria-label="Pages">'
                    + (f'<a href="{e(link(page=str(page - 1)))}">Previous</a>' if page > 1 else "")
                    + f"<span>Page {page} of {pages}</span>"
                    + (f'<a href="{e(link(page=str(page + 1)))}">Next</a>' if page < pages else "") + "</nav>")
-        grid = "".join(self.card(i) for i in shown) or (
+        grid = "".join(self.card(i, metrics.get(i["id"]) if rk else None, rk) for i in shown) or (
             '<p class="hb-empty">Nothing here yet. '
             + (f'<a href="{BASE}/submit">Submit a mod</a> to fill it.' if cat != "themes" else "Theme packs are on the way.") + "</p>")
         body = (f'<header class="hb-head"><h1>Catalog</h1><p>{total} items'
@@ -699,11 +737,12 @@ class Hub:
                 f'<form class="hb-search" method="get" action="{BASE}/catalog" role="search">{hidden}'
                 f'<label for="hb-q">Search</label><input id="hb-q" name="q" value="{e(text)}" maxlength="60">'
                 '<button type="submit">Search</button></form>'
-                f'<div class="hb-filters"><p>{f_build}</p><p>{f_cat}</p><p>{f_src}</p><p>{f_sort}</p></div>'
-                f'<div class="hb-grid">{grid}</div>{nav}')
+                f'<div class="hb-filters"><p>{f_build}</p><p>{f_cat}</p><p>{f_src}</p>{f_kind}'
+                f'<p role="tablist" aria-label="Sort">{f_sort}</p></div>'
+                f'<div class="hb-grid">{grid}</div>{nav}' + (f"<style>{rk.RANK_CSS}</style>" if rk else ""))
         return self._shell("Catalog · Leyline", body, BASE + "/catalog")
 
-    def item_page(self, slug: str) -> tuple[int, bytes]:
+    def item_page(self, slug: str, handler=None, query: dict | None = None) -> tuple[int, bytes]:
         e = html.escape
         i = self.get_item(slug)
         if i is None:
@@ -720,6 +759,9 @@ class Hub:
             rows.append(("Needs", i["needs"]))
         if i.get("archived"):
             rows.append(("Status", "Archived by its authors (read-only)"))
+        rel = i.get("release") if isinstance(i.get("release"), dict) else None
+        if rel:
+            rows.append(("Latest release", rel["tag"] + (f" ({rel['date']})" if rel.get("date") else "")))
         table = "".join(f"<tr><th>{e(k)}</th><td>{e(v)}</td></tr>" for k, v in rows)
         acts = []
         if i["source"] == "workshop":
@@ -736,9 +778,16 @@ class Hub:
                                                  ": a link people shared."),
                "theme": "A theme pack for the Leyline launcher."}[i["source"]]
         desc = f'<p class="hb-repo">From the repo: {e(i["description"])}</p>' if i.get("description") else ""
+        if rel and i.get("repo") and rel["url"].startswith(i["repo"] + "/"):
+            acts.append(f'<a class="ly-btn hb-alt" href="{e(rel["url"])}" rel="noopener noreferrer nofollow ugc">Latest release</a>')
+        rk = self.portal("hub_rank")
+        try:
+            panel = rk.item_panel(handler, i, query) + f"<style>{rk.RANK_CSS}</style>" if rk is not None and handler is not None else ""
+        except Exception:   # noqa: BLE001: the rankings never break the page
+            panel = ""
         body = (f'<article class="ly-panel hb-item"><h1>{e(i["name"])}</h1><p class="hb-sum">{e(i["summary"])}</p>{desc}'
                 f'<table class="ly-table">{table}</table><p class="hb-actions">{" ".join(acts)}</p>'
-                f'<p class="hb-fine">{e(how)}</p></article>')
+                f'<p class="hb-fine">{e(how)}</p></article>{panel}')
         return 200, self._shell(f"{i['name']} · Leyline", body, BASE + "/p/" + slug)
 
     def creators_page(self) -> bytes:
@@ -979,7 +1028,7 @@ def get(handler, path: str, query: dict) -> None:
         handler.send(200, hub.submit_page(done=done), headers=_robots())
         return
     if path.startswith(BASE + "/p/"):
-        status, body = hub.item_page(path[len(BASE + "/p/"):])
+        status, body = hub.item_page(path[len(BASE + "/p/"):], handler, query)
         handler.send(status, body, headers=_robots())
         return
     handler.send(404, hub._shell("Not found · Leyline", '<section class="ly-panel"><h2>Not found</h2>'
