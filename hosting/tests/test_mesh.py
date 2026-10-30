@@ -329,6 +329,41 @@ class Relays(unittest.TestCase):
                     os.environ[k] = x
 
 
+class CrossLanguage(unittest.TestCase):
+    def test_the_launcher_test_vector_verifies_here(self):
+        # launcher/src-tauri/src/p2p/mesh.rs python_signed_records_verify_here reads the same file
+        p = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                         "launcher", "src-tauri", "src", "p2p", "mesh-vector.json")
+        with open(p, encoding="utf-8") as f:
+            recs = json.load(f)["records"]
+        rid, seq = mesh.check(json.loads(json.dumps(recs[0])), 1761700010)
+        self.assertEqual((rid, seq), ("r-kzdvvj2umnduyauf", 1761700000123))
+        self.assertTrue(mesh.check(recs[1], 1761700010)[0].startswith("n-"))
+
+
+class Simulation(unittest.TestCase):
+    def test_the_harness_runs_small(self):
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("numpy")
+        import importlib.util
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        spec = importlib.util.spec_from_file_location("meshsim", os.path.join(here, "mesh-sim", "meshsim.py"))
+        sim = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sim)
+        rng = np.random.default_rng(1)
+        g = sim.gossip(500, rng, offline=0.3, malicious=0.1)
+        self.assertEqual(g["reached"], 1.0)
+        r = sim.real_merge(rng, n=30, realms=3, rounds=15)
+        self.assertEqual(r["forged_or_tampered_records_accepted"], 0)
+        self.assertEqual(r["records_left_after_expiry"], 0)
+        d = sim.dht(500, rng, lookups=10, offline=0.3)
+        self.assertGreater(d["found_closest_live_node"], 0.8)
+        c = sim.relay_choice(rng, players=2000, realms=100, volunteers=30)
+        self.assertEqual(c["unserved"], 0)
+
+
 class EndToEnd(unittest.TestCase):
     def test_agent_heartbeat_to_relay_a_reaches_relay_b_over_http(self):
         async def go():

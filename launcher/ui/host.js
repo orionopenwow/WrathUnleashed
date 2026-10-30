@@ -224,6 +224,22 @@
         } catch (e) { note(advStatus, String(e), "bad"); }
       }));
     }
+    // "Help the network: relay for others" (docs/LEYLINE-MESH.md): only when the website offers it AND this PC is "On".
+    if (v.site.relay_volunteer && v.local.overrides.relay_volunteer === true) {
+      const hostIn = mk("input", ""); hostIn.placeholder = "this PC's public name, like relay.example.org"; hostIn.size = 34;
+      const vRow = mk("div", "row");
+      vRow.append(mk("span", "hint", "Relaying needs a public name for this PC and ports 80, 443 and 41000-41051 open. Players' game traffic passes through it (never passwords). "), hostIn,
+        btn("START RELAYING", "btn small", async () => {
+          note(advStatus, "Starting the community relay…");
+          try { note(advStatus, await call("host_volunteer_relay", { on: true, publicHost: hostIn.value.trim(), region: null }), "ok"); }
+          catch (e) { note(advStatus, String(e), "bad"); }
+        }),
+        btn("STOP", "btn small", async () => {
+          try { note(advStatus, await call("host_volunteer_relay", { on: false, publicHost: null, region: null }), "ok"); }
+          catch (e) { note(advStatus, String(e), "bad"); }
+        }));
+      advList.append(vRow);
+    }
     if (v.error) note(advStatus, v.from_cache ? "Using the saved copy of the website's switches (offline)." : "Could not read the website's switches: everything stays off unless you turn it on here.", "warn");
   }
 
