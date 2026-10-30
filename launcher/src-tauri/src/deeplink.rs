@@ -3,7 +3,7 @@
 //! The scheme is registered by the installer (tauri.conf.json `plugins.deep-link.desktop.schemes`). On Windows and
 //! Linux the OS starts Leyline with the link as an argument; `from_args` finds it. A link never installs anything
 //! by itself: the UI shows the project and the player clicks INSTALL (a web page can open a link, so the click is
-//! the consent). Only `install/<id>` with a well-formed catalog id is understood; anything else is ignored.
+//! the consent). Only `install/<catalog id>` and `realm/<realm id or official>` are understood; anything else is ignored.
 
 /// What a link asks for.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -11,6 +11,9 @@
 pub enum Link {
     /// Show this catalog project with its INSTALL button.
     Install(String),
+    /// Show this realm on the Realms page with its PLAY button (a website's "Open in launcher"). Nothing starts
+    /// until the player clicks PLAY.
+    Realm(String),
 }
 
 pub const SCHEME: &str = "leyline";
@@ -40,6 +43,7 @@ pub fn parse(url: &str) -> Option<Link> {
     let id = id.replace("%3A", ":").replace("%3a", ":");
     match action {
         "install" if id_ok(&id) => Some(Link::Install(id)),
+        "realm" if id == "official" || crate::realms::realm_id_ok(&id) => Some(Link::Realm(id)),
         _ => None,
     }
 }
@@ -59,6 +63,17 @@ mod tests {
         assert_eq!(parse("LEYLINE://install/mod%3Apings/"), Some(Link::Install("mod:pings".into())));
         assert_eq!(parse("leyline://install/link:0123456789ab?from=hub"), Some(Link::Install("link:0123456789ab".into())));
         assert_eq!(parse("leyline://install/theme:night-sky"), Some(Link::Install("theme:night-sky".into())));
+    }
+
+    #[test]
+    fn parses_realm_links() {
+        assert_eq!(parse("leyline://realm/abcdefgh234567ab"), Some(Link::Realm("abcdefgh234567ab".into())));
+        assert_eq!(parse("leyline://realm/official/?from=hub"), Some(Link::Realm("official".into())));
+        for bad in ["leyline://realm/", "leyline://realm/xyz", "leyline://realm/../x", "leyline://realm/ABCDEFGH234567AB"] {
+            assert_eq!(parse(bad), None, "{bad}");
+        }
+        let json = serde_json::to_value(Link::Realm("official".into())).unwrap();
+        assert_eq!(json, serde_json::json!({"action": "realm", "id": "official"}));
     }
 
     #[test]

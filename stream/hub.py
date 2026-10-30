@@ -796,8 +796,9 @@ class Hub:
             acts.append(f'<a class="hb-play" href="{e(href)}" aria-label="Play {e(r["name"])} in your browser">Play in browser</a>')
         elif live:
             acts.append(f'<span class="hb-need">Needs a {e(build)} client</span>')
-        if REALM_DEEPLINK and r.get("id") and not r.get("home"):
-            acts.append(f'<a class="hb-ghost" href="{e(REALM_DEEPLINK.format(id=r["id"]))}">Open in launcher</a>')
+        if REALM_DEEPLINK and (r.get("home") or r.get("id")):
+            rid = "official" if r.get("home") else r["id"]
+            acts.append(f'<a class="hb-ghost" href="{e(REALM_DEEPLINK.format(id=rid))}">Open in launcher</a>')
         if r.get("address"):
             acts.append(f'<code class="hb-addr" title="The realm address for a desktop client">{e(r["address"])}</code>')
         rid = r.get("id") or ""
@@ -1545,10 +1546,9 @@ function tick(){if(d.hidden)return;
 setInterval(tick,30000);d.addEventListener("visibilitychange",function(){if(!d.hidden)tick();});
 })();"""
 
-# The launcher's deep link for a realm. Today the launcher's leyline:// scheme (launcher/src-tauri/src/deeplink.rs)
-# only understands install/<catalog id>, so realm rows have no "Open in launcher" yet; set this to
-# "leyline://realm/{id}" once deeplink.rs accepts it (docs/LAUNCHER-IN-BROWSER.md, the first open gap).
-REALM_DEEPLINK = ""
+# The launcher's deep link for a realm (launcher/src-tauri/src/deeplink.rs: realm/<realm id or official>). It shows
+# the realm on the launcher's Realms page with PLAY focused; nothing starts until the player clicks PLAY.
+REALM_DEEPLINK = "leyline://realm/{id}"
 BROWSER_BUILD = 12340   # the browser game is a 3.3.5a client: only 3.3.5a realms get "Play in browser"
 FRONT_REALMS = 60       # rows sent on the front page (8 show until a filter is used; the rest are on the realm list)
 

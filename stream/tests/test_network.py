@@ -290,7 +290,8 @@ check("hub realm list: badges, build, core, region, uptime", all(x in sec for x 
       "1.12.1 · AzerothCore", "North America east", "98% up", "<b class=\"hb-n\">30</b> playing", "40 bots")), sec[:400])
 check("hub realm list: a GET form filter that works without script", f'action="/wrath/leyline-preview/realms" data-rf="hb-rlist"' in sec
       and '<option value="1.12.1">' in sec and 'name="now" value="1"' in sec)
-check("hub realm list: no Open in launcher until deeplink.rs accepts a realm link", "leyline://" not in sec and wp.hub_mod.REALM_DEEPLINK == "")
+check("hub realm list: Open in launcher on every row (the home realm as official)", 'href="leyline://realm/official"' in sec
+      and sec.count(">Open in launcher</a>") == sec.count('class="hb-addr"') or sec.count(">Open in launcher</a>") >= 2, sec[:300])
 st, _, only = req("GET", "/wrath/leyline-preview/realms?build=1.12.1&now=1")
 check("hub realms page: the form's filters on the server", st == 200 and "<b>Picked One</b>" in only and "<b>Busy Den</b>" not in only
       and "Leyline Sample Hangout" not in only)

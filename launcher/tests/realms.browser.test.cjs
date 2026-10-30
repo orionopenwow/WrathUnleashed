@@ -39,6 +39,7 @@ const FAKE = (p2p) => {
       case 'host_listing': return details;
       case 'host_listing_set': details = args.details; return 'Saved. The realm list shows them within a minute.';
       case 'open_url': return null;
+      case 'deep_link_take': { const l = window.__link || null; window.__link = null; return l; }
       default: throw 'unknown ' + cmd;
     }
   } } };
@@ -163,4 +164,21 @@ test('Realms page: 4.3.4 / 5.4.8 are hidden until the override', async () => {
   assert.deepEqual(await all.page.$$eval('#rl-f-build option', (o) => o.map((x) => x.value)), ['', '1.12.1', '3.3.5a', '4.3.4']);
   assert.deepEqual(all.errors, []);
   await all.page.close();
+});
+
+test('A website\'s Open in launcher (leyline://realm/<id>) shows that realm with PLAY focused, starting nothing', async () => {
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.addInitScript(() => { window.__link = { action: 'realm', id: 'bbbbbbbbbbbbbbbb' }; });
+  await page.addInitScript(FAKE, false);
+  await page.goto(INDEX);
+  await page.waitForFunction(() => document.querySelector('#rl-list .realm-card.linked'));
+  assert.ok(await page.locator('#page-realms').evaluate((e) => e.classList.contains('on')));
+  assert.equal(await page.textContent('#rl-list .realm-card.linked .name'), 'Busy Den');
+  assert.match(await page.textContent('#rl-status'), /From the website: Busy Den\. Press PLAY/);
+  assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.textContent), 'PLAY');
+  const started = await page.evaluate(() => window.__calls.map(([c]) => c).filter((c) => /^(play|play_realm|start_)/.test(c)));
+  assert.deepEqual(started, [], 'nothing starts by itself');
+  assert.deepEqual(errors, []);
 });

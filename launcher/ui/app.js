@@ -767,6 +767,7 @@ async function installProject(p, btn) {
 async function handleDeepLink() {
   let link = null;
   try { link = await invoke("deep_link_take"); } catch (_) { return; }
+  if (link && link.action === "realm" && typeof link.id === "string") return showLinkedRealm(link.id);
   if (!link || link.action !== "install" || typeof link.id !== "string") return;
   const p = catalog.projects.find((x) => x.id === link.id);
   show("discover", true);   // the catalog was just loaded
@@ -782,6 +783,20 @@ async function handleDeepLink() {
   const card = document.querySelector(`#cat-grid .mod-card[data-id="${CSS.escape(p.id)}"]`);
   if (card) { card.scrollIntoView({ block: "center" }); const b = card.querySelector(".acts .btn"); if (b && !b.disabled) b.focus(); }
   say("cat-status", c ? `From the hub: ${p.name}. Press INSTALL to put it in ${c.name}.` : `From the hub: ${p.name}. Add your game client first, then press INSTALL.`, "ok");
+}
+
+// A website's "Open in launcher" (leyline://realm/<id>): show that realm on the Realms page with PLAY focused.
+// Nothing starts until the player clicks PLAY.
+async function showLinkedRealm(id) {
+  show("realms", true);
+  if (!realmsCache.length) { try { await loadRealms(false); } catch (_) {} }
+  const r = realmsCache.find((x) => (id === "official" ? x.official : x.realm_id === id));
+  if (!r) { say("rl-status", "That realm isn't on the realm list right now: it may be offline. Try Refresh in a minute.", "warn"); return; }
+  $("rl-mine").checked = false;
+  renderRealms();
+  const card = [...document.querySelectorAll("#rl-list .realm-card")].find((c) => c.querySelector(".name")?.textContent === r.name);
+  if (card) { card.classList.add("linked"); card.scrollIntoView({ block: "center" }); const b = card.querySelector(".acts .btn"); if (b && !b.disabled) b.focus(); }
+  say("rl-status", `From the website: ${r.name}. Press PLAY to join.`, "ok");
 }
 
 $("cat-q").addEventListener("input", renderCatalog);
