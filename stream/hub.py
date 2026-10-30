@@ -897,7 +897,7 @@ class Hub:
             ok = False
         if not ok:
             return ""
-        return ('html{background:linear-gradient(180deg,rgba(11,13,20,.32),rgba(11,13,20,.62) 80%) fixed,'
+        return ('html{background:linear-gradient(180deg,rgba(11,13,20,.46),rgba(11,13,20,.74) 80%) fixed,'
                 f'url(/wrath/art/{BACKDROP}) center top/cover no-repeat fixed,#0b0d14}}body.hb{{background:transparent}}'
                 '@media print{html{background:#fff}}')
 
@@ -1142,27 +1142,32 @@ class Hub:
                 '<path d="M44 7l3-3 3 3-3 3z" class="dm s"/><circle cx="61" cy="7" r="1.6" class="dt"/></svg></div>')
 
     def host_showcase(self) -> str:
-        """The "Host a server" picture: the server software the host pack runs (HOST_CORES), one card each with what it is
-        good for, its scripting, bots and the eras it covers (words, never client numbers), One click to host or Coming,
-        "Your own" for any core on the relay, and the realm console's status strip. Slate cards, a rune rule, torch gold
-        used sparingly, our crest from the Leyline crystal. Purely our own shapes and colours."""
+        """The "Server hosting software" picture (owner 2026-10-30: "server software should be the server GM console /
+        health etc in our new style and all in one host server package"): the host pack's own console as one panel, with
+        sample values. Health (the services and players), the GM controls of the in-game Your realm window
+        (realm/custom/lua_scripts/ov_hostctl.lua), Check my realm's checks (hosting/kit/tools/wuhost/selfcheck.py),
+        Realm tools.bat's jobs, and the cores it runs (HOST_CORES: One click only for what the kit hosts today)."""
         e = html.escape
-        cards = []
+        svc = "".join(f'<li><i></i>{e(x)}<span>{e(y)}</span></li>' for x, y in HOST_SERVICES)
+        acts = "".join(f'<li><b>{e(a)}</b><span>{e(b)}</span></li>' for a, b in HOST_GM)
+        chk = "".join(f'<li><i aria-hidden="true"></i>{e(x)}</li>' for x in HOST_CHECKS)
+        tools = "".join(f"<li>{e(x)}</li>" for x in HOST_TOOLS)
+        cores = []
         for cid, name, status, eras, line, script, bots in HOST_CORES:
             live = status == "live"
-            chip = ('<span class="hb-sw-chip go">One click to host</span>' if live else '<span class="hb-sw-chip soon">Coming</span>')
-            cards.append(f'<li class="hb-sw-c{"" if live else " soon"}" data-core="{cid}" data-status="{status}">'
-                         f'<p class="hb-sw-h"><b>{e(name)}</b>{chip}</p><p class="hb-sw-l">{e(line)}</p>'
-                         f'<p class="hb-sw-eras">{"".join(f"<span>{e(x)}</span>" for x in eras)}</p>'
-                         f'<dl><dt>Scripting</dt><dd>{e(script)}</dd><dt>Bots</dt><dd>{e(bots)}</dd></dl></li>')
-        cards.append(f'<li class="hb-sw-c own" data-core="own" data-status="own"><p class="hb-sw-h"><b>{e(HOST_OWN[0])}</b>'
-                     f'<span class="hb-sw-chip">List it on the relay</span></p><p class="hb-sw-l">{e(HOST_OWN[1])}</p></li>')
-        svc = "".join(f'<li><i></i>{e(x)}<span>{e(y)}</span></li>' for x, y in HOST_SERVICES)
-        return ('<div class="hb-sw" role="group" aria-label="Server software Leyline hosts">'
-                f'<div class="hb-sw-top">{self._crest()}<div><p class="hb-sw-k">The host pack</p><p class="hb-sw-t">Server software</p></div>'
-                '<p class="hb-sw-run"><span aria-hidden="true"></span>Your realm · running</p></div>'
-                f'{self._rune_rule()}<ul class="hb-sw-list">{"".join(cards)}</ul>{self._rune_rule()}'
-                f'<ul class="hb-sw-svc" aria-label="The realm console">{svc}</ul></div>')
+            cores.append(f'<li class="hb-sw-core{"" if live else " soon"}" data-core="{cid}" data-status="{status}" title="{e(line)}">'
+                         f'<b>{e(name)}</b><span>{"One click" if live else "Coming"}</span></li>')
+        cores.append(f'<li class="hb-sw-core own" data-core="own" data-status="own" title="{e(HOST_OWN[1])}">'
+                     f'<b>{e(HOST_OWN[0])}</b><span>Relay agent</span></li>')
+        return ('<div class="hb-sw" role="group" aria-label="The host pack: your realm\'s console">'
+                f'<div class="hb-sw-top">{self._crest()}<div><p class="hb-sw-k">The host pack</p><p class="hb-sw-t">Your realm console</p></div>'
+                '<p class="hb-sw-run"><span aria-hidden="true"></span>Online · listed</p></div>'
+                f'{self._rune_rule()}<ul class="hb-sw-svc" aria-label="Health">{svc}</ul>'
+                '<div class="hb-sw-cols">'
+                f'<div class="hb-sw-box"><p class="hb-sw-bh">GM controls</p><ul class="hb-sw-acts">{acts}</ul></div>'
+                f'<div class="hb-sw-box"><p class="hb-sw-bh">Health check</p><ul class="hb-sw-chk">{chk}</ul>'
+                f'<p class="hb-sw-bh">Realm tools</p><ul class="hb-sw-tools">{tools}</ul></div></div>'
+                f'{self._rune_rule()}<p class="hb-sw-bh">Runs on</p><ul class="hb-sw-cores">{"".join(cores)}</ul></div>')
 
     def realm_list_art(self, got) -> str:
         """The "Realms & hopping" picture: a realm list in our own fantasy panel, from the live rows (realm_rows: ours
@@ -1281,8 +1286,8 @@ class Hub:
              [(dl, "Download the launcher", True), ("/wrath", "Play in your browser", False)],
              shot("home", "The Leyline launcher's home page: the server, your account, your game client and the PLAY button.")),
             ("host", "Server hosting software", "Host your own realm in one click",
-             "Run a realm from your own PC, on any core. The host pack is everything a host needs in one download: the "
-             "scripts, the realm tools and the relay agent. Our code only, never game files.",
+             "Run a realm from your own PC, on any core. The host pack is everything in one download: the realm, its "
+             "console with health checks and GM controls, the realm tools and the relay agent. Our code only, never game files.",
              ["Any core, your rules, your GM login", "No port forwarding: the relay lists it",
               "Start from the website or the launcher's Host page", "An invite link for friends"],
              [("/wrath/host", "Start hosting", False), (BASE + "/beacon", "Host a Beacon", False)], host_art),
@@ -1607,6 +1612,28 @@ class Hub:
             return "mode"
         return "addon" if i.get("type") == "addon" or i.get("category") == "addons" else "mod"
 
+    def mod_strip(self, items) -> str:
+        """Near the foot of the front page (owner 2026-10-30: "this place should show sliding gallery of mod images from
+        in game etc addon images"): a slow sliding strip of the gallery's real pictures, mods and addons and in game
+        (gallery_tiles; no drawn placeholder tiles, no launcher shots). The moving copy is aria-hidden; it stops on
+        hover or focus and does not move with reduced motion (then it scrolls sideways)."""
+        e = html.escape
+        tiles = [t for t in self.gallery_tiles(items) if t.get("img") and t["k"] in ("mods", "game")][:16]
+        if len(tiles) < 3:
+            return ""
+        out = []
+        for t in tiles:
+            src, w, h, alt = t["img"]
+            ext = ' rel="noopener noreferrer"' if t.get("ext") or str(t["href"]).startswith("http") else ""
+            out.append(f'<li><a class="hb-ms-t" href="{e(t["href"])}"{ext}><img src="{e(src)}" alt="{e(alt)}" width="{int(w)}" '
+                       f'height="{int(h)}" loading="lazy" decoding="async"><span><b>{e(neutral(t["title"]))}</b>'
+                       f'<i>{e(t.get("label") or "")}</i></span></a></li>')
+        items_html = "".join(out)
+        return ('<section class="hb-ms hb-rv" aria-labelledby="hb-ms-h"><div class="hb-ms-head"><h2 id="hb-ms-h">Mods in play</h2>'
+                f'<a href="{BASE}/catalog">Browse every mod</a></div>'
+                f'<div class="hb-ms-run"><ul class="hb-ms-l">{items_html}</ul><ul class="hb-ms-l dup" aria-hidden="true" inert>'
+                f'{items_html}</ul></div></section>')
+
     def gallery_tiles(self, items: list | None = None, want: int = 0) -> list[dict]:
         """Every picture the gallery can show, in the gallery's order: in-game shots, mods and launcher shots taken in
         turn (one of each, then the next), so any prefix is a mix. want: stop after that many (0: all).
@@ -1789,9 +1816,6 @@ class Hub:
         items = self.items()
         got = self.realm_rows() or False
         status = self.status_cards()
-        by_cat = {c: sum(1 for i in items if i["category"] == c) for c in CATEGORY_IDS + ["themes"]}
-        cats = "".join(
-            f'<a class="hb-chip" href="{BASE}/catalog?cat={c}">{e(n)} <small>{by_cat[c]}</small></a>' for c, n in CATEGORIES + [THEMES])
         body = (
             '<section class="hb-hero" id="top" aria-labelledby="hb-h">'
             f'<div class="hb-art" aria-hidden="true">{self._spin(400, "slow hb-hero-mark")}</div>'
@@ -1802,17 +1826,11 @@ class Hub:
             '<a class="hb-ghost lg" href="/wrath">Play in your browser</a></p>'
             '<p class="hb-note">Free and open source, for Windows, macOS and Linux. Nothing to buy.</p></section>'
             + self.ticker(got) + self.realm_section(got) + self.how_strip() + self.counters(got, items) + self.featured_mod() + self.features(got)
-            + self.gallery_section(items) + self.posters(got)
+            + self.posters(got)
             + f'<div class="hb-pair">{self.mod_of_week(items)}{self.herokey_teaser(got)}</div>'
             + self.creator_spotlight(items) + self.news_strip()
-            + f'<div class="hb-rv">{status}</div><div class="hb-rv">{self.spotlight()}</div>' +
-            '<section class="hb-sec hb-rv" aria-labelledby="hb-b"><h2 id="hb-b">Browse by category</h2>'
-            f'<p class="hb-chips">{cats}</p></section>'
-            '<section class="hb-two hb-rv">'
-            f'<a class="hb-box" href="{BASE}/creators"><b>For creators</b><span>Make an addon, a realm script or a whole mode: '
-            'the docs, the package format and how the index works.</span></a>'
-            f'<a class="hb-box" href="{BASE}/beacon"><b>Host a Beacon</b><span>Run your own realm and put it on the Leyline '
-            'list, so players can hop over from the launcher.</span></a></section>'
+            + f'<div class="hb-rv">{status}</div><div class="hb-rv">{self.spotlight()}</div>'
+            + self.mod_strip(items) +
             '<p class="hb-fine">Community projects are links: nothing of theirs is hosted here. Each belongs to its '
             'authors, under the licence they chose. Leyline is an independent open-source project.</p>')
         return self._shell("Leyline", body, path, nonce)
@@ -2398,8 +2416,8 @@ body.hb{margin:0;min-height:100vh;display:flex;flex-direction:column;background:
 .hb-skip:focus{top:8px}
 /* the header: the launcher's pages on the web. A sticky bar with a blur; a hairline and a shadow once the page scrolls
    (a scroll timeline where the browser has one, else .hb-scrolled from HUB_JS on the front page) */
-.hb-top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px 24px;padding:14px clamp(20px,2.6vw,48px);min-height:76px;
-background:rgba(24,27,35,.86);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid transparent}
+.hb-top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px 24px;padding:8px clamp(20px,2.6vw,48px);min-height:62px;
+background:rgba(20,23,31,.58);-webkit-backdrop-filter:blur(14px) saturate(1.2);backdrop-filter:blur(14px) saturate(1.2);border-bottom:1px solid transparent}
 .hb-top.hb-scrolled{border-bottom-color:var(--lk-border);box-shadow:0 6px 22px rgba(0,0,0,.35)}
 @supports (animation-timeline:scroll()){.hb-top{animation:hb-edge linear both;animation-timeline:scroll(root);animation-range:0 56px}}
 @keyframes hb-edge{from{border-bottom-color:transparent;box-shadow:none}to{border-bottom-color:var(--lk-border);box-shadow:0 6px 22px rgba(0,0,0,.35)}}
@@ -2473,7 +2491,9 @@ transform:translate(-50%,-50%);border-radius:50%;
 background:radial-gradient(closest-side,rgba(91,141,239,.34),rgba(139,108,240,.15) 55%,transparent 100%)}
 .hb-hero-mark{--ly-spin-size:clamp(220px,min(34vw,42vh),400px)!important;--ly-spin-turn:48s!important}
 .hb-hero-mark::before{background-image:url(/wrath/art/leyline-swirl-512.png)}
-.hb-hero-mark::after{background-image:url(/wrath/art/leyline-crystal-512.png);filter:drop-shadow(0 0 16px rgba(91,141,239,.6))}
+.hb-hero-mark::after{background-image:url(/wrath/art/leyline-crystal-512.png);filter:drop-shadow(0 0 18px rgba(140,180,255,.85)) drop-shadow(0 0 42px rgba(91,141,239,.6)) brightness(1.12)}
+.hb-hero-mark::before{filter:drop-shadow(0 0 14px rgba(139,108,240,.75)) drop-shadow(0 0 36px rgba(91,141,239,.45)) brightness(1.18) saturate(1.15)}
+.hb-art{position:relative}.hb-art::before{content:"";position:absolute;left:50%;top:50%;width:min(560px,90vw);aspect-ratio:1;translate:-50% -50%;border-radius:50%;background:radial-gradient(closest-side,rgba(11,13,20,.78),rgba(11,13,20,.45) 55%,transparent);pointer-events:none;z-index:-1}
 .hb-hero h1{margin:0 0 8px;font-size:clamp(22px,3vw,32px);line-height:1.1;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--lk-text-2)}
 .hb-sub-h{max-width:560px;margin:0 auto 18px;color:var(--lk-text-2);font-size:clamp(15px,1.8vw,17px);line-height:1.5}
 .hb-hero-a{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:10px 12px;margin:0}
@@ -2928,7 +2948,50 @@ background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,0) 60%)
 .hb-sw-eras{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px!important}
 .hb-sw-eras span{font-size:11px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--lk-accent-soft);color:var(--lk-accent-strong)}
 .hb-sw dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;margin:0;font-size:12px}.hb-sw dt{color:var(--lk-muted)}.hb-sw dd{margin:0;color:var(--lk-text-2)}
-.hb-sw-svc{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:0;padding:0;list-style:none}
+.hb-sw-svc{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:0;padding:0;list-style:none}
+.hb-ms{margin:34px 0 18px}
+.hb-ms-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}
+.hb-ms-head h2{margin:0;font-size:20px;font-weight:700}
+.hb-ms-head a{color:var(--lk-accent-strong);font-weight:600;font-size:14px}
+.hb-ms-run{display:flex;width:max-content;gap:14px;animation:hb-ms 70s linear infinite;
+mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent)}
+.hb-ms:hover .hb-ms-run,.hb-ms:focus-within .hb-ms-run{animation-play-state:paused}
+@keyframes hb-ms{to{transform:translateX(calc(-50% - 7px))}}
+.hb-ms-l{display:flex;gap:14px;margin:0;padding:0;list-style:none}
+.hb-ms-t{position:relative;display:block;width:300px;aspect-ratio:16/9;border-radius:12px;overflow:hidden;border:1px solid var(--lk-border);
+background:#11131a;box-shadow:0 10px 26px rgba(0,0,0,.35)}
+.hb-ms-t img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .4s}
+.hb-ms-t:hover img{transform:scale(1.05)}
+.hb-ms-t span{position:absolute;inset:auto 0 0;display:grid;padding:22px 12px 9px;background:linear-gradient(transparent,rgba(8,10,16,.88));color:#fff}
+.hb-ms-t b{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hb-ms-t i{font-style:normal;font-size:11px;color:var(--lk-text-2)}
+@media (prefers-reduced-motion:reduce){.hb-ms{overflow-x:auto}.hb-ms-run{animation:none;mask-image:none}.hb-ms-l.dup{display:none}}
+@media (max-width:640px){.hb-ms-t{width:240px}}
+.hb-sw-cols{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:10px;margin-top:10px}
+.hb-sw-box{padding:12px;border-radius:10px;background:rgba(0,0,0,.22);border:1px solid #2a2e39}
+.hb-sw-bh{margin:0 0 8px!important;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--lk-muted)}
+.hb-sw-box .hb-sw-bh+ul+.hb-sw-bh{margin-top:12px!important}
+.hb-sw-acts,.hb-sw-chk,.hb-sw-tools,.hb-sw-cores{margin:0;padding:0;list-style:none}
+.hb-sw-acts{display:grid;gap:6px}
+.hb-sw-acts li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;
+background:linear-gradient(180deg,#232836,#1c2029);border:1px solid #333a4a;font-size:12.5px}
+.hb-sw-acts li b{font-weight:700}
+.hb-sw-acts li span{color:var(--lk-muted);font-size:11px;text-align:right}
+.hb-sw-acts li:last-child{border-color:rgba(217,164,65,.45)}
+.hb-sw-acts li:last-child b{color:#f1cf86}
+.hb-sw-chk{display:grid;gap:5px;font-size:12.5px;color:var(--lk-text-2)}
+.hb-sw-chk li{position:relative;padding-left:20px}
+.hb-sw-chk i{position:absolute;left:0;top:3px;width:13px;height:13px;border-radius:50%;background:rgba(79,209,139,.16);border:1px solid var(--lk-ok)}
+.hb-sw-chk i::after{content:"";position:absolute;left:3.5px;top:1.5px;width:3px;height:6px;border:solid var(--lk-ok);border-width:0 1.6px 1.6px 0;rotate:45deg}
+.hb-sw-tools{display:flex;flex-wrap:wrap;gap:5px}
+.hb-sw-tools li{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:6px;background:var(--lk-accent-soft);color:var(--lk-accent-strong)}
+.hb-sw-cores{display:flex;flex-wrap:wrap;gap:6px}
+.hb-sw-core{display:flex;align-items:center;gap:6px;padding:4px 6px 4px 10px;border-radius:999px;border:1px solid rgba(217,164,65,.45);background:rgba(217,164,65,.08);font-size:12.5px}
+.hb-sw-core span{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:999px;background:rgba(217,164,65,.16);color:#f1cf86}
+.hb-sw-core.soon{border-color:var(--lk-border-strong);background:none}
+.hb-sw-core.soon span{background:rgba(255,255,255,.06);color:var(--lk-muted)}
+.hb-sw-core.own{border-style:dashed;border-color:#3d4352;background:none}
+.hb-sw-core.own span{background:var(--lk-accent-soft);color:var(--lk-accent-strong)}
 .hb-sw-svc li{position:relative;display:grid;padding:6px 8px 6px 22px;border-radius:8px;background:rgba(0,0,0,.24);border:1px solid #2a2e39;font-size:12px;font-weight:600}
 .hb-sw-svc i{position:absolute;left:9px;top:12px;width:7px;height:7px;border-radius:50%;background:var(--lk-ok);box-shadow:0 0 0 3px rgba(79,209,139,.16)}
 .hb-sw-svc span{color:var(--lk-muted);font-weight:500;font-size:11px}
@@ -2947,7 +3010,7 @@ background:rgba(0,0,0,.16);transition:background .15s,border-color .15s}
 .hb-rlx-p{font-weight:700}.hb-rlx-p.low{color:#5fd896}.hb-rlx-p.med{color:#e9c45c}.hb-rlx-p.high{color:#f2a654}.hb-rlx-p.full{color:#ff8a80}
 .hb-rlx-p.rec{color:#8fb2ff}.hb-rlx-p.off{color:var(--lk-muted);font-weight:500}
 .hb-rlx-f{display:flex;justify-content:space-between;gap:10px;margin-top:12px!important;font-size:13px}
-@media (max-width:560px){.hb-sw,.hb-rlx{padding:16px}.hb-sw-list{grid-template-columns:minmax(0,1fr)}.hb-sw-svc{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:560px){.hb-sw,.hb-rlx{padding:16px}.hb-sw-list{grid-template-columns:minmax(0,1fr)}.hb-sw-svc{grid-template-columns:repeat(2,minmax(0,1fr))}.hb-sw-cols{grid-template-columns:minmax(0,1fr)}
 .hb-sw-run{display:none!important}.hb-rlx-cols{display:none}
 .hb-rlx-r{grid-template-columns:minmax(0,1fr) auto;gap:2px 10px}.hb-rlx-n{grid-column:1}.hb-rlx-p{grid-column:2;grid-row:1;text-align:right}
 .hb-rlx-t{grid-column:1;grid-row:2;font-size:12px}.hb-rlx-ch{display:none}}
@@ -3226,8 +3289,15 @@ HOST_CORES = (
      "C++ scripts", "No bots"),
 )
 HOST_OWN = ("Your own", "Already run a server? Put it on the Leyline list with the relay agent and keep your own core.")
-# The realm console strip under the cores (what the host pack's Check shows).
-HOST_SERVICES = (("Database", "ready"), ("Login server", "ready"), ("World server", "ready"), ("Relay agent", "listed"))
+# The console's health tiles (sample values; what Check my realm and the in-game status show).
+HOST_SERVICES = (("Database", "ready"), ("Login server", "ready"), ("World server", "ready"), ("Relay agent", "listed"),
+                 ("Players", "12 online"), ("Uptime", "3 days"))
+# The in-game Your realm window's GM controls (ov_hostctl.lua), what Check my realm tests (selfcheck.py) and Realm tools.bat.
+HOST_GM = (("Announce", "to everyone online"), ("Message of the day", "shown at login"), ("Kick", "one player"),
+           ("Ban or unban", "an account"), ("Allow-list", "only listed characters"), ("Restart", "with a five-minute warning"))
+HOST_CHECKS = ("The servers on your PC", "The tunnel to the relay", "A login through the relay", "Your invite link",
+               "Your place on the realm list")
+HOST_TOOLS = ("Invite links", "Accounts for friends", "Public or private", "Who may sign up", "Server logs", "House rules")
 
 # The realm list picture in "Realms & hopping" (owner 2026-10-30: "the actual looking realm list thing but ... our featured
 # server names"): our own panel built from the live rows. Population in words from players online; the type from tags.

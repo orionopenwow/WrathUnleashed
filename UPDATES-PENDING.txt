@@ -333,3 +333,5 @@
 1108b ship Save to GitHub: the forms fix
 1109a signin Forms work in Chrome: Start server on the host page (and the other site forms)
 1109b ship Save to GitHub: the forms fix
+1110a signin Front page: dimmer backdrop, glowing logo, thinner see-through header, the host console panel, the mod strip (gallery section gone)
+1110b ship Save to GitHub: the front page touches
