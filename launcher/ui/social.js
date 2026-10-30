@@ -1,7 +1,9 @@
-// Leyline Launcher: the Friends page. Friends, presence and messages over the Rust core's social commands
+// Leyline Launcher: Community › Friends. Friends, presence and messages over the Rust core's social commands
 // (src-tauri/src/social.rs), which talk to the portal's /wrath/api/social (stream/social.py; docs/SOCIAL.md).
 //
-// Loaded before app.js: it adds its own nav button and page, so app.js's navigation picks them up like the others.
+// Loaded before app.js: it fills the Community page's Friends tab (#pane-friends in index.html); app.js's navigation
+// shows it (show("community", false, "friends"), or the old page id "friends"). The unread count goes on the
+// Community menu item and on the Friends tab.
 // While signed in it keeps one long poll open ("events"): that is what shows you "in the launcher" to your friends.
 // Sign-in is the website's own, in your browser (a code to approve); the launcher keeps only a revocable token.
 // Everything from the server is shown with textContent: no markup from anyone's name or message.
@@ -22,24 +24,18 @@
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const REASONS = [["spam", "Spam"], ["harassment", "Harassment"], ["hate", "Hate"], ["cheating", "Cheating"], ["other", "Something else"]];
 
-  // ---------------------------------------------------------------- the nav button and the page
-  const nav = document.querySelector("aside nav");
-  const navBtn = el("button", "nav");
-  navBtn.dataset.page = "friends";
-  navBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.4 2.7-6 6-6s6 2.6 6 6"/><path d="M16 11.5l2 2 3.5-4"/></svg>';
-  navBtn.appendChild(document.createTextNode("Friends"));
-  const navBadge = el("span", "badge");
-  navBadge.id = "nav-friends-count";
+  // ---------------------------------------------------------------- the tab (index.html) and its badges
+  const navBadge = $("nav-friends-count") || el("span", "badge");
+  const tabBadge = $("tab-friends-count");
   navBadge.hidden = true;
-  navBtn.appendChild(navBadge);
-  const community = nav && nav.querySelector('[data-page="community"]');
-  if (community) community.before(navBtn); else if (nav) nav.appendChild(navBtn);
+  function setBadge(n) {
+    for (const b of [navBadge, tabBadge]) { if (!b) continue; b.textContent = String(n); b.hidden = n === 0; }
+  }
 
-  const page = el("section", "page");
-  page.id = "page-friends";
+  const page = $("pane-friends");
   page.innerHTML = `
-    <div class="panel sx">
-      <div class="sx-head"><h2>Friends</h2><span class="sx-me" id="sx-me"></span></div>
+    <div class="sx">
+      <div class="sx-head"><span class="sx-me" id="sx-me"></span></div>
       <div id="sx-out" hidden>
         <p class="lede">Your Leyline friends in game, in the launcher and on the website, and messages that reach them wherever they are.
           Sign in with the website (Google or your Hero Key) in your browser: the launcher never sees your password.</p>
@@ -81,8 +77,7 @@
       </div>
       <p class="status" id="sx-status" role="status"></p>
     </div>`;
-  const main = document.querySelector("main");
-  if (main) main.appendChild(page);
+  const shown = () => page.classList.contains("on") && !!page.closest(".page.on");
   for (const [v, t] of REASONS) { const o = el("option", "", t); o.value = v; $("sx-reason").appendChild(o); }
 
   function say(text, kind) { const s = $("sx-status"); s.textContent = text || ""; s.className = "status" + (kind ? " " + kind : ""); }
@@ -94,7 +89,7 @@
   function showSignedOut() {
     signedIn = false; state = null; selected = null;
     $("sx-out").hidden = false; $("sx-in").hidden = true; $("sx-code").hidden = true; $("sx-me").textContent = "";
-    navBadge.hidden = true;
+    setBadge(0);
   }
 
   function showSignedIn() {
@@ -142,7 +137,7 @@
       b.onclick = () => openChat(f.pid);
       list.appendChild(b);
     }
-    navBadge.textContent = String(unread); navBadge.hidden = unread === 0;
+    setBadge(unread);
     // blocked
     const bl = $("sx-blocked"); bl.textContent = "";
     for (const x of state.blocked) {
@@ -189,7 +184,7 @@
       messages = r.messages || [];
       renderMessages();
       const f = friendBy(pid);
-      if (f && f.unread && page.classList.contains("on")) { await call("read", { with: pid }); }
+      if (f && f.unread && shown()) { await call("read", { with: pid }); }
     } catch (e) { failed(e); }
   }
 
@@ -332,8 +327,11 @@
       $("sx-report").hidden = true; $("sx-note").value = "";
     }
   });
-  // opening the page marks the open conversation read
-  navBtn.addEventListener("click", () => { if (signedIn) { refresh(); } });
+  // opening the tab refreshes (and so marks the open conversation read)
+  document.addEventListener("leyline:page", (ev) => {
+    const d = ev.detail || {};
+    if (signedIn && ((d.page === "community" && d.tab === "friends") || d.page === "friends")) refresh();
+  });
 
   // ---------------------------------------------------------------- start
   (async () => {

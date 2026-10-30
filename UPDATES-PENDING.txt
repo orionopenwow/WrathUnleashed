@@ -355,3 +355,5 @@
 1121b ship Save to GitHub: the bots switch
 1122a signin Host page: ready-made realms (Duels, Mod test, Event night, Roleplay, Small-group levelling)
 1122b ship Save to GitHub: the ready-made realms
+1123a signin Site flags: magnet links listed (off)
+1123b ship Save to GitHub: the launcher's new menu, panels, backdrop and realm cards; hidden magnet links (GitHub then rebuilds Leyline.exe)

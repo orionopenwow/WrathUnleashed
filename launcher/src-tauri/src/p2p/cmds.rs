@@ -148,3 +148,73 @@ pub async fn p2p_nat_check() -> Result<NatReport, String> {
     })
     .await
 }
+
+// Shared magnet: links (p2p/magnet.rs), behind the `magnet_links` flag. With the flag off every command answers "off"
+// and does nothing. Only info-hashes of Leyline's own checked packages (the cached catalog) are accepted.
+
+fn inbox() -> &'static std::sync::Mutex<crate::p2p::magnet::Inbox> {
+    static INBOX: std::sync::OnceLock<std::sync::Mutex<crate::p2p::magnet::Inbox>> = std::sync::OnceLock::new();
+    INBOX.get_or_init(Default::default)
+}
+
+/// A `magnet:` link Leyline was started with (its arguments). Queued for `magnet_pending`; nothing is fetched.
+pub fn magnet_from_args() {
+    if let Some(uri) = crate::p2p::magnet::from_args(std::env::args()) {
+        let dir = settings::app_dir();
+        let flags = flags::current(&dir);
+        if flags.magnet_links {
+            if let Ok(mut i) = inbox().lock() {
+                crate::p2p::magnet::open(&uri, &flags, &crate::p2p::magnet::known(&dir), &mut i);
+            }
+        }
+    }
+}
+
+/// Open a shared magnet link: `{"status":"off"}`, `{"status":"accepted","package":{..},"open":<leyline link>}` or
+/// `{"status":"refused","reason":".."}`. Nothing is downloaded here.
+#[tauri::command]
+pub async fn magnet_open(uri: String) -> Result<crate::p2p::magnet::Opened, String> {
+    blocking(move || {
+        let dir = settings::app_dir();
+        let flags = flags::current(&dir);
+        let mut i = inbox().lock().map_err(|_| "magnet lock poisoned")?;
+        Ok(crate::p2p::magnet::open(&uri, &flags, &crate::p2p::magnet::known(&dir), &mut i))
+    })
+    .await
+}
+
+/// The shared links this session received (newest last). Empty when the flag is off.
+#[tauri::command]
+pub fn magnet_pending() -> Result<Vec<crate::p2p::magnet::Pending>, String> {
+    if !flags::current(&settings::app_dir()).magnet_links {
+        return Ok(vec![]);
+    }
+    Ok(inbox().lock().map_err(|_| "magnet lock poisoned")?.list())
+}
+
+/// Forget one shared link (by info-hash) or all of them.
+#[tauri::command]
+pub fn magnet_dismiss(info_hash: Option<String>) -> Result<(), String> {
+    inbox().lock().map_err(|_| "magnet lock poisoned")?.dismiss(info_hash.as_deref());
+    Ok(())
+}
+
+/// Download an accepted shared package through the one download path (refusal list + the catalog's sha256), into
+/// `<app data>/downloads/magnet/`. Only an info-hash that `magnet_open` accepted and the catalog still lists.
+#[tauri::command]
+pub async fn magnet_fetch(info_hash: String) -> Result<(String, crate::p2p::transfer::Outcome), String> {
+    blocking(move || {
+        let dir = settings::app_dir();
+        let flags = flags::current(&dir);
+        if !flags.magnet_links {
+            return Err(crate::p2p::magnet::OFF.into());
+        }
+        if inbox().lock().map_err(|_| "magnet lock poisoned")?.accepted(&info_hash).is_none() {
+            return Err(crate::p2p::magnet::UNKNOWN.into());
+        }
+        let k = crate::p2p::magnet::known(&dir).into_iter().find(|k| k.info_hash == info_hash).ok_or(crate::p2p::magnet::UNKNOWN)?;
+        let (path, out) = crate::p2p::magnet::fetch(&dir, &k, &flags, &NoSwarm)?;
+        Ok((path.display().to_string(), out))
+    })
+    .await
+}

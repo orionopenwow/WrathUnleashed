@@ -10,7 +10,8 @@ The flags file (docs/P2P-AND-TORRENT.md):
 
     {"format": 1, "updated_at": "2026-10-29T00:00:00Z",
      "flags": {"p2p_hosting": false, "torrent_downloads": false, "torrent_seeding": false, "webrtc_presence": false,
-               "mesh_realms": false, "mesh_relays": false, "relay_volunteer": false, "herokey_sso": false},
+               "mesh_realms": false, "mesh_relays": false, "relay_volunteer": false, "herokey_sso": false,
+               "magnet_links": false},
      "limits": {"seed_upload_kbps": 0, "seed_ratio_pct": 0, "max_peers": 0},
      "stun": ["stun.cloudflare.com:3478"],
      "sha256": "<sha256 of the canonical JSON of everything above>"}
@@ -45,7 +46,9 @@ KNOWN = ("p2p_hosting", "torrent_downloads", "torrent_seeding", "webrtc_presence
          "mesh_realms", "mesh_relays", "relay_volunteer",
          # Hero Key sign-in on Beacons (docs/HERO-KEY-SSO.md, stream/herokey_sso.py): hops and the launcher sign in to
          # a community realm with the website account; off = the realm's own join page, as before
-         "herokey_sso")
+         "herokey_sso",
+         # shared magnet: links in the launcher (p2p/magnet.rs), only for Leyline's own checked packages
+         "magnet_links")
 LIMITS = {"seed_upload_kbps": 100_000, "seed_ratio_pct": 1000, "max_peers": 200}
 DEFAULT_STUN = ["stun.cloudflare.com:3478"]
 _STUN_RE = re.compile(r"^[A-Za-z0-9.-]{1,253}:[0-9]{1,5}$")

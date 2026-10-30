@@ -832,6 +832,7 @@ pub fn run() {
         })
         .setup(|app| {
             start_update_timer(app.handle().clone());
+            crate::p2p::cmds::magnet_from_args(); // a shared magnet: link (only with the magnet_links flag on)
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -901,6 +902,11 @@ pub fn run() {
             crate::p2p::cmds::p2p_set_flag,
             crate::p2p::cmds::p2p_set_limits,
             crate::p2p::cmds::p2p_nat_check,
+            // shared magnet: links, behind the magnet_links flag (src/p2p/magnet.rs)
+            crate::p2p::cmds::magnet_open,
+            crate::p2p::cmds::magnet_pending,
+            crate::p2p::cmds::magnet_dismiss,
+            crate::p2p::cmds::magnet_fetch,
             // Leyline friends and messages (social.rs)
             crate::social::commands::social_status,
             crate::social::commands::social_signin_start,

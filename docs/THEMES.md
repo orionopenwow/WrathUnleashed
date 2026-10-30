@@ -1,7 +1,7 @@
 # Leyline launcher themes
 
 A theme changes how the Leyline launcher looks: colours, corners, fonts and art. It never changes what the
-launcher does. Players pick one under **Settings › Themes**, and find more under **Discover › Themes**.
+launcher does. Players pick one under **Settings › Themes**, and find more under **Mods › Discover › Themes**.
 
 ## Built-in themes
 
@@ -88,6 +88,24 @@ files sit at most two folders down.
   --t-font-display: var(--t-font);   /* headings */
   --t-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
 }
+```
+
+Panels and cards float on the website's backdrop picture as a translucent, blurred layer. Their tokens are built
+from the ones above, so most packs never touch them; set them to change that layer:
+
+```css
+:root {
+  --t-panel: rgba(18, 25, 51, 0.82);         /* pages' panels and Home's cards */
+  --t-panel-border: #4a5a95;                 /* their brighter 1px border */
+  --t-panel-head: rgba(255, 255, 255, 0.05); /* the header strip behind a panel's title */
+  --t-panel-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  --t-panel-blur: 14px;
+  --t-card: rgba(32, 43, 85, 0.88);          /* cards inside a panel (mods, realms) */
+  --t-card-border: #3a4a85;
+  --t-gold: #f1cf86;  --t-gold-bg: rgba(217, 164, 65, 0.12);  --t-gold-border: rgba(217, 164, 65, 0.45);  /* the client version chip */
+  --t-backdrop-wash: linear-gradient(180deg, rgba(11, 13, 20, 0.46), rgba(11, 13, 20, 0.74) 80%);
+  --t-backdrop: none;                        /* no website picture behind this theme (or url("images/bg.webp")) */
+}
 @font-face { font-family: "Owl Sans"; src: url("fonts/owl-sans.woff2") format("woff2"); }
 ```
 
@@ -117,8 +135,9 @@ with the reason shown:
   handlers, `<foreignObject>`, entities or any link outside itself.
 
 The pack is checked when it is installed and again every time it loads. The launcher's window only loads
-scripts that ship with the app and images and fonts from itself or `data:`, so a theme can't load
-anything from the internet.
+scripts that ship with the app, fonts from itself or `data:`, and images from itself, `data:` or the website's
+own origin (https://play.openvanilla.app, for its backdrop picture); a pack's `url()` can only name its own files,
+so a theme can't load anything from the internet.
 
 ### Try it
 
@@ -146,7 +165,7 @@ you made or may share, and say their licence.
 
 | Path | What |
 |---|---|
-| `launcher/ui/themes.js` | applies the theme before the window paints; Settings › Themes and Discover › Themes |
+| `launcher/ui/themes.js` | applies the theme before the window paints; Settings › Themes and Mods › Discover › Themes |
 | `launcher/ui/style.css` | the Dark and Light looks and the `--t-*` tokens |
 | `launcher/ui/themes/themes.css` | the theme cards, tabs and the preview bar |
 | `launcher/src-tauri/src/themes.rs` | the pack format, the checker, install, list, apply, remove (`cargo test --no-default-features themes`) |

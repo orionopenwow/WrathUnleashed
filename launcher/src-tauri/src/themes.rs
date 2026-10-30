@@ -1310,7 +1310,10 @@ mod tests {
         assert_eq!(dir("script-src"), "script-src 'self'");
         assert_eq!(dir("default-src"), "default-src 'self'");
         assert_eq!(dir("connect-src"), "connect-src ipc: http://ipc.localhost");
-        for d in ["img-src", "font-src", "style-src"] {
+        // Images: the app, data: (packs are inlined) and exactly one https origin, the website's backdrop picture
+        // (ui/app.js BACKDROP_URL). Pack CSS still can't name it: the checker refuses every http(s) url().
+        assert_eq!(dir("img-src"), "img-src 'self' data: https://play.openvanilla.app");
+        for d in ["font-src", "style-src"] {
             let v = dir(d);
             assert!(!v.contains("http:") && !v.contains("https:") && !v.contains('*') && !v.contains("unsafe-eval"), "{v}");
         }

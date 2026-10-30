@@ -8,6 +8,14 @@ copies it.
 - **A new look.** Leyline is flat and modern now: a navy Dark theme (the default) and a Light theme, rounded cards,
   a clean sans font and the Leyline mark up top. Pick one under Settings › Themes. The painted stone and parchment
   look is gone; if you had it (or a Rounded theme), Leyline moves you to Dark or Light on its own.
+- **The same menu as the website.** Home, Realms, Mods, Host, Community and News. My Mods and Discover are one
+  Mods page with the tabs Installed and Discover; Friends and the Community Hub are one Community page with the tabs
+  Friends and Hub. Modes moved off the menu: open it from Home's featured mode or Realms › MODES.
+- **Panels that stand out.** Pages and cards float on the website's backdrop picture as their own lighter layer,
+  with a brighter edge, a soft shadow and a title strip. Turn the picture off under Settings › Background picture.
+- **Realms like on the website.** Each realm is a card with its icon, the client version in gold, Official,
+  Featured, Verified and New, its server, region, rules and uptime, and how many are playing on a small bar.
+  Offline realms are dimmed. The Your realms list shows the icon and version too.
 
 ## 0.3.1 (2026-10-29)
 

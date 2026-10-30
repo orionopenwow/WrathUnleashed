@@ -1,4 +1,4 @@
-/* Leyline themes: the Themes section (Settings › Themes, Discover › Themes) and the preview bar.
+/* Leyline themes: the Themes section (Settings › Themes, Mods › Discover › Themes) and the preview bar.
    Reads style.css's --t-* tokens, so it fits Dark, Light and every pack. */
 
 .themes-box { margin-top: 6px; }
@@ -34,7 +34,7 @@
 .theme-swatch.k-light .sw-btn { background: #3a6fdc; border-radius: 6px; }
 .theme-swatch.k-unknown { background: repeating-linear-gradient(135deg, var(--t-surface-2) 0 10px, var(--t-raised) 10px 20px); }
 
-/* Discover: Mods | Themes */
+/* Mods › Discover: Mods | Themes (inside the page's own Installed | Discover tabs) */
 .ly-tabs { display: flex; gap: 4px; margin: 0 0 14px; border-bottom: var(--t-border-w) solid var(--t-border); }
 .ly-tab {
   height: 32px; padding: 0 14px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px;
@@ -42,7 +42,7 @@
 }
 .ly-tab:hover { color: var(--t-text); }
 .ly-tab[aria-selected="true"] { color: var(--t-accent); border-bottom-color: var(--t-accent); }
-#page-discover .panel[data-tab="themes"] > :not(h2):not(.ly-tabs):not(#themes-discover) { display: none !important; }
+#pane-discover[data-tab="themes"] > :not(.ly-tabs):not(#themes-discover) { display: none !important; }
 
 /* Previewing: KEEP / UNDO */
 .theme-preview-bar {

@@ -22,7 +22,7 @@
     <input id="search" type="search" placeholder="Search mods, realms and players" aria-label="Search mods, realms and players" autocomplete="off" spellcheck="false">
   </form>
   <div class="tb-fill" data-tauri-drag-region></div>
-  <button type="button" class="pill upd" id="tb-modupd" hidden title="Workshop mods with a newer version: open My Mods">Mod updates</button>
+  <button type="button" class="pill upd" id="tb-modupd" hidden title="Workshop mods with a newer version: open Mods › Installed">Mod updates</button>
   <button type="button" class="pill upd" id="tb-update" hidden title="A new Leyline is downloaded: restart to use it">Update ready, restart</button>
   <div class="pill" id="tb-status"><span class="dot"></span><span id="tb-status-text">Checking…</span></div>
   <button type="button" class="chip" id="tb-account" title="Your account lives on the website: sign in with Google or your Hero Key">
@@ -38,12 +38,13 @@
 
 <aside class="side">
   <nav aria-label="Pages">
+    <!-- The website's side menu (stream/hub.py nav_items): Home, Realms, Mods, Host, Community, News. Mods has the tabs
+         Installed and Discover; Community has Friends and Hub (app.js TABS). Modes has no item: Home and Realms lead there. -->
     <button class="nav" data-page="play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</button>
-    <button class="nav" data-page="mods"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>My Mods<span class="badge" id="nav-mods-count" hidden></span></button>
-    <button class="nav" data-page="discover"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg>Discover</button>
     <button class="nav" data-page="realms"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>Realms</button>
+    <button class="nav" data-page="mods"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Mods<span class="badge" id="nav-mods-count" hidden></span></button>
     <button class="nav" data-page="host"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>Host</button>
-    <button class="nav" data-page="community"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6M15 14.5c3 0 6 2 6 5"/></svg>Community Hub</button>
+    <button class="nav" data-page="community"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6M15 14.5c3 0 6 2 6 5"/></svg>Community<span class="badge" id="nav-friends-count" hidden></span></button>
     <button class="nav" data-page="news"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h13v14H6a2 2 0 0 1-2-2z"/><path d="M17 9h3v8a2 2 0 0 1-2 2M8 9h5M8 13h5"/></svg>News</button>
   </nav>
 
@@ -58,6 +59,8 @@
   </div>
 </aside>
 
+<!-- the site's backdrop behind the content area only (app.js loads it; the plain colour if it does not load) -->
+<div class="backdrop" id="backdrop" aria-hidden="true"></div>
 <main>
   <!-- HOME -->
   <section class="page" id="page-play">
@@ -72,9 +75,11 @@
       <div class="cards-col">
         <section class="card" aria-label="Server">
           <div class="card-head"><span>SERVER</span><button type="button" class="link" data-page-go="realms">Change ›</button></div>
-          <div class="srv-name" id="srv-name">Official realm</div>
+          <div class="srv-top"><span class="rl-ic crystal" id="srv-ic" aria-hidden="true"></span>
+            <div class="srv-id"><div class="srv-name" id="srv-name">Official realm</div><span class="rl-ver" id="srv-ver" title="Game client version" hidden></span></div></div>
           <div class="srv-state" id="srv-state"><span class="dot"></span><span id="srv-state-text">CHECKING…</span></div>
           <div class="srv-detail" id="srv-detail"></div>
+          <span class="rl-bar srv-bar" id="srv-bar" aria-hidden="true" hidden><i></i></span>
         </section>
 
         <section class="card" aria-label="Account">
@@ -120,62 +125,63 @@
     </div>
   </section>
 
-  <!-- MY MODS -->
+  <!-- MODS: Installed (the picked client's mods) and Discover (the Workshop catalog) -->
   <section class="page" id="page-mods">
     <div class="panel wide">
-      <h2>My Mods</h2>
-      <div class="toolbar">
-        <label class="inline">Client <select class="client-pick" data-for="mods"></select></label>
-        <span class="hint" id="mods-client-note"></span>
-        <span class="toolbar-fill"></span>
-        <button type="button" class="btn small" id="mods-update-all" hidden>UPDATE ALL</button>
-        <button type="button" class="btn small" data-page-go="discover">FIND MODS</button>
-      </div>
-      <div class="drop" id="drop">
-        <b>Drop a mod here</b>
-        <span>a .zip, an addon folder, a client patch (.MPQ) or a native mod (.dll, .asi)</span>
-        <div class="row center">
-          <button type="button" class="btn small" id="mods-pick-file">CHOOSE A FILE…</button>
-          <button type="button" class="btn small" id="mods-pick-folder">CHOOSE A FOLDER…</button>
+      <div class="panel-head"><h2>Mods</h2>
+        <div class="page-tabs" role="tablist" aria-label="Mods">
+          <button type="button" class="page-tab" role="tab" id="tab-mods-installed" data-group="mods" data-tab="installed" aria-controls="pane-installed">Installed<span class="badge" id="tab-mods-count" hidden></span></button>
+          <button type="button" class="page-tab" role="tab" id="tab-mods-discover" data-group="mods" data-tab="discover" aria-controls="pane-discover">Discover</button>
+        </div></div>
+      <div class="tabpane" id="pane-installed" role="tabpanel" aria-labelledby="tab-mods-installed">
+        <div class="toolbar">
+          <label class="inline">Client <select class="client-pick" data-for="mods"></select></label>
+          <span class="hint" id="mods-client-note"></span>
+          <span class="toolbar-fill"></span>
+          <button type="button" class="btn small" id="mods-update-all" hidden>UPDATE ALL</button>
+          <button type="button" class="btn small" data-page-go="discover">FIND MODS</button>
         </div>
+        <div class="drop" id="drop">
+          <b>Drop a mod here</b>
+          <span>a .zip, an addon folder, a client patch (.MPQ) or a native mod (.dll, .asi)</span>
+          <div class="row center">
+            <button type="button" class="btn small" id="mods-pick-file">CHOOSE A FILE…</button>
+            <button type="button" class="btn small" id="mods-pick-folder">CHOOSE A FOLDER…</button>
+          </div>
+        </div>
+        <p class="status" id="mods-status" role="status"></p>
+        <ul class="problems" id="mods-problems" hidden></ul>
+        <div id="mods-list" class="cards mods-grid"></div>
+        <p class="hint">Every mod is allowed: there is no review and no signing, so only add mods from people you trust.
+          Workshop downloads must match their sha256, and anything holding game data or secrets is refused.
+          Addons go to <code>Interface\AddOns</code>, patches to a free <code>Data\patch-X.MPQ</code> slot, native mods
+          (.dll, .asi) next to the game, after a one-time OK. Leyline never runs what it installs.
+          Removing a mod takes out exactly the files Leyline put in and you have not changed; an addon's saved
+          settings in <code>WTF</code> stay, as the game keeps them.</p>
       </div>
-      <p class="status" id="mods-status" role="status"></p>
-      <ul class="problems" id="mods-problems" hidden></ul>
-      <div id="mods-list" class="cards mods-grid"></div>
-      <p class="hint">Every mod is allowed: there is no review and no signing, so only add mods from people you trust.
-        Workshop downloads must match their sha256, and anything holding game data or secrets is refused.
-        Addons go to <code>Interface\AddOns</code>, patches to a free <code>Data\patch-X.MPQ</code> slot, native mods
-        (.dll, .asi) next to the game, after a one-time OK. Leyline never runs what it installs.
-        Removing a mod takes out exactly the files Leyline put in and you have not changed; an addon's saved
-        settings in <code>WTF</code> stay, as the game keeps them.</p>
-    </div>
-  </section>
-
-  <!-- DISCOVER: the Workshop catalog -->
-  <section class="page" id="page-discover">
-    <div class="panel wide">
-      <h2>Discover</h2>
-      <div class="toolbar">
-        <label class="inline">Install into <select class="client-pick" data-for="discover"></select></label>
-        <input id="cat-q" type="search" placeholder="Search the Workshop" autocomplete="off" spellcheck="false">
-        <label class="check"><input type="checkbox" id="cat-fit" checked> Only mods for this client</label>
+      <div class="tabpane" id="pane-discover" role="tabpanel" aria-labelledby="tab-mods-discover">
+        <div class="toolbar">
+          <label class="inline">Install into <select class="client-pick" data-for="discover"></select></label>
+          <input id="cat-q" type="search" placeholder="Search the Workshop" autocomplete="off" spellcheck="false">
+          <label class="check"><input type="checkbox" id="cat-fit" checked> Only mods for this client</label>
+        </div>
+        <div class="chips cat-sorts" id="cat-sorts" role="tablist" aria-label="Sort">
+          <button type="button" class="chip-btn" role="tab" data-sort="hot">Hot</button>
+          <button type="button" class="chip-btn" role="tab" data-sort="rising">Rising</button>
+          <button type="button" class="chip-btn" role="tab" data-sort="top">Top rated</button>
+          <button type="button" class="chip-btn" role="tab" data-sort="installs">Most installed</button>
+          <button type="button" class="chip-btn" role="tab" data-sort="installs30">This month</button>
+          <button type="button" class="chip-btn" role="tab" data-sort="new">New</button>
+          <button type="button" class="chip-btn" role="tab" data-sort="updated">Updated</button>
+          <label class="inline cat-kind">Kind <select id="cat-kind">
+            <option value="">everything</option><option value="addon">Addons</option><option value="mod">Realm mods and tools</option>
+            <option value="mode">Game modes</option><option value="theme">Themes</option></select></label>
+        </div>
+        <div class="chips" id="cat-chips" role="group" aria-label="Categories"></div>
+        <p class="status" id="cat-status" role="status"></p>
+        <div class="mod-grid" id="cat-grid"></div>
+        <div class="row"><button type="button" class="btn" data-link="mods">OPEN THE WORKSHOP</button><button type="button" class="btn" data-link="modders">MAKE A MOD</button></div>
       </div>
-      <div class="chips cat-sorts" id="cat-sorts" role="tablist" aria-label="Sort">
-        <button type="button" class="chip-btn" role="tab" data-sort="hot">Hot</button>
-        <button type="button" class="chip-btn" role="tab" data-sort="rising">Rising</button>
-        <button type="button" class="chip-btn" role="tab" data-sort="top">Top rated</button>
-        <button type="button" class="chip-btn" role="tab" data-sort="installs">Most installed</button>
-        <button type="button" class="chip-btn" role="tab" data-sort="installs30">This month</button>
-        <button type="button" class="chip-btn" role="tab" data-sort="new">New</button>
-        <button type="button" class="chip-btn" role="tab" data-sort="updated">Updated</button>
-        <label class="inline cat-kind">Kind <select id="cat-kind">
-          <option value="">everything</option><option value="addon">Addons</option><option value="mod">Realm mods and tools</option>
-          <option value="mode">Game modes</option><option value="theme">Themes</option></select></label>
-      </div>
-      <div class="chips" id="cat-chips" role="group" aria-label="Categories"></div>
-      <p class="status" id="cat-status" role="status"></p>
-      <div class="mod-grid" id="cat-grid"></div>
-      <div class="row"><button type="button" class="btn" data-link="mods">OPEN THE WORKSHOP</button><button type="button" class="btn" data-link="modders">MAKE A MOD</button></div>
     </div>
   </section>
 
@@ -188,6 +194,7 @@
         <button type="button" class="btn small" id="rl-back">BACK TO WRATH</button>
         <button type="button" class="btn small" id="rl-restore" title="Put back the realmlist you had before Leyline">MY OWN REALMLIST</button>
         <button type="button" class="btn small" id="rl-refresh">REFRESH</button>
+        <button type="button" class="btn small" data-page-go="modes" title="Minigames and game modes">MODES</button>
         <label class="check inline"><input type="checkbox" id="rl-mine"> Only realms my clients can play</label>
       </div>
       <p class="net-line" id="rl-net" aria-live="polite"></p>
@@ -264,17 +271,24 @@
     </div>
   </section>
 
-  <!-- COMMUNITY -->
+  <!-- COMMUNITY: Friends (social.js fills it) and Hub -->
   <section class="page" id="page-community">
-    <div class="panel">
-      <h2>Community Hub</h2>
-      <p class="lede">Find people to play with, share what you make, and follow what's coming.</p>
-      <div class="link-grid">
-        <button type="button" class="btn" data-link="discord">JOIN THE DISCORD</button>
-        <button type="button" class="btn" data-link="news">THE LEYLINE PAGE</button>
-        <button type="button" class="btn" data-link="mods">THE WORKSHOP</button>
-        <button type="button" class="btn" data-link="github">SOURCE ON GITHUB</button>
-        <button type="button" class="btn" data-link="support" hidden>SUPPORT THE REALM</button>
+    <div class="panel wide">
+      <div class="panel-head"><h2>Community</h2>
+        <div class="page-tabs" role="tablist" aria-label="Community">
+          <button type="button" class="page-tab" role="tab" id="tab-community-friends" data-group="community" data-tab="friends" aria-controls="pane-friends">Friends<span class="badge" id="tab-friends-count" hidden></span></button>
+          <button type="button" class="page-tab" role="tab" id="tab-community-hub" data-group="community" data-tab="hub" aria-controls="pane-hub">Hub</button>
+        </div></div>
+      <div class="tabpane" id="pane-friends" role="tabpanel" aria-labelledby="tab-community-friends"></div>
+      <div class="tabpane" id="pane-hub" role="tabpanel" aria-labelledby="tab-community-hub">
+        <p class="lede">Find people to play with, share what you make, and follow what's coming.</p>
+        <div class="link-grid">
+          <button type="button" class="btn" data-link="discord">JOIN THE DISCORD</button>
+          <button type="button" class="btn" data-link="news">THE LEYLINE PAGE</button>
+          <button type="button" class="btn" data-link="mods">THE WORKSHOP</button>
+          <button type="button" class="btn" data-link="github">SOURCE ON GITHUB</button>
+          <button type="button" class="btn" data-link="support" hidden>SUPPORT THE REALM</button>
+        </div>
       </div>
     </div>
   </section>
@@ -297,11 +311,13 @@
         realmlist.wtf (your original is kept as realmlist.wtf.leyline-backup) and starts the game.
         BROWSER plays Wrath in your web browser instead, with nothing to install.</p>
       <h3>Mods</h3>
-      <p class="lede">Discover lists the Workshop. INSTALL puts a mod into the client you picked; My Mods turns it off and on,
-        updates it and removes it. You can also drop a .zip, an addon folder or a .MPQ patch on My Mods.</p>
+      <p class="lede">Mods › Discover lists the Workshop. INSTALL puts a mod into the client you picked; Mods › Installed turns it
+        off and on, updates it and removes it. You can also drop a .zip, an addon folder or a .MPQ patch on Mods › Installed.</p>
       <h3>Realms and hosting</h3>
       <p class="lede">Realms lists the official realm and the community's Beacons. PLAY sets your realmlist and starts the game;
-        BACK TO WRATH points it at the official realm again. Host walks you through running your own.</p>
+        BACK TO WRATH points it at the official realm again; MODES lists the minigames and game modes. Host walks you through running your own.</p>
+      <h3>Community</h3>
+      <p class="lede">Community › Friends: your Leyline friends and messages. Community › Hub: the Discord, the Workshop and the source.</p>
       <h3>Guides</h3>
       <div class="row"><button type="button" class="btn" data-link="docs">OPEN THE LEYLINE DOCS</button><button type="button" class="btn" data-link="discord">ASK ON DISCORD</button></div>
     </div>
@@ -326,6 +342,9 @@
         <div class="row"><button class="btn" type="submit">SAVE</button><button class="btn" type="button" data-page-go="clients">GAME CLIENTS</button></div>
         <p class="status" id="set-status" role="status"></p>
       </form>
+      <h3>Background</h3>
+      <label class="check"><input type="checkbox" id="set-backdrop"> Background picture: the website's picture behind the pages, under a soft wash
+        (fetched from play.openvanilla.app when Leyline starts; the plain colour when it is off or offline)</label>
       <h3>Updates</h3>
       <p class="lede">Leyline looks for a new version when it starts and every 6 hours. It downloads it in the background,
         checks its signature, and installs it only when you press <b>Update ready, restart</b> in the title bar, never

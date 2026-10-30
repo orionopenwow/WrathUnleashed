@@ -1,8 +1,8 @@
-// The launcher's Discover page (ui/app.js) with the hub rankings, in Chromium with a fake Tauri core: the sort tabs
+// The launcher's Mods › Discover tab (ui/app.js) with the hub rankings, in Chromium with a fake Tauri core: the sort tabs
 // (Hot, Rising, Top rated, Most installed, This month, New, Updated) asking the core for the order, the kind filter,
 // each card's rating and installs, INSTALL in one click (mod_install into the picked client) with INSTALLED and
 // UPDATE TO states, rating stars (mod_rate, and the signed-out note), the remembered sort, a leyline://install/<id>
-// link opening Discover on that project without installing anything, the Count my installs setting, offline
+// link opening Mods › Discover on that project without installing anything, the Count my installs setting, offline
 // fallback, and catalog text shown as text.
 //
 //   NODE_PATH=$(npm root -g) node --test launcher/tests/mods.browser.test.cjs
@@ -102,7 +102,8 @@ const card = (page, id) => page.locator(`#cat-grid .mod-card[data-id="${id}"]`);
 
 test('sort tabs: every sort asks the core and shows its order', async () => {
   const { page, errors } = await open();
-  assert.ok(await page.isVisible('#page-discover'));
+  assert.ok(await page.isVisible('#pane-discover'), "the old page id 'discover' opens Mods › Discover");
+  assert.equal(await page.getAttribute('#tab-mods-discover', 'aria-selected'), 'true');
   const tabs = await page.$$eval('#cat-sorts [role="tab"]', (b) => b.map((x) => x.textContent));
   assert.deepEqual(tabs, ['Hot', 'Rising', 'Top rated', 'Most installed', 'This month', 'New', 'Updated']);
   assert.equal(await page.getAttribute('#cat-sorts [data-sort="hot"]', 'aria-selected'), 'true', 'Hot by default');
@@ -165,7 +166,7 @@ test('rating stars: saved, or the sign-in note', async () => {
   await page.close();
   ({ page, errors } = await open({ signedOut: true }));
   await card(page, 'mod:bravo').locator('.stars button').first().click();
-  await page.waitForFunction(() => /Sign in on the Friends page/.test(document.getElementById('cat-status').textContent));
+  await page.waitForFunction(() => /Sign in under Community › Friends/.test(document.getElementById('cat-status').textContent));
   assert.deepEqual(errors, []);
   await page.close();
 });
@@ -173,7 +174,7 @@ test('rating stars: saved, or the sign-in note', async () => {
 test('a leyline://install link opens that project and installs nothing by itself', async () => {
   const { page, errors } = await open({ link: { action: 'install', id: 'mod:old-bars' } });
   await page.waitForFunction(() => /From the hub: Old Bars/.test(document.getElementById('cat-status').textContent));
-  assert.ok(await page.isVisible('#page-discover'));
+  assert.ok(await page.isVisible('#pane-discover'));
   assert.equal(await page.isChecked('#cat-fit'), false, 'shown even though it is for another build');
   assert.ok(await card(page, 'mod:old-bars').evaluate((n) => n.classList.contains('linked')));
   assert.deepEqual(await calls(page, 'mod_install'), [], 'nothing installed without a click');
@@ -199,7 +200,7 @@ test('offline rankings: the catalog order, the kind filter still works; Count my
   assert.deepEqual(await calls(page, 'set_count_installs'), [{ on: false }]);
   const text = await page.textContent('#page-settings');
   assert.match(text, /no account, nothing about you or your PC/);
-  assert.doesNotMatch(text + await page.textContent('#page-discover'), /world of warcraft|\bwow\b|warcraft|lich king|blizzard/i);
+  assert.doesNotMatch(text + await page.textContent('#page-mods'), /world of warcraft|\bwow\b|warcraft|lich king|blizzard/i);
   assert.deepEqual(errors, []);
   await page.close();
 });

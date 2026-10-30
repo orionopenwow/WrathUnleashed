@@ -5,6 +5,7 @@
 //!   updates): HTTPS, or a torrent's swarm / web seeds when `torrent_downloads` is on. Every result passes the
 //!   refusal list (`checker`: never game data, never a client) and a sha256 check.
 //! * `torrent`, `bencode`, `sha1`: single-file `.torrent` metainfo, web seeds and the piece check.
+//! * `magnet`: shared `magnet:` links, opened only for Leyline's own checked packages (`magnet_links`).
 //! * `nat`, `direct`: the NAT check (STUN) and the rule for when a direct connection to a hosted realm may
 //!   replace the relay (`p2p_hosting`).
 //! * `mesh`: the realm list from the Leyline mesh (signed records from peers and seed relays, verified here) and
@@ -16,6 +17,7 @@ pub mod bencode;
 pub mod checker;
 pub mod direct;
 pub mod flags;
+pub mod magnet;
 pub mod mesh;
 pub mod nat;
 pub mod sha1;
