@@ -151,7 +151,7 @@ class TrustedProxies(unittest.TestCase):
 
 class ImagesWorkflow(unittest.TestCase):
     def test_publishes_what_the_kit_pulls(self):
-        # the source copy (tools/github-workflows/); .github/workflows/ gets it from "Turn on GitHub builds.bat"
+        # the source copy (tools/github-workflows/); .github/workflows/ gets it from "setup\Turn on GitHub builds.bat"
         p = os.path.join(REPO, "tools", "github-workflows", "wu-images.yml")
         if not os.path.exists(p):
             p = os.path.join(REPO, ".github", "workflows", "wu-images.yml")

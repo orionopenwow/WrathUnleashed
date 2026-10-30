@@ -1,4 +1,4 @@
-# WrathUnleashed repo: our own code, scripts and docs only.
+# The Leyline workspace repo (orionopenwow/leyline-workspace): our own code, scripts and docs only.
 # Never: Blizzard game data, game-file slices, Forever UI art, build outputs, secrets.
 
 # game data / slices / patch files (from players' own installs)
@@ -39,6 +39,7 @@ gmconsole.env
 wow-folder.txt
 foreverui-installed.txt
 players/wow-folder.txt
+labs/players/wow-folder.txt
 
 # logs and diagnostics
 *.log
@@ -50,8 +51,9 @@ __pycache__/
 # wu-mod.py catalog / pack output
 /mods/dist/
 
-# the Leyline Launcher branch bundle (delivered beside the ovland step, never committed)
+# the Leyline Launcher branch bundle (delivered beside the old ovland step, never committed)
 tools/ov-rename/*.bundle
+labs/done/ov-rename/*.bundle
 
 # fresh-history: written by Claude when the step is queued, never committed
 tools/fresh-history/CONFIRM
@@ -65,5 +67,40 @@ tools/fresh-history/CONFIRM
 # the sync bundle Claude drops beside the labs 1.12 client tool (never committed)
 labs/leyline-client-112/*.bundle
 
-# working copies the steps manage inside the workspace (Move to Leyline.bat): .repos\leyline-public, .repos\leyline-launcher
+# working copies the steps manage inside the workspace (the move to Leyline, tools/workspace-move): .repos\leyline-public, .repos\leyline-launcher
 /.repos/
+
+# machine state: the control window's files (tools/control/control.py writes them; Claude writes claude-status.json
+# here on the PC), every step's logs, and the GitHub cleanup plan / Discord tool's token and state
+/logs/
+/control/autopilot.json
+/control/claude-status.json
+/control/last-run.json
+tools/github-cleanup/PLAN.json
+tools/discord-leyline/token.txt
+tools/discord-leyline/.leyline-state.json
+# the note the move to Leyline leaves in the old folder
+MOVED-TO-LEYLINE.txt
+# the old tester package's zip (labs/players/Make player package.bat)
+labs/players/*.zip
+# the client boot check's screenshot (client/dev/smoke.js)
+client/dev/smoke.png
+
+# tool caches and build folders (npm, cargo, Python)
+node_modules/
+target/
+.venv/
+venv/
+*.pyc
+.pytest_cache/
+
+# editor, OS and scratch files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+*.bak
+*~
+~$*
+.vscode/
+.idea/

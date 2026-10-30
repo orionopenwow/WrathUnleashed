@@ -1,5 +1,5 @@
 # "Submit a mod" for the Leyline hub's community index. Source copy: tools/github-workflows/ISSUE_TEMPLATE/
-# ("Turn on GitHub builds.bat" installs it as .github/ISSUE_TEMPLATE/submit-mod.yml in the public Leyline repo).
+# ("setup\Turn on GitHub builds.bat" installs it as .github/ISSUE_TEMPLATE/submit-mod.yml in the public Leyline repo).
 # A maintainer adds the "approved" label; the weekly Hub index workflow then fetches, checks and lists it.
 name: Submit a mod
 description: Add an open project to the Leyline community index.

@@ -1,12 +1,13 @@
 @echo off
 setlocal
 title Put the Leyline Launcher changes on GitHub (orionopenwow/Leyline-Launcher)
-rem Autopilot step "ovland". Run after "ovrename". Takes the branch feat-leyline-launcher-rename from
+rem Was Autopilot step "ovland" (done; the step is gone). Run after "ovrename". Takes the branch feat-leyline-launcher-rename from
 rem feat-leyline-launcher-rename.bundle next to this file, fast-forwards the PC's OpenVanilla clone's main to it
 rem and pushes main (gh signed in as orionopenwow; refuses Chumpton). Fast-forward only: it stops, changing
 rem nothing, if the clone isn't a clean checkout of main or GitHub moved on. Never force-pushes, makes no commits.
 rem The release itself stays the owner's: dev\Release.bat 1.57.0 in that clone.
-set "WU=%~dp0..\.."
+rem Done for good (2026-10-29); in labs\done\ov-rename\ since 2026-10-30, so the workspace is three folders up.
+set "WU=%~dp0..\..\.."
 for %%I in ("%WU%") do set "WU=%%~fI"
 set GIT_TERMINAL_PROMPT=0
 set "PY="

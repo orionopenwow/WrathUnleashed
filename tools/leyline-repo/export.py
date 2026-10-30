@@ -433,7 +433,7 @@ def missing_includes(files: dict) -> list:
 
 def export(src: Path, target: Path, dry: bool = False, out=print) -> dict:
     src, target = src.resolve(), target.resolve()
-    # Inside the workspace only under .repos/ (gitignored; "Move to Leyline.bat" puts the public clone at
+    # Inside the workspace only under .repos/ (gitignored; the move to Leyline, tools/workspace-move, puts the public clone at
     # .repos/leyline-public). Never the workspace itself, a folder holding it, or anywhere else inside it.
     in_repos = (src / ".repos") in target.parents
     if target == src or target in src.parents or (src in target.parents and not in_repos):

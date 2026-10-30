@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Where leyline_rename.py looks for the Leyline-Launcher clone (after "Move to Leyline.bat" too).
 
-    python3 -I tools/ov-rename/test_leyline_rename.py
+    python3 -I labs/done/ov-rename/test_leyline_rename.py
 """
 import importlib.util
 import os

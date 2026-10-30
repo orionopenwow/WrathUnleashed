@@ -1,7 +1,7 @@
 # WrathUnleashed: test the realm Lua scripts on every push, and deploy the changed ones to the live realm
 # (live "reload ale", no restart; luaup.sh backs up each file and puts the old ones back if the reload fails).
 # Owner's standing rule (2026-10-24): Claude may push and deploy to the live realm once tests pass.
-# Needs two repository secrets, set once by "Set up automatic deploys.bat": WU_DEPLOY_SSH_KEY, WU_KNOWN_HOSTS.
+# Needs two repository secrets, set once by "setup\Set up automatic deploys.bat": WU_DEPLOY_SSH_KEY, WU_KNOWN_HOSTS.
 name: realm scripts
 on:
   push:
@@ -84,7 +84,7 @@ jobs:
           KEY: ${{ secrets.WU_DEPLOY_SSH_KEY }}
           KNOWN: ${{ secrets.WU_KNOWN_HOSTS }}
         run: |
-          [ -n "$KEY" ] || { echo "No WU_DEPLOY_SSH_KEY secret yet: run 'Set up automatic deploys.bat' once."; exit 1; }
+          [ -n "$KEY" ] || { echo "No WU_DEPLOY_SSH_KEY secret yet: run 'setup\Set up automatic deploys.bat' once."; exit 1; }
           install -m 700 -d ~/.ssh
           printf '%s\n' "$KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
           printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts

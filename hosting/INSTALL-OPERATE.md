@@ -11,7 +11,7 @@ which steps need your OK), and how to run it afterwards. Design: `README.md`.
 | `relay/` + `kit/tools/wunet/` | the relay VM (`/opt/wu-relay`) | the relay server, its Docker/systemd/Caddy setup, the join page |
 | `site/` | the website repo (`www/`) | `join/index.html`, a snippet for `404.html`, the community-record schema for the Beacons page |
 | `server/set-realm-address.sh` | `WrathUnleashed\server\` (replaces the old one) | same as before, plus a world port and `--relay STATE_DIR` |
-| `tools/github-workflows/` (source copies) | `.github/workflows/`, put there by `Turn on GitHub builds.bat` | tests (`wu-hosting.yml`) and the image build (`wu-images.yml`: publishes on a push to main, see 9.4) in WrathUnleashed; `leyline-launcher.yml` in the public Leyline repo |
+| `tools/github-workflows/` (source copies) | `.github/workflows/`, put there by `setup\Turn on GitHub builds.bat` | tests (`wu-hosting.yml`) and the image build (`wu-images.yml`: publishes on a push to main, see 9.4) in WrathUnleashed; `leyline-launcher.yml` in the public Leyline repo |
 | `tests/` | with the code | unit tests, docker end-to-end, soak |
 
 The zip players download is published by the Autopilot step `hostkit` (`kit/Publish host kit.bat`, see 9.5):
@@ -204,7 +204,7 @@ who reinstalls with the same `state\` keeps the same id, ports and listing.
 - DNS: `relay.openvanilla.app` A record (no AAAA).
 - Deploying the relay (`deploy-relay.sh`, 2 SSH connections) and the listing site secret's
   hand-off to the website.
-- Publishing images to ghcr.io (`wu-images.yml`, see 9.4): `Turn on GitHub builds.bat`, once.
+- Publishing images to ghcr.io (`wu-images.yml`, see 9.4): `setup\Turn on GitHub builds.bat`, once.
 - Pushing the workflows: only that bat (it needs the `workflow` permission); website changes (join page, 404
   snippet, Beacons community list).
 - Opening hosting to everyone vs a closed beta (`RELAY_ALLOW_FILE`), and the default limits.
@@ -312,7 +312,7 @@ The launcher (`leyline-launcher.yml`) builds in the **public Leyline repo**: pla
 from the private WrathUnleashed repo, and a public repo's Actions minutes are free (the private repo would pay
 10x for every macOS minute, on every push). The launcher's update check reads Leyline's releases.
 
-**The owner, once: double-click `Turn on GitHub builds.bat`** (top of the WrathUnleashed folder; safe to run again).
+**The owner, once: double-click `setup\Turn on GitHub builds.bat`** (in the setup folder of the workspace; safe to run again).
 It asks GitHub for `workflow`, `write:packages` and `admin:org` (a browser page opens: click **Authorize**), turns
 on Actions for the org and both repos where the API allows it, copies the workflow files from
 `tools/github-workflows/` into `.github/workflows/` (WrathUnleashed: wu-images, wu-hosting, and realm-scripts once

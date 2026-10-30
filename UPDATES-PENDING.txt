@@ -320,3 +320,6 @@
 1104a frontpage  The site's home (play.openvanilla.app/) opens the Leyline front page
 1104b ov112-check  The old 1.12 jobs: what would be turned off (read-only)
 1104c ship  Save to GitHub: front page as home, the 1.12 jobs switch
+1105a remove-files Tidy the workspace: retire the old copies of the bats that moved to setup\ and play\
+1105b ov112-off Turn off the old 1.12 jobs (backup in /root; undo: ov112-on)
+1105c ship Save to GitHub: tidy workspace, one-click Ship to GitHub.bat, .gitignore

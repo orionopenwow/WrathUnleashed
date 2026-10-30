@@ -10,7 +10,7 @@ rem Never force-pushes. Never touches the WrathUnleashed folder's own git (it on
 rem Safe to run again: nothing changed = nothing committed. The Autopilot step "leyline" runs this.
 set "WU=%~dp0..\.."
 for %%I in ("%WU%") do set "WU=%%~fI"
-rem The public repo's working copy: .repos\leyline-public inside the workspace (since "Move to Leyline.bat");
+rem The public repo's working copy: .repos\leyline-public inside the workspace (since the move to Leyline);
 rem before the move it is still the separate Desktop\Leyline clone. Never the workspace itself.
 set "LY=%WU%\.repos\leyline-public"
 if not exist "%LY%\.git" if exist "%USERPROFILE%\Desktop\Leyline\.git" if /i not "%USERPROFILE%\Desktop\Leyline"=="%WU%" set "LY=%USERPROFILE%\Desktop\Leyline"

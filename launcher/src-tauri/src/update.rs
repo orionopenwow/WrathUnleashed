@@ -7,7 +7,7 @@
 //! * The install (the desktop app, `app.rs`): Tauri's updater plugin fetches that one manifest, checks the
 //!   download's signature against the public key in tauri.conf.json, downloads it in the background and installs
 //!   it only when the player presses "Restart" in the title bar, never while a game Leyline started is running.
-//!   Until the owner has run "Turn on launcher updates.bat" (no public key yet), or on a .deb install, Leyline
+//!   Until the owner has run "setup\Turn on launcher updates.bat" (no public key yet), or on a .deb install, Leyline
 //!   only links to the release page.
 //!
 //! `parse_manifest` re-checks the manifest Leyline is about to hand the plugin: a semver version, a signature
@@ -208,7 +208,7 @@ fn signature_ok(s: &str) -> bool {
 }
 
 /// The updater's public key as tauri.conf.json carries it (base64 of a minisign public key file). The repo
-/// ships a placeholder until the owner runs "Turn on launcher updates.bat".
+/// ships a placeholder until the owner runs "setup\Turn on launcher updates.bat".
 pub fn pubkey_ok(s: &str) -> bool {
     signature_ok(s.trim()) && s.trim().len() < 400
 }
@@ -349,7 +349,7 @@ mod tests {
         assert!(PLATFORM_KEYS.contains(&this_platform().as_str()) || cfg!(not(target_arch = "x86_64")));
         let conf: Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
         let pk = conf["plugins"]["updater"]["pubkey"].as_str().unwrap();
-        // The repo ships the placeholder until "Turn on launcher updates.bat" writes the real key.
+        // The repo ships the placeholder until "setup\Turn on launcher updates.bat" writes the real key.
         assert!(pk.starts_with("TODO") || pubkey_ok(pk), "{pk}");
         assert!(!pubkey_ok("TODO(owner): run Turn on launcher updates.bat"));
         assert!(pubkey_ok(&"dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6".repeat(3)));

@@ -6,12 +6,12 @@ rem "mini" slice at wrath.openvanilla.app, so browser players get the same look 
 rem Its art comes from the modern WoW client: it goes ONLY into the gated stream (served by wu-play
 rem behind the sign-in, like the slice itself), never anywhere public.
 rem
-rem   "Add Forever UI to the stream.bat"                      from your WoW folder (Install Forever UI.bat)
+rem   "Add Forever UI to the stream.bat"                      from your WoW folder (play\Install Forever UI.bat)
 rem   "Add Forever UI to the stream.bat" D:\path\mod-forever-ui-main.zip   or a repo zip / .tgz / folder
 rem
 rem Where it takes Forever UI from, first found:
 rem   1 the folder or zip you give it
-rem   2 your WoW folder (foreverui-installed.txt, wow-folder.txt), as Install Forever UI.bat put it there
+rem   2 your WoW folder (foreverui-installed.txt, wow-folder.txt), as play\Install Forever UI.bat put it there
 rem   3 fui-src.tgz in the WrathUnleashed folder
 rem   4 its author's current version from GitHub
 rem Only Forever UI's own files go up: Interface\AddOns\ForeverUI, its art (Interface\ForeverUI), its
@@ -26,12 +26,13 @@ set "SSH=ssh -i "%KEY%" -o StrictHostKeyChecking=accept-new -o ServerAliveInterv
 set "KIT=%~dp0server"
 for %%f in (fui-install.sh fui-overlay.py slice-install.sh patch-index.sh) do if not exist "%KIT%\%%f" (echo server\%%f is missing next to this file. & goto fail)
 
-rem The workspace folder (Desktop\Leyline, before the move Desktop\WrathUnleashed; where Install Forever UI.bat keeps foreverui-installed.txt).
+rem The workspace folder (Desktop\Leyline, before the move Desktop\WrathUnleashed; where play\Install Forever UI.bat keeps foreverui-installed.txt).
 set "WU="
 for %%d in ("%~dp0." "%~dp0.." "%~dp0..\.." "%USERPROFILE%\Desktop\Leyline" "%USERPROFILE%\Desktop\WrathUnleashed") do (
   if not defined WU if exist "%%~fd\foreverui-installed.txt" set "WU=%%~fd"
 )
 for %%d in ("%~dp0." "%~dp0.." "%~dp0..\.." "%USERPROFILE%\Desktop\Leyline" "%USERPROFILE%\Desktop\WrathUnleashed") do (
+  if not defined WU if exist "%%~fd\play\Install Forever UI.bat" set "WU=%%~fd"
   if not defined WU if exist "%%~fd\Install Forever UI.bat" set "WU=%%~fd"
 )
 
@@ -50,7 +51,7 @@ if not "!SRC!"=="" (
   if not defined MODE (echo !SRC! is neither a mod-forever-ui folder or zip nor a WoW folder with Forever UI installed. & goto fail)
 )
 if not defined MODE if defined WU (
-  for %%t in ("!WU!\foreverui-installed.txt" "!WU!\wow-folder.txt" "!WU!\players\wow-folder.txt") do (
+  for %%t in ("!WU!\foreverui-installed.txt" "!WU!\wow-folder.txt" "!WU!\labs\players\wow-folder.txt" "!WU!\players\wow-folder.txt") do (
     if not defined MODE if exist "%%~t" (
       set "W="
       set /p W=<"%%~t"
@@ -86,7 +87,7 @@ if "!MODE!"=="repo" (
   if exist "!SRC!\LICENSE" copy /y "!SRC!\LICENSE" "!F!\AddOns\ForeverUI\LICENSE-GPL-2.0.txt" >nul
 ) else (
   xcopy /e /i /y /q "!SRC!\Interface\AddOns\ForeverUI" "!F!\AddOns\ForeverUI\" >nul || goto fail
-  if not exist "!SRC!\Interface\ForeverUI" (echo !SRC!\Interface\ForeverUI ^(its art^) is missing: run Install Forever UI.bat again, or pass the repo zip. & goto fail)
+  if not exist "!SRC!\Interface\ForeverUI" (echo !SRC!\Interface\ForeverUI ^(its art^) is missing: run play\Install Forever UI.bat again, or pass the repo zip. & goto fail)
   xcopy /e /i /y /q "!SRC!\Interface\ForeverUI" "!F!\ForeverUI\" >nul || goto fail
   copy /y "!SRC!\Interface\GlueXML\ForeverUI*.*" "!F!\GlueXML\" >nul || goto fail
   if defined WU if exist "!WU!\patch\Interface\GlueXML\GlueXML.toc" copy /y "!WU!\patch\Interface\GlueXML\GlueXML.toc" "!F!\GlueXML\" >nul

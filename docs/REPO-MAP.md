@@ -19,7 +19,7 @@ we made are kept; the ones that are not part of the core today are in `labs/`.
 | `hosting/` | The P2P/relay network and one-click hosting (see below) | Core | partly |
 | `stream/` | The website, portal and hub on our server, and the browser game page layer (see below) | Core | a few files |
 | `client/` | Our browser client for the Dalaran Hangout: `get-source.sh`, the CI build, `patches/` (the web port, the newest change, smooth frames; older series in `patches/history/`), `dev/` (rebuild and boot-check helpers) | Core | no |
-| `play/` | Local play: `Play 3.3.5a in browser.bat` and the test-build launchers (smooth frames, nameplates, Azeroth Survivors, newest test build) | Core (test bats: experimental, in place) | no |
+| `play/` | Local play: `Play locally (one click).bat` (local realm and browser client on this PC: Docker, your own game folder; was `Play WotLK (one click).bat` at the top), `Install Forever UI.bat` (Forever UI into your own game folder), `Play 3.3.5a in browser.bat` and the test-build launchers (smooth frames, nameplates, Azeroth Survivors, newest test build) | Core (test bats: experimental, in place) | no |
 | `realm/` | The Dalaran Hangout realm: AzerothCore 3.3.5a in Docker, custom modules and Lua scripts (`custom/`), profiles, SQL, the brand and sampler switches, server passes | Core | two scripts |
 | `mods/` | The mod package format (`SPEC.md`), the checker `wu-mod.py`, the template, the catalog and categories | Core | `SPEC.md` |
 | `addons/` | Our client addons for the Hangout (OVArmory, OVQoL, MiniGM) and the GM addon fetcher | Core | no |
@@ -27,10 +27,10 @@ we made are kept; the ones that are not part of the core today are in `labs/`.
 | `tools/` | Ops tools (see below) | Ops | no |
 | `gmconsole/` | The owner-only GM console on the server (Autopilot step `gm`) | Ops | no |
 | `server/` | Our server's deploy kit: Caddy, the realm deploy and rollback, backups, sign-up service, runbook | Ops | no |
-| `control/` | Autopilot's state files (`autopilot.json`, `claude-status.json`, `last-run.json`), read and written by `tools/control/control.py` | Ops | no |
-| `players/` | The old tester package (`Make player package.bat` builds the zip from `play/` and `addons/`) | Experimental, in place | no |
-| `labs/` | Paused tools and plans, kept for later: the 1.12 client repo maker, the 1.12 login carry-over, the sandbox roadmap. `labs/README.md` | Labs | no |
-| `.repos/` (not in git) | Working copies the steps manage: `leyline-public` (the public repo, `leyline` step), `leyline-launcher` (the Leyline-Launcher repo, `ovrename`/`ovland`) | Ops | no |
+| `setup/` | One-time setup, each safe to run again: `Turn on Autopilot (start with Windows).bat`, `Turn on GitHub builds.bat`, `Turn on launcher updates.bat`, `Set up automatic deploys.bat` (all at the top until 2026-10-30; they work from the workspace folder) | Ops | no |
+| `control/` (not in git) | Autopilot's state on this PC (`autopilot.json`, `claude-status.json`, `last-run.json`), read and written by `tools/control/control.py`; gitignored since 2026-10-30, like `logs/` | Ops | no |
+| `labs/` | Paused tools and plans, kept for later: the 1.12 client repo maker, the 1.12 login carry-over, the sandbox roadmap, the old tester package (`players/`), and finished one-shot tools (`done/`). `labs/README.md` | Labs | no |
+| `.repos/` (not in git) | Working copies the steps manage: `leyline-public` (the public repo, `leyline` step), `leyline-launcher` (the Leyline-Launcher repo) | Ops | no |
 | `.github/workflows/` | CI that runs here: hosting tests, realm images, hub index, scout. Mirrors in `tools/github-workflows/` | Ops | no |
 
 ## Root files
@@ -39,15 +39,15 @@ we made are kept; the ones that are not part of the core today are in `labs/`.
 |---|---|
 | `README.md` | This repo in short |
 | `UPDATE.bat`, `UPDATES-PENDING.txt`, `UPDATES-DONE.txt` | The update queue: Claude adds steps, `UPDATE.bat` or the control window runs them |
+| `.gitignore` | What never goes in git: game data, builds, secrets, machine state (`control/*.json`, `logs/`), caches |
 | `Leyline Control.bat` | The control window with Autopilot (`tools/control/control.py`); was `WrathUnleashed Control.bat` |
-| `Move to Leyline.bat` | Once: one workspace folder, `Desktop\Leyline`, with the other clones in `.repos\` (`tools/workspace-move/`) |
-| `Turn on Autopilot (start with Windows).bat` | Starts the control window at sign-in |
-| `Ship WrathUnleashed.bat` | Saves the repo to the private GitHub repo (Autopilot step `ship`) |
-| `Ship the Leyline launcher.bat`, `Turn on launcher updates.bat`, `Turn on GitHub builds.bat` | Launcher release: update key, save, public repo, tag |
-| `Set up automatic deploys.bat` | One time: the deploy key GitHub uses for realm scripts |
-| `Play WotLK (one click).bat` | Local realm and browser client on this PC (Docker, your own game folder) |
-| `Install Forever UI.bat` | Puts Forever UI into your own game folder for the browser client |
-| `Make player package.bat` | Builds `players/WrathUnleashed-Player.zip` (experimental, in place) |
+| `Ship to GitHub.bat` | One click, no questions: saves the repo to the private GitHub repo, main (Autopilot step `ship`; was `Ship WrathUnleashed.bat`) |
+| `Ship the Leyline launcher.bat` | Launcher release: `setup\Turn on launcher updates.bat`, Ship to GitHub, the public repo, `setup\Turn on GitHub builds.bat` (tag) |
+
+Moved off the top on 2026-10-30 (the cleanup list `tools/cleanup/REMOVE.txt` takes the old copies off the PC):
+the one-time setup files to `setup/`; `Play WotLK (one click).bat` (now `Play locally (one click).bat`) and
+`Install Forever UI.bat` to `play/`; `Make player package.bat` and `players/` to `labs/players/`;
+`Move to Leyline.bat` (done) to `tools/workspace-move/`.
 
 ## hosting/
 
@@ -92,24 +92,23 @@ we made are kept; the ones that are not part of the core today are in `labs/`.
 | `control/` | The control window and Autopilot (`control.py`: its `STEPS` name every step it can run) |
 | `leyline-repo/` | The public Leyline export (`export.py`, `Update Leyline repo.bat`, Autopilot `leyline`) and the host-kit zip |
 | `hub-index/` | Hub index and scout (GitHub workflows `hub-index.yml`, `scout.yml`), hub thumbnails (Autopilot `thumbs`) |
-| `github-workflows/` | The workflow files `Turn on GitHub builds.bat` installs (here and in the Leyline repo) |
+| `github-workflows/` | The workflow files `setup\Turn on GitHub builds.bat` installs (here and in the Leyline repo) |
 | `github-builds/`, `github-cleanup/`, `github-deployments/` | GitHub: turn on builds, why a build failed, old releases and packages, old deployments |
-| `launcher-updates/` | The launcher's update signing key (`Turn on launcher updates.bat`) |
+| `launcher-updates/` | The launcher's update signing key (`setup\Turn on launcher updates.bat`) |
 | `discord-leyline/` | The Leyline Discord server's channels and art |
-| `fresh-history/` | One-commit fresh history for the Leyline repo |
-| `ov-rename/` | Rename the older Python launcher's repo and land its branch (Autopilot `ovrename`, `ovland`) |
+| `fresh-history/` | One-commit fresh history for the Leyline repo (Autopilot `fresh-check`, `fresh-history`; not run yet) |
 | `cleanup/` | Remove files a change took out (`REMOVE.txt`, Autopilot `remove-files`) |
 | `art/` | Share card and launcher screenshot renderers |
 | `creator-api/` | Writes `docs/CREATOR-API.md` and `docs/creator-api.html` from the Modes API |
 | `playerbots-specs/` | Turns playerbots talent specs into the realm's env lines |
-| `workspace-move/` | `move_to_leyline.py`, behind `Move to Leyline.bat`: the one-folder move and the repo rename |
+| `workspace-move/` | `Move to Leyline.bat` + `move_to_leyline.py`: the one-folder move and the repo rename (done 2026-10-30; kept for reference, still runs from here) |
 
 ## Experimental, in place
 
 These are prototypes that live scripts, tests or the client build still point at, so they stay where they are:
 the extra realm profiles (`realm/profiles/brawl.env`, `progression.env`, `casual.env`, with `Make it Brawl.bat`,
 `Make it Main.bat` and their SQL; `server/deploy.sh` and the host kit apply the same SQL), `hosting/mesh-sim/`,
-the P2P/torrent and mesh flags (OFF), `stream/demo.py` (OFF), the test-build launchers in `play/`, and `players/`.
+the P2P/torrent and mesh flags (OFF), `stream/demo.py` (OFF) and the test-build launchers in `play/`.
 Hordes of Azeroth lives only on its own branch.
 
 ## Rules of thumb
