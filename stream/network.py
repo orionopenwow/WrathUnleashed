@@ -661,7 +661,7 @@ def post(h, path: str) -> None:
         h.send(429, P("busy_page")(back="/wrath/realms"))
         return
     origin = h.headers.get("Origin", "")
-    if origin and origin != f"https://{P('PUBLIC_HOST') or 'play.openvanilla.app'}":
+    if origin and origin != f"https://{P('PUBLIC_HOST') or 'play.openvanilla.app'}" and not (origin == "null" and h.headers.get("Sec-Fetch-Site", "") == "same-origin"):
         h.send(403, P("error_page")("That form came from another site."))
         return
     form = _form(h)

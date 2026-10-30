@@ -1109,7 +1109,7 @@ def _auth(h, post: bool):
             _json(h, 403, {"error": "That came from another site."})
             return None
         origin = h.headers.get("Origin", "")
-        if origin and origin != f"https://{P('PUBLIC_HOST')}":
+        if origin and origin != f"https://{P('PUBLIC_HOST')}" and not (origin == "null" and h.headers.get("Sec-Fetch-Site", "") == "same-origin"):
             _json(h, 403, {"error": "That came from another site."})
             return None
     try:
@@ -1336,7 +1336,7 @@ def link_page(h, query: dict, note: str = "") -> None:
 
 def link_post(h) -> None:
     origin = h.headers.get("Origin", "")
-    if (origin and origin != f"https://{P('PUBLIC_HOST')}") or h.headers.get("Sec-Fetch-Site", "") == "cross-site":
+    if (origin and origin != f"https://{P('PUBLIC_HOST')}" and not (origin == "null" and h.headers.get("Sec-Fetch-Site", "") == "same-origin")) or h.headers.get("Sec-Fetch-Site", "") == "cross-site":
         return _page(h, 403, "Link the launcher", "<p>That form came from another site.</p>")
     try:
         n = int(h.headers.get("Content-Length", "0"))

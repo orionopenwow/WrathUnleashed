@@ -551,7 +551,8 @@ def _cross_site(h) -> bool:
     if h.headers.get("Sec-Fetch-Site", "") == "cross-site":
         return True
     origin = h.headers.get("Origin", "")
-    return bool(origin) and origin != f"https://{_get('PUBLIC_HOST') or 'play.openvanilla.app'}"
+    return (bool(origin) and origin != f"https://{_get('PUBLIC_HOST') or 'play.openvanilla.app'}"
+            and not (origin == "null" and h.headers.get("Sec-Fetch-Site", "") == "same-origin"))
 
 
 def _known(mid) -> dict | None:

@@ -926,7 +926,7 @@ def post(h, path: str) -> None:
         h.send(429, P("busy_page")(back="/wrath/host"))
         return
     origin = h.headers.get("Origin", "")
-    if origin and origin != f"https://{P('PUBLIC_HOST')}":
+    if origin and origin != f"https://{P('PUBLIC_HOST')}" and not (origin == "null" and h.headers.get("Sec-Fetch-Site", "") == "same-origin"):   # null: no-referrer pages (Caddy)
         h.send(403, P("error_page")("That form came from another site."))
         return
     form = read_form(h)
