@@ -52,7 +52,7 @@ jobs:
   # every push to main builds one portable Leyline.exe (no installer: double-click and it runs; Windows 10 and 11 already
   # have the WebView2 it uses) and puts it on the rolling release "launcher-latest", always at the same address:
   #   https://github.com/orionopenwow/Leyline/releases/download/launcher-latest/Leyline.exe
-  # "Open Leyline Launcher.bat" and the website's Download button fetch it from there.
+  # "Open Leyline Launcher.bat" fetches it from there (the website can link it once the first build is up).
   portable:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: core-tests
