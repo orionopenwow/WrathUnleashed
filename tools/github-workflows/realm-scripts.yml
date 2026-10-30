@@ -47,6 +47,11 @@ jobs:
           lua5.1 stream/tests/test_wuui_workshop.lua
       - name: ov_playmode (one click to play a mode) and the launcher's LeylinePlay addon
         run: lua5.1 stream/tests/test_ov_playmode.lua realm/custom/lua_scripts launcher/src-tauri/src/modes/LeylinePlay.lua
+      - name: ov_hostctl (Your realm, for the realm's GM) and the in-game Host window, Realm List, the Leyline look
+        run: |
+          lua5.1 stream/tests/test_wuui_host.lua
+          lua5.1 stream/tests/test_wuui_leyline.lua
+          lua5.1 stream/tests/test_ov_leyline.lua
       - name: ov_admin (the Admin Console's console words)
         run: lua5.1 stream/tests/test_ov_admin.lua realm/custom/lua_scripts
       - name: ov_discord (World chat bridge, game side)

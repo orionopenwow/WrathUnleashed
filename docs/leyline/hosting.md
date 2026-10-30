@@ -150,6 +150,23 @@ The listing's rules:
 - A record goes offline after 3 missed heartbeats and leaves the list 24 hours after the last one.
 - It is readable by anyone at `/api/listing/realms.json`. The schema is in [Other servers](cross-server.md#the-realm-record-and-listing-schema).
 
+## From the game
+
+**Esc > Realm List > Host your own** opens the Host window in game.
+
+- **Set up a realm**: pick the core and ruleset, the realm name, type (Normal, PvP, RP, RP-PvP), rates (XP, loot,
+  reputation: 1x to 10x, AzerothCore rulesets), new characters (level 1 or the boost, Classic levelling), bots,
+  public or private, who can make accounts, Hero Key sign-in, region, language, tags and max players. **Start
+  hosting** hands them over: in the browser game a bar offers the website's host page filled in; in the desktop client
+  you copy a `leyline://host?...` link (the launcher's Host page) or the website link. The realm key is still made on
+  your PC.
+- **Your realm**: on your own realm, with your GM account: status (uptime, players, bots, on the list, sign-up),
+  announce, message of the day, kick, ban or unban a character, an allow list (only listed characters may log in), and
+  a restart that always gives everyone five minutes' warning. Bots, rates, sign-up, the realm list and the invite link
+  change on your PC: `leyline options --bots 40`, `leyline options --xp 3 --loot 1 --rep 2 --type pvp`,
+  `leyline signup open|invite|off`, `leyline public|private` (rates, type and bots need `leyline stop`, then
+  `leyline host`).
+
 ## Discord bridge
 
 The bridge links the realm's World chat channel with one Discord channel, both ways, and feeds `.bug` reports to a second channel. It is built but off until the owner fills in the bot's settings and turns it on. Players see `[Discord] Name: text`. `.discord off` hides those lines for you.

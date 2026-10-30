@@ -764,6 +764,7 @@ local function label(parent, text, font, ...)
     return fs
 end
 local function button(parent, text, w, onClick, ...)
+    if W.Style then local b = W.Style.Button(parent, text, w, onClick, nil, ...); b:SetHeight(20); return b end
     local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     b:SetWidth(w); b:SetHeight(20)
     b:SetText(text)
@@ -772,7 +773,7 @@ local function button(parent, text, w, onClick, ...)
     return b
 end
 local function input(parent, w, ...)
-    local b = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    local b = (W.Style and W.Style.Input(parent) or CreateFrame("EditBox", nil, parent, "InputBoxTemplate"))
     b:SetWidth(w); b:SetHeight(18)
     b:SetAutoFocus(false)
     b:SetPoint(...)
@@ -1044,8 +1045,8 @@ local function openMenu(anchor, options, onPick)
         menu:SetFrameStrata("FULLSCREEN_DIALOG")
         menu:SetWidth(180)
         menu:EnableMouse(true)
-        menu:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 16, edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
+        if W.Style then W.Style.Backdrop(menu, W.Style.C.bg2) else menu:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 16, edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 } }) end
         menu:SetBackdropColor(0.05, 0.04, 0.1, 0.96)
         menu.rows = {}
         for i = 1, 14 do
@@ -1111,17 +1112,19 @@ local function build()
     ui:RegisterForDrag("LeftButton")
     ui:SetScript("OnDragStart", ui.StartMoving)
     ui:SetScript("OnDragStop", ui.StopMovingOrSizing)
-    ui:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    if not W.Style then   -- Style.lua draws the window (S.Window, at its title)
+        ui:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32,
         insets = { left = 11, right = 12, top = 12, bottom = 11 } })
+    end
     ui:SetBackdropColor(0.05, 0.06, 0.08, 0.95)   -- solid: the dialog texture draws see-through in the browser client
     do   -- a colour fill the engine draws itself (no texture file; the backdrop fill needs one)
         local bg = ui:CreateTexture(nil, "BACKGROUND")
-        bg:SetTexture(0.05, 0.06, 0.08, 0.95)
+        bg:SetTexture(0.094, 0.106, 0.137, 0.97)   -- #181b23 (Style.lua)
         bg:SetPoint("TOPLEFT", 10, -10); bg:SetPoint("BOTTOMRIGHT", -10, 10)
     end
-    label(ui, "Device editor", "GameFontNormalLarge", "TOP", -40, -18)
-    local close = CreateFrame("Button", nil, ui, "UIPanelCloseButton")
+    local _ = (W.Style and W.Style.Window(ui, "Device editor") or label(ui, "Device editor", "GameFontNormalLarge", "TOP", -40, -18))
+    local close = (W.Style and W.Style.Close(ui) or CreateFrame("Button", nil, ui, "UIPanelCloseButton"))
     close:SetPoint("TOPRIGHT", -6, -6)
     tinsert(UISpecialFrames, "LeylineDevicesEditor")
 

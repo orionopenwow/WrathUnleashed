@@ -132,7 +132,7 @@ WUUI_GAMEFOLDER = { page = true, on = false, realm = "held", keeps = true, allow
 win.folder.note = nil
 tick()
 check("page, no folder: streamed line, drop help", win.folder.line.text:find(G.STREAMED, 1, true)
-    and remember(win.folder.help.text):find("Drop your 3.3.5a game folder on the page", 1, true)
+    and remember(win.folder.help.text):find("Drop your game folder on the page", 1, true)
     and win.folder.button.enabled ~= false)
 win.folder.button:Fire("OnClick")
 check("the button asks the page", WUUI_GAMEFOLDER_ASK == "pick" and remember(win.folder.help.text):find("folder picker", 1, true))

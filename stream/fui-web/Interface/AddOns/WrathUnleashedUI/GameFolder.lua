@@ -42,7 +42,7 @@ end
 function G.Help()
     local s = G.State()
     if not s then
-        return "In the browser game you can drop your own 3.3.5a game folder on the page to go anywhere. How: " .. HELP
+        return "In the browser game you can drop your own game folder on the page to go anywhere. How: " .. HELP
     end
     if s.on then
         local bits = {}
@@ -53,7 +53,7 @@ function G.Help()
     if s.allowed == false then
         return "Your game folder works on the streamed page after you sign in. How: " .. HELP
     end
-    return "Drop your 3.3.5a game folder on the page, or press Use my game folder: it is read on your computer, "
+    return "Drop your game folder on the page, or press Use my game folder: it is read on your computer, "
         .. "nothing is uploaded." .. (s.keeps == false and " This browser asks for it on each visit." or "")
 end
 
@@ -64,7 +64,7 @@ function G.Ask()
     if s and s.allowed == false then return false, G.Help() end
     WUUI_GAMEFOLDER_ASK = "pick"
     G.asking = now()
-    return true, "Opening the folder picker in the page... choose your 3.3.5a game folder there."
+    return true, "Opening the folder picker in the page... choose your game folder there."
 end
 
 -- Called often (the window's OnUpdate): an ask nobody took means there is no page.
@@ -87,7 +87,7 @@ function G.Attach(win, y, width)
     help:SetPoint("TOPLEFT", 20, y - 18)
     help:SetJustifyH("LEFT")
     help:SetWidth((width or 560) - 200)
-    local b = CreateFrame("Button", nil, win, "UIPanelButtonTemplate")
+    local b = W.Style and W.Style.Button(win, "", 150, nil, "ghost") or CreateFrame("Button", nil, win, "UIPanelButtonTemplate")
     b:SetWidth(150); b:SetHeight(22)
     b:SetPoint("TOPRIGHT", -20, y + 2)
     b:SetText("Use my game folder")

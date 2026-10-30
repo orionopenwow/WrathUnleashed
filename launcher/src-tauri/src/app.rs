@@ -359,6 +359,16 @@ fn open_link(app: AppHandle, name: String) -> Result<(), String> {
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
+/// The website's host form filled in with the choices a `leyline://host?` link brought (deeplink.rs): checked again
+/// here, so the UI can only open the site's own host page.
+#[tauri::command]
+fn open_host_form(app: AppHandle, query: String) -> Result<(), String> {
+    let q = crate::deeplink::host_query(&query).filter(|q| !q.starts_with("manage="))
+        .ok_or("Those choices are not valid: set them up again in the game.")?;
+    let url = format!("{}?{q}", crate::host::HOST_PAGE);
+    app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
+}
+
 /// Open an address the core handed the UI (a mod's repo or page, an author, a realm's join page or Discord,
 /// the release page). Anything else is refused.
 #[tauri::command]
@@ -847,6 +857,7 @@ pub fn run() {
             realm_status,
             open_link,
             open_url,
+            open_host_form,
             mods_catalog,
             mods_installed,
             mod_install,

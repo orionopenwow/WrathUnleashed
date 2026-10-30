@@ -288,8 +288,8 @@ class TestPreview(Base):
         self.assertEqual(self.backup_dirs(), [])
         out = p.stdout
         for s in ("PREVIEW", "rename 'OpenVanilla Wrath' -> 'Leyline'", "icon -> leyline-discord-icon-512.png",
-                  "New channels:", "category START", "◆︱looking-for-group in PLAY",
-                  "Reused channels", "general -> ◆︱general", "General -> ◆︱Hangout",
+                  "New channels:", "category START", "🤝︱looking-for-group in PLAY",
+                  "Reused channels", "general -> 💬︱general", "General -> 🎧︱Hangout",
                   "ov-realm-help -> ARCHIVE", "wrath-dev -> ARCHIVE", "AFK -> ARCHIVE",
                   "create Helper", "restyle Moderator", "--delete-old-roles", "Realm-Ally",
                   "Do these by hand", "Vanity URL", "Enable Community", "Nothing changed"):
@@ -360,11 +360,11 @@ class TestApply(Base):
         # reused, history kept: same ids
         gen, ann, hang = self.ch("general", (0,)), self.ch("announcements"), self.ch("hangout", (2,))
         self.assertEqual((gen["id"], ann["id"], hang["id"]), ("20", "21", "30"))
-        self.assertEqual(gen["name"], "◆︱general")
+        self.assertEqual(gen["name"], "💬︱general")
         self.assertEqual(gen["parent_id"], cats["PLAY"]["id"])
         self.assertEqual(gen["topic"], "Talk about anything Leyline.")
-        self.assertEqual(ann["name"], "✦︱announcements")
-        self.assertEqual(hang["name"], "◆︱Hangout")
+        self.assertEqual(ann["name"], "📣︱announcements")
+        self.assertEqual(hang["name"], "🎧︱Hangout")
         welcome = self.ch("welcome")
         self.assertEqual(w["guild"]["system_channel_id"], welcome["id"])
         for name, cat in (("help", "PLAY"), ("looking-for-group", "PLAY"), ("mods-and-workshop", "CREATE"),
@@ -372,7 +372,7 @@ class TestApply(Base):
                           ("ideas", "FEEDBACK"), ("welcome", "START")):
             c = self.ch(name)
             self.assertEqual(c["parent_id"], cats[cat]["id"], name)
-            self.assertTrue(c["name"].startswith(dl.GLYPHS[cat] + dl.GLYPH_SEP), c["name"])
+            self.assertTrue(c["name"].startswith((dl.EMOJI.get(name) or dl.GLYPHS[cat]) + dl.GLYPH_SEP), c["name"])
         self.assertEqual(self.ch("help")["rate_limit_per_user"], 10)
         self.assertEqual(self.ch("ideas")["rate_limit_per_user"], 10)
         self.assertEqual(self.ch("general", (0,))["rate_limit_per_user"], 0)
@@ -434,7 +434,7 @@ class TestApply(Base):
         self.assertEqual(self.ch("general", (0,))["name"], "general")
         self.assertEqual(self.ch("hangout", (2,))["name"], "Hangout")
         self.apply()                                            # switching back to glyphs is a plain rename
-        self.assertEqual(self.ch("general", (0,))["name"], "◆︱general")
+        self.assertEqual(self.ch("general", (0,))["name"], "💬︱general")
 
     def test_no_yes_no_change(self):
         p = self.run_script("--apply", stdin="yes please\n")
@@ -535,6 +535,21 @@ class TestDeleteFlags(Base):
         self.assertEqual(p.returncode, 1)
         self.assertEqual(self.fake.writes(), [])
 
+    def test_wipe_history_fresh_channels(self):
+        self.apply("--wipe-history", stdin="YES\nWIPE\n")
+        self.assertIsNone(self.fake.chan("20"), "the old general (and its messages) is gone")
+        gen = [c for c in self.fake.w["channels"] if c["name"] == "💬︱general"]
+        self.assertEqual(len(gen), 1)
+        welcome = [c for c in self.fake.w["channels"] if c["name"] == "👋︱welcome"][0]
+        self.assertEqual(self.fake.w["guild"].get("system_channel_id"), welcome["id"])
+        self.assertTrue(self.backup_dirs())
+
+    def test_wipe_history_needs_wipe(self):
+        n = len(self.fake.writes())
+        p = self.run_script("--apply", "--wipe-history", stdin="YES\nno\n")
+        self.assertEqual(p.returncode, 1)
+        self.assertEqual(len(self.fake.writes()), n)
+
     def test_delete_archived_after_backup(self):
         self.apply("--delete-archived", stdin="YES\nOpenVanilla Wrath\n")
         b = self.backup_dirs()[-1]
@@ -542,7 +557,7 @@ class TestDeleteFlags(Base):
         for cid in ("22", "23", "24", "31", "10", "11"):
             self.assertIsNone(self.fake.chan(cid), cid)
         self.assertFalse([c for c in self.fake.w["channels"] if c["name"] == "ARCHIVE"])
-        self.assertEqual(self.fake.chan("20")["name"], "◆︱general")     # reused channels never deleted
+        self.assertEqual(self.fake.chan("20")["name"], "💬︱general")     # reused channels never deleted
         dels = [x for x in self.fake.writes() if x[0] == "DELETE"]
         self.assertTrue(dels and all(x[4] for x in dels))
         # again: nothing left to delete, nothing changes

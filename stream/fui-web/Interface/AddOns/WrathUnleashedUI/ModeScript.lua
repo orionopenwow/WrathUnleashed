@@ -37,6 +37,7 @@ local function label(parent, text, font, ...)
     return fs
 end
 local function button(parent, text, w, onClick, ...)
+    if W.Style then local b = W.Style.Button(parent, text, w, onClick, nil, ...); b:SetHeight(22); return b end
     local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     b:SetWidth(w); b:SetHeight(22)
     b:SetText(text)
@@ -487,17 +488,19 @@ local function build()
     ed:RegisterForDrag("LeftButton")
     ed:SetScript("OnDragStart", ed.StartMoving)
     ed:SetScript("OnDragStop", ed.StopMovingOrSizing)
-    ed:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    if not W.Style then   -- Style.lua draws the window (S.Window, at its title)
+        ed:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32,
         insets = { left = 11, right = 12, top = 12, bottom = 11 } })
+    end
     ed:SetBackdropColor(0.05, 0.06, 0.08, 0.95)
     do
         local bg = ed:CreateTexture(nil, "BACKGROUND")
-        bg:SetTexture(0.05, 0.06, 0.08, 0.95)
+        bg:SetTexture(0.094, 0.106, 0.137, 0.97)   -- #181b23 (Style.lua)
         bg:SetPoint("TOPLEFT", 10, -10); bg:SetPoint("BOTTOMRIGHT", -10, 10)
     end
-    ed.title = label(ed, "Mode editor", "GameFontNormal", "TOPLEFT", 22, -18)
-    local close = CreateFrame("Button", nil, ed, "UIPanelCloseButton")
+    ed.title = W.Style and W.Style.Window(ed, "Mode editor") or label(ed, "Mode editor", "GameFontNormal", "TOPLEFT", 22, -18)
+    local close = (W.Style and W.Style.Close(ed) or CreateFrame("Button", nil, ed, "UIPanelCloseButton"))
     close:SetPoint("TOPRIGHT", -6, -6)
     tinsert(UISpecialFrames, "LeylineModesEditor")
 

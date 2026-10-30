@@ -43,6 +43,7 @@ local function label(parent, text, font, ...)
 end
 
 local function button(parent, text, w, onClick, ...)
+    if W.Style then local b = W.Style.Button(parent, text, w, onClick, nil, ...); b:SetHeight(22); return b end
     local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     b:SetWidth(w); b:SetHeight(22)
     b:SetText(text)
@@ -52,7 +53,7 @@ local function button(parent, text, w, onClick, ...)
 end
 
 local function editBox(parent, w, maxLetters, ...)
-    local e = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    local e = (W.Style and W.Style.Input(parent) or CreateFrame("EditBox", nil, parent, "InputBoxTemplate"))
     e:SetWidth(w); e:SetHeight(20)
     e:SetPoint(...)
     e:SetAutoFocus(false)
@@ -527,17 +528,19 @@ local function buildMenu()
     menu:SetPoint("CENTER")
     menu:SetFrameStrata("DIALOG")
     menu:EnableMouse(true)
-    menu:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    if not W.Style then   -- Style.lua draws the window (S.Window, at its title)
+        menu:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32,
         insets = { left = 11, right = 12, top = 12, bottom = 11 } })
+    end
     menu:SetBackdropColor(0.05, 0.06, 0.08, 0.95)   -- solid: the dialog texture draws see-through in the browser client
     do   -- a colour fill the engine draws itself (no texture file; the backdrop fill needs one)
         local bg = menu:CreateTexture(nil, "BACKGROUND")
-        bg:SetTexture(0.05, 0.06, 0.08, 0.95)
+        bg:SetTexture(0.094, 0.106, 0.137, 0.97)   -- #181b23 (Style.lua)
         bg:SetPoint("TOPLEFT", 10, -10); bg:SetPoint("BOTTOMRIGHT", -10, 10)
     end
-    label(menu, "Spawn menu", "GameFontNormalLarge", "TOPLEFT", 20, -18)
-    local close = CreateFrame("Button", nil, menu, "UIPanelCloseButton")
+    local _ = (W.Style and W.Style.Window(menu, "Spawn menu") or label(menu, "Spawn menu", "GameFontNormalLarge", "TOPLEFT", 20, -18))
+    local close = (W.Style and W.Style.Close(menu) or CreateFrame("Button", nil, menu, "UIPanelCloseButton"))
     close:SetPoint("TOPRIGHT", -6, -6)
     menu.search = editBox(menu, 180, 30, "TOPLEFT", 200, -16)
     menu.search:SetScript("OnTextChanged", function(self)
@@ -671,14 +674,14 @@ local function buildPanel()
     panel:RegisterForDrag("LeftButton")
     panel:SetScript("OnDragStart", panel.StartMoving)
     panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
-    panel:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    if W.Style then W.Style.Backdrop(panel, W.Style.C.bg2) else panel:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", tile = true, tileSize = 16, edgeSize = 16,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 } })
+        insets = { left = 4, right = 4, top = 4, bottom = 4 } }) end
     panel:SetBackdropColor(0.06, 0.07, 0.09, 0.92)
     label(panel, "Properties", "GameFontNormal", "TOPLEFT", 14, -12)
     panel.title2 = label(panel, "", "GameFontHighlightSmall", "TOPLEFT", 14, -30)
     panel.title2:SetWidth(220)
-    local close = CreateFrame("Button", nil, panel, "UIPanelCloseButton")
+    local close = (W.Style and W.Style.Close(panel) or CreateFrame("Button", nil, panel, "UIPanelCloseButton"))
     close:SetPoint("TOPRIGHT", -2, -2)
     panel.box = {}
     for i, f in ipairs(FIELDS) do
@@ -734,17 +737,19 @@ local function build()
     win:RegisterForDrag("LeftButton")
     win:SetScript("OnDragStart", win.StartMoving)
     win:SetScript("OnDragStop", win.StopMovingOrSizing)
-    win:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    if not W.Style then   -- Style.lua draws the window (S.Window, at its title)
+        win:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32,
         insets = { left = 11, right = 12, top = 12, bottom = 11 } })
+    end
     win:SetBackdropColor(0.05, 0.06, 0.08, 0.95)   -- solid: the dialog texture draws see-through in the browser client
     do   -- a colour fill the engine draws itself (no texture file; the backdrop fill needs one)
         local bg = win:CreateTexture(nil, "BACKGROUND")
-        bg:SetTexture(0.05, 0.06, 0.08, 0.95)
+        bg:SetTexture(0.094, 0.106, 0.137, 0.97)   -- #181b23 (Style.lua)
         bg:SetPoint("TOPLEFT", 10, -10); bg:SetPoint("BOTTOMRIGHT", -10, 10)
     end
-    label(win, "Builder", "GameFontNormalLarge", "TOP", 0, -18)
-    local close = CreateFrame("Button", nil, win, "UIPanelCloseButton")
+    local _ = (W.Style and W.Style.Window(win, "Builder") or label(win, "Builder", "GameFontNormalLarge", "TOP", 0, -18))
+    local close = (W.Style and W.Style.Close(win) or CreateFrame("Button", nil, win, "UIPanelCloseButton"))
     close:SetPoint("TOPRIGHT", -6, -6)
     button(win, "Done", 90, function() win:Hide() end, "BOTTOMRIGHT", -16, 14)
     button(win, "Help", 70, function() B.Command("help") end, "BOTTOMLEFT", 16, 14)

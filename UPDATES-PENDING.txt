@@ -308,3 +308,10 @@
 1098a signin  Leyline site: header mark without its ring, new launcher Home screenshot
 1098b ship  Save to GitHub (orionopenwow/WrathUnleashed): launcher Home art fills the hero card, header mark, window buttons
 1099a ship  Save to GitHub (orionopenwow/WrathUnleashed): purple chat icon in the launcher's Discord buttons
+1100a ghclean-check  What the GitHub cleanup would delete (read-only: Leyline-Launcher releases, packages)
+1102a scripts  Realm scripts: in-game host controls for a realm's own GM (ov_hostctl), one Dalaran Hangout row (live reload, no restart)
+1102b foreverui  In-game: Realm List in the Esc menu, the Leyline look for our windows, Host your own panel
+1102c page  Game page: hands the in-game host choices to the website
+1102d signin  Website host flow: filled in from the game, More settings
+1102e hostkit  Host pack: applies the host options (type, rates, start, bots)
+1102f ship  Save to GitHub (orionopenwow/WrathUnleashed): in-game Realm List, Leyline look, hosting from the game

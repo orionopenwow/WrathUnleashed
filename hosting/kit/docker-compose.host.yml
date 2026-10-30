@@ -106,6 +106,8 @@ services:
     env_file:
       - path: realm-files/profiles/${WU_PROFILE:-main}.env
       - path: realm-files/modules.env
+      - path: state/realm.env      # the host's own settings: type, rates, start (setup.py options; may be missing)
+        required: false
     environment:
       <<: *db
       AC_DATA_DIR: /azerothcore/env/dist/data

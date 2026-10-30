@@ -45,6 +45,7 @@ local function label(parent, text, font, ...)
 end
 
 local function button(parent, text, w, onClick, ...)
+    if W.Style then local b = W.Style.Button(parent, text, w, onClick, nil, ...); b:SetHeight(22); return b end
     local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     b:SetWidth(w); b:SetHeight(22)
     b:SetText(text)
@@ -598,8 +599,8 @@ local function setHud(show)
         local top = CreateFrame("Frame", nil, hud)
         top:SetWidth(520); top:SetHeight(36)
         top:SetPoint("TOP", 0, -14)
-        top:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 16, edgeSize = 14, insets = { left = 4, right = 4, top = 4, bottom = 4 } })
+        if W.Style then W.Style.Backdrop(top, W.Style.C.bg2) else top:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 16, edgeSize = 14, insets = { left = 4, right = 4, top = 4, bottom = 4 } }) end
         top:SetBackdropColor(0.05, 0.04, 0.1, 0.82)
         top:SetBackdropBorderColor(0.6, 0.5, 1, 0.9)
         hud.banner = top:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -610,8 +611,8 @@ local function setHud(show)
         local card = CreateFrame("Frame", nil, hud)
         card:SetWidth(200); card:SetHeight(140)
         card:SetPoint("TOPRIGHT", -18, -90)
-        card:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 16, edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
+        if W.Style then W.Style.Backdrop(card, W.Style.C.bg2) else card:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 16, edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 } }) end
         card:SetBackdropColor(0.04, 0.03, 0.08, 0.78)
         label(card, "Scores", "GameFontNormalSmall", "TOPLEFT", 10, -8)
         hud.card = label(card, "", "GameFontHighlightSmall", "TOPLEFT", 10, -24)
@@ -1193,17 +1194,19 @@ local function build()
     win:RegisterForDrag("LeftButton")
     win:SetScript("OnDragStart", win.StartMoving)
     win:SetScript("OnDragStop", win.StopMovingOrSizing)
-    win:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    if not W.Style then   -- Style.lua draws the window (S.Window, at its title)
+        win:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32,
         insets = { left = 11, right = 12, top = 12, bottom = 11 } })
+    end
     win:SetBackdropColor(0.05, 0.06, 0.08, 0.95)   -- solid: the dialog texture draws see-through in the browser client
     do   -- a colour fill the engine draws itself (no texture file; the backdrop fill needs one)
         local bg = win:CreateTexture(nil, "BACKGROUND")
-        bg:SetTexture(0.05, 0.06, 0.08, 0.95)
+        bg:SetTexture(0.094, 0.106, 0.137, 0.97)   -- #181b23 (Style.lua)
         bg:SetPoint("TOPLEFT", 10, -10); bg:SetPoint("BOTTOMRIGHT", -10, 10)
     end
-    label(win, "Modes", "GameFontNormalLarge", "TOP", 0, -18)
-    local close = CreateFrame("Button", nil, win, "UIPanelCloseButton")
+    local _ = (W.Style and W.Style.Window(win, "Modes") or label(win, "Modes", "GameFontNormalLarge", "TOP", 0, -18))
+    local close = (W.Style and W.Style.Close(win) or CreateFrame("Button", nil, win, "UIPanelCloseButton"))
     close:SetPoint("TOPRIGHT", -6, -6)
     tinsert(UISpecialFrames, "LeylineModesFrame")
     label(win, "Modes on this realm", "GameFontNormal", "TOPLEFT", 22, -48)

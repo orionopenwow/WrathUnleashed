@@ -39,6 +39,7 @@ local function label(parent, text, font, ...)
 end
 
 local function button(parent, text, w, onClick, ...)
+    if W.Style then local b = W.Style.Button(parent, text, w, onClick, nil, ...); b:SetHeight(20); return b end
     local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     b:SetWidth(w); b:SetHeight(20)
     b:SetText(text)
@@ -232,11 +233,11 @@ function W.BuildWorkshopItems(p)
 
     local py = by - 30
     label(p, "Publish a build:", "GameFontHighlightSmall", "TOPLEFT", 12, py - 4)
-    local code = CreateFrame("EditBox", nil, p, "InputBoxTemplate")
+    local code = (W.Style and W.Style.Input(p) or CreateFrame("EditBox", nil, p, "InputBoxTemplate"))
     code:SetWidth(70); code:SetHeight(20); code:SetPoint("TOPLEFT", 124, py)
     code:SetAutoFocus(false); code:SetMaxLetters(6)
     code:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    local title = CreateFrame("EditBox", nil, p, "InputBoxTemplate")
+    local title = (W.Style and W.Style.Input(p) or CreateFrame("EditBox", nil, p, "InputBoxTemplate"))
     title:SetWidth(140); title:SetHeight(20); title:SetPoint("TOPLEFT", 202, py)
     title:SetAutoFocus(false); title:SetMaxLetters(40)
     title:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
