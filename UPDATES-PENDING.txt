@@ -339,3 +339,4 @@
 1111b ship Save to GitHub: the logo shadow and the strip fix
 1112a signin Realm list: client version on every row, nicer cards
 1112b ship Save to GitHub: the realm list, Open Leyline Launcher.bat
+1113a ship Save to GitHub: Open Leyline Launcher.bat skips old launcher copies (opens the current dark launcher)
