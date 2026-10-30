@@ -787,7 +787,7 @@ class Hub:
                 return url
         except Exception:   # noqa: BLE001: the releases page then
             pass
-        return RELEASES
+        return LAUNCHER_EXE
 
     def _spin(self, size: int, cls: str = "", label: str = "") -> str:
         sp = self.portal("spin")
@@ -2419,6 +2419,8 @@ class Hub:
 
 # The Leyline launcher's download when the admin console has published none (docs/leyline/launcher.md links it too).
 RELEASES = "https://github.com/orionopenwow/Leyline/releases"
+# The launcher as one file, no installer (owner 2026-10-30): GitHub builds it from main (the workflow's portable job)
+LAUNCHER_EXE = RELEASES + "/download/launcher-latest/Leyline.exe"
 # the launcher's Dark tokens, when the hub runs without the portal (the portal's LOOK_VARS is the one copy)
 LOOK_FALLBACK = (":root{--lk-bg:#15181f;--lk-chrome:#181b23;--lk-surface:#1e222b;--lk-surface-2:#252a35;--lk-raised:#2c3240;"
                  "--lk-border:#2c313c;--lk-border-strong:#3c4352;--lk-text:#eef0f4;--lk-text-2:#c8cdd7;--lk-muted:#9aa1ae;"
