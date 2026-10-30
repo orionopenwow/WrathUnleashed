@@ -1,7 +1,7 @@
 -- Leyline (3.3.5a API): the in-game window of the Leyline network, in the Mods & Workshop panel's look.
 --   Realms:  every Leyline realm (name, ruleset, players, online/offline), this one first. "Copy link" puts the
 --            realm's link (PUBLIC_BASE/r/<id>) in the box to copy; "Join" hops there: the browser game reloads
---            on that realm. "Back to Wrath" (always at the bottom) hops home.
+--            on that realm. The home button (always at the bottom: "Back to Wrath", or "Back to Dalaran Hangout" with the Leyline brand on) hops home.
 --   Friends across realms: the place for the global friends list (coming).
 --   Your game folder: "Streamed: Dalaran, capitals, starting areas" or "Whole world: your game folder", and
 --            "Use my game folder", which asks the page for the folder picker (GameFolder.lua).
@@ -38,7 +38,9 @@ local W = WrathUnleashedUI
 local PUBLIC_BASE = "https://play.openvanilla.app"
 local THIS_REALM_PATH = "/wrath"
 local PREFIX = "WULY"
-local HOME_REALM = "WrathUnleashed"       -- GetRealmName() on Wrath itself
+local HOME_REALM = "WrathUnleashed"       -- GetRealmName() on Wrath itself (W.Brand.home while the brand is on)
+-- The Leyline brand switch (WrathUnleashedUI.lua W.Brand, from the realm at login): the home realm's name.
+local function brand() return W.Brand or { on = false, home = "Wrath", back = "Back to Wrath" } end
 local HOP_WAIT = 8                        -- seconds: still here after this = no page took the hop
 local WIN_W, WIN_H, ROW_H, ROWS = 560, 632, 34, 7
 local SAMPLE_NAME = "Leyline Sample Hangout"
@@ -267,7 +269,7 @@ end
 -- (ruleset, then tags, build, region, language when the realm has them) and the state (with the uptime badge).
 function L.Texts(r)
     local name = r.name
-    if r.sample then name = SAMPLE_NAME .. " · " .. SAMPLE_NOTE end
+    if r.sample then name = (brand().on and brand().home or SAMPLE_NAME) .. " · " .. SAMPLE_NOTE end
     if r.id == "this" then name = name .. "  |cff8fd3ff(you are here)|r" end
     local badges = {}
     if r.featured then badges[#badges + 1] = "|cffffd100Featured|r" end
@@ -319,7 +321,7 @@ local function info(text) if win then win.info:SetText(text) end end
 function L.OnWrath()
     if not GetRealmName then return true end
     local ok, name = pcall(GetRealmName)
-    return not ok or name == nil or name == HOME_REALM
+    return not ok or name == nil or name == HOME_REALM or (brand().on and name == brand().home)
 end
 
 -- Ask the page to reload the game on target ("wrath" or a relay realm id). False for anything else.
@@ -328,13 +330,14 @@ function L.Hop(target, name)
         return false
     end
     WUUI_LEYLINE_HOP = target
-    L.hopping = { target = target, name = name or "Wrath", at = now() }
+    L.hopping = { target = target, name = name or brand().home, at = now() }
     if SendAddonMessage and UnitName then pcall(SendAddonMessage, PREFIX, "H:" .. target, "WHISPER", UnitName("player")) end
     if target == "wrath" then
-        info("Back to Wrath... the game reloads there in a moment.")
+        info(brand().back .. "... the game reloads there in a moment.")
     else
         info("Hopping to " .. (name or "that realm") .. "... the game reloads there in a moment. The first time, you "
-            .. "make an account on that realm (or sign in to yours); the Dalaran Hangout uses your Wrath login.")
+            .. "make an account on that realm (or sign in to yours); the Dalaran Hangout uses your "
+            .. (brand().on and "own" or "Wrath") .. " login.")
     end
     return true
 end
@@ -360,9 +363,16 @@ function L.Report(r)
     return true
 end
 
+-- The brand can arrive after the window was made: relabel its home button then.
+if W.OnBrand then
+    W.OnBrand(function(b)
+        if win and win.back then win.back:SetText(b.back); win.back:SetWidth(170) end
+    end)
+end
+
 function L.Back()
-    if L.OnWrath() then info("You're on Wrath now."); return false end
-    return L.Hop("wrath", "Wrath")
+    if L.OnWrath() then info("You're on " .. brand().home .. " now."); return false end
+    return L.Hop("wrath", brand().home)
 end
 
 function L.Join(r)
@@ -448,7 +458,7 @@ local function build()
     local close = CreateFrame("Button", nil, win, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", -6, -6)
     button(win, "Done", 90, function() win:Hide() end, "BOTTOMRIGHT", -16, 14)
-    win.back = button(win, "Back to Wrath", 120, function() L.Back() end, "BOTTOMLEFT", 16, 14)
+    win.back = button(win, brand().back, brand().on and 170 or 120, function() L.Back() end, "BOTTOMLEFT", 16, 14)
     win.host = button(win, "Host your own", 120, function() L.HostYourOwn() end, "BOTTOM", 0, 14)
     tinsert(UISpecialFrames, "WrathUnleashedLeylineFrame")   -- Esc closes it
 
@@ -507,7 +517,7 @@ local function build()
         if L.hopping and now() - L.hopping.at > HOP_WAIT then   -- no page took it (the desktop client)
             local h = L.hopping
             L.hopping, WUUI_LEYLINE_HOP = nil, nil
-            info(h.target == "wrath" and "Hopping works in the browser game. Open " .. L.Link("this") .. " to play on Wrath."
+            info(h.target == "wrath" and "Hopping works in the browser game. Open " .. L.Link("this") .. " to play on " .. brand().home .. "."
                 or "Hopping works in the browser game. Open the link above to play on " .. h.name .. ".")
         end
     end)

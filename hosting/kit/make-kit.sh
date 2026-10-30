@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fills realm-files/ from the WrathUnleashed realm folder and (optionally) zips the host kit for
+# Fills realm-files/ from the Leyline realm folder and (optionally) zips the host kit for
 # players (the published zip: tools/leyline-repo/hostkit.py, "Publish host kit.bat"). Runs on the owner's PC (WSL/Git Bash) or in CI. Never copies state/, .env or cache/:
 # those are one host's secrets.
 #   bash make-kit.sh [REALM_DIR] [--zip OUT.zip]      REALM_DIR default: ../realm

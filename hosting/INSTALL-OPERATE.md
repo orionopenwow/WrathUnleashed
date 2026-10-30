@@ -173,7 +173,7 @@ who reinstalls with the same `state\` keeps the same id, ports and listing.
 | Private realm: players can't connect | they must open the invite link on the PC (and internet connection) they play from; links last 24 h per IP; a new invite link locks out old ones |
 | "realm is full" / "too many connections" | per-realm 128 streams (≈ 64 players) / per-IP limits in `relay.env` |
 | A whole realm is slow | its 512 KB/s cap (≈ 50 players) shapes it; raise `RELAY_KBPS` for that relay |
-| Stock-image warning in the kit | no WrathUnleashed images: publish them (3.4) or build locally |
+| Stock-image warning in the kit | no Leyline images: publish them (3.4) or build locally |
 
 ## 7. Known limits and open questions
 
@@ -286,7 +286,7 @@ signed heartbeat, and the realm list shows it as "House rules".
 
 ### 9.3 The realm list on the play page
 
-`https://play.openvanilla.app/wrath/realms` (linked from the play and sign-in pages): WrathUnleashed first
+`https://play.openvanilla.app/wrath/realms` (linked from the play and sign-in pages): the official realm first
 (its own status), then the public community realms from the relay's `/api/listing/realms.json` with name,
 ruleset, players (and bots), house rules and a **Join** link (`https://relay.openvanilla.app/join/<id>`).
 The list is fetched in the background and cached (60 s; 30 s after a failure); a page waits at most 2.5 s,

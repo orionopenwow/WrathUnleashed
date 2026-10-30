@@ -1,7 +1,7 @@
 @echo off
 setlocal
-title WrathUnleashed - the Dalaran Hangout on Leyline (the realm as a Beacon)
-rem Makes the WrathUnleashed realm itself reachable as a Leyline Beacon, "Dalaran Hangout", through the relay on
+title Leyline - the Dalaran Hangout (the realm as a Beacon)
+rem Makes the main realm itself reachable as a Leyline Beacon, "Dalaran Hangout", through the relay on
 rem the same server: players on any Leyline realm can hop to it, and hops land in Dalaran. You host it; nothing runs
 rem anywhere else. One SSH login: the agent's source (our own code only: no game data, no secrets) goes over stdin
 rem as one small tarball, and hangout-up.sh inside it backs up, builds, starts, checks and rolls back on failure.

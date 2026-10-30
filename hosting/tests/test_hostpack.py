@@ -48,10 +48,10 @@ class Build(unittest.TestCase):
         self.assertEqual(json.loads(made["json"].read_text()), d)
         names = zipfile.ZipFile(made["zip"]).namelist()
         top = {n.split("/")[0] for n in names}
-        self.assertEqual(top, {"WrathUnleashed host"}, "one top folder (Leyline strips it)")
+        self.assertEqual(top, {"Leyline host"}, "one top folder (Leyline strips it)")
         for must in ("Host a Wrath realm.bat", "leyline", "host-wrath-realm.sh", "docker-compose.host.yml",
                      "realm-files/profiles/main.env", "HOSTPACK-VERSION.txt"):
-            self.assertIn(f"WrathUnleashed host/{must}", names)
+            self.assertIn(f"Leyline host/{must}", names)
         for n in names:
             self.assertFalse("/state/" in n or n.endswith("/.env"), n)
             self.assertFalse(n.lower().endswith((".mpq", ".blp", ".m2", ".dbc", ".exe")), n)

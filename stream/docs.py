@@ -237,6 +237,50 @@ def links_in(text: str) -> list[str]:
     return found
 
 
+# ------------------------------------------------------------------------------------------- the brand switch
+# docs/leyline says Leyline (renamed 2026-10-30, for the public repo). Until the owner flips the Leyline brand
+# (LEYLINE_BRAND=1 in portal.env, realm/brand.sh on), the site shows these pages with the words they had before:
+# (page, the new words, the old words). Delete this table once the brand is on for good.
+UNTIL_FLIP = (
+    ("hero-key", "is run by the Leyline Launcher realm service on play.openvanilla.app.",
+     "is run by the Open Vanilla realm service on play.openvanilla.app."),
+    ("hero-key", "These are in the Leyline Launcher repo, not here,",
+     "These are in the Open Vanilla repo, not here,"),
+    ("hero-key", "(`launcher/herokey_v2.py` in Leyline Launcher)",
+     "(`launcher/herokey_v2.py` in Open Vanilla)"),
+    ("hero-key", "What `launcher/passport.py` in Leyline Launcher does,",
+     "What `launcher/passport.py` in Open Vanilla does,"),
+    ("hosting", "1. Download the host kit: [the host kit zip](",
+     "1. Download the host kit: [WrathUnleashed-host-kit.zip]("),
+    ("hosting", "You get the host kit's folder.",
+     "You get a folder called `WrathUnleashed host`."),
+    ("mods", "the lowest Leyline version the mod works with",
+     "the lowest WU version the mod works with"),
+    ("mods", "\"preview.png - Leyline - MIT - drawn for this mod\"",
+     "\"preview.png - WrathUnleashed - MIT - drawn for this mod\""),
+    ("mods", "  \"author\": \"Leyline\",",
+     "  \"author\": \"WrathUnleashed\","),
+    ("play", "The 1.12 game plays on the sibling 1.12 realm.",
+     "The 1.12 game plays on Open Vanilla."),
+    ("play", "The player package has a `Play` .bat file that asks",
+     "The player package has a `Play WrathUnleashed.bat` that asks"),
+    ("play", "The 1.12 client plays on the sibling 1.12 realm, not on Dalaran Hangout.",
+     "The 1.12 client plays on the sibling Open Vanilla realm, not on Wrath."),
+    ("publishing", "2. Send the link to the Leyline team.",
+     "2. Send the link to the WrathUnleashed team."),
+)
+
+
+def site_text(name: str, text: str) -> str:
+    """A page's markdown as the site shows it: as written with the brand on, else with UNTIL_FLIP's old words."""
+    if os.environ.get("LEYLINE_BRAND", "0").strip() == "1":
+        return text
+    for page_name, new, old in UNTIL_FLIP:
+        if page_name == name:
+            text = text.replace(new, old)
+    return text
+
+
 # ------------------------------------------------------------------------------------------- pages
 _cache: dict[str, tuple[float, str, list]] = {}
 _lock = threading.Lock()
@@ -257,7 +301,7 @@ def load(name: str) -> tuple[str, list] | None:
                 return got[1], got[2]
         with open(path, encoding="utf-8", errors="replace") as f:
             text = f.read(MAX_BYTES)
-        body, heads = render_markdown(text)
+        body, heads = render_markdown(site_text(name, text))
         with _lock:
             _cache[path] = (st.st_mtime, body, heads)
         return body, heads

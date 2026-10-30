@@ -1341,7 +1341,10 @@ WUModCatalog.lua
 def write_catalog_addon(catalog, parent):
     d = os.path.join(parent, CATALOG_ADDON)
     os.makedirs(d, exist_ok=True)
-    for name, text in (("WUModCatalog.toc", CATALOG_TOC), ("WUModCatalog.lua", catalog_lua(catalog))):
+    toc = CATALOG_TOC
+    if os.environ.get("LEYLINE_BRAND") == "1":   # the Leyline brand switch (mods-install.sh passes portal.env's value)
+        toc = toc.replace("(WrathUnleashed)", "(Leyline)").replace("## Author: WrathUnleashed", "## Author: Leyline")
+    for name, text in (("WUModCatalog.toc", toc), ("WUModCatalog.lua", catalog_lua(catalog))):
         with open(os.path.join(d, name), "w", encoding="utf-8", newline="\n") as fh:
             fh.write(text)
     return d

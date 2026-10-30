@@ -117,7 +117,7 @@ def describe(kind: str, ident: str, realm_name: str, realms=None, who=None, mods
     label = KINDS[kind][1]
     desc = _DESC[kind]
     if kind == "r":
-        if ident in (realm_name.lower(), "official", "wrath"):
+        if ident in (realm_name.lower(), "official", "wrath", "wrathunleashed"):   # the old name's links keep working
             return f"{realm_name} · Leyline", "The official Wrath realm on the Leyline network. Play in your browser.", \
                 f"{realm_name}, the official realm"
         try:

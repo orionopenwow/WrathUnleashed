@@ -126,8 +126,14 @@ async function refresh() {
 // ------------------------------------------------------------------ realm: the chosen realm, the rows, live status
 function isOfficial() { return $("play-realm").value === "official"; }
 function chosenRealm() { return isOfficial() ? state.official_realm : $("play-custom").value.trim(); }
+// The official realm's name comes from the realm listing (the network's sample block: "Dalaran Hangout" once the
+// Leyline brand is on, the Sample Hangout while it runs); before the list arrives, a plain label.
+function officialName() {
+  const o = (realmsCache || []).find((x) => x.official);
+  return (o && o.name) || "Official realm";
+}
 function realmLabel() {
-  if (isOfficial()) return "WrathUnleashed";
+  if (isOfficial()) return officialName();
   const a = chosenRealm();
   const r = realmsCache.find((x) => x.address === a);
   return r ? r.name : (a || "Another realm");
@@ -156,7 +162,7 @@ function renderRealmRows() {
     });
     rows.append(b);
   };
-  add("WrathUnleashed", true);
+  add(officialName(), true);
   const saved = state.settings.selected_realm;
   const custom = !isOfficial() ? chosenRealm() : (saved && saved !== state.official_realm ? saved : "");
   if (custom) {
@@ -280,7 +286,7 @@ function renderPlayBar() {
     detail = "This realm streams no game files: the browser asks for your own 3.3.5a game folder (read on your PC, never uploaded)";
   } else if (mode === "browser") {
     head = "READY · PLAYS IN YOUR BROWSER";
-    detail = "WrathUnleashed · plays in your web browser, nothing to install";
+    detail = officialName() + " · plays in your web browser, nothing to install";
   } else if (!c) {
     head = "SET UP YOUR GAME CLIENT"; warn = true;
     detail = "PLAY takes you to your game clients: point Leyline at your game folder";

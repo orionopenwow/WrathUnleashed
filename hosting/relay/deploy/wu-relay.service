@@ -3,7 +3,7 @@
 #   sudo useradd --system --home /var/lib/wu-relay wu-relay
 #   sudo install -m 644 wu-relay.service /etc/systemd/system/ && sudo systemctl enable --now wu-relay
 [Unit]
-Description=WrathUnleashed relay (home-hosted realms without open ports)
+Description=Leyline relay (home-hosted realms without open ports)
 After=network-online.target
 Wants=network-online.target
 

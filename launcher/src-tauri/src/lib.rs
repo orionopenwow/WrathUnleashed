@@ -34,7 +34,7 @@ mod app;
 #[cfg(feature = "app")]
 pub use app::run;
 
-/// The official realm address the WrathUnleashed player kit uses (`players/README.txt`).
+/// The official realm address the player kit uses (`players/README.txt`).
 pub const OFFICIAL_REALM: &str = "play.openvanilla.app";
 /// The browser client.
 pub const BROWSER_PLAY_URL: &str = "https://play.openvanilla.app/wrath";

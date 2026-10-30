@@ -2,7 +2,7 @@
 
 A Hero Key is a way to sign in to the website without a password. It is one of the two sign-in options at [play.openvanilla.app/wrath](https://play.openvanilla.app/wrath). The other is Google.
 
-The website's sign-in, Hero Keys included, is run by the Open Vanilla realm service on play.openvanilla.app. That service is a sibling project and is not in this repo. This page says what this repo shows and marks the rest "to confirm".
+The website's sign-in, Hero Keys included, is run by the Leyline Launcher realm service on play.openvanilla.app. That service is a sibling project and is not in this repo. This page says what this repo shows and marks the rest "to confirm".
 
 ## What you can do with it today
 
@@ -33,11 +33,11 @@ The design calls this Hero Key v2: an Ed25519 challenge and response, so the hos
 
 ## To confirm
 
-These are in the Open Vanilla repo, not here, so this page can't check them:
+These are in the Leyline Launcher repo, not here, so this page can't check them:
 
-- The exact format of a key after `ovk1.`, and how it is checked (`launcher/herokey_v2.py` in Open Vanilla).
+- The exact format of a key after `ovk1.`, and how it is checked (`launcher/herokey_v2.py` in Leyline Launcher).
 - Whether the v2 challenge-and-response sign-in is live on the website, or only planned.
-- What `launcher/passport.py` in Open Vanilla does, and whether a Hero Key will carry a player's identity across realms (a "passport").
+- What `launcher/passport.py` in Leyline Launcher does, and whether a Hero Key will carry a player's identity across realms (a "passport").
 - How you get a Hero Key, and how to replace a lost one.
 - Whether the planned [Leyline Launcher](launcher.md) will sign in with a Hero Key.
 

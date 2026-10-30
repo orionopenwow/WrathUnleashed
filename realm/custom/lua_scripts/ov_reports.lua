@@ -16,7 +16,12 @@
 -- it reaches SQL. Nothing is sent anywhere else: staff read them in the GM console or with SQL.
 -- mod-ale events used: 3 ON_LOGIN, 13 ON_LEVEL_CHANGE, 42 ON_COMMAND (return false = handled, no "no such command").
 
-local TAG = "|cff66ccff[WrathUnleashed]|r "
+-- The Leyline brand switch (ov_modapi.lua OVMod.Brand, realm/brand.sh): the project's name where players read it.
+local function brandName()
+    local m = rawget(_G, "OVMod")
+    if m and m.Brand then return m.Brand().name end
+    return os.getenv("OV_LEYLINE_BRAND") == "1" and "Leyline" or "WrathUnleashed"
+end
 local REPORTS_PER_HOUR = 6
 local MAX_TEXT = 500
 local STUCK_COOLDOWN = 600
@@ -42,7 +47,7 @@ local recent = {}   -- account id -> { times }
 local stuckAt = {}  -- char guid -> os.time() of the last .stuck
 local mountsAt = {} -- char guid -> os.time() of the last .mounts
 
-local function say(player, msg) player:SendBroadcastMessage(TAG .. msg) end
+local function say(player, msg) player:SendBroadcastMessage("|cff66ccff[" .. brandName() .. "]|r " .. msg) end
 
 -- SQL string literal body: backslash and quote escaped, control characters dropped.
 local function esc(s)

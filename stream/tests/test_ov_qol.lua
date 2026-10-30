@@ -361,5 +361,20 @@ check("no data: nothing queued", #np.queue == 0)
 cmd(np, "learnall")
 check("no data: .learnall explains", last(np):match("no trainer data"))
 
+-- the Leyline brand switch: the realm's name in .qol is "Dalaran Hangout" while it is on (OVMod.Brand, or the env alone)
+local bq = player()
+cmd(bq, "qol")
+check("brand off: .qol names the realm as before", bq.msgs[1]:find("WrathUnleashed quality of life:", 1, true) ~= nil)
+env.OV_LEYLINE_BRAND = "1"
+local bq2 = player()
+cmd(bq2, "qol")
+check("brand on (env): .qol names Dalaran Hangout", bq2.msgs[1]:find("Dalaran Hangout quality of life:", 1, true) ~= nil)
+env.OV_LEYLINE_BRAND = nil
+_G.OVMod = { Brand = function() return { on = true, name = "Leyline", realm = "Dalaran Hangout", home = "Dalaran Hangout" } end }
+local bq3 = player()
+cmd(bq3, "qol")
+check("brand on (OVMod.Brand): .qol names Dalaran Hangout", bq3.msgs[1]:find("Dalaran Hangout quality of life:", 1, true) ~= nil)
+_G.OVMod = nil
+
 realPrint(string.format("\n%d/%d passed", pass, pass + fail))
 os.exit(fail == 0 and 0 or 1)

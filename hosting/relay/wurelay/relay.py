@@ -1,4 +1,4 @@
-"""wu-relay: home-hosted WrathUnleashed (3.3.5a) realms reachable with no open ports, the host's
+"""wu-relay: home-hosted Leyline (3.3.5a) realms reachable with no open ports, the host's
 IP hidden.
 
     host PC: realm (docker) <- agent --outbound wss--> relay <-- players (raw TCP or WebSocket)

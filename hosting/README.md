@@ -1,6 +1,6 @@
-# WrathUnleashed hosting first (H1–H3)
+# Leyline hosting first (H1–H3)
 
-Anyone can host a WrathUnleashed (3.3.5a, AzerothCore) realm from their own PC, share an invite
+Anyone can host a Leyline (3.3.5a, AzerothCore) realm from their own PC, share an invite
 link, keep their home IP hidden behind our relay, and (optionally) list it in Beacons.
 How to install and run it: `INSTALL-OPERATE.md`. Nothing here is deployed, pushed or published.
 
@@ -34,7 +34,7 @@ prerequisite: every helper runs in containers, so no Python on the host.
 * Game data: dbc + maps only, extracted from the host's own 3.3.5a install with AzerothCore's
   `map_extractor`, into the same `ov-client-data` volume the realm tooling uses; plus mod-arac's
   DBCs from the pinned commit, exactly like `Build custom realm.bat`. Nothing is downloaded from
-  Open Vanilla, nothing leaves the PC.
+  our servers, nothing leaves the PC.
 * Profile world SQL (`main_unbrawl`/`main_world`/`brawl_world*`/`modern_combos`) applied once per
   profile, as `Make it Main.bat` / `deploy.sh` do. `realm-files/` is filled from `realm\` by
   `Make host kit.bat` / `make-kit.sh`.
@@ -48,7 +48,7 @@ Compose (`kit/docker-compose.host.yml`): the realm has **no published ports** an
 `internal: true` network; only `wu-agent` (read-only root, all capabilities dropped) has a way out.
 Because every player reaches the authserver from the agent's address, wrong-password bans are per
 account, not per IP (the relay does per-IP limits). Warden is on for public realms (stock clients),
-off for private ones (so the WrathUnleashed browser/desktop client can join).
+off for private ones (so the Leyline browser/desktop client can join).
 
 ## H2: the relay (`relay/`, `kit/tools/wunet/`)
 
@@ -82,7 +82,7 @@ kept in the relay's state file. The agent writes `realmlist.address/localAddress
 * `set realmlist relay.openvanilla.app` (shared port 3724, routed by the player's IP to the realm
   whose join page that IP opened most recently, valid 24 h), or
 * `set realmlist relay.openvanilla.app:40000` (the realm's own auth port, no knock needed for public realms).
-* Browser/desktop WrathUnleashed client: `wss://relay.openvanilla.app/r/<realm-id>/ws/<port>`
+* Browser/desktop Leyline client: `wss://relay.openvanilla.app/r/<realm-id>/ws/<port>`
   (3724/8085 or the realm's pair; `?invite=` or `/r/<id>/i/<secret>/ws/<port>` for private realms).
 
 **Private realms**: the relay holds only sha256(secret). A raw-TCP player gets in only from an IP

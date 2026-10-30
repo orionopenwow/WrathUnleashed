@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Host a WrathUnleashed (3.3.5a) realm from this Mac or Linux PC. Needs Docker, nothing else.
+# Host a Leyline (3.3.5a) realm from this Mac or Linux PC. Needs Docker, nothing else.
 # No port forwarding: the realm talks out to the relay, players connect to the relay, nobody sees
 # your home IP address.
 #
@@ -125,7 +125,7 @@ pick_images() {
   step "Realm images"
   local err=""
   if err=$(pull_prebuilt 2>&1); then
-    IMG="$WU_IMAGE"; TAG="$WU_TAG"; say "  Using the prebuilt WrathUnleashed images ($IMG-*:$TAG)."
+    IMG="$WU_IMAGE"; TAG="$WU_TAG"; say "  Using the prebuilt Leyline images ($IMG-*:$TAG)."
   elif docker image inspect "$WU_LOCAL_IMAGE-worldserver:$WU_LOCAL_TAG" >/dev/null 2>&1; then
     IMG="$WU_LOCAL_IMAGE"; TAG="$WU_LOCAL_TAG"; say "  Using the images built on this PC ($IMG-*:$TAG)."
   else
@@ -146,7 +146,7 @@ pick_images() {
       IMG="$WU_LOCAL_IMAGE"; TAG="$WU_LOCAL_TAG"
     else
       IMG="acore/ac-wotlk"; TAG="master"
-      say "  Using AzerothCore's stock images: the realm runs without WrathUnleashed's modules."
+      say "  Using AzerothCore's stock images: the realm runs without Leyline's modules."
     fi
   fi
   ensure_tools

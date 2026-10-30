@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title WrathUnleashed - deploy the Beacons relay (relay.openvanilla.app)
+title Leyline - deploy the Beacons relay (relay.openvanilla.app)
 rem Installs or updates the Beacons relay on the server, next to the realm and the website. One SSH login:
 rem the relay's source (our own code only: no game data, no secrets) goes over stdin as one small tarball,
 rem and relay-up.sh inside it backs up, builds, starts, health-checks and rolls back on failure.

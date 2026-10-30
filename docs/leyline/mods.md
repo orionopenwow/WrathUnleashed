@@ -30,7 +30,7 @@ Other files allowed at the top: `README.txt`, `LICENSE.txt`, `LICENSE.md`, `CHAN
 | `author` | yes | text |
 | `licence` | yes | an SPDX id or expression: `MIT`, `GPL-3.0-or-later`, `MIT OR CC-BY-4.0`, `LicenseRef-...` |
 | `kind` | yes | `ui`, `realm` or `both`; must match the folders present |
-| `wu` | yes | the lowest WU version the mod works with, for example `"1.0"` |
+| `wu` | yes | the lowest Leyline version the mod works with, for example `"1.0"` |
 | `description` | yes | up to 300 characters |
 | `category` | no | the Workshop shelf: one id from the list below. Left out, it follows `kind`: `ui` and `both` give `addons`, `realm` gives `realm-scripts`. Anything else is an error. |
 | `permissions` | no | a list from the fixed vocabulary below |
@@ -139,7 +139,7 @@ pings/
   ui/WUPings/WUPings.toc   the addon's table of contents
   ui/WUPings/WUPings.lua   sends pings and draws the ones it gets
   assets/preview.png       the Workshop screenshot
-  assets/CREDITS.txt       "preview.png - WrathUnleashed - MIT - drawn for this mod"
+  assets/CREDITS.txt       "preview.png - Leyline - MIT - drawn for this mod"
   tests/test_pings.lua     fake-ALE tests for the realm half
   tests/test_ui.lua        tests for the addon
   README.md, LICENSE
@@ -152,7 +152,7 @@ pings/
   "id": "pings",
   "name": "Pings",
   "version": "0.1.0",
-  "author": "WrathUnleashed",
+  "author": "Leyline",
   "licence": "MIT",
   "kind": "both",
   "wu": "1.0",

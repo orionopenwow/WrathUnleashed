@@ -396,7 +396,13 @@ local function num(name, default)
     local v = tonumber(os.getenv(name) or "")
     return v and math.floor(v) or default
 end
-local function say(player, text) player:SendBroadcastMessage("|cff66ccff[WrathUnleashed]|r " .. text) end
+-- The Leyline brand switch (ov_modapi.lua OVMod.Brand, realm/brand.sh): the project's name where players read it.
+local function brandName()
+    local m = rawget(_G, "OVMod")
+    if m and m.Brand then return m.Brand().name end
+    return os.getenv("OV_LEYLINE_BRAND") == "1" and "Leyline" or "WrathUnleashed"
+end
+local function say(player, text) player:SendBroadcastMessage("|cff66ccff[" .. brandName() .. "]|r " .. text) end
 local function try(obj, method, ...)
     local f = obj and obj[method]
     if type(f) ~= "function" then return nil end

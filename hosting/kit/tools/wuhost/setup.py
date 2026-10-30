@@ -44,7 +44,7 @@ KIT = os.environ.get("WU_KIT", "/kit")
 STATE = os.path.join(KIT, "state")
 NAME_RE = re.compile(r"^[A-Za-z0-9 _'-]{1,32}$")
 GM_RE = re.compile(r"^[A-Za-z0-9]{3,16}$")
-PROFILES = {"main": "WrathUnleashed main: normal Wrath from level 1, or a one-time boost to 80",
+PROFILES = {"main": "Leyline main: normal Wrath from level 1, or a one-time boost to 80",
             "brawl": "Brawl: everyone starts at 80 in Dalaran with everything unlocked",
             "progression": "Progression: blizzlike 1x, Vanilla then TBC then Wrath per character",
             "dalaran": "Dalaran hangout: light on your PC, no bots, boost to 80 straight to Dalaran"}
@@ -341,7 +341,7 @@ def cmd_init(a):
         auth_service=PROFILE_CORE.get(profile, (0, 0, "ac-authserver:3724"))[2],
         world_service=PROFILE_CORE.get(profile, (0, 0, 0, "ac-worldserver:8085"))[3],
         # Warden: stock clients on a public realm get the core's anti-cheat; a friends' realm leaves
-        # it off so the WrathUnleashed browser/desktop client (no Warden module) can join too.
+        # it off so the Leyline browser/desktop client (no Warden module) can join too.
         warden=(vis == "public") if a.warden is None else a.warden == "on",
         bots=(a.bots if a.bots is not None
               else cfg["bots"] if cfg.get("profile") == profile and "bots" in cfg
@@ -656,7 +656,7 @@ def cmd_relay_pick(a):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="WrathUnleashed host setup")
+    ap = argparse.ArgumentParser(description="Leyline host setup")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("init")
     p.add_argument("--name")

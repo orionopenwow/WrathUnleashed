@@ -181,7 +181,7 @@ pub fn official() -> Realm {
 }
 
 /// The official realms, first on the list. Wrath (3.3.5a, AzerothCore) is the one there is today.
-/// TODO(owner): the sibling Open Vanilla 1.12 realm is not in the relay's listing and its desktop address is not
+/// TODO(owner): the sibling 1.12 realm is not in the relay's listing and its desktop address is not
 /// written down anywhere in this repo; when it is, add it here (build 1.12.1, its core and its address).
 pub fn officials() -> Vec<Realm> {
     vec![official()]
