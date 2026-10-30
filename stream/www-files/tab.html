@@ -1,9 +1,24 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>WrathUnleashed</title>
+<script>
+// The Leyline brand switch (wrath-page.js keeps "wu-brand" while it is on): the flat look, set before the first paint.
+try {
+  if (localStorage.getItem('wu-brand')) {
+    document.documentElement.className = 'ly-brand';
+    document.write('<link rel="stylesheet" href="./leyline-look.css">');
+  }
+} catch (e) {}
+</script>
 <style>
-html,body{margin:0;height:100%;background:#070a12 url(./art/wu-load-orion.webp) center/cover no-repeat;color:#e9e4d4;
-font:16px/1.5 Georgia,serif}
+html,body{margin:0;height:100%;color:#e9e4d4;font:16px/1.5 Georgia,serif}
+html:not(.ly-brand),html:not(.ly-brand) body{background:#070a12 url(./art/wu-load-orion.webp) center/cover no-repeat}
+html.ly-brand,html.ly-brand body{background:#15181f;color:#eef0f4;font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+html.ly-brand .box{background:#1e222b;border-color:#2c313c;border-radius:14px}
+html.ly-brand .box::before{content:"";display:block;width:64px;height:64px;margin:0 auto 14px;
+background:url(./art/leyline-crystal-128.png) center/contain no-repeat,url(./art/leyline-swirl-128.png) center/contain no-repeat}
+html.ly-brand h1{font:700 19px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#eef0f4}
+html.ly-brand button{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#5b8def;color:#fff;border-radius:10px}
 .wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
 .box{background:rgba(7,10,18,.84);border:1px solid #6b5a2e;border-radius:10px;padding:28px 34px;max-width:420px;text-align:center}
 h1{font-size:21px;font-weight:normal;color:#f0d389;margin:0 0 8px}
@@ -36,6 +51,8 @@ background:linear-gradient(#f0d389,#d8b25a);color:#1b1406}button:disabled{opacit
   }
   go.onclick = function () {
     go.disabled = true; go.textContent = 'Starting…';
+    if (brand) { var sp = document.createElement('span'); sp.className = 'ly-spin'; sp.style.cssText = '--ly-spin-size:16px;margin-right:8px';
+      go.prepend(sp); }
     try { if (typeof BroadcastChannel === 'function') new BroadcastChannel('wu-game').postMessage('take-over'); } catch (e) {}
     var locks = navigator.locks;
     if (locks && typeof locks.request === 'function') {

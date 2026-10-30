@@ -358,6 +358,27 @@
       link.href = './wu-loading.css';
       (document.head || document.documentElement).appendChild(link);
     }
+    // The Leyline brand switch (/__env.js brand "leyline"): the flat look with the spinning mark (leyline-look.css)
+    // over the loading screens. Off: nothing is added.
+    var env = window.__wenilla_env || {};
+    if (env.brand === 'leyline' && !document.getElementById('ly-look-css')) {
+      document.documentElement.classList.add('ly-brand');
+      // until leyline-look.css arrives: none of wu-loading.css's painted art or its display font is drawn (or fetched)
+      var first = document.createElement('style');
+      first.textContent = 'html.ly-brand{--wu-load-art:none}'
+        + 'html.ly-brand body #wenilla-boot,html.ly-brand #wu-loading{background:#15181f!important}'
+        + 'html.ly-brand #wenilla-boot .box::before,html.ly-brand #wenilla-boot .box::after,'
+        + 'html.ly-brand #wu-loading .box::before,html.ly-brand #wu-loading .box::after,'
+        + 'html.ly-brand #wenilla-boot .stage,html.ly-brand #wu-loading .stage{background-image:none}'
+        + 'html.ly-brand body #wenilla-boot .err,html.ly-brand body #wenilla-boot .stage::after,'
+        + 'html.ly-brand #wu-loading .stage::after,html.ly-brand #wu-drop h2,html.ly-brand #wu-addons h2{font-family:system-ui,sans-serif}';
+      (document.head || document.documentElement).appendChild(first);
+      var look = document.createElement('link');
+      look.id = 'ly-look-css';
+      look.rel = 'stylesheet';
+      look.href = './leyline-look.css';
+      (document.head || document.documentElement).appendChild(look);
+    }
   } catch (e) { console.warn('wrath-early.js loading style', e); }
   try {
     window.__wuPage = import('./wrath-page.js')

@@ -21,11 +21,13 @@ SCRIPTS = ["ownfiles.js", "ownfiles-worker.js", "mpq.js", "chain.js", "sections.
 # The page layer (wrath-page.js): optional, copied when www-files/ has them all.
 PAGE_LAYER = ["wrath-early.js", "wrath-page.js", "stages.js", "input.js", "touch.js", "touch-driver.js",
               "ahead.js", "sw-register.js", "wrath-sw.js", "wu-diag.js", "wu-loading.js", "wu-loading.css", "tab.html",
-              "wu-addons.js", "wu-addons-core.js"]
+              "wu-addons.js", "wu-addons-core.js", "leyline-look.css"]
 # the loading screens' art and font (www-files/art/ -> www/art/), the 1.12 boot screen's
 PAGE_ART = ["wu-load-bg.webp", "wu-load-orion.webp", "wu-corner-tl.webp", "wu-corner-tr.webp", "wu-corner-bl.webp",
             "wu-corner-br.webp", "wu-divider.webp", "wu-dragon-l.webp", "wu-dragon-r.webp",
-            "Cinzel-SemiBold.woff2", "Cinzel-OFL.txt"]
+            "Cinzel-SemiBold.woff2", "Cinzel-OFL.txt",
+            # the Leyline brand's loading logo (leyline-look.css, only with the brand switch on)
+            "leyline-swirl-256.webp", "leyline-crystal-256.webp", "leyline-swirl-128.png", "leyline-crystal-128.png"]
 PAGE_TAG = '<script src="./wrath-early.js"></script>\n'
 # where the tag goes, first anchor found wins: after the sign-in env (so __wenilla_env is set when
 # it runs), else before the page's module script; else at the end of the page

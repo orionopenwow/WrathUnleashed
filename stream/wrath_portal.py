@@ -290,7 +290,7 @@ def brand_body(body: bytes, ctype: str) -> bytes:
     except UnicodeDecodeError:
         return body
     if kind == "text/html":
-        out = _BRAND_HTML.sub(lambda m: m.group(1) or "Leyline", text)
+        out = brand_look(_BRAND_HTML.sub(lambda m: m.group(1) or "Leyline", text))   # + the flat look and the spinning mark
     else:
         out = _BRAND_JSON.sub(lambda m: m.group(1) or "Leyline", text)
     return body if out == text else out.encode("utf-8")
@@ -823,6 +823,10 @@ ART_TYPES = {
     # the owner's screenshots for /wrath/modes (stream/modes.py); a missing one leaves a painted panel
     "leyline-shot-dalaran.webp": "image/webp", "leyline-shot-start.webp": "image/webp",
     "leyline-shot-city.webp": "image/webp", "leyline-shot-durotar.webp": "image/webp",
+    # the round Leyline mark, split so the swirl turns while the crystal stays upright (SPIN_CSS, the hub)
+    "leyline-swirl-256.webp": "image/webp", "leyline-crystal-256.webp": "image/webp",
+    "leyline-swirl-128.png": "image/png", "leyline-crystal-128.png": "image/png",
+    "leyline-swirl-512.png": "image/png", "leyline-crystal-512.png": "image/png", "leyline-mark-512.png": "image/png",
 }
 ART_MAX_AGE = 7 * 86400
 # Screenshots of the running game (rendered from the game's own files): the killswitch takes them off too
@@ -904,12 +908,15 @@ def card_meta(path: str, title: str = "") -> str:
     title = title or REALM_NAME
     url = f"https://{PUBLIC_HOST}{path}"
     img = f"https://{PUBLIC_HOST}{art_url('wu-card.webp')}"
+    card = [("property", "og:image:type", "image/webp"), ("property", "og:image:width", "1200"), ("property", "og:image:height", "630")]
+    if BRAND:   # the brand on: the round mark, not the painted card
+        img = f"https://{PUBLIC_HOST}{art_url('leyline-mark-512.png')}"
+        card = [("property", "og:image:type", "image/png"), ("property", "og:image:width", "512"), ("property", "og:image:height", "512")]
     tags = [("property", "og:type", "website"), ("property", "og:site_name", SITE_NAME),
             ("property", "og:title", title), ("property", "og:description", CARD_DESCRIPTION),
             ("property", "og:url", url), ("property", "og:image", img),
-            ("property", "og:image:type", "image/webp"), ("property", "og:image:width", "1200"),
-            ("property", "og:image:height", "630"), ("property", "og:image:alt", f"{REALM_NAME}: Wrath on the Leyline network"),
-            ("name", "twitter:card", "summary_large_image"), ("name", "twitter:title", title),
+            *card, ("property", "og:image:alt", f"{REALM_NAME}: Wrath on the Leyline network"),
+            ("name", "twitter:card", "summary" if BRAND else "summary_large_image"), ("name", "twitter:title", title),
             ("name", "twitter:description", CARD_DESCRIPTION), ("name", "twitter:image", img)]
     return (f'<meta name="description" content="{e(CARD_DESCRIPTION)}"><link rel="canonical" href="{e(url)}">'
             + "".join(f'<meta {k}="{n}" content="{e(v)}">' for k, n, v in tags))
@@ -921,7 +928,7 @@ def render(body: str, nonce: str = "", script: str = "", wide: bool = False, met
     for this page) and footer, and next_step ("play" or "host") adds the closing call to action."""
     s = f'<script nonce="{nonce}">{script}</script>' if script else ""
     v = theme_version()
-    theme = f'<link rel="stylesheet" href="{art_url("wu-theme.css")}?v={v}">' if v else ""
+    theme = f'<link rel="stylesheet" href="{art_url("wu-theme.css")}?v={v}">' if v and not BRAND else ""   # brand on: the flat look
     full = f"{title} · {SITE_NAME}" if title else SITE_NAME
     top = (SKIP_LINK + site_nav(current, signed_in)) if chrome else ""
     end = ((next_block(next_step) if next_step else "") + site_footer()) if chrome else ""
@@ -934,6 +941,8 @@ def render(body: str, nonce: str = "", script: str = "", wide: bool = False, met
 
 def crest(title: str) -> str:
     """The page heading: the title between the two dragons, with the gold divider under it."""
+    if BRAND:   # the spinning mark over the title, no dragons
+        return f'<div class="crest wu-brand">{spin(56, "ly-crest-mark")}<h1>{html.escape(title)}</h1></div>'
     return f'<div class="crest wu-brand"><h1>{html.escape(title)}</h1></div>'
 
 
@@ -1514,7 +1523,112 @@ def leyline_css() -> str:
                  ("ART_CTL", "leyline-corner-tl.webp"), ("ART_CTR", "leyline-corner-tr.webp"), ("ART_CBL", "leyline-corner-bl.webp"),
                  ("ART_CBR", "leyline-corner-br.webp"), ("ART_DIV", "leyline-divider.webp")):
         css = css.replace(k, art_url(f))
+    if BRAND:   # the brand on: none of the painted art (the nebula, the corners, the divider) or the display fonts
+        css = re.sub(r"url\(/wrath/art/leyline-(?:bg|corner-[tb][lr]|divider)\.webp\)", "none", css)
+        css = re.sub(r"@font-face\{[^}]*\}", "", css)
     return css
+
+
+# ----------------------------------------------------------------------------------------------
+# The Leyline look (owner 2026-10-30): flat and dark like the launcher, the round mark that turns
+# ----------------------------------------------------------------------------------------------
+#
+# SPIN_CSS is the spinner: one empty element (spin()), the swirl turns, the crystal on top stays upright; the same rules
+# as the launcher's ui/spin.css and the game page's www-files/leyline-look.css, only the image paths differ. LOOK_VARS
+# are the launcher's Dark tokens. With the brand switch on, brand_look() adds them and FLAT_CSS to every page this
+# portal sends (the gold render() pages and the Leyline ones): the painted art is not linked at all then (render(),
+# leyline_css(), card_meta(), crest(), site_nav(), leyline_page()), and the spinning mark is the header logo. With
+# the switch off nothing here is sent. The hub (stream/hub.py) uses SPIN_CSS and LOOK_VARS always.
+
+SPIN_CSS = """
+.ly-spin{--ly-spin-size:18px;--ly-spin-turn:7s;position:relative;display:inline-block;flex:none;vertical-align:middle;
+width:var(--ly-spin-size);height:var(--ly-spin-size)}
+.ly-spin::before,.ly-spin::after{content:"";position:absolute;inset:0;background:center/contain no-repeat;pointer-events:none}
+.ly-spin::before{background-image:url(/wrath/art/leyline-swirl-256.webp);animation:ly-spin-turn var(--ly-spin-turn) linear infinite;will-change:transform}
+.ly-spin::after{background-image:url(/wrath/art/leyline-crystal-256.webp)}
+.ly-spin.slow{--ly-spin-turn:16s}
+@keyframes ly-spin-turn{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.ly-spin::before{animation:none!important}}
+"""
+LOOK_VARS = """
+:root{--lk-bg:#15181f;--lk-chrome:#181b23;--lk-surface:#1e222b;--lk-surface-2:#252a35;--lk-raised:#2c3240;
+--lk-border:#2c313c;--lk-border-strong:#3c4352;--lk-text:#eef0f4;--lk-text-2:#c8cdd7;--lk-muted:#9aa1ae;
+--lk-accent:#5b8def;--lk-accent-strong:#7aa3f5;--lk-accent-soft:rgba(91,141,239,.16);--lk-accent-2:#8b6cf0;
+--lk-ok:#4fd18b;--lk-bad:#ff7f76;--lk-r:14px;--lk-r-sm:10px;
+--lk-font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+"""
+FLAT_CSS = """
+html,html body.wu,html body.ly{background:var(--lk-bg)!important;color:var(--lk-text)}
+html body.ly::before,html body.ly::after,html body.wu::before,.ly-glow{display:none!important}
+html body :is(h1,h2,h3,h4,p,li,td,th,a,button,label,summary,small,span,b,i,div,input,select,textarea,figcaption){font-family:var(--lk-font)!important}
+html body a,html body :is(.fine,.sub,p,li) a{color:var(--lk-accent-strong)}
+html body .foot{border-top-color:var(--lk-border)!important}
+html body :is(h1,.ly h1,.hb-head h1){background:none!important;-webkit-text-fill-color:currentColor;color:var(--lk-text)!important;filter:none!important;
+text-shadow:none!important;text-transform:none!important;letter-spacing:-.01em!important;font-weight:700!important}
+html body.ly h1{font-size:clamp(38px,6vw,58px)!important}
+html body :is(h2,.ly h2){color:var(--lk-text)!important;text-shadow:none!important;text-transform:none!important;letter-spacing:-.005em!important;font-weight:700!important}
+html body.ly h2{font-size:22px!important}
+html body :is(.ly-feat h3,.ly-shot figcaption b,.hb-card h3,.hb-build b,.ly-now b){color:var(--lk-text)!important;text-transform:none!important;letter-spacing:0!important;font-weight:650!important}
+html body .ly-panel h2::after{display:none!important}
+html body :is(main.wu-panel,.ly-panel,.realm,.ly-feat,.ly-shot,.ly-now,.hb-card,.hb-build,.hb-cat,.card){background:var(--lk-surface)!important;
+border:1px solid var(--lk-border)!important;border-radius:var(--lk-r)!important;box-shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.18)!important}
+html body :is(.ly-btn,a.btn,button,a.ly-next-go,.ly-nav a.ly-hot){background:var(--lk-accent)!important;color:#fff!important;
+border:1px solid var(--lk-accent)!important;border-radius:var(--lk-r-sm)!important;box-shadow:none!important;text-transform:none!important;
+letter-spacing:.01em!important;font-weight:650!important}
+html body :is(.ly-btn,a.btn,button,a.ly-next-go):hover{background:var(--lk-accent-strong)!important;border-color:var(--lk-accent-strong)!important}
+html body .ly-btn::before{display:none!important}
+html body .ly-btn.violet{background:var(--lk-accent-2)!important;border-color:var(--lk-accent-2)!important}
+html body :is(button.ghost,.btn.off,.ly-btn.hb-alt){background:var(--lk-raised)!important;border-color:var(--lk-border-strong)!important;color:var(--lk-text)!important}
+html body :is(.sub,.fine,label,.tags,.eyebrow,summary,.ly-fine,.ly-lede,.ly-next p,.ly-foot,.hb-count){color:var(--lk-muted)}
+html body .ly-lede{color:var(--lk-text-2)}
+html body :is(.rule,.wu-divider){background:none!important;border:0!important;border-top:1px solid var(--lk-border)!important;height:0!important}
+html body :is(.field,code,.tag,.ly-share code){background:var(--lk-surface-2)!important;border-color:var(--lk-border)!important;color:var(--lk-text)!important}
+html body .ly-nav{background:var(--lk-chrome)!important;border-bottom:1px solid var(--lk-border)!important;-webkit-backdrop-filter:none;backdrop-filter:none}
+html body .ly-nav a{color:var(--lk-muted);text-transform:none;letter-spacing:.01em;font-size:13px}
+html body .ly-nav a:hover,html body .ly-nav a.on{color:var(--lk-text)!important;border-color:var(--lk-border-strong)!important;background:var(--lk-accent-soft)!important}
+html body .ly-nav a.ly-brand{gap:9px;font:700 19px/1 var(--lk-font)!important;letter-spacing:-.01em!important;color:var(--lk-text)!important;
+background:none!important;border-color:transparent!important}
+html body .ly-foot{background:var(--lk-chrome)!important;border-top:1px solid var(--lk-border)!important}
+html body .ly-foot a{color:var(--lk-text-2)}
+html body .ly-dot{background:var(--lk-ok);box-shadow:none}
+html body .ly-on,html body .live{color:var(--lk-ok)!important}
+html body .ly-table th{color:var(--lk-muted);border-color:var(--lk-border)}html body .ly-table td{border-color:var(--lk-border)}
+html body .ly-feat .soon{color:var(--lk-accent-2);border-color:var(--lk-accent-2)}
+html body .ly-ver{border-color:var(--lk-border-strong);color:var(--lk-muted)}
+html body .crest{flex-direction:column;align-items:center;gap:10px}
+html body .ly-crest-mark,html body .ly-hero-mark{display:block;margin:0 auto}
+html body .ly-hero-mark{--ly-spin-size:min(180px,48vw)!important;margin:6px auto 8px}
+html body .ly-hero-mark::after{filter:drop-shadow(0 0 18px rgba(91,141,239,.55))}
+html body .ly-skip{background:var(--lk-accent)!important;color:#fff!important}
+html body .ly-btn{font-size:18px!important;min-height:52px}
+html body .ly-plus{background:var(--lk-accent-2)!important;color:#fff!important;box-shadow:none!important;text-transform:none;letter-spacing:.01em}
+html body .ly-now li{background:var(--lk-surface-2)!important;border-color:var(--lk-border)!important}
+html body .ly .ly-now h2{color:var(--lk-ok)!important;font-size:12px!important;letter-spacing:.12em!important;text-transform:uppercase!important}
+html body .ly-table td.name a{color:var(--lk-text);text-decoration:none;font-weight:600}
+html body :where(a,button,summary,input,select,textarea,[tabindex]):focus-visible{outline:2px solid var(--lk-accent-strong)!important}
+"""
+_LOOK_TAG = f'<style id="ly-look">{LOOK_VARS}{SPIN_CSS}{FLAT_CSS}</style>'
+
+
+def spin(size: int = 0, cls: str = "", label: str = "") -> str:
+    """The spinning Leyline mark (SPIN_CSS). size in px (default 18), label: what a screen reader says (else hidden)."""
+    c = "ly-spin" + (" " + cls if cls else "")
+    st = f' style="--ly-spin-size:{int(size)}px"' if size else ""
+    a = f' role="img" aria-label="{html.escape(label)}"' if label else ' aria-hidden="true"'
+    return f'<span class="{c}"{st}{a}></span>'
+
+
+def brand_look(page: str) -> str:
+    """With the brand on: the flat look and the spinner's rules into a page (once; the hub has its own)."""
+    if not BRAND or "</head>" not in page or 'id="ly-look"' in page or 'data-look="leyline"' in page:
+        return page
+    page = _PAINTED_FONT.sub("", page)   # the display fonts' @font-face rules (SITE_CSS, modules): nothing uses them now
+    page = _PAINTED_URL.sub("none", page)   # any painted art a module's own CSS still names (the demo page's nebula)
+    return page.replace("</head>", _LOOK_TAG + "</head>", 1)
+
+
+_PAINTED_URL = re.compile(r"url\((?:/wrath/art/)?(?:leyline-(?:bg|emblem|divider|corner-[tb][lr])\.webp|wu-[\w-]+\.webp|ART_[A-Z]+)\)")
+_PAINTED_FONT = re.compile(r"@font-face\{font-family:'(?:Leyline Display|OW Cinzel|WU Cinzel)';[^}]*\}")
 
 
 # ----------------------------------------------------------------------------------------------
@@ -1630,7 +1744,8 @@ def site_nav(current: str = "", signed_in: bool = False) -> str:
     links_html += _nav_item("discord", "Discord", DISCORD_URL, current, external=True)
     end = "" if signed_in else _nav_item("signin", "Sign in", "/login?next=%2Fwrath", current)
     return ('<nav class="ly-nav" id="ly-site-nav" aria-label="Leyline">'
-            + _nav_item("leyline", "Leyline", "/wrath/leyline", current, "ly-brand")
+            + (_nav_item("leyline", "Leyline", "/wrath/leyline", current, "ly-brand").replace(">Leyline</a>", ">" + spin(26) + "Leyline</a>")
+               if BRAND else _nav_item("leyline", "Leyline", "/wrath/leyline", current, "ly-brand"))
             + '<a class="ly-hot" href="/wrath">Play now</a>'
             '<input type="checkbox" id="ly-menu" class="ly-menu-t"><label for="ly-menu" class="ly-menu-b">Menu</label>'
             f'<div class="ly-links">{links_html}</div>'
@@ -1901,8 +2016,9 @@ def leyline_page() -> bytes:
                 f'<p>{text}</p></div>')
     body = (
         '<header class="ly-hero">'
-        f'<img class="ly-emblem" src="{art_url("leyline-emblem.webp")}" alt="" width="300" height="248" '
-        'decoding="async" fetchpriority="high">'
+        + (spin(180, "ly-hero-mark") if BRAND else
+           f'<img class="ly-emblem" src="{art_url("leyline-emblem.webp")}" alt="" width="300" height="248" '
+           'decoding="async" fetchpriority="high">') +
         '<h1>Leyline</h1>'
         '<p class="ly-lede">An open-source, community-built MMO project. Play in your browser or a client, '
         'build and share mods, and host your own realm.</p>'

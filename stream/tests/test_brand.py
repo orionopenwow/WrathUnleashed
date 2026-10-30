@@ -96,6 +96,9 @@ if wp.armory is not None:
     wp.armory.STAT_EVERY = 0
     wp.armory.store.root = ARM
 
+# the art as fastloop.sh installs it (www-files/art -> /wrath/art/)
+for n in os.listdir(os.path.join(STREAM, "www-files", "art")):
+    shutil.copy(os.path.join(STREAM, "www-files", "art", n), ART)
 srv = ThreadingHTTPServer(("127.0.0.1", 0), wp.PageHandler)
 srv.daemon_threads = True
 threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -117,6 +120,51 @@ for path in PAGES:
     if hd.get("content-type", "").startswith("text/html") and "<title>" in page:
         t = re.search(r"<title>([^<]*)</title>", page).group(1)
         check(f"{path}: the title", not OLD.search(t), t)
+
+# the look (owner 2026-10-30): flat, the spinning mark as the header and loading logo, none of the painted art
+PAINTED = re.compile(r"""(?:url\(|href="|src="|content=")[^)"]*(?:wu-theme\.css|wu-card\.webp|wu-corner|wu-dragon|wu-divider|"""
+                     r"""wu-load-|leyline-bg\.webp|leyline-corner|leyline-divider|leyline-emblem|Cinzel|leyline-display\.woff2)""")
+for path in PAGES:
+    st, hd, page = get(path)
+    if not hd.get("content-type", "").startswith("text/html") or "</head>" not in page:
+        continue
+    check(f"{path}: no painted art or display font", not PAINTED.search(page), PAINTED.findall(page)[:4])
+    hub = 'data-look="leyline"' in page
+    check(f"{path}: the flat look and the spinner's rules", hub or page.count('id="ly-look"') == 1)
+    if 'id="ly-site-nav"' in page:
+        nav = re.search(r'<a href="/wrath/leyline" class="ly-brand[^"]*"[^>]*>(.*?)</a>', page)
+        check(f"{path}: the nav's Leyline carries the spinning mark", nav and 'class="ly-spin"' in nav.group(1), nav and nav.group(0))
+for label, page in (("sign-in", wp.signed_out_page()), ("busy", wp.busy_page()), ("error", wp.error_page("x"))):
+    page = wp.brand_body(page, "text/html").decode()
+    check(f"{label} page: the spinning mark over the title, no theme link", 'class="ly-spin ly-crest-mark"' in page
+          and "wu-theme.css" not in page and 'id="ly-look"' in page)
+ley = get("/wrath/leyline")[2]
+check("/wrath/leyline: the big spinning mark, not the emblem", 'class="ly-spin ly-hero-mark"' in ley and "ly-emblem" not in ley.split("</style>")[-1])
+check("link cards: the round mark", "leyline-mark-512.png" in wp.card_meta("/wrath") and "wu-card" not in wp.card_meta("/wrath"))
+check("SPIN_CSS: the swirl turns, the crystal doesn't, reduced motion stands still",
+      "ly-spin::before{background-image:url(/wrath/art/leyline-swirl-256.webp);animation:ly-spin-turn" in wp.SPIN_CSS
+      and "ly-spin::after{background-image:url(/wrath/art/leyline-crystal-256.webp)}" in wp.SPIN_CSS
+      and "prefers-reduced-motion:reduce){.ly-spin::before{animation:none" in wp.SPIN_CSS)
+for n, t in (("leyline-swirl-256.webp", "image/webp"), ("leyline-crystal-256.webp", "image/webp"), ("leyline-mark-512.png", "image/png"),
+             ("leyline-swirl-128.png", "image/png"), ("leyline-crystal-128.png", "image/png")):
+    st, hd, _ = get("/wrath/art/" + n)
+    check(f"/wrath/art/{n}: served", st == 200 and hd.get("content-type") == t, (st, hd.get("content-type")))
+check("the logo files ship under the Leyline export's art rule", all(os.path.exists(os.path.join(STREAM, "www-files", "art", n)) for n in
+      ("leyline-swirl-256.webp", "leyline-crystal-256.webp", "leyline-swirl-512.png", "leyline-crystal-512.png", "leyline-swirl-128.png",
+       "leyline-crystal-128.png")))
+
+# with the switch OFF: none of it (the other suites load the portal off and check the pages; this checks the look's parts)
+os.environ["LEYLINE_BRAND"] = "0"
+spec0 = importlib.util.spec_from_file_location("wp_off", PORTAL)
+wp0 = importlib.util.module_from_spec(spec0); spec0.loader.exec_module(wp0)
+os.environ["LEYLINE_BRAND"] = "1"
+s0 = wp0.signed_out_page().decode()
+check("brand off: the sign-in page keeps its theme, crest and card, no spinner or flat look",
+      "wu-theme.css" in s0 and "ly-spin" not in s0 and 'id="ly-look"' not in s0 and "wu-card.webp" in s0
+      and wp0.brand_body(s0.encode(), "text/html").decode() == s0)
+check("brand off: the nav as before", "ly-spin" not in wp0.site_nav() and ">Leyline</a>" in wp0.site_nav())
+check("brand off: the Leyline page keeps its emblem and art", "leyline-emblem.webp" in wp0.leyline_page().decode()
+      and "leyline-bg.webp" in wp0.leyline_css() and "@font-face" in wp0.leyline_css())
 
 st, _, realms = get("/wrath/realms")
 check("realms page: Dalaran Hangout is the official realm", "Dalaran Hangout" in visible(realms))
@@ -188,6 +236,19 @@ for f in ("wrath-early.js", "wu-loading.js", "ownfiles.js", "sections.js", "touc
     lits = re.findall(r"'([^'\n]*)'|\"([^\"\n]*)\"|`([^`]*)`", re.sub(r"(?m)^\s*//.*$|/\*.*?\*/", "", src, flags=re.S))
     bad = [x for t in lits for x in t if x and OLD.search(x) and not x.startswith("[WrathUnleashed]")]
     check(f"{f}: no old names in strings people see (console tags aside)", not bad, bad[:3])
+
+early = open(os.path.join(WWW, "wrath-early.js"), encoding="utf-8").read()
+check("wrath-early.js: links leyline-look.css and marks <html> only with the brand on",
+      "env.brand === 'leyline'" in early and "./leyline-look.css" in early and "classList.add('ly-brand')" in early)
+look = open(os.path.join(WWW, "leyline-look.css"), encoding="utf-8").read()
+check("leyline-look.css: every rule outside the spinner waits for html.ly-brand", all(
+      sel.strip().startswith(("html.ly-brand", ".ly-spin", "@keyframes", "from", "to")) or not sel.strip()
+      for block in re.sub(r"/\*.*?\*/", "", look, flags=re.S).split("}") for sel in [block.split("{")[0].split(",")[0]]
+      if "{" in block and not block.strip().startswith("@media")), look[:0])
+check("leyline-look.css: no painted art", not PAINTED.search(re.sub(r"/\*.*?\*/", "", look, flags=re.S)))
+wpatch = open(os.path.join(STREAM, "server", "www-patch.py"), encoding="utf-8").read()
+check("www-patch.py ships leyline-look.css and the logo halves", '"leyline-look.css"' in wpatch and '"leyline-swirl-256.webp"' in wpatch
+      and '"leyline-crystal-128.png"' in wpatch)
 
 # ---------------------------------------------------------------- 5. the addon-list .toc swap and WUModCatalog
 fo = importlib.util.spec_from_file_location("fo", os.path.join(STREAM, "server", "fui-overlay.py"))
