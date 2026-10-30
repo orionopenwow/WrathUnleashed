@@ -13,7 +13,7 @@
 #     WrathUnleashedUI addon. No "reload ale" and no world server restart: nobody is kicked.
 #   2 acore_auth.realmlist: the name in the game's realm list becomes "Dalaran Hangout" (the login server reads it
 #     again within 20 s; players in the world stay in). With the Sample Hangout on, it is "Dalaran Hangout" too.
-#   3 portal.env: LEYLINE_BRAND=1 (wrath_portal.py: the site is "Leyline", the main realm "Dalaran Hangout", the
+#   3 portal.env: LEYLINE_BRAND=1 and WU_HUB_FRONT=1 (the front page; LEYLINE_HUB_FRONT=0 keeps it hidden) (wrath_portal.py: the site is "Leyline", the main realm "Dalaran Hangout", the
 #     page layer's "Back to Dalaran Hangout"); wu-portal recreated (stream visitors click Play again, as after
 #     any sign-in update).
 #   4 the streamed addons' addon-list names (fui-install.sh / mods-install.sh brand on: WrathUnleashedUI.toc and
@@ -67,7 +67,7 @@ if [ "$MODE" = check ]; then
   done
   echo "== 2 realm list name: '$(current_name)' -> '$([ $want = on ] && echo "$NAME" || echo "$OFF_NAME")'"
   sampler_on && echo "  (the Sample Hangout is on: its name is '$SAMPLE_NAME' while the brand is off)"
-  echo "== 3 portal.env: LEYLINE_BRAND=$(portal_brand) -> $([ $want = on ] && echo 1 || echo 0) (wu-portal recreated)"
+  echo "== 3 portal.env: LEYLINE_BRAND=$(portal_brand) -> $([ $want = on ] && echo 1 || echo 0) and WU_HUB_FRONT -> $([ $want = on ] && [ "${LEYLINE_HUB_FRONT:-1}" = 1 ] && echo 1 || echo 0) (wu-portal recreated)"
   if grep -q 'LEYLINE_BRAND' portal/wrath_portal.py 2>/dev/null; then echo "  wrath_portal.py knows the switch"; else echo "  NOTE: portal/wrath_portal.py is older than the switch: run the signin step first"; fi
   echo "== 4 streamed addon list names"
   for s in fui-install.sh mods-install.sh; do
@@ -116,6 +116,10 @@ if [ -f portal.env ]; then
   B=$([ "$MODE" = on ] && echo 1 || echo 0)
   echo "== 3 portal: LEYLINE_BRAND=$B"
   if grep -q '^LEYLINE_BRAND=' portal.env; then sed -i "s#^LEYLINE_BRAND=.*#LEYLINE_BRAND=$B#" portal.env; else echo "LEYLINE_BRAND=$B" >> portal.env; fi
+  # the Leyline front page at /wrath/leyline (hub.py WU_HUB_FRONT) goes live with the brand; LEYLINE_HUB_FRONT=0 keeps it hidden
+  H=$([ "$MODE" = on ] && [ "${LEYLINE_HUB_FRONT:-1}" = 1 ] && echo 1 || echo 0)
+  echo "     WU_HUB_FRONT=$H (the Leyline front page $([ $H = 1 ] && echo live || echo hidden))"
+  if grep -q '^WU_HUB_FRONT=' portal.env; then sed -i "s#^WU_HUB_FRONT=.*#WU_HUB_FRONT=$H#" portal.env; else echo "WU_HUB_FRONT=$H" >> portal.env; fi
   grep -q 'LEYLINE_BRAND' portal/wrath_portal.py 2>/dev/null || echo "  NOTE: portal/wrath_portal.py is older than the switch: the signin step makes the pages follow it"
   if [ -f "$ST/stream-lib.sh" ]; then
     # shellcheck disable=SC1091

@@ -358,6 +358,7 @@ check("brand.sh on: the realm scripts' flag file", os.path.exists(flag))
 check("brand.sh on: the realm list says Dalaran Hangout", read(os.path.join(st, "realm-name")).strip() == "Dalaran Hangout")
 check("brand.sh on: the old name kept", read(os.path.join(w, "brand-state", "realm-name.txt")).strip() == "WrathUnleashed")
 check("brand.sh on: portal.env LEYLINE_BRAND=1, the rest kept", "LEYLINE_BRAND=1" in read(penv) and "REALM_NAME=WrathUnleashed" in read(penv))
+check("brand.sh on: the Leyline front page goes live with it (WU_HUB_FRONT=1)", "WU_HUB_FRONT=1" in read(penv))
 check("brand.sh on: wu-portal restarted", "restart wu-portal" in read(os.path.join(st, "restarts")))
 check("brand.sh on: the streamed addon names", read(os.path.join(st, "stream")).split() == ["fui-install.sh", "brand", "on", "mods-install.sh", "brand", "on"],
       read(os.path.join(st, "stream")))
@@ -388,6 +389,7 @@ check("brand.sh off: reports success", r.returncode == 0 and r.stdout.rstrip().e
 check("brand.sh off: the flag file is gone", not os.path.exists(flag))
 check("brand.sh off: the realm's old name is back", read(os.path.join(st, "realm-name")).strip() == "WrathUnleashed")
 check("brand.sh off: portal.env LEYLINE_BRAND=0", "LEYLINE_BRAND=0" in read(penv))
+check("brand.sh off: the front page hidden again (WU_HUB_FRONT=0)", "WU_HUB_FRONT=0" in read(penv))
 check("brand.sh off: the streamed addon names back", read(os.path.join(st, "stream")).split()[-6:] == ["fui-install.sh", "brand", "off", "mods-install.sh", "brand", "off"])
 bj = json.load(open(os.path.join(w, "hangout-beacon", "state", "beacon.json")))
 check("brand.sh off: the hangout's own listing text again (beacon.json as before: no text of its own)",
