@@ -213,6 +213,7 @@ hostflow = _load_module("wu_hostflow", "hostflow.py")   # /wrath/host: "+ Your s
 creations = _load_module("wu_creations", "creations.py")   # /wrath/workshop: what players made (stream/creations.py)
 leyline_net = _load_module("wu_leyline_net", "leyline_net.py")   # /wrath/leyline/flags.json + the Host pack (stream/leyline_net.py)
 hub_mod = _load_module("wu_hub", "hub.py")   # /wrath/leyline-preview: the hidden Leyline hub (stream/hub.py)
+playmodes = _load_module("wu_playmodes", "playmodes.py")   # game modes: /wrath/modes.json, Games, ?go=mode: (stream/playmodes.py)
 if hub_mod is not None:
     hub_mod.bind(lambda name: globals()[name])
 if hostflow is not None:
@@ -1791,6 +1792,11 @@ def right_now_html() -> str:
 def remember_go(user: str, query: dict) -> None:
     """A signed-in player came with ?go=<kind>:<id>: record it for their game account on the realm
     ("ovgo set", realm/custom/lua_scripts/ov_go.lua), at most 20 a minute per account. Never fails the page."""
+    if playmodes is not None and (query.get("go") or [""])[0][:40].startswith("mode:"):   # a game mode (stream/playmodes.py)
+        mid = playmodes.go_mode((query.get("go") or [""])[0][:40])
+        if mid and gate_limit.hit("go:" + user.upper(), 20):
+            playmodes.go_intent(ac_soap, user, mid, log)
+        return
     if modes is None or links is None:
         return
     v = (query.get("go") or [""])[0][:40]
@@ -2587,7 +2593,14 @@ class PageHandler(BaseHTTPRequestHandler):
                 self.send(429, busy_page(back=path))
                 return
             self.send(200, site_chrome(modes.page(leyline_css(), art_url, art_present, card_meta, REALM_NAME,
-                                                  public_host=PUBLIC_HOST), path))
+                                                  public_host=PUBLIC_HOST,
+                                                  games=playmodes.section() if playmodes is not None else ""), path))
+            return
+        if path == "/wrath/modes.json" and playmodes is not None:   # the game modes catalog (stream/playmodes.py)
+            if not browse_limit.hit(self.ip(), 600):
+                self.send(429, b'{"error":"busy"}', "application/json; charset=utf-8")
+                return
+            self.send(200, playmodes.json_bytes(), "application/json; charset=utf-8", public=True)
             return
         if workshop is not None and workshop_mod.match(path):   # the mods Workshop (stream/workshop.py)
             dl = "/download" in path

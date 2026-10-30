@@ -24,6 +24,8 @@ had_armory=""
 if [ -f "$WU/portal/armory.py" ]; then cp -p "$WU/portal/armory.py" "$BK/armory.py"; had_armory=1; fi
 had_modes=""
 if [ -f "$WU/portal/modes.py" ]; then cp -p "$WU/portal/modes.py" "$BK/"; [ ! -f "$WU/portal/modes_data.py" ] || cp -p "$WU/portal/modes_data.py" "$BK/"; had_modes=1; fi
+had_play=""
+if [ -f "$WU/portal/playmodes.py" ]; then cp -p "$WU/portal/playmodes.py" "$BK/"; [ ! -f "$WU/portal/playmodes.json" ] || cp -p "$WU/portal/playmodes.json" "$BK/"; had_play=1; fi
 had_workshop=""
 if [ -f "$WU/portal/workshop.py" ]; then cp -p "$WU/portal/workshop.py" "$BK/workshop.py"; had_workshop=1; fi
 had_creations=""
@@ -56,6 +58,8 @@ put_back() {
   if [ -n "$had_armory" ]; then cp -p "$BK/armory.py" "$WU/portal/armory.py"; else rm -f "$WU/portal/armory.py"; fi
   if [ -n "$had_modes" ]; then cp -p "$BK/modes.py" "$WU/portal/modes.py"; [ ! -f "$BK/modes_data.py" ] || cp -p "$BK/modes_data.py" "$WU/portal/modes_data.py"
   else rm -f "$WU/portal/modes.py" "$WU/portal/modes_data.py"; fi
+  if [ -n "$had_play" ]; then cp -p "$BK/playmodes.py" "$WU/portal/playmodes.py"; [ ! -f "$BK/playmodes.json" ] || cp -p "$BK/playmodes.json" "$WU/portal/playmodes.json"
+  else rm -f "$WU/portal/playmodes.py" "$WU/portal/playmodes.json"; fi
   if [ -n "$had_workshop" ]; then cp -p "$BK/workshop.py" "$WU/portal/workshop.py"; else rm -f "$WU/portal/workshop.py"; fi
   if [ -n "$had_creations" ]; then cp -p "$BK/creations.py" "$WU/portal/creations.py"; else rm -f "$WU/portal/creations.py"; fi
   if [ -n "$had_docs" ]; then cp -p "$BK/docs.py" "$WU/portal/docs.py"; else rm -f "$WU/portal/docs.py"; fi
@@ -82,6 +86,11 @@ if [ -f links.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1
 if [ -f modes.py ] && [ -f modes_data.py ]; then
   python3 -I -c 'import ast,sys;[ast.parse(open(f).read()) for f in sys.argv[1:]]' modes.py modes_data.py \
     && install -m 644 modes.py modes_data.py "$WU/portal/"
+fi
+# the game modes (/wrath/modes.json, Games on /wrath/modes, ?go=mode:): playmodes.py and its catalog, optional, always as a pair
+if [ -f playmodes.py ] && [ -f playmodes.json ]; then
+  python3 -I -c 'import ast,sys,json;ast.parse(open(sys.argv[1]).read());json.load(open(sys.argv[2]))' playmodes.py playmodes.json \
+    && python3 -I playmodes.py --check playmodes.json >/dev/null && install -m 644 playmodes.py playmodes.json "$WU/portal/"
 fi
 # the guest pass (demo.py): off unless portal.env has WU_GUEST_DEMO=1
 if [ -f demo.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' demo.py && install -m 644 demo.py "$WU/portal/demo.py"; fi
@@ -240,6 +249,8 @@ c6=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/w
 echo "  /wrath/armory (200 = the armory is on): $c6"
 c7=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/mods || true)
 echo "  /wrath/mods Workshop (200 = on): $c7"
+c7m=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/modes.json || true)
+echo "  /wrath/modes.json game modes (200 = on): $c7m"
 c8=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/docs || true)
 c8w=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/workshop || true)
 echo "  /wrath/workshop player creations (200 = on): $c8w"

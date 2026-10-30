@@ -775,6 +775,8 @@ local function dispatch(name, data)
         M.waiting = nil
         status(#M.modes > 0 and "Pick a mode: Host here (party nearby is invited) or Play solo." or "No modes on this realm yet.")
         M.Refresh()
+    elseif name == "open" then   -- the realm's Play (ov_playmode.lua): show the window
+        if not win or not win:IsShown() then M.Toggle() end
     elseif name == "invite" then
         local id, host, title = data:match("^(%d+) (%S+) (.+)$")
         if id then M.invite = { id = tonumber(id), host = tidy(host), title = tidy(title) }; sound("igPlayerInvite"); M.Refresh(); if not win or not win:IsShown() then M.Toggle() end end

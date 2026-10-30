@@ -426,6 +426,8 @@ dispatch = function(name, data)
         G.waiting = nil
         G.Refresh()
         status(#G.courses > 0 and "Pick a course and Play here, or Practice on your own." or "No courses on this realm.")
+    elseif name == "open" then   -- the realm's Play (ov_playmode.lua): show the window
+        if not win or not win:IsShown() then G.Toggle() end
     elseif name == "invite" then
         local id, host, title = data:match("^(%d+) (%S+) (%S+)")
         if id then

@@ -49,3 +49,6 @@ __pycache__/
 
 # wu-mod.py catalog / pack output
 /mods/dist/
+
+# the Leyline Launcher branch bundle (delivered beside the ovland step, never committed)
+tools/ov-rename/*.bundle

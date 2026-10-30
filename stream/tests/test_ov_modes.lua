@@ -859,6 +859,18 @@ check("docs: the HTML page makes no outside requests", not html:find("https?://"
 
 local seen = {}
 for _, f in ipairs(frames) do if type(f.text) == "string" then seen[#seen + 1] = f.text end end
+-- the realm's Play (ov_playmode.lua) opens the window
+do
+    local w = _G["LeylineModesFrame"]
+    if w and w:IsShown() then w:Hide() end
+    OVMod.Send(ann, "wumodes", "open", "")
+    deliver()
+    check("open: the realm's Play shows the window", _G["LeylineModesFrame"] ~= nil and _G["LeylineModesFrame"]:IsShown())
+    OVMod.Send(ann, "wumodes", "open", "")
+    deliver()
+    check("open: again keeps it shown", _G["LeylineModesFrame"]:IsShown())
+end
+
 local all = table.concat(seen, "\n"):lower()
 check("no brand names or shop words on screen", not all:find("blizzard") and not all:find("warcraft") and not all:find(" buy") and not all:find("shop"))
 

@@ -112,6 +112,9 @@ STEPS = {
     "sampler-off": ("realm/Sample hangout - off.bat", "Leyline Sample Hangout off: back to the full realm (5-min restart)", False),
     "slice-sampler": ("stream/Make sampler slice.bat", "Sample Hangout streamed game files (30-60 min)", False),
     "builds-why": ("tools/github-builds/Why did the build fail.bat", "Why the last GitHub build failed (read-only)", False),
+    # The older Python launcher's repo (owner 2026-10-29: "rename repo to Leyline Launcher"): rename, then land the branch.
+    "ovrename": ("tools/ov-rename/Rename OpenVanilla repo.bat", "Rename GitHub repo OpenVanilla to Leyline-Launcher", False),
+    "ovland": ("tools/ov-rename/Land Leyline Launcher branch.bat", "Leyline Launcher changes to GitHub (main, fast-forward only)", False),
     # The game data killswitch (docs/GAME-DATA-ON-OUR-SERVER.md): only when the owner asks for it.
     "gamedata-off": ("stream/Game data killswitch ON.bat", "Game data OFF: our server serves no game data (players use their own game folder)", False),
     "gamedata-on": ("stream/Game data killswitch OFF.bat", "Game data back ON: stream the slim sampler again", False),

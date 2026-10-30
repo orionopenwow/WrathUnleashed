@@ -13,6 +13,7 @@ pub mod catalog;
 pub mod clients;
 pub mod host;
 pub mod launch;
+pub mod modes; // the Modes page: game modes one click away (modes agent)
 pub mod mods;
 pub mod net;
 pub mod p2p;

@@ -78,6 +78,8 @@ install -m 644 "$ST/wrath_portal.py" "$WU/portal/wrath_portal.py"
 [ -f "$ST/links.py" ] && install -m 644 "$ST/links.py" "$WU/portal/links.py"   # the /r /h /q /m /u share links (optional)
 # The Modes hub (stream/modes.py and its data, /wrath/modes and the go intent; optional, always as a pair).
 if [ -f "$ST/modes.py" ] && [ -f "$ST/modes_data.py" ]; then install -m 644 "$ST/modes.py" "$ST/modes_data.py" "$WU/portal/"; fi
+# The game modes (stream/playmodes.py and its catalog: /wrath/modes.json, Games, ?go=mode:; optional, always as a pair).
+if [ -f "$ST/playmodes.py" ] && [ -f "$ST/playmodes.json" ]; then install -m 644 "$ST/playmodes.py" "$ST/playmodes.json" "$WU/portal/"; fi
 # The guest pass (stream/demo.py) sits beside it; off unless portal.env has WU_GUEST_DEMO=1 (demo-pool.sh).
 if [ -f "$ST/demo.py" ]; then install -m 644 "$ST/demo.py" "$WU/portal/demo.py"; fi
 # The web armory (stream/armory.py, /wrath/armory) too; its data comes from realm/serverpass.sh's export.

@@ -795,7 +795,12 @@ pub fn run() {
             crate::social::commands::social_signin_poll,
             crate::social::commands::social_signin_cancel,
             crate::social::commands::social_call,
-            crate::social::commands::social_signout
+            crate::social::commands::social_signout,
+            // the Modes page (modes.rs)
+            crate::modes::commands::modes_list,
+            crate::modes::commands::mode_open_browser,
+            crate::modes::commands::mode_open_credit,
+            crate::modes::commands::mode_prepare_desktop
         ])
         .run(tauri::generate_context!())
         .expect("error while running Leyline");

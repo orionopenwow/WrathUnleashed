@@ -242,3 +242,9 @@
 1076e client  Page scripts: game data killswitch handling (switch stays off), killswitch kit
 1076f hostkit  Host pack: realm list details (tags, region, language, player limit)
 1076g ship  Save to GitHub (orionopenwow/WrathUnleashed): community realms first, game data killswitch (off), launcher 0.3.1 source
+1077a signin  Put the new Host pack listing (hostpack.json) live
+1078a scripts  One-click modes: ov_playmode (go=mode: links start minigolf, Bumper Balls, Coin Dash, or open community Modes after login)
+1078b foreverui  Modes and Golf windows open on the realm's request
+1078c signin  Games section on /wrath/modes, /wrath/modes.json, go=mode: sign-in links
+1078d ship  Save to GitHub (orionopenwow/WrathUnleashed): launcher Modes page and one-click modes
+1079a ship  Save to GitHub (orionopenwow/WrathUnleashed): the ovrename and ovland steps (OpenVanilla repo becomes Leyline-Launcher)

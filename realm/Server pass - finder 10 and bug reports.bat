@@ -43,6 +43,7 @@ rem Leyline minigolf (/golf): the referee for sessions, turns and published cour
 if exist "custom\lua_scripts\ov_golf.lua" copy /y "custom\lua_scripts\ov_golf.lua" "%T%\" >nul
 rem Leyline Modes (/modes): sessions and the relay for scripted minigames; needs ov_modapi.lua.
 if exist "custom\lua_scripts\ov_modes.lua" copy /y "custom\lua_scripts\ov_modes.lua" "%T%\" >nul
+if exist "custom\lua_scripts\ov_playmode.lua" copy /y "custom\lua_scripts\ov_playmode.lua" "%T%\" >nul
 rem The Leyline Workshop (Esc > Mods & Workshop > Workshop, /wrath/workshop): player-made courses, modes and builds,
 rem GM review and one-click Play; needs ov_modapi.lua. workshop-export.py fills the web page (step 1c).
 if exist "custom\lua_scripts\ov_workshop.lua" copy /y "custom\lua_scripts\ov_workshop.lua" "%T%\" >nul

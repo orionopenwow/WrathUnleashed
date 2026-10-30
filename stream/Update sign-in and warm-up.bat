@@ -21,6 +21,8 @@ if exist links.py set "LINKS=links.py"
 if exist demo.py set "LINKS=%LINKS% demo.py"
 if exist armory.py set "LINKS=%LINKS% armory.py"
 if exist modes.py if exist modes_data.py set "LINKS=%LINKS% modes.py modes_data.py"
+rem the game modes (/wrath/modes.json, Games on /wrath/modes, ?go=mode:): playmodes.py and its catalog, always as a pair
+if exist playmodes.py if exist playmodes.json set "LINKS=%LINKS% playmodes.py playmodes.json"
 if exist workshop.py set "LINKS=%LINKS% workshop.py"
 if exist creations.py set "LINKS=%LINKS% creations.py"
 if exist projects.py set "LINKS=%LINKS% projects.py"
@@ -50,7 +52,7 @@ echo [1/2] Uploading...
 scp %OPTS% "%T%" %HOST%:/tmp/wu-fastloop.tgz || (echo Upload failed. If it says "timed out", wait 2 minutes and run this again. & pause & exit /b 1)
 
 echo [2/2] Applying it on the server (under a minute)...
-ssh %OPTS% %HOST% "mkdir -p /srv/wrath/fastloop && rm -rf /srv/wrath/fastloop/www-files /srv/wrath/fastloop/docs /srv/wrath/fastloop/hub && tar -xzf /tmp/wu-fastloop.tgz -C /srv/wrath/fastloop && rm -f /tmp/wu-fastloop.tgz && cd /srv/wrath/fastloop && sed -i 's/\r$//' fastloop.sh wrath_portal.py $(ls links.py demo.py armory.py modes.py modes_data.py workshop.py creations.py hostflow.py ed25519_pure.py projects.py social.py network.py docs.py leyline_net.py admin.py wu-mod.py hub.py 2>/dev/null) && bash fastloop.sh 2>&1 | tee fastloop.log; grep -q '^FASTLOOP OK' fastloop.log"
+ssh %OPTS% %HOST% "mkdir -p /srv/wrath/fastloop && rm -rf /srv/wrath/fastloop/www-files /srv/wrath/fastloop/docs /srv/wrath/fastloop/hub && tar -xzf /tmp/wu-fastloop.tgz -C /srv/wrath/fastloop && rm -f /tmp/wu-fastloop.tgz && cd /srv/wrath/fastloop && sed -i 's/\r$//' fastloop.sh wrath_portal.py $(ls links.py demo.py armory.py modes.py modes_data.py playmodes.py workshop.py creations.py hostflow.py ed25519_pure.py projects.py social.py network.py docs.py leyline_net.py admin.py wu-mod.py hub.py 2>/dev/null) && bash fastloop.sh 2>&1 | tee fastloop.log; grep -q '^FASTLOOP OK' fastloop.log"
 if errorlevel 1 (
   echo.
   echo It did not report success; see the lines above. Anything it changed was put back.

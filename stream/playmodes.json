@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "about": "Leyline game modes: what the launcher's Modes page and /wrath/modes list. Checked by stream/playmodes.py (python3 -I stream/playmodes.py --check). Served at /wrath/modes.json.",
+  "modes": [
+    {
+      "id": "minigolf",
+      "title": "Minigolf",
+      "line": "Putt through courses that players built. Play alone or with your party.",
+      "kind": "realm",
+      "players": { "min": 1, "max": 8 },
+      "status": "live",
+      "start": { "go": "mode:minigolf" }
+    },
+    {
+      "id": "bumper-balls",
+      "title": "Bumper Balls",
+      "line": "Push the others off the arena. The last ball rolling wins.",
+      "kind": "realm",
+      "players": { "min": 1, "max": 8 },
+      "status": "live",
+      "start": { "go": "mode:bumper-balls" }
+    },
+    {
+      "id": "coin-dash",
+      "title": "Coin Dash",
+      "line": "Grab the most coins in 60 seconds. Gold is 1, blue gems are 3.",
+      "kind": "realm",
+      "players": { "min": 1, "max": 8 },
+      "status": "live",
+      "start": { "go": "mode:coin-dash" }
+    },
+    {
+      "id": "community",
+      "title": "Community modes",
+      "line": "Minigames other players made, checked by a GM. Pick one and host it.",
+      "kind": "realm",
+      "players": { "min": 1, "max": 8 },
+      "status": "live",
+      "start": { "go": "mode:community" }
+    },
+    {
+      "id": "brawl",
+      "title": "Wrath Brawl",
+      "line": "A realm type: everyone starts at 80 in Dalaran with their class spells, riding and reputations.",
+      "kind": "realm-type",
+      "players": { "min": 1, "max": null },
+      "status": "live",
+      "start": { "host": "brawl" }
+    },
+    {
+      "id": "azeroth-survivors",
+      "title": "Azeroth Survivors",
+      "line": "A survivors-style roguelike: hold out against the waves. Runs in your browser with your own game folder, no server.",
+      "kind": "offline",
+      "players": { "min": 1, "max": 1 },
+      "status": "coming",
+      "start": { "path": "/wrath/play?mode=own&survivors=1" },
+      "credit": {
+        "by": "Aethus",
+        "note": "Open rebuild by OutThisLife",
+        "license": "MIT or Apache-2.0",
+        "source": "https://github.com/OutThisLife/azeroth-survivors-re"
+      }
+    },
+    {
+      "id": "hordes-of-azeroth",
+      "title": "Hordes of Azeroth",
+      "line": "A roguelike run by its own server. A realm type you host with the Host pack.",
+      "kind": "realm-type",
+      "players": { "min": 1, "max": null },
+      "status": "coming",
+      "start": { "host": "hordes-of-azeroth" },
+      "credit": {
+        "by": "jonhaldors",
+        "license": "GPL-3.0 (client), GPL-2.0 (server)",
+        "source": "https://github.com/jonhaldors/hordes-of-azeroth",
+        "more": ["https://github.com/jonhaldors/hordes-of-azeroth-server"]
+      }
+    }
+  ]
+}
