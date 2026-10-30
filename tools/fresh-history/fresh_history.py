@@ -63,8 +63,9 @@ def fresh(root, go=False, confirm_file=None, backup_dir=None, runner=run, out=pr
     rc, branch = git("rev-parse", "--abbrev-ref", "HEAD")
     if rc != 0 or branch != "main":
         raise Stop(f"this folder is on '{branch}', not main")
-    rc, dirty = git("status", "--porcelain", "--untracked-files=no")
-    # Autopilot rewrites its own bookkeeping after every step; those changes are not work to lose.
+    rc, dirty = git("status", "--porcelain", "--untracked-files=no", "--ignore-submodules=dirty")
+    # Autopilot rewrites its own bookkeeping after every step, and an embedded repo (realm/custom/acore) has its
+    # own local changes the parent never records: neither is work this would lose (the new commit keeps HEAD).
     paths = [ln.split(None, 1)[1].strip().strip('"') for ln in dirty.splitlines() if len(ln.split(None, 1)) == 2]
     own = [p for p in paths if p not in AUTOPILOT_FILES]
     if own:
