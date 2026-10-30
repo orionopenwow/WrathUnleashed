@@ -345,3 +345,5 @@
 1116a signin Site: the sidebar like the launcher (folds to icons)
 1116b ship Save to GitHub: the site sidebar
 1117a ship Save to GitHub: the last launcher test fix (GitHub then builds Leyline.exe)
+1118a signin Front page: backdrop centred with the logo, side menu without a scroll bar, no hero buttons
+1118b ship Save to GitHub: the front page touches

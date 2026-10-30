@@ -904,9 +904,12 @@ class Hub:
             ok = False
         if not ok:
             return ""
-        return ('html{background:linear-gradient(180deg,rgba(11,13,20,.46),rgba(11,13,20,.74) 80%) fixed,'
-                f'url(/wrath/art/{BACKDROP}) center top/cover no-repeat fixed,#0b0d14}}body.hb{{background:transparent}}'
-                '@media print{html{background:#fff}}')
+        # a fixed layer over the page's own area (right of the side menu), so the picture is centred with the hero
+        return ('body.hb::before{content:"";position:fixed;top:0;bottom:0;right:0;left:var(--hb-side,0px);z-index:-1;pointer-events:none;'
+                'background:linear-gradient(180deg,rgba(11,13,20,.46),rgba(11,13,20,.74) 80%),'
+                f'url(/wrath/art/{BACKDROP}) center top/cover no-repeat;transition:left .2s ease}}'
+                'html{background:#0b0d14}body.hb{background:transparent}'
+                '@media print{body.hb::before{display:none}}')
 
     def status_cards(self) -> str:
         """Platform Status: live values only, read when the page is made (no script). A source this portal doesn't
@@ -1839,8 +1842,7 @@ class Hub:
             '<!-- TODO(owner): the hero heading and the line under it; his final wording -->'
             '<h1 id="hb-h">Every client, every server</h1>'
             '<p class="hb-sub-h">One launcher for every classic client and every server: your game, your realm, one click.</p>'
-            f'<p class="hb-hero-a"><a class="hb-cta" href="{e(self._download())}" rel="noopener noreferrer">Download Now</a>'
-            '<a class="hb-ghost lg" href="/wrath">Play in your browser</a></p>'
+            # no buttons under the line (owner 2026-10-30): Download and Play are in the side menu
             '<p class="hb-note">Free and open source, for Windows, macOS and Linux. Nothing to buy.</p></section>'
             + self.ticker(got) + self.realm_section(got) + self.how_strip() + self.counters(got, items) + self.featured_mod() + self.features(got)
             + self.posters(got)
@@ -3061,12 +3063,13 @@ margin:-16px -16px 6px;border-bottom:1px solid var(--lk-border)}
 
 /* the sidebar (wide screens): the launcher's layout, the page as it is beside it; folds to an icon rail */
 @media (min-width:1081px){
-body.hb{--hb-side:236px}
-body.hb:has(#hb-side:checked){--hb-side:72px}
+:root{--hb-side:236px}
+:root:has(#hb-side:checked){--hb-side:72px}
 .hb-side-t{position:fixed;opacity:0;width:1px;height:1px;pointer-events:none}
 body.hb .hb-top{position:fixed;inset:0 auto 0 0;width:var(--hb-side);min-height:0;flex-direction:column;align-items:stretch;gap:4px;
-padding:16px 12px 14px;overflow-y:auto;overflow-x:hidden;border-right:1px solid var(--lk-border);border-bottom:0;animation:none;box-shadow:none;
-background:rgba(18,21,29,.78);transition:width .2s ease}
+padding:16px 12px 14px;overflow-y:auto;overflow-x:hidden;border-right:1px solid rgba(255,255,255,.05);border-bottom:0;animation:none;box-shadow:none;
+background:rgba(14,16,23,.72);transition:width .2s ease;scrollbar-width:none}
+body.hb .hb-top::-webkit-scrollbar{display:none}
 body.hb .hb-brand{padding:2px 6px 12px;margin-bottom:6px;border-bottom:1px solid var(--lk-border)}
 body.hb .hb-nav{flex-direction:column;align-items:stretch;gap:2px;margin:0}
 body.hb .hb-ni{justify-content:flex-start;width:100%;padding:9px 12px;border-radius:10px;font-size:15px;gap:12px;white-space:nowrap}
