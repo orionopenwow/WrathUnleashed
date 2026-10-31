@@ -24,9 +24,9 @@
 .theme-swatch .sw-side { left: 0; top: 0; bottom: 0; width: 28%; }
 .theme-swatch .sw-main { left: 34%; right: 6%; top: 12%; height: 46%; }
 .theme-swatch .sw-btn { right: 6%; bottom: 10%; width: 30%; height: 18%; }
-.theme-swatch.k-dark { background: #15181f; }
-.theme-swatch.k-dark .sw-side { background: #181b23; border-right: 1px solid #2c313c; }
-.theme-swatch.k-dark .sw-main { background: #1e222b; border: 1px solid #2c313c; border-radius: 7px; }
+.theme-swatch.k-dark { background: #12151b; }
+.theme-swatch.k-dark .sw-side { background: #15171e; border-right: 1px solid #262a34; }
+.theme-swatch.k-dark .sw-main { background: #1a1d25; border: 1px solid #262a34; border-radius: 7px; }
 .theme-swatch.k-dark .sw-btn { background: #5b8def; border-radius: 6px; }
 .theme-swatch.k-light { background: #eef1f6; }
 .theme-swatch.k-light .sw-side { background: #f8f9fb; border-right: 1px solid #dde2ea; }

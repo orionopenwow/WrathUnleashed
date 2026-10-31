@@ -343,6 +343,7 @@ function renderPlay() {
   if (s.clients.length === 0) sel.append(el("option", "", "No game client yet"));
   if (s.selected_client) sel.value = s.selected_client;
   sel.disabled = s.clients.length === 0;
+  renderClientMenu();
   $("play-empty").hidden = s.clients.length !== 0;
   $("client-change").textContent = s.clients.length ? "CHANGE GAME FOLDER" : "ADD YOUR GAME FOLDER";
   const official = !s.selected_realm || s.selected_realm === state.official_realm;
@@ -380,6 +381,115 @@ function realmChanged() {
   refreshStatus();
 }
 
+// ------------------------------------------------------------------ the play bar's client picker: a drop-up list
+// Top: Add a game folder… and Find your game files. Then the families Leyline plays that have no folder yet, greyed
+// ("Not found": a click opens the Find your game files guide). Nearest the button: the folders you added, the picked
+// one marked. Arrow keys, Home / End, Enter or Space, Esc; a click outside closes it. #play-client stays the model.
+const FAMILIES = [["1.12.1", "Vanilla"], ["2.4.3", "TBC"], ["3.3.5a", "Wrath"]];
+let menuOpen = false;
+function clientVersion(c) { return c && BUILDS[c.build] ? c.build : (c && c.exe_version) || ""; }
+function renderClientMenu() {
+  if (!state) return;
+  const c = currentClient();
+  $("pb-client-name").textContent = c ? c.name : "No game client";
+  $("pb-client").classList.toggle("empty", !c);
+  const v = clientVersion(c);
+  $("pb-client-ver").hidden = !v;
+  $("pb-client-ver").textContent = v;
+  $("pb-client").title = c ? `${c.name} · ${c.path}` : "Add your game folder";
+  if (menuOpen) return;   // never rebuilt under the keyboard: it is built fresh each time it opens
+  const menu = $("pb-menu");
+  const rows = [];
+  const row = (cls, label, opts) => {
+    const li = el("li", "pb-opt " + cls);
+    li.setAttribute("role", "option");
+    li.tabIndex = -1;
+    li.id = "pb-opt-" + rows.length;
+    const name = el("span", "pb-opt-name", label);
+    li.append(name);
+    if (opts.ver) li.append(el("span", "rl-ver sm", opts.ver));
+    if (opts.sub) li.append(el("span", "pb-opt-sub", opts.sub));
+    li.setAttribute("aria-selected", String(!!opts.selected));
+    if (opts.disabled) li.setAttribute("aria-disabled", "true");
+    if (opts.title) li.title = opts.title;
+    li.addEventListener("click", () => { closeClientMenu(true); opts.run(); });
+    rows.push(li);
+    return li;
+  };
+  const sep = () => { const d = el("li", "pb-sep"); d.setAttribute("role", "presentation"); return d; };
+  const top = [
+    row("pb-act", "Add a game folder…", { run: () => show("clients") }),
+    row("pb-act", "Find your game files", { run: () => openFindFiles() }),
+  ];
+  const have = state.settings.clients;
+  const missing = FAMILIES.filter(([b]) => !have.some((x) => x.build === b)).map(([b, name]) =>
+    row("pb-missing", name, { ver: b, sub: "Not found", disabled: true, title: `No ${b} folder added yet: how to find it`, run: () => openFindFiles(name, b) }));
+  const tail = (t) => ([...t].length > 30 ? "…" + [...t].slice(-29).join("") : t);   // the end of a long path, where the folder name is
+  const mine = have.map((x) => row("pb-mine", x.name, { ver: clientVersion(x), sub: tail(x.path), selected: c && x.id === c.id, title: x.path,
+    run: () => { $("play-client").value = x.id; realmChanged(); saveSelection(); } }));
+  const parts = [top, missing, mine].filter((g) => g.length);
+  menu.replaceChildren(...parts.flatMap((g, i) => (i ? [sep(), ...g] : g)));
+}
+function menuRows() { return [...$("pb-menu").querySelectorAll(".pb-opt")]; }
+function openClientMenu() {
+  if (menuOpen) return;
+  renderClientMenu();
+  menuOpen = true;
+  $("pb-menu").hidden = false;
+  $("pb-client").setAttribute("aria-expanded", "true");
+  const rows = menuRows();
+  const at = rows.find((r) => r.getAttribute("aria-selected") === "true") || rows[rows.length - 1];
+  if (at) at.focus();
+}
+function closeClientMenu(refocus) {
+  if (!menuOpen) return;
+  menuOpen = false;
+  $("pb-menu").hidden = true;
+  $("pb-client").setAttribute("aria-expanded", "false");
+  if (refocus) $("pb-client").focus();
+}
+$("pb-client").addEventListener("click", () => (menuOpen ? closeClientMenu(true) : openClientMenu()));
+$("pb-client").addEventListener("keydown", (e) => {
+  if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); openClientMenu(); }
+});
+$("pb-menu").addEventListener("keydown", (e) => {
+  const rows = menuRows();
+  const i = rows.indexOf(document.activeElement);
+  let j = null;
+  if (e.key === "ArrowDown") j = Math.min(rows.length - 1, i + 1);
+  else if (e.key === "ArrowUp") j = Math.max(0, i - 1);
+  else if (e.key === "Home") j = 0;
+  else if (e.key === "End") j = rows.length - 1;
+  else if (e.key === "Escape") { e.preventDefault(); closeClientMenu(true); return; }
+  else if (e.key === "Tab") { closeClientMenu(false); return; }
+  else if ((e.key === "Enter" || e.key === " ") && i >= 0) { e.preventDefault(); rows[i].click(); return; }
+  if (j === null) return;
+  e.preventDefault();
+  rows[j].focus();
+});
+document.addEventListener("pointerdown", (e) => {
+  if (menuOpen && !e.target.closest(".pb-pick")) closeClientMenu(false);
+});
+
+// The Find your game files guide (page-findfiles), with the family asked for when a greyed row opened it.
+let ffWant = null;
+function openFindFiles(name, build) {
+  ffWant = name ? `Looking for ${name} ${build}. ` : null;
+  show("findfiles");
+}
+document.addEventListener("leyline:page", (e) => {
+  if (e.detail.page !== "findfiles") return;
+  $("ff-want").hidden = !ffWant;
+  $("ff-want").textContent = ffWant || "";
+  ffWant = null;   // opened any other way (Clients' link, a remembered page): the general guide
+});
+$("ff-pick").addEventListener("click", async () => {
+  show("clients");
+  try { addClient(await invoke("pick_folder")); } catch (e) { say("cl-status", String(e), "bad"); }
+});
+$("ff-browser").addEventListener("click", () => { setMode("browser"); show("play"); });
+$("pb-realm-btn").addEventListener("click", () => show("realms"));
+
 function renderPlayBar() {
   if (!state) return;
   const c = currentClient();
@@ -389,8 +499,7 @@ function renderPlayBar() {
     head = "BROWSER PLAY · NEEDS YOUR GAME FOLDER"; warn = true;
     detail = "The browser will ask for your game folder (it stays on your PC)";
   } else if (mode === "browser") {
-    head = "READY · PLAYS IN YOUR BROWSER";
-    detail = "Nothing to install";
+    head = "READY · NOTHING TO INSTALL";
   } else if (!c) {
     head = "SET UP YOUR GAME CLIENT"; warn = true;
     detail = "Point Leyline at your game folder";
@@ -398,7 +507,7 @@ function renderPlayBar() {
     const need = chosenRealmBuild();
     head = `THIS SERVER NEEDS ${need.toUpperCase()}`; warn = true;
     const other = state.settings.clients.find((x) => x.build === need);
-    detail = other ? `${realmLabel()} runs ${need}: pick ${other.name}` : `${realmLabel()} runs ${need}: add your own ${need} client under Game clients`;
+    detail = other ? `Pick ${other.name}` : `Add a ${need} folder`;
   } else if (!chosenRealm()) {
     head = "CHOOSE A REALM"; warn = true;
     detail = "Type the realm's address under Realms";
@@ -408,7 +517,15 @@ function renderPlayBar() {
   $("play-headline").textContent = head;
   bar.classList.toggle("warn", warn);
   $("pb-detail").textContent = detail;
-  $("pb-realm").textContent = mode === "browser" ? "Plays in your web browser" : realmLabel();
+  $("pb-realm").textContent = mode === "browser" ? "Plays in your browser" : realmLabel();
+  // the realm's icon and client version beside its name (none in the browser)
+  const official = isOfficial();
+  const rv = mode === "browser" ? null : official ? "3.3.5a" : realmVersion(realmAt(chosenRealm()));
+  $("pb-realm-ver").hidden = !rv;
+  $("pb-realm-ver").textContent = rv || "";
+  $("pb-realm-ic").hidden = mode === "browser";
+  if (mode !== "browser") fillRealmIcon($("pb-realm-ic"), realmLabel(), official);
+  renderClientMenu();
   $("play-caption").textContent = mode === "browser" ? "IN YOUR BROWSER" : (c ? `ONLINE  ·  ${c.name.toUpperCase()}` : "ONLINE");
 }
 
@@ -1216,6 +1333,7 @@ async function loadRealms(quiet) {
   renderRealms();
   renderRealmRows();
   renderSrvHead();
+  renderPlayBar();   // the play bar's realm name and version come from the list too
   document.dispatchEvent(new CustomEvent("leyline:realms"));   // Home's Popular realms row (home.js)
 }
 

@@ -72,7 +72,7 @@ test('nothing saved: Dark, and only Dark and Light are built in', async () => {
   assert.equal(l.theme, 'dark');
   assert.equal(l.base, 'dark');
   assert.equal(l.skin, undefined);
-  assert.equal(l.bg, 'rgb(21, 24, 31)', 'the dark window');
+  assert.equal(l.bg, 'rgb(18, 21, 27)', 'the dark window');
   assert.deepEqual(await page.evaluate(() => [window.LeylineThemes.DEFAULT, window.LeylineThemes.BUILTINS]), ['dark', ['dark', 'light']]);
   const names = await page.$$eval('#themes-settings .theme-card .name', (n) => n.map((x) => x.textContent));
   assert.deepEqual(names, ['Dark', 'Light']);

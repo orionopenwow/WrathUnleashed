@@ -149,7 +149,7 @@ test('the backdrop: behind the content area only, under the wash; plain when it 
     const rect = (e) => { const x = e.getBoundingClientRect(); return [x.left, x.top, x.width, x.height].map(Math.round); };
     return { img: cs.backgroundImage, b: rect(b), m: rect(m), sideBg: getComputedStyle(s).backgroundImage, panel: getComputedStyle(document.querySelector('.home .card')).backdropFilter };
   });
-  assert.match(r.img, /linear-gradient\(rgba\(11, 13, 20, 0\.46\).*rgba\(11, 13, 20, 0\.74\) 80%\), url\("https:\/\/play\.openvanilla\.app\/wrath\/art\/leyline-shot-backdrop\.webp"\)/);
+  assert.match(r.img, /linear-gradient\(rgba\(9, 11, 17, 0\.52\).*rgba\(9, 11, 17, 0\.8\) 80%\), url\("https:\/\/play\.openvanilla\.app\/wrath\/art\/leyline-shot-backdrop\.webp"\)/);
   assert.deepEqual(r.b, r.m, 'exactly behind the content area');
   assert.equal(r.sideBg, 'none', 'not behind the side bar');
   assert.match(r.panel, /blur/, 'panels are a blurred layer over it');
@@ -170,7 +170,7 @@ test('the backdrop: behind the content area only, under the wash; plain when it 
 
   ({ page, ctx, errors } = await open({}, 'fail'));
   await page.waitForFunction(() => document.getElementById('backdrop').dataset.loaded === '0');
-  assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('backdrop')).backgroundColor), 'rgb(21, 24, 31)', 'the plain colour');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('backdrop')).backgroundColor), 'rgb(18, 21, 27)', 'the plain colour');
   assert.deepEqual(errors, []);
   await ctx.close();
 });
