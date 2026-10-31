@@ -97,7 +97,21 @@
     $("sx-out").hidden = true; $("sx-in").hidden = false;
   }
 
-  const STATUS = { game: "In game", launcher: "In the launcher", offline: "Offline" };
+  const STATUS = { game: "In game", launcher: "Online", offline: "Offline" };
+
+  // One friend row, as on Community › Friends and Home: a round letter avatar (a hue from the name) with the status
+  // badge on its corner, the name and where they are in the status colour; offline rows dimmed (owner 2026-10-30).
+  function hue(name) { let h = 0; for (const ch of name) h = (h * 31 + ch.codePointAt(0)) >>> 0; return h % 360; }
+  function friendRow(f, on) {
+    const b = el("button", "sx-friend st-" + f.status + (on ? " on" : ""));
+    b.type = "button"; b.setAttribute("role", "listitem");
+    const av = el("span", "sx-av"); av.style.setProperty("--h", hue(f.name));
+    av.append(el("b", "", (f.name.match(/[A-Za-z0-9]/) || ["?"])[0].toUpperCase()), el("span", "sx-dot " + f.status));
+    const t = el("span", "sx-ft"); t.append(el("b", "", f.name), el("i", "", where(f)));
+    b.append(av, t);
+    if (f.unread) b.appendChild(el("span", "badge", String(f.unread)));
+    return b;
+  }
 
   // Home's Friends card (owner 2026-10-30): who is on, in game first; a click opens the chat on Community › Friends.
   const RANK = { game: 0, launcher: 1, offline: 2 };
@@ -118,10 +132,7 @@
     const fs = state.friends.slice().sort((a, b) => (RANK[a.status] ?? 3) - (RANK[b.status] ?? 3) || a.name.localeCompare(b.name));
     if (!fs.length) { box.appendChild(el("p", "hint", `No friends yet. You are ${state.me.name}#${state.me.tag}`)); return; }
     for (const f of fs) {
-      const b = el("button", "sx-friend"); b.type = "button"; b.setAttribute("role", "listitem");
-      b.appendChild(el("span", "sx-dot " + f.status));
-      const t = el("span", "sx-ft"); t.append(el("b", "", f.name), el("i", "", where(f))); b.appendChild(t);
-      if (f.unread) b.appendChild(el("span", "badge", String(f.unread)));
+      const b = friendRow(f, false);
       b.onclick = () => goFriends(f.pid);
       box.appendChild(b);
     }
@@ -157,13 +168,7 @@
     let unread = state.incoming.length;
     for (const f of state.friends) {
       unread += f.unread;
-      const b = el("button", "sx-friend" + (selected === f.pid ? " on" : ""));
-      b.type = "button"; b.setAttribute("role", "listitem");
-      b.appendChild(el("span", "sx-dot " + f.status));
-      const t = el("span", "sx-ft");
-      t.append(el("b", "", f.name), el("i", "", where(f)));
-      b.appendChild(t);
-      if (f.unread) b.appendChild(el("span", "badge", String(f.unread)));
+      const b = friendRow(f, selected === f.pid);
       b.onclick = () => openChat(f.pid);
       list.appendChild(b);
     }

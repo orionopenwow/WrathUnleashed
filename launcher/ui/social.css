@@ -13,16 +13,27 @@
 .sx-req span { flex: 1; min-width: 120px; }
 .sx-req.out { background: none; color: var(--muted); }
 .sx-list { display: flex; flex-direction: column; gap: 3px; overflow: auto; max-height: 360px; }
-.sx-friend { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border: 1px solid transparent; border-radius: var(--t-radius-sm);
+.sx-friend { display: flex; align-items: center; gap: 12px; padding: 6px 8px; border: 1px solid transparent; border-radius: var(--t-radius-sm);
   background: none; color: var(--text); text-align: left; cursor: pointer; font: 13px var(--t-font); }
-.sx-friend:hover { background: var(--t-surface-2); }
+.sx-friend:hover { background: color-mix(in srgb, var(--t-text) 6%, transparent); }
 .sx-friend.on { border-color: var(--t-border); background: var(--t-accent-soft); }
-.sx-ft { display: grid; min-width: 0; flex: 1; }
-.sx-ft b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sx-ft i { font-style: normal; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sx-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--t-muted); }
-.sx-dot.game { background: var(--ok); box-shadow: 0 0 6px color-mix(in srgb, var(--t-ok) 50%, transparent); }
-.sx-dot.launcher { background: var(--t-accent); }
+/* the avatar: a letter on a hue from the name, the status badge on its lower right corner */
+.sx-av { position: relative; flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
+  background: linear-gradient(145deg, hsl(var(--h, 220) 45% 46%), hsl(calc(var(--h, 220) + 30) 50% 30%));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+.sx-av b { font: 700 15px var(--t-font); color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
+.sx-dot { position: absolute; right: -2px; bottom: -2px; width: 13px; height: 13px; border-radius: 50%;
+  background: #6b7280; border: 3px solid var(--t-bg, #11141c); box-sizing: border-box; }
+.sx-dot.game { background: #59bf40; }
+.sx-dot.launcher { background: #57cbde; }
+.sx-ft { display: grid; min-width: 0; flex: 1; line-height: 1.25; }
+.sx-ft b { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sx-ft i { font-style: normal; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* name and line in the status colour: in game green, online blue, offline grey and dimmed */
+.sx-friend.st-game .sx-ft b, .sx-friend.st-game .sx-ft i { color: #8fd36f; }
+.sx-friend.st-launcher .sx-ft b, .sx-friend.st-launcher .sx-ft i { color: #6dcff6; }
+.sx-friend.st-offline .sx-ft b, .sx-friend.st-offline .sx-ft i { color: #8a8f98; }
+.sx-friend.st-offline .sx-av { filter: grayscale(1) brightness(.7); }
 .sx-more { margin-top: auto; color: var(--muted); font-size: 13px; }
 .sx-more summary { cursor: pointer; }
 .sx-more > * + * { margin-top: 8px; }
@@ -43,5 +54,5 @@
 
 /* Home's Friends card: fills the rest of the right column, scrolls inside */
 .home-friends { flex: 1 1 auto; min-height: 140px; display: flex; flex-direction: column; }
-.hf-list { flex: 1; min-height: 0; overflow: auto; display: grid; align-content: start; gap: 2px; padding: 6px 6px 8px; scrollbar-width: thin; }
+.hf-list { flex: 1; min-height: 0; overflow: auto; display: grid; align-content: start; gap: 2px; padding: 4px 4px 8px; scrollbar-width: thin; }
 .hf-list .hint { margin: 4px 2px 10px; }
