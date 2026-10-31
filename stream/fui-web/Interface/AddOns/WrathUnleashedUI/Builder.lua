@@ -16,6 +16,9 @@
 --                      wubuild \t state \t i/n \t sel=..;mine=..;area=..;code=..;n=..;pos=..;pts=..;tier=..;plot=..;clip=..;
 --                                                  ids=..;rot=<yaw>,<pitch>,<roll>;gids=<object GUID counters>;core=0|1
 --                      wubuild \t prefabs \t i/n \t id,name,code,count;...
+--                      wubuild \t storage \t i/n \t entry,count;...         what you have put away (.build store)
+--   The state also carries undo=<n>;redo=<n>;stored=<n>;grp=<0|1> and, in a Den, den=<owner|builder|visitor>;
+--   room=<used>/<cap>;yard=<used>/<cap> (the Den's two decor budgets).
 -- The realm checks everything (role, area, plot, budget, rate) and answers in chat as for the dot commands. The
 -- window only ever offers props from the realm's catalog. Without the realm script nothing is sent anywhere
 -- else and the window says the Builder isn't on this realm.
@@ -26,13 +29,14 @@ local WIN_W, WIN_H, ROW_H, ROWS = 520, 650, 20, 9
 local ANSWER_WAIT = 6
 local STEPS = { 0.25, 1, 3 }
 local TURN = 15
-local CATS = { "all", "seating", "tables", "barrels", "crates", "lights", "banners", "tents", "fires", "fences", "nature", "decor" }
+local CATS = { "all", "seating", "tables", "barrels", "crates", "lights", "banners", "tents", "fires", "fences", "nature", "decor",
+    "structure" }
 local MENU_COLS, MENU_ROWS = 3, 12
 local RECENT_MAX = 12
 
 local win, menu, panel
 local B = { catalog = {}, shown = {}, offset = 0, cat = 1, step = 2, search = "", state = {}, parts = {}, prefabs = {},
-    menuTab = "all", menuSearch = "", menuOffset = 0, menuItems = {} }
+    menuTab = "all", menuSearch = "", menuOffset = 0, menuItems = {}, storage = {} }
 
 local function label(parent, text, font, ...)
     local fs = parent:CreateFontString(nil, "OVERLAY", font or "GameFontHighlight")
@@ -240,6 +244,15 @@ local function dispatch(name, data)
         end
         B.prefabs = list
         B.MenuRefresh()
+    elseif name == "storage" then
+        -- what you have put away: [entry] = count (placing one from the Storage tab takes it out)
+        local st = {}
+        for item in data:gmatch("[^;]+") do
+            local e, n = item:match("^(%d+),(%d+)$")
+            if e then st[tonumber(e)] = tonumber(n) end
+        end
+        B.storage = st
+        B.MenuRefresh()
     end
 end
 
@@ -431,9 +444,9 @@ end
 
 -- ---------------------------------------------------------------- the spawn menu (hold Q in edit mode)
 
-local MENU_TABS = { "favourites", "recent", "prefabs", "all" }
+local MENU_TABS = { "favourites", "recent", "prefabs", "storage", "all" }
 for i = 2, #CATS do MENU_TABS[#MENU_TABS + 1] = CATS[i] end
-local TAB_TEXT = { favourites = "Favourites", recent = "Recent", prefabs = "Prefabs", all = "All props" }
+local TAB_TEXT = { favourites = "Favourites", recent = "Recent", prefabs = "Prefabs", storage = "Storage", all = "All props" }
 local function tabText(t) return TAB_TEXT[t] or (t:sub(1, 1):upper() .. t:sub(2)) end
 
 local function byIdMap()
@@ -452,6 +465,10 @@ function B.MenuList()
         return out
     end
     local ids = byIdMap()
+    if tab == "storage" then
+        for _, c in ipairs(B.catalog) do if (B.storage[c.id] or 0) > 0 and match(c) then out[#out + 1] = c end end
+        return out
+    end
     if tab == "recent" then
         for _, id in ipairs(store().recent) do local c = ids[id]; if c and match(c) then out[#out + 1] = c end end
         return out
@@ -502,6 +519,7 @@ function B.MenuRefresh()
         cell.item = c
         if c then
             if c.kind == "prefab" then cell:SetText(c.name .. " (" .. (c.count or 0) .. ")")
+            elseif B.menuTab == "storage" then cell:SetText(c.name .. " x" .. (B.storage[c.id] or 0))
             else cell:SetText((favs[c.id] and "* " or "") .. c.name) end
             cell:Show()
         else
@@ -516,6 +534,7 @@ function B.MenuRefresh()
         if B.menuTab == "favourites" then empty = "No favourites yet: right-click a prop to add it."
         elseif B.menuTab == "recent" then empty = "Props you spawn show up here."
         elseif B.menuTab == "prefabs" then empty = "No prefabs yet: select props, then Save in the Builder's Prefab row."
+        elseif B.menuTab == "storage" then empty = "Nothing put away: select props, then Put away (edit mode's tool bar)."
         else empty = "Nothing matches." end
     end
     menu.empty:SetText(empty)
@@ -524,7 +543,7 @@ end
 
 local function buildMenu()
     menu = CreateFrame("Frame", "WrathUnleashedSpawnMenu", UIParent)
-    menu:SetWidth(580); menu:SetHeight(400)
+    menu:SetWidth(580); menu:SetHeight(470)
     menu:SetPoint("CENTER")
     menu:SetFrameStrata("DIALOG")
     menu:EnableMouse(true)
