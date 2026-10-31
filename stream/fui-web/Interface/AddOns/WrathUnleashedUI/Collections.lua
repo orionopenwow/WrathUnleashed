@@ -340,10 +340,14 @@ end
 listener:SetScript("OnEvent", function(_, event)
     if event == "PLAYER_ENTERING_WORLD" then
         listener:UnregisterEvent("PLAYER_ENTERING_WORLD")
-        WrathUnleashedUIChar = WrathUnleashedUIChar or {}
-        if not WrathUnleashedUIChar.collectionsKey then
-            WrathUnleashedUIChar.collectionsKey = W.CollectionsKey(true) and true or nil
+        -- Shift-P is bound on a Leyline realm only (W.WhenLeyline: the realm's hello), once per character.
+        local function key()
+            WrathUnleashedUIChar = WrathUnleashedUIChar or {}
+            if not WrathUnleashedUIChar.collectionsKey then
+                WrathUnleashedUIChar.collectionsKey = W.CollectionsKey(true) and true or nil
+            end
         end
+        if W.WhenLeyline then W.WhenLeyline(key) else key() end
         return
     end
     if win and win:IsShown() and win.current then

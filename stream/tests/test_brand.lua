@@ -157,7 +157,10 @@ check("addon: off until the realm says otherwise", W.Brand and W.Brand.on == fal
 for _, f in ipairs(frames) do
     if f.events.PLAYER_ENTERING_WORLD then f:Fire("OnEvent", "PLAYER_ENTERING_WORLD") end
 end
-check("off: the addon's ask is not answered", #received == 0 and W.Brand.on == false)
+local function brandSent() local n = 0; for _, r in ipairs(received) do if r[2]:find("^wubrand") then n = n + 1 end end; return n end
+check("off: the addon's ask is not answered", brandSent() == 0 and W.Brand.on == false)
+-- the hello is answered brand on or off (WrathUnleashedUI applies its defaults on a Leyline realm only)
+check("off: the realm's hello is answered, so the addon knows a Leyline realm", #received == 1 and received[1][2] == "wuhello\thi\t1/1\t1" and W.LeylineRealm == true)
 W.Say("hello")
 check("off: chat lines wait a moment for the realm's word", #chat == 0 or not chat[#chat]:find("hello", 1, true))
 for _ = 1, 40 do for _, f in ipairs(frames) do f:Fire("OnUpdate", 0.1) end end

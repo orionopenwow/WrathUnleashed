@@ -5,6 +5,10 @@
 --     not already on a bar, highest rank, in spellbook order. Once per character; /wubars does it again.
 --     Not for a character the realm lays out itself (the main realm's boost, ov_main.lua): see "the realm's layout".
 -- Nothing is removed or moved: only empty buttons are used.
+-- Leyline realms only (owner 2026-10-30): every one-time default (camera, auto loot, talent preview, the bars, the
+-- keys and the page keys, the level 80 fill, Shift-P in Collections.lua) and the instant quests wait for our realm's
+-- answer at login (W.WhenLeyline, "the realm's hello" below). The Leyline launcher installs this addon into players'
+-- own game folders too, so on any other server the windows load but nothing is rebound or changed.
 
 local ADDON = "WrathUnleashedUI"
 local BOOK = BOOKTYPE_SPELL or "spell"
@@ -71,6 +75,27 @@ function W.SettleBrand()
 end
 W.Say = say
 
+-- The realm's hello: the addon asks at login (OVMOD "wuhello" "ask"); a Leyline realm answers "wuhello" "hi"
+-- (ov_modapi.lua). Its other answers prove it too: the brand ("wubrand" "brand") and the bars word ("wubars"
+-- "layout", ov_main.lua). Only answers count, never the ask (a whisper to oneself comes back on any server). Kept for
+-- this session only: the next login asks again.
+W.LeylineRealm = false
+local leylineWaiting = {}
+-- fn now on a Leyline realm, else once its hello arrives (never on another server).
+function W.WhenLeyline(fn)
+    if W.LeylineRealm then pcall(fn) else leylineWaiting[#leylineWaiting + 1] = fn end
+end
+function W.SetLeyline()
+    if W.LeylineRealm then return end
+    W.LeylineRealm = true
+    local list = leylineWaiting
+    leylineWaiting = {}
+    for _, fn in ipairs(list) do pcall(fn) end
+end
+local function isHello(msg)
+    return msg:find("^wuhello\thi\t%d+/%d+\t") or msg:find("^wubrand\tbrand\t%d+/%d+\t") or msg:find("^wubars\tlayout\t%d+/%d+\t")
+end
+
 local BRAND_WAIT = 3   -- seconds after entering the world: no word from the realm by then = off (the ask is answered at once)
 local brandFrame = CreateFrame("Frame")
 brandFrame:RegisterEvent("CHAT_MSG_ADDON")
@@ -79,6 +104,7 @@ brandFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel)
     if event == "PLAYER_ENTERING_WORLD" then
         self:UnregisterEvent("PLAYER_ENTERING_WORLD")
         if SendAddonMessage and UnitName then
+            pcall(SendAddonMessage, "OVMOD", "wuhello\task\t1/1\t", "WHISPER", UnitName("player"))
             pcall(SendAddonMessage, "OVMOD", "wubrand\task\t1/1\t", "WHISPER", UnitName("player"))
         end
         local wait = 0
@@ -91,6 +117,7 @@ brandFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel)
         return
     end
     if prefix ~= "OVMOD" or channel ~= "WHISPER" or type(msg) ~= "string" then return end
+    if isHello(msg) then W.SetLeyline() end
     local data = msg:match("^wubrand\tbrand\t1/1\t(.*)$")
     if not data then return end
     local kind, realm = data:match("^(%a+)\t?(.*)$")
@@ -307,52 +334,60 @@ f:SetScript("OnEvent", function(_, event, level, msg, channel)
     end
     if event == "PLAYER_ENTERING_WORLD" then
         f:UnregisterEvent("PLAYER_ENTERING_WORLD")
-        WrathUnleashedUIDB = WrathUnleashedUIDB or {}
-        -- Defaults everyone wants (once per character, so a player's own change sticks):
-        -- the farthest camera (and start zoomed out), auto loot.
-        if not c.defaults then
-            c.defaults = true
-            if SetCVar then
-                pcall(SetCVar, "cameraDistanceMax", "50")
-                pcall(SetCVar, "cameraDistanceMaxFactor", "4")
-                pcall(SetCVar, "autoLootDefault", "1")
-            end
-            if CameraZoomOut then pcall(CameraZoomOut, 50) end
-        end
-        -- Talent planner: 3.3.5's own preview mode (plan points, then Learn), on for everyone.
-        if SetCVar then pcall(SetCVar, "previewTalents", "1"); pcall(SetCVar, "previewPetTalents", "1") end
-        -- Undo the first version's UIParent:SetScale (it cut off the left edge); the default size now
-        -- comes from the client, and the slider sets the game's own UI scale.
-        if UIParent:GetScale() ~= 1 and not WrathUnleashedUIDB.uiScale then UIParent:SetScale(1) end
-        WrathUnleashedUIDB.scale = nil
-        if not c.barsOn then
-            barsOn()
-            c.barsOn = true
-        end
-        if not c.keys then
-            c.keys = defaultKeys(true) and true or nil
-            if c.keys then c.pageKeys = true; say("Every action bar is on, with keys: 1-7 and F G T Z X, plus Shift, Ctrl and Alt for the bars above. Esc > Mods & Workshop to change.") end
-        end
-        if c.keys and not c.pageKeys then c.pageKeys = unbindPageFlips() or nil end
         lastLevel = UnitLevel("player")
-        if lastLevel and lastLevel >= 80 and not c.filled80 then
-            if SendAddonMessage and UnitName then
-                pcall(SendAddonMessage, "OVMOD", "wubars\task\t1/1\t", "WHISPER", UnitName("player"))
-            end
-            if fill.word == "boost" then leaveToRealm()
-            elseif fill.word == "none" then fillIn(FILL_DELAY)
-            else fillIn(ASK_WAIT) end
-        end
+        W.WhenLeyline(function() W.LeylineDefaults() end)
         return
     end
     -- PLAYER_LEVEL_UP
     local lvl = tonumber(level) or UnitLevel("player")
     local jump = lastLevel and lvl and lvl - lastLevel > 1
     lastLevel = lvl
+    if not W.LeylineRealm then return end   -- another server: no fill
     if not lvl or lvl < 80 or c.filled80 then return end
     if jump or fill.word == "boost" then leaveToRealm(); return end   -- a boost: the realm lays the bars out
     fillIn(FILL_DELAY)
 end)
+
+-- The one-time defaults, on a Leyline realm only (W.WhenLeyline at login).
+function W.LeylineDefaults()
+    local c = char()
+    WrathUnleashedUIDB = WrathUnleashedUIDB or {}
+    -- Defaults everyone wants (once per character, so a player's own change sticks):
+    -- the farthest camera (and start zoomed out), auto loot.
+    if not c.defaults then
+        c.defaults = true
+        if SetCVar then
+            pcall(SetCVar, "cameraDistanceMax", "50")
+            pcall(SetCVar, "cameraDistanceMaxFactor", "4")
+            pcall(SetCVar, "autoLootDefault", "1")
+        end
+        if CameraZoomOut then pcall(CameraZoomOut, 50) end
+    end
+    -- Talent planner: 3.3.5's own preview mode (plan points, then Learn), on for everyone.
+    if SetCVar then pcall(SetCVar, "previewTalents", "1"); pcall(SetCVar, "previewPetTalents", "1") end
+    -- Undo the first version's UIParent:SetScale (it cut off the left edge); the default size now
+    -- comes from the client, and the slider sets the game's own UI scale.
+    if UIParent:GetScale() ~= 1 and not WrathUnleashedUIDB.uiScale then UIParent:SetScale(1) end
+    WrathUnleashedUIDB.scale = nil
+    if not c.barsOn then
+        barsOn()
+        c.barsOn = true
+    end
+    if not c.keys then
+        c.keys = defaultKeys(true) and true or nil
+        if c.keys then c.pageKeys = true; say("Every action bar is on, with keys: 1-7 and F G T Z X, plus Shift, Ctrl and Alt for the bars above. Esc > Mods & Workshop to change.") end
+    end
+    if c.keys and not c.pageKeys then c.pageKeys = unbindPageFlips() or nil end
+    lastLevel = UnitLevel("player")
+    if lastLevel and lastLevel >= 80 and not c.filled80 then
+        if SendAddonMessage and UnitName then
+            pcall(SendAddonMessage, "OVMOD", "wubars\task\t1/1\t", "WHISPER", UnitName("player"))
+        end
+        if fill.word == "boost" then leaveToRealm()
+        elseif fill.word == "none" then fillIn(FILL_DELAY)
+        else fillIn(ASK_WAIT) end
+    end
+end
 
 W.BarsOn, W.FillBars, W.DefaultKeys = barsOn, fillBars, defaultKeys
 
@@ -361,6 +396,7 @@ W.BarsOn, W.FillBars, W.DefaultKeys = barsOn, fillBars, defaultKeys
 local q = CreateFrame("Frame")
 for _, e in ipairs({ "QUEST_DETAIL", "QUEST_PROGRESS", "QUEST_COMPLETE", "QUEST_ACCEPT_CONFIRM" }) do q:RegisterEvent(e) end
 q:SetScript("OnEvent", function(_, event)
+    if not W.LeylineRealm then return end   -- never on another server
     if (WrathUnleashedUIDB and WrathUnleashedUIDB.questsOff) or (IsShiftKeyDown and IsShiftKeyDown()) then return end
     if event == "QUEST_DETAIL" then
         if AcceptQuest then AcceptQuest() end

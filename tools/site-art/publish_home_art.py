@@ -7,8 +7,9 @@
 The owner drops PNG / JPG / WebP screenshots into site-art\\home\\ (in the workspace's top folder; gitignored, never shipped), each
 named by the slide it is for:
 
-    hangout.png   browser.png   host.png   den.png   news.png        (hangout-2.png ... more for the same slide: they
-    mode-minigolf.png  mode-bumper-balls.png  mode-coin-dash.png      take turns, one a day; mode-<id>: the small tile)
+    hangout.jpg   browser.jpg   host.jpg   den.jpg   news.jpg        (.png, .jpg or .webp; hangout-2.jpg ... more for
+    mode-minigolf.jpg  mode-bumper-balls.jpg  mode-coin-dash.jpg      the same slide take turns, one a day; mode-<id>:
+    street.jpg (a spare: published, not shown yet)                    the small tile)
 
 Optional: site-art\\home\\captions.json, {"hangout": {"alt": "...", "credit": "..."}, "hangout-2": {...}}: the words
 the launcher shows as plain text (alt for screen readers, credit in small type over the picture).
@@ -29,6 +30,9 @@ import time
 
 SLIDES = ("hangout", "news", "browser", "host", "den")       # the slides that show a screenshot (ui/home.js photo)
 MODES = ("minigolf", "bumper-balls", "coin-dash", "community")
+# spares: published and listed in home.json, but no slide shows them yet (a slide can take one up later without a new
+# upload); "street" is a second Dalaran street shot
+SPARES = ("street",)
 # what each slide's picture should show, for the owner (and the default alt text)
 WHAT = {
     "hangout": "Players together in Dalaran, the Hangout's meeting place",
@@ -36,6 +40,7 @@ WHAT = {
     "browser": "The game running in a browser tab",
     "host": "A player-hosted realm in play",
     "den": "A Den: a built-up room in edit mode, or friends in it",
+    "street": "A street in Dalaran",
 }
 NAME = re.compile(r"^(?P<id>(?:mode-)?[a-z0-9][a-z0-9-]{0,30}?)(?:-(?P<n>[2-9]))?\.(?:png|jpe?g|webp)$", re.I)
 MAX_W = 1600
@@ -46,7 +51,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 
 
 def known(slide_id: str) -> bool:
-    return slide_id in SLIDES or (slide_id.startswith("mode-") and slide_id[5:] in MODES)
+    return slide_id in SLIDES or slide_id in SPARES or (slide_id.startswith("mode-") and slide_id[5:] in MODES)
 
 
 def find(src: str):
@@ -124,7 +129,7 @@ def main(argv=None) -> int:
     for f, why in skipped:
         print(f"  skipped {f}: {why}")
     if not items:
-        print(f"No screenshots in {a.src}. Put hangout.png, browser.png, host.png, den.png, news.png there.")
+        print(f"No screenshots in {a.src}. Put hangout.jpg, browser.jpg, host.jpg, den.jpg, news.jpg there (.png works too).")
         return 1
     caps = captions(a.src)
     for sid in SLIDES:

@@ -1,7 +1,7 @@
 @echo off
 rem The launcher Home gallery's in-game screenshots, from site-art\home\ on this PC to the website (the Autopilot step
-rem "homeart"). Put screenshots named by slide in site-art\home\ (hangout.png, browser.png, host.png, den.png,
-rem news.png; hangout-2.png for a second one that takes turns; optional captions.json). This makes each a 1600 px
+rem "homeart"). Put screenshots named by slide in site-art\home\ (hangout.jpg, browser.jpg, host.jpg, den.jpg,
+rem news.jpg; .png works too; hangout-2.jpg for a second one that takes turns; street.jpg a spare; optional captions.json). This makes each a 1600 px
 rem wide WebP with no metadata plus home.json, uploads them (one upload, one SSH login) to /srv/wrath/portal/art/home,
 rem served at https://play.openvanilla.app/wrath/art/home/, keeps a backup of what was there and puts it back if the
 rem site does not answer with the new list. Nothing goes into the repo. Needs Python 3 and Pillow. Safe to run again.
@@ -11,7 +11,7 @@ set "KEY=%USERPROFILE%\.ssh\openwow"
 set "HOST=root@play.openvanilla.app"
 set "OPTS=-i "%KEY%" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30"
 if not exist "%KEY%" (echo SSH key %KEY% not found. & exit /b 1)
-if not exist "site-art\home" (echo Make the folder site-art\home here and put the screenshots in it: hangout.png, browser.png, host.png, den.png, news.png. & exit /b 1)
+if not exist "site-art\home" (echo Make the folder site-art\home here and put the screenshots in it: hangout.jpg, browser.jpg, host.jpg, den.jpg, news.jpg. & exit /b 1)
 set PY=py -3
 where py >nul 2>&1 || set PY=python
 %PY% -c "import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)" >nul 2>&1 || (echo Python 3.9 or newer is needed: https://www.python.org/downloads/ & exit /b 1)

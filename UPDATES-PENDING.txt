@@ -411,3 +411,7 @@
 1153a signin Site: /wrath/art/home serves the launcher gallery's in-game screenshots
 1153b homeart Publish the gallery screenshots from site-art\home (backup, check, roll back)
 1153c ship Save to GitHub: launcher gallery with in-game screenshots, Leyline addons setup (Game Clients, Mods, PLAY offer) (GitHub then rebuilds Leyline.exe)
+1154a scripts Realm hello for our addon (ov_modapi answers wuhello) so its defaults apply on Leyline realms only (live reload; a 5-minute warning if a restart is needed)
+1154b foreverui Addon: one-time defaults and instant quests on Leyline realms only
+1154c addons Publish the Leyline addons pack (release leyline-addons) for the launcher
+1154d ship Save to GitHub: the above
