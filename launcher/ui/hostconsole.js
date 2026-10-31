@@ -79,6 +79,7 @@
   const DEN_FACTS = [["Private", "only friends with your invite link"], ["Sign-up", "from your invite link only"], ["No bots", "just you and your friends"]];
   // the guide: short how-tos, each with its page on the website (lib.rs LINKS: hostdocs, alwayson)
   const GUIDE = [
+    ["network", "How the Leyline network works", "Players reach your realm through the Leyline relay, by its realm id: nobody sees your address and you open no ports. Public realms are listed; private ones take an invite link. Leyline never ships game files.", "network"],
     ["start", "Start your realm", "Pick a ruleset and press Start. A window opens: leave it running. The first start imports the databases, 5 to 20 minutes.", "hostdocs"],
     ["stop", "Stop it", "Stop keeps characters, accounts and your invite link. Start again any time; it picks up where it was.", "hostdocs"],
     ["update", "Update", "When a new Host pack is out, update it under Host pack & settings, then press Start again. Your realm and its links are kept.", "hostdocs"],
@@ -658,6 +659,10 @@
     top.append(crest(), id, ui.prereq);
     // TODO(owner): the setup start's line, in your own words.
     const lede = mk("p", "hc-lede", "Run a realm on this PC for friends or everyone. Players reach it through the Leyline relay: no ports to open, your address stays hidden.");
+    // what a host needs and how long it takes, up front (the website's /wrath/host says the same). TODO(owner): the wording.
+    const needs = mk("p", "hc-needs");
+    needs.append(mk("b", "", "You need: "), document.createTextNode("Docker, your own game folder "),
+      mk("span", "hc-ver", "3.3.5a"), document.createTextNode(", about 10 GB free. The first start takes 5 to 20 minutes, and your PC must stay on for others to play."));
     ui.rules = mk("div", "hc-rulesets");
     ui.rules.setAttribute("role", "radiogroup");
     ui.rules.setAttribute("aria-label", "Ruleset");
@@ -683,7 +688,7 @@
     // before anything else, while the Host pack or Docker is missing (owner 2026-10-30: "make getting the host pack more obvious")
     ui.ready = mk("div", "hc-ready");
     ui.ready.hidden = true;
-    sw.append(top, rune(), lede, ui.ready, mk("p", "hc-bh", "Pick a ruleset"), ui.rules, ui.den, go, ui.status, link, rune(), mk("p", "hc-bh", "Runs on"), coreChips(linkServer));
+    sw.append(top, rune(), lede, needs, ui.ready, mk("p", "hc-bh", "Pick a ruleset"), ui.rules, ui.den, go, ui.status, link, rune(), mk("p", "hc-bh", "Runs on"), coreChips(linkServer));
     const side = mk("aside", "hc-box hc-side");
     side.append(mk("p", "hc-bh", "Guide"), guideList(true));
     wrap.append(sw, side);

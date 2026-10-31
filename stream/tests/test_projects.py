@@ -31,8 +31,15 @@ GH = {
                                "stargazers_count": 42, "pushed_at": "2026-10-20T10:00:00Z",
                                "owner": {"login": "alice", "html_url": "https://github.com/alice"}, "private": False},
     "/repos/mallory/evil": {"name": "<script>alert(1)</script>", "description": "\"><img src=x onerror=1>",
-                            "license": None, "stargazers_count": 1, "pushed_at": "2026-01-01T00:00:00Z",
+                            "license": {"spdx_id": "MIT"}, "stargazers_count": 1, "pushed_at": "2026-01-01T00:00:00Z",
                             "owner": {"login": "<b>mal</b>", "html_url": "javascript:alert(1)"}},
+    # held for a person by the hub's rules (stream/hub.py link_problems)
+    "/repos/zed/nolicence": {"name": "nolicence", "description": "Handy frames", "license": None, "stargazers_count": 2,
+                             "pushed_at": "2026-10-01T00:00:00Z", "owner": {"login": "zed", "html_url": "https://github.com/zed"}},
+    "/repos/zed/autofarm": {"name": "autofarm", "description": "Speedhack and aimbot for arenas", "license": {"spdx_id": "MIT"},
+                            "stargazers_count": 2, "pushed_at": "2026-10-01T00:00:00Z", "owner": {"login": "zed", "html_url": "https://github.com/zed"}},
+    "/repos/zed/client-decompiled": {"name": "client-decompiled", "description": "Source", "license": {"spdx_id": "MIT"},
+                                     "stargazers_count": 2, "pushed_at": "2026-10-01T00:00:00Z", "owner": {"login": "zed", "html_url": "https://github.com/zed"}},
     "/repos/carol/wow-tools": {"name": "wow-tools", "description": "Tools for World of Warcraft by Blizzard fans",
                                "license": {"spdx_id": "GPL-3.0-only"}, "stargazers_count": 7,
                                "pushed_at": "2026-09-01T00:00:00Z", "owner": {"login": "carol", "html_url": "https://github.com/carol"}},
@@ -67,7 +74,8 @@ class Api(BaseHTTPRequestHandler):
 
 USERS = {"alice": {"id": "hk-alice", "display_name": "Alice"}, "bob": {"id": "hk-bob", "display_name": "Bob <i>"},
          "admin": {"id": "hk-admin", "display_name": "Admin"}, "carol": {"id": 77, "display_name": "Carol"},
-         "frank": {"id": "hk-frank", "display_name": "Frank"}, "gina": {"id": "hk-gina", "display_name": "Gina"}}
+         "frank": {"id": "hk-frank", "display_name": "Frank"}, "gina": {"id": "hk-gina", "display_name": "Gina"},
+         **{f"zed{c}": {"id": f"hk-zed{c}", "display_name": f"Zed {c}"} for c in "abcd"}}
 
 
 class Site(BaseHTTPRequestHandler):
@@ -137,8 +145,12 @@ def submit(who, url, cat="addons", builds="3.3.5a", desc="A tidy set of unit fra
     return req("POST", "/wrath/mods/submit", who, {"t": token(who) if tok is None else tok, "url": url,
                                                     "category": cat, "builds": builds, "description": desc})
 
-def records():
+def all_records():
     return [json.loads(l) for l in open(os.path.join(DATA, "projects.jsonl"))] if os.path.exists(os.path.join(DATA, "projects.jsonl")) else []
+
+def records():
+    """The listed ones: never a record the hub's rules hold for a person."""
+    return [r for r in all_records() if not (r.get("review") or {}).get("state") == "pending"]
 
 def comm_cards(h):
     return re.findall(r'<a class="wk-card" href="/wrath/mods/p/([0-9a-f]{12})"', h)
@@ -292,6 +304,28 @@ st, _, h = req("GET", "/wrath/mods?q=raidtimer")
 check("search", comm_cards(h) == [gl["id"]] and 'href="/wrath/mods/pings"' not in h)
 check("kind filter: packaged only", comm_cards(req("GET", "/wrath/mods?kind=ui")[2]) == [])
 
+# ---------------------------------------------------------------- the hub's rules: held for a person, never listed at once
+n_listed = len(records())
+held_ids = {}
+for who, slug in (("zeda", "nolicence"), ("zedb", "autofarm"), ("zedc", "client-decompiled")):
+    st, hd, h = submit(who, f"https://github.com/zed/{slug}", desc="A small project for the tools shelf.", cat="tools")
+    rec_h = next((x for x in all_records() if x["url"].endswith("/zed/" + slug)), {})
+    held_ids[slug] = rec_h.get("id")
+    check(f"held: {slug} waits for a person (303 to the submit page with a thank-you)",
+          st == 303 and hd.get("Location") == "/wrath/mods/submit?queued=1" and (rec_h.get("review") or {}).get("state") == "pending", (st, hd, rec_h.get("review")))
+check("held: the reasons (no licence, a cheat, decompiled)",
+      [ (next(x for x in all_records() if x["id"] == held_ids[k])["review"]["reasons"]) for k in ("nolicence", "autofarm", "client-decompiled")]
+      == [["no open licence"], ["looks like a cheat or exploit"], ["decompiled, leaked or repack material"]])
+check("held: not listed, no page of its own", len(records()) == n_listed and not any(i in comm_cards(req("GET", "/wrath/mods")[2]) for i in held_ids.values())
+      and req("GET", f"/wrath/mods/p/{held_ids['nolicence']}")[0] == 404)
+q = [json.loads(l) for l in open(os.path.join(DATA, "hub", "submissions.jsonl"))] if os.path.exists(os.path.join(DATA, "hub", "submissions.jsonl")) else []
+check("held: in the hub's review queue (the admin console's pending list), no account id", sorted(x["id"] for x in q if x.get("via") == "workshop-link")
+      == sorted(held_ids.values()) and all("zed" not in json.dumps({k: v for k, v in x.items() if k != "repo"}) for x in q)
+      and all(x["repo"].startswith("https://github.com/zed/") for x in q))
+check("held: the thank-you note", "waits for a person to check it" in req("GET", "/wrath/mods/submit?queued=1", "zeda")[2])
+st, _, h = submit("zedd", "https://github.com/zed/nolicence", desc="A small project for the tools shelf.", cat="tools")
+check("held: the same link again says it is waiting", st == 400 and "waiting for a person" in err(h), err(h))
+
 # ---------------------------------------------------------------- report and hide
 pid = r["id"]
 st, _, h = req("POST", f"/wrath/mods/p/{pid}/report", "", {})
@@ -333,7 +367,9 @@ keys = {"id", "source", "name", "description", "category", "builds", "author", "
 check("all.json: format 1, CORS *", doc.get("format") == 1 and hd.get("Access-Control-Allow-Origin") == "*")
 check("all.json: the 13 categories and the builds", [c["id"] for c in doc.get("categories", [])] == CAT_IDS and doc.get("builds") == ["3.3.5a", "1.12", "any"])
 check("all.json: both kinds in one schema", {p["source"] for p in ps} == {"packaged", "community"} and all(set(p) == keys for p in ps))
-check("all.json: every project once", len(ps) == 3 + len(records()) and len({p["id"] for p in ps}) == len(ps))
+_hp = [p for p in ps if p["id"] == "mod:host-pack"]   # the Host pack (stream/hostpack.json), a tools project in the same shape
+check("all.json: every project once", len(ps) == 3 + len(records()) + len(_hp) and len({p["id"] for p in ps}) == len(ps)
+      and all(p["category"] == "tools" and p["kind"] == "hostpack" for p in _hp))
 pk = next(p for p in ps if p["id"] == "mod:pings")
 check("all.json: packaged fields", pk["download"] == "https://play.example/wrath/mods/pings/download" and pk["on_wrath"] is True
       and pk["licence"] == "MIT" and pk["builds"] == ["3.3.5a"] and pk["category"] == "addons" and pk["page"] == "https://play.example/wrath/mods/pings")
@@ -370,7 +406,7 @@ check("storage: JSON lines, no temp files left", all(l.strip().startswith("{") f
       and not [f for f in os.listdir(DATA) if f.endswith(".tmp")])
 with open(os.path.join(DATA, "projects.jsonl"), "a") as fh:
     fh.write("{broken\n")
-check("a broken line is skipped", len(Wk.projects.load()) == len(vis))
+check("a broken line is skipped", len(Wk.projects.load()) == len(vis) + len(held_ids))
 PM = wp.workshop_mod.projects_mod
 closed = PM.Projects(os.path.join(T, "nope"), categories=["sandbox"])
 ok, msg = closed.submit({"id": "x"}, {"url": "https://github.com/a/b", "category": "sandbox", "builds": "any", "description": "a fine thing here"})

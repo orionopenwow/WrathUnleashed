@@ -1,4 +1,10 @@
-"""Community projects for the Leyline Workshop: links people submit, listed at once (no review queue).
+"""Community projects for the Leyline Workshop: links people submit, listed at once unless the hub's rules hold them.
+
+A link that breaks one of the hub's rules (stream/hub.py link_problems: decompiled, leaked or repack material, cheats, an
+excluded account, or a repo with no open licence once its forge has answered) is not listed: the record is kept with
+"review": {"state": "pending", "reasons": [...]}, and a forge repo also goes into the hub's review queue
+($WU_PORTAL_DATA/hub/submissions.jsonl, the admin console's pending list), where a person approves it into the catalog
+or rejects it.
 
 A project is a link only: a public repo on GitHub, GitLab, Codeberg or another forge, or a project page.
 Nothing is downloaded or hosted from a submission. On submit the server asks the forge's public API for
@@ -100,6 +106,67 @@ def scrub(v: str) -> str:
         w = m.group(0).lower()
         return "Wrath" if "lich" in w else "the publisher" if "blizzard" in w else "the game"
     return BRAND_RE.sub(rep, v)
+
+
+def held(r: dict) -> bool:
+    """Waiting for a person (the hub's rules held it): never listed, never on its own page."""
+    rv = r.get("review")
+    return isinstance(rv, dict) and rv.get("state") == "pending"
+
+
+_hub = {"mod": None, "tried": False}
+
+
+def _hub_mod():
+    """stream/hub.py, for its link rules: the portal's copy (wu_hub) when loaded, else loaded once from beside this file."""
+    import sys
+    m = sys.modules.get("wu_hub")
+    if m is not None and hasattr(m, "link_problems"):
+        return m
+    if not _hub["tried"]:
+        _hub["tried"] = True
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("wu_projects_hub", os.path.join(os.path.dirname(os.path.abspath(__file__)), "hub.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            _hub["mod"] = mod
+        except Exception:   # noqa: BLE001
+            _hub["mod"] = None
+    return _hub["mod"]
+
+
+_HOLD_FALLBACK = re.compile(r"(?i)wowdecomp|waystone|decompil|chumpton|repack|\bleak|\bcheat|\bhack(?:s|ing|ed)?\b|aimbot|exploit")
+
+
+def hub_problems(url: str, texts: list, licence: str, licence_known: bool) -> list[str]:
+    """The hub's rules for a link (stream/hub.py link_problems). Without the hub: its word rules, so nothing that should
+    wait is listed (the licence then waits for the hub)."""
+    hub = _hub_mod()
+    if hub is not None:
+        try:
+            return list(hub.link_problems(url, texts, licence, licence_known))
+        except Exception:   # noqa: BLE001
+            pass
+    return ["needs a check"] if _HOLD_FALLBACK.search(" ".join([url] + [str(t) for t in texts])) else []
+
+
+def queue_for_review(rec: dict, link: dict, build: str) -> None:
+    """A held forge link into the hub's review queue (the same line the hub's Submit a mod form appends), so the admin
+    console shows it. Never the submitter's account id: only the reasons go in the note."""
+    if not link.get("forge"):
+        return   # only forge repos fit the hub's queue; the record waits in projects.jsonl with its reasons
+    tag = {"3.3.5a": "3.3.5a", "1.12": "1.12", "both": "3.3.5a", "any": "any"}.get(build, "any")
+    line = {"id": rec["id"], "repo": rec["url"], "build": tag, "category": rec["category"],
+            "note": ("Workshop link held: " + ", ".join(rec["review"]["reasons"]))[:300],
+            "at": time.strftime("%Y-%m-%dT%H:%M:00Z", time.gmtime()), "via": "workshop-link"}
+    d = os.path.join(os.environ.get("WU_PORTAL_DATA", "/data"), "hub")
+    try:
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "submissions.jsonl"), "a", encoding="utf-8") as f:
+            f.write(json.dumps(line, ensure_ascii=False, sort_keys=True) + "\n")
+    except OSError:
+        log.warning("could not queue %s for review", rec["id"])
 
 
 def account_of(me) -> str:
@@ -415,14 +482,14 @@ class Projects:
 
     # -------------------------------------------------- reads
     def visible(self) -> list[dict]:
-        return [r for r in self.load() if not r.get("hidden")]
+        return [r for r in self.load() if not r.get("hidden") and not held(r)]
 
     def get(self, pid: str) -> dict | None:
         if not isinstance(pid, str) or not PID_RE.fullmatch(pid):
             return None
         for r in self.load():
             if r["id"] == pid:
-                return r
+                return None if held(r) else r
         return None
 
     # -------------------------------------------------- writes
@@ -459,6 +526,8 @@ class Projects:
         with self._locked():
             recs = list(self.load())
             for r in recs:
+                if r.get("key") == link["key"] and held(r):
+                    return False, "That project is already waiting for a person to check it: thanks."
                 if r.get("key") == link["key"]:
                     return False, ("That project is already listed." if not r.get("hidden")
                                    else "That link was taken down and can't be added again.") + f"|{r['id']}"
@@ -489,12 +558,20 @@ class Projects:
             "submitted_by": display_of(me), "submitter": who, "submitted_at": _now_iso(now),
             "last_checked": _now_iso(now) if meta else "", "reports": [], "hidden": False,
         }
+        why = hub_problems(link["url"], [rec["title"], rec["author"], rec["repo_description"], desc],
+                           rec["licence"], bool(meta))
+        if why:
+            rec["review"] = {"state": "pending", "reasons": why}
         with self._locked():
             recs = list(self.load())
             if any(r.get("key") == rec["key"] for r in recs):
                 return False, "That project is already listed.|" + rec["id"]
             recs.append(rec)
             self._save(recs)
+        if held(rec):
+            queue_for_review(rec, link, build)
+            log.info("community project held for review: %s (%s): %s", rec["id"], rec["host"], ", ".join(rec["review"]["reasons"]))
+            return True, rec
         log.info("community project added: %s (%s)", rec["id"], rec["host"])
         return True, rec
 

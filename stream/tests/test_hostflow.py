@@ -157,6 +157,15 @@ check("no script, CSP script-src none", "<script" not in page and "script-src 'n
 check("no-store", h.get("cache-control") == "no-store")
 check("no instant-slot option", not re.search(r"(?i)instant|slot|coming soon", page))
 check("form: no banned words", not BANNED.findall(visible(page)), BANNED.findall(visible(page)))
+check("form: what a host needs and how long it takes, up front", "You need:" in page and "Docker" in page
+      and "your own game folder" in page and "about 10 GB free" in page and "5 to 20 minutes" in page
+      and "your PC must stay on for others to play" in page and 'href="/wrath/docs/network"' in page
+      and page.index("You need:") < page.index("New realm"))
+for _bad in ("Fag Den", "n1gger town"):
+    check(f"word filter: {_bad!r} refused as a name", "name" in hf.validate(form("x", name=_bad))[1])
+check("word filter: a slur in the rules is refused, kind words pass", "rules" in hf.validate(form("x", rules="no tranny jokes"))[1]
+      and not hf.validate(form("x", name="Raccoon Spicy Den"))[1] and not hf.has_slur("Scunthorpe"))
+check("word filter: the prefill drops a slur name", "name" in hf.prefill("name=Fag%20Den")[1])
 
 # --- validation
 for label, kw, field in (
@@ -437,6 +446,12 @@ listing.append({"id": rid, "name": "Violet Hangout", "tagline": "", "type": "PvE
 hf._status.clear()
 st, h, b = req("GET", loc, "alice")
 check("online, listed", b"Online, listed" in b and b"http-equiv=\"refresh\"" not in b)
+lv = b.decode()
+check("you're live: on the front page, the share link, a Discord line and the card preview", "You're on the front page" in lv
+      and f"https://play.openvanilla.app/wrath/r/{rid}" in lv
+      and f"Come play on Violet Hangout, my realm on Leyline: https://play.openvanilla.app/wrath/r/{rid}" in lv
+      and 'class="poster"' in lv and "<h3>Violet Hangout</h3>" in lv and "TODO(owner): the &quot;You" not in lv
+      and "TODO(owner)" in lv and "<script" not in lv, re.findall(r"You[^<]{0,40}front page|Come play[^<]*|<h3>[^<]*", lv))
 check("claimed for the account", fake_relay["claims"] and fake_relay["claims"][-1] == {
     "realm_id": rid, "token": rec["claim"], "claimed_by": "Alice"} and fake_relay["auth"][-1] == "Bearer " + SENTINELS["WU_LISTING_SITE_SECRET"])
 n = len(fake_relay["claims"])

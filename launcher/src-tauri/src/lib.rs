@@ -65,6 +65,7 @@ pub const LINKS: &[(&str, &str)] = &[
     ("hostguide", "https://play.openvanilla.app/wrath/docs/hosting"), // the Host pack and its settings
     ("hostdocs", "https://play.openvanilla.app/wrath/docs/hosting"), // the host console's guide (host/console.rs)
     ("alwayson", "https://play.openvanilla.app/wrath/docs/always-on"),
+    ("network", "https://play.openvanilla.app/wrath/docs/network"), // the host guide's first item: how the network works
     ("themes", "https://github.com/orionopenwow/WrathUnleashed/blob/main/docs/THEMES.md"), // themes agent
     ("modders", "https://github.com/orionopenwow/WrathUnleashed/blob/main/mods/README-modders.md"),
     ("releases", update::RELEASES_PAGE),
@@ -114,6 +115,7 @@ mod link_tests {
         assert_eq!(super::link("hostdocs"), Some("https://play.openvanilla.app/wrath/docs/hosting"));
         assert_eq!(super::link("hostguide"), Some("https://play.openvanilla.app/wrath/docs/hosting"));
         assert_eq!(super::link("alwayson"), Some("https://play.openvanilla.app/wrath/docs/always-on"));
+        assert_eq!(super::link("network"), Some("https://play.openvanilla.app/wrath/docs/network"));
         let mut names: Vec<&str> = super::LINKS.iter().map(|(n, _)| *n).collect();
         names.sort();
         names.dedup();

@@ -32,8 +32,8 @@ CSS = "/*LEYLINE-CSS*/"
 names = [n for n, _ in d.PAGES]
 
 # ---------------------------------------------------------------- 1. the page list and the files
-check("twelve pages, fixed order", names == ["index", "getting-started", "play", "commands", "mods", "publishing", "hosting",
-                                             "always-on", "launcher", "hero-key", "cross-server", "unite"], names)
+check("thirteen pages, fixed order", names == ["index", "network", "getting-started", "play", "commands", "mods", "publishing",
+                                               "hosting", "always-on", "launcher", "hero-key", "cross-server", "unite"], names)
 on_disk = sorted(f[:-3] for f in os.listdir(DOCS_DIR) if f.endswith(".md"))
 check("every page has its file in docs/leyline", all(n in on_disk for n in names), set(names) - set(on_disk))
 check("every file in docs/leyline is on the page list", all(n in names for n in on_disk), set(on_disk) - set(names))
@@ -68,8 +68,19 @@ check("mods: the category field and every category in categories.json", "<code>c
       and len(cats) == 13 and all(f"<td><code>{c}</code></td>" in pages["mods"] for c in cats), cats)
 check("mods/publishing: no stale 'categories.json does not exist' note",
       "no such file" not in pages["mods"] and "does not exist" not in visible(pages["mods"]))
-check("publishing: the category pages and the submit form as coming soon", "/wrath/mods/c/" in pages["publishing"]
-      and "/wrath/mods/submit" in pages["publishing"] and "coming soon" in visible(pages["publishing"]))
+check("publishing: the category pages and one submit path (the Workshop's form), no 'coming soon'",
+      "/wrath/mods/c/" in pages["publishing"] and "/wrath/mods/submit" in pages["publishing"]
+      and "coming soon" not in visible(pages["publishing"]) and "review queue" in visible(pages["publishing"]))
+net_page = visible(pages["network"])
+check("network: the player explainer, ten lines and a diagram, never game files",
+      "How the Leyline network works" in net_page and pages["network"].count("<li>") >= 10 and "<pre" in pages["network"]
+      and all(s in net_page for s in ("relay", "Invite links", "Claimed", "Official", "Dens", "never ship")))
+check("network: no client version numbers", not re.search(r"\b(1\.12|2\.4\.3|3\.3\.5)", net_page))
+check("hosting: a realm leaves the list after 6 hours, needs up front",
+      "leaves the list 6 hours" in visible(pages["hosting"]) and "Your PC must stay on" in visible(pages["hosting"])
+      and "24 hours after the last" not in visible(pages["hosting"]))
+check("index: relay live, claims built, launcher released", "no release yet" not in idx
+      and "the temporary" not in idx and "runs the 3.3.5a game" not in idx)
 gs = visible(pages["getting-started"])
 check("getting-started: bring your own files, where they are, browser or client, level 1 or 80, the launcher, the Discord, fixes",
       all(s in gs for s in ("We never download", "Where your files usually are", "Browser or your own client", "Level 1 or boost to 80",

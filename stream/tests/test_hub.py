@@ -214,15 +214,20 @@ check("footer: Docs, Download, Forum, Status, the wordmark, Join the Discord and
       and f'href="{wp.DISCORD_URL}" rel="noopener noreferrer"' in foot and "</svg>Join the Discord</a>" in foot)
 # launch (2026-10-30): the official realm (Wrath Unleashed) is the front door, the Discord everywhere
 ho = re.search(r'<section class="hb-ho[^"]*" id="hangout".*?</section>', front, re.S)
-check("launch: under the hero, Wrath Unleashed is open, Play in your browser and Join the Discord",
+check("launch: under the hero, Wrath Unleashed is open, Play in your browser (no Discord button here: two Discord links at most)",
       ho and "<h2 id=\"hb-ho-h\">Wrath Unleashed is open</h2>" in ho.group(0)
       and '<a class="hb-cta sm" href="/wrath">Play in your browser</a>' in ho.group(0)
-      and f'href="{wp.DISCORD_URL}"' in ho.group(0) and "TODO(owner): the Hangout line" in ho.group(0)
+      and f'href="{wp.DISCORD_URL}"' not in ho.group(0) and "TODO(owner): the Hangout line" in ho.group(0)
       and front.index('class="hb-hero"') < front.index('id="hangout"') < front.index('id="realms"'))
 cm = re.search(r'<section class="hb-sec hb-cm hb-rv" id="forum".*?</section>', front, re.S)
-check("launch: the Forum and Discord section opens with a big Join the Discord, and the Community feature section links it and the forum",
-      cm and cm.group(0).index('class="hb-cm-dc big"') < cm.group(0).index('class="hb-cm-g') and re.search(r'id="f-community".*?href="/wrath/leyline/forum"', front, re.S) and f'href="{wp.DISCORD_URL}"' in cm.group(0)
-      and re.search(r'id="f-community".*?Join the Discord</a>', front, re.S))
+check("launch: the Forum and Discord section opens with a big Join the Discord, and the Community feature section links the forum",
+      cm and cm.group(0).index('class="hb-cm-dc big"') < cm.group(0).index('class="hb-cm-g') and re.search(r'id="f-community".*?href="/wrath/leyline/forum"', front, re.S) and f'href="{wp.DISCORD_URL}"' in cm.group(0))
+_main = re.sub(r'<footer class="hb-foot">.*?</footer>|<header class="hb-top">.*?</header>', "", front, flags=re.S)
+check("launch: one Discord call to action in the page body (the site chrome has the other link)",
+      _main.count(f'href="{wp.DISCORD_URL}"') == 1, _main.count(f'href="{wp.DISCORD_URL}"'))
+check("the official realm: no Temporary chip, the start line", 'hb-bdg">Temporary<' not in front
+      and HB.OFFICIAL_START in re.search(r'<li class="hb-rl home.*?</li>', front, re.S).group(0))
+check("how it works links the plain network explainer", 'class="hb-how-more"><a href="/wrath/docs/network">' in front)
 check("launch: the Hangout row comes first, named, labelled Official realm",
       re.search(r'<li class="hb-rl home[^"]*" data-home="1"[^>]*>.*?<b>Wrath Unleashed</b><span class="hb-rl-k">Official realm</span>', front))
 # the owner's 2026-10-30 additions: realms under the hero, the feature sections in order, how it works, the polish
@@ -243,7 +248,7 @@ check("feature sections: links to pages that exist, nothing paid", [h[0] for h i
       and not re.search(r"(?i)support|donat|\bvip\b|\bshop\b", " ".join(f[6] for f in fs)))
 check("feature sections: a TODO(owner) to reorder them", "TODO(owner): the order of the products" in open(HB.__file__).read())
 check("feature sections: the game modes line from playmodes.json, Hero Key as coming", "Minigolf" in fs[3][4]
-      and "Hero Key sign-in across realms (coming)" in fs[2][5])
+      and "Hero Key sign-in across community realms (coming)" in fs[2][5])
 check("feature sections: every one has its icon", front.count('<span class="hb-ico"><svg viewBox="0 0 24 24" aria-hidden="true">') == 8)
 feats = re.search(r'<div class="hb-feats" id="features">.*?(?=<section class="hb-sec hb-gal-s|<section class="hb-sec hb-rv" id="hosted"|<!-- TODO\(owner\): the Hero Key line)', front, re.S).group(0)
 shots = re.findall(r'<img src="/wrath/art/(leyline-ui-[a-z]+\.webp)" alt="([^"]+)" width="1240" height="760" loading="lazy"', feats)
@@ -512,10 +517,12 @@ with wp._listing_lock:
     wp._listing.update(realms=[], ok=False, fetched=False, at=-1e9)
 
 # ---------------------------------------------------------------- the front page's new parts (owner 2026-10-30)
-def realm_rec(rid, name, build=12340, players=0, tags=(), tagline="", new=False, port=40200, live=True):
+def realm_rec(rid, name, build=12340, players=0, tags=(), tagline="", new=False, port=40200, live=True, age=1200, claimed=True,
+              name_ok=True):
     return wp.clean_listing_record({"schema": 1, "name": name, "tagline": tagline, "state": "live" if live else "offline",
         "tags": list(tags), "profile": {"build": build, "core": "azerothcore", "port": port, "address": "relay.example"},
-        "community": {"realmId": rid, "relay": "relay.example", "claimed": True, "score": 5, "new": new,
+        "community": {"realmId": rid, "relay": "relay.example", "claimed": claimed, "score": 5, "new": new, "nameOk": name_ok,
+                      "firstSeen": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - age)),
                       "lastHeartbeat": {"online": live, "players": players, "bots": 0}}})
 
 
@@ -524,7 +531,11 @@ listing = [realm_rec(RIDS[0], "Old Days", 5875, 12, ["blizzlike", "pvp"], "The o
            realm_rec(RIDS[1], "Busy Den", 12340, 30, ["pvp"], "Fast levels, world PvP every evening.", port=40202),
            realm_rec(RIDS[2], "Plain Field", 12340, 0, ["rp"], "Slow roleplay on quiet fields.", new=True, port=40203),
            realm_rec(RIDS[3], "Quiet Shore", 12340, 2, [], "", port=40204),
-           realm_rec("offofoffofoffofo", "Sleepy Hollow", 12340, 0, live=False, port=40205)]
+           realm_rec("offofoffofoffofo", "Sleepy Hollow", 12340, 0, live=False, port=40205),
+           # not announced: up for two minutes; a name the relay changed; a brand word in the name (an older relay)
+           realm_rec("freshfreshfresha", "Fresh Meadow", 12340, 0, new=True, port=40206, age=120),
+           realm_rec("filtfiltfiltfilt", "Haven", 12340, 0, new=True, port=40207, name_ok=False),
+           realm_rec("brandbrandbrandb", "WoW Fun Town", 12340, 0, new=True, port=40208)]
 with wp._listing_lock:
     wp._listing.update(realms=[r for r in listing if r], ok=True, fetched=True, at=time.monotonic() + 1e6, when=time.time())
 json.dump({"format": 1, "posts": [
@@ -534,8 +545,10 @@ json.dump({"format": 1, "posts": [
     {"id": "n4", "date": "2026-10-28", "tag": "Workshop", "title": "Hot, rising and top", "items": ["Rate what you play"]},
     {"id": "n5", "date": "2026-10-20", "tag": "Old", "title": "The fourth one", "items": []}]},
     open(os.path.join(os.environ["WU_LEYLINE_DIR"], "news.json"), "w"))
-pool = [i for i in HB.hub.items() if i["source"] != "theme"]
-HOT = sorted(pool, key=lambda i: i["name"].lower())[3]          # some item that isn't the best score
+pool = [i for i in HB.hub.items() if HB.player_mod(i)]   # Hot right now and Top creators: player mods only
+HOT = sorted(pool, key=lambda i: i["name"].lower())[3]
+check("Hot right now pool: player mods only, never a server core or server tool", pool and all(i["type"] in ("addon", "other") for i in pool)
+      and not any(re.search(r"(?i)trinitycore|azerothcore|keira", i["name"]) for i in pool))          # some item that isn't the best score
 AUTH = {i["author"] for i in pool}
 
 
@@ -609,7 +622,7 @@ check("ticker: the 30 s live update refreshes its counts (same JSON, text only)"
 nums = re.findall(r'<b class="hb-num" data-count="(\d+)">(\d+)</b><span>([^<]+)</span>', fp)
 check("numbers: realms, players, mods, the final values in the page (no script, reduced motion)", [n[2] for n in nums] == [
       "realms online", "players right now", "mods, addons and tools"] and all(a == b for a, b, _ in nums)
-      and int(nums[2][0]) == len(pool) and int(nums[1][0]) >= 44, nums)
+      and int(nums[2][0]) == len([i for i in HB.hub.items() if i["source"] != "theme"]) and int(nums[1][0]) >= 44, nums)
 check("numbers: counted up once by the script, only below the fold, never with reduced motion",
       re.search(r"if\(!still&&\"IntersectionObserver\" in window\)\{\s*var cio=", HB.HUB_JS) and 'n.textContent="0";cio.observe(n)' in HB.HUB_JS
       and "getBoundingClientRect().top>innerHeight){n.textContent" in HB.HUB_JS)
@@ -631,8 +644,8 @@ hot1 = re.search(r'<ol class="hb-hot"><li><a class="hb-hot-r" href="([^"]+)">.*?
 check("no separate Mod of the week card (the featured slider and the gallery carry it); Hot right now leads with the top Hot item, "
       "its author and its installs this month",
       'id="mod-week"' not in fp and 'class="hb-motw' not in fp and 'class="hb-pair"' not in fp
-      and hot1 and hot1.group(1) == f'/wrath/leyline-preview/p/{HOT["id"].replace(":", "-")}' and hot1.group(2) == html.escape(HB.neutral(HOT['name']))
-      and re.fullmatch(rf"by {re.escape(html.escape(HB.neutral(HOT['author'])))} · \d+ installs? this month", hot1.group(3)), hot1.groups() if hot1 else "")
+      and hot1 and hot1.group(1) == f'/wrath/leyline-preview/p/{HOT["id"].replace(":", "-")}' and hot1.group(2) == html.escape(HB.as_typed(HOT['name'], HB.neutral(HOT['name'])))
+      and re.fullmatch(rf"by {re.escape(html.escape(HB.as_typed(HOT['author'], HB.neutral(HOT['author']))))} · \d+ installs? this month", hot1.group(3)), hot1.groups() if hot1 else "")
 posters = re.findall(r'<article class="hb-poster" style="--h1:(\d+);--h2:(\d+);--a:(\d+)deg;--x:(\d+)%;--y:(\d+)%;--r:(\d+)deg">(.*?)</article>', fp, re.S)
 names = [re.search(r"<h3>([^<]+)</h3>", p[6]).group(1) for p in posters]
 check("hosted by the community: up to three live community realms as posters (not ours, not offline)",
@@ -655,7 +668,7 @@ if wp.admin is not None:
           and "<form" not in newsb, newsb)
 hk = re.search(r'<section class="hb-hkb hb-rv" id="herokey".*?</section>', fp, re.S).group(0)
 check("Hero Key (flag off): one slim line, One key, every realm, Coming soon and one sentence; no made-up realm chips, no moving key",
-      "One key, every realm" in hk and "Coming soon" in hk and "Available now" not in hk and hk.count('<span class="hb-hkb-l">') == 1
+      "One key, every community realm" in hk and "Coming soon" in hk and "Available now" not in hk and hk.count('<span class="hb-hkb-l">') == 1
       and 'hb-hk-c' not in fp and 'hb-hk-key' not in fp and "@keyframes hb-key" not in fp and "<a " not in hk
       and "TODO(owner): the Hero Key line" in fp and fp.index("TODO(owner): the Hero Key line") < fp.index('id="herokey"'))
 HK["on"] = True
@@ -668,7 +681,7 @@ crs = re.findall(r'<li><a class="hb-crw-a" href="/wrath/leyline-preview/catalog\
                  re.search(r'id="creators-top".*?</div>', fp, re.S).group(0), re.S)
 crs = [(q, n, t, sm) for q, t, n, sm in crs]
 check("Top creators: a compact avatar row, up to four authors of the top mods, with counts, linking to their work in the catalog",
-      1 <= len(crs) <= 4 and HB.neutral(HOT["author"]) == html.unescape(crs[0][1]) and all(re.match(r"\d+ hot mods?( · |$)", html.unescape(c[2])) for c in crs)
+      1 <= len(crs) <= 4 and HB.as_typed(HOT["author"], HB.neutral(HOT["author"])) == html.unescape(crs[0][1]) and all(re.match(r"\d+ hot mods?( · |$)", html.unescape(c[2])) for c in crs)
       and re.fullmatch(r"[5-9]\d\d installs this month", crs[0][3]) and " · Top: " in crs[0][2] and len({c[1] for c in crs}) == len(crs)
       and all(urllib.parse.unquote_plus(html.unescape(c[0])) in AUTH for c in crs), crs)
 foot = re.search(r'<footer class="hb-foot">.*?</footer>', fp, re.S).group(0)
@@ -1198,7 +1211,7 @@ check("gallery: mod tiles use the thumbnail, and the credit is in the caption th
       and 'parts.c.textContent=txt(t,".hb-gt-c i")' in HB.HUB_JS, [t[2] for t in tm][:5])
 check("gallery page: the fine print says where the pictures come from", "preview image from its GitHub page" in galx)
 frontx = req("/wrath/leyline-preview")[2].decode()
-top = HB.hub._ranked([i for i in HB.hub.items() if i["source"] != "theme"])[0][0]
+top = HB.hub._ranked([i for i in HB.hub.items() if HB.player_mod(i)])[0][0]
 spot = re.search(r'id="forum".*?</section>', frontx, re.S).group(0)
 hot1 = re.search(r'<span class="hb-hot-pic">(.*?)</span><span class="hb-hot-t">', spot, re.S).group(1)
 if top.get("thumb"):
@@ -1271,6 +1284,17 @@ check("fastloop.sh: installs the art's files and the hub-thumbs folder (WebP onl
       "install -m 644 www-files/art/*" not in fl and 'find www-files/art -maxdepth 1 -type f -exec install -m 644 {} "$WU/portal/art/"' in fl
       and "find www-files/art/hub-thumbs -maxdepth 1 -type f -name '*.webp' -exec install -m 644 {} \"$WU/portal/art/hub-thumbs/\"" in fl)
 check("sign-in bat: packs the whole www-files/art folder (tar is recursive: hub-thumbs goes along)", " www-files/art " in bat)
+_bc = req("/wrath/leyline-preview/beacon")[2].decode()
+check("Beacon page: no promise of adding realm scripts (per-realm mods don't exist yet), the needs and time up front",
+      "add realm scripts" not in _bc and "You need:" in _bc and "about 10 GB free" in _bc and "5 to 20 minutes" in _bc
+      and 'href="/wrath/docs/network"' in _bc and "host kit" not in _bc and "a profile" not in _bc)
+_h = type(HB.hub)()
+_t = time.time()
+_per_ip = [_h._rate_ok("10.1.1.1", _t) for _ in range(6)]
+_flood = sum(_h._rate_ok(f"10.2.{i // 250}.{i % 250}", _t) for i in range(6000))
+check("submit limits: 5 an hour per address, and a flood from many addresses never resets the daily cap of 200",
+      _per_ip == [True] * 5 + [False] and _flood == 195 and not _h._rate_ok("10.9.9.9", _t)
+      and not _h._rate_ok("2001:db8:1:2::5", _t), (_per_ip, _flood))
 check("the index in the repo passes the hub's rules", HB.validate_index(json.load(open(os.path.join(HERE, "hub", "community-index.json")))) == [])
 
 srv.shutdown()

@@ -56,6 +56,7 @@ canonical repo links and ids, validate_index), so there is one copy. Standard li
 """
 from __future__ import annotations
 
+import calendar
 import hashlib
 import html
 import itertools
@@ -64,6 +65,7 @@ import math
 import os
 import re
 import secrets
+import sys
 import threading
 import time
 import urllib.parse
@@ -162,6 +164,25 @@ def neutral(text, n: int = 0) -> str:
     s = re.sub(r"\b([Aa])n (?=[b-df-hj-np-tv-zB-DF-HJ-NP-TV-Z0-9])", r"\1 ", s)
     s = s[:1].upper() + s[1:]
     return clean_line(s, n) if n else s
+
+
+# What a player installs into their own game: addons and the Workshop's own packages ("other": both halves). Server
+# cores, realm modules and scripts, presets and server tools (TrinityCore, AzerothCore, Keira3, ...) are for people who run
+# a server, so the front page's Hot right now and Top creators leave them out (the catalog still lists them).
+PLAYER_TYPES = ("addon", "other")
+
+
+def player_mod(i: dict) -> bool:
+    return i.get("source") != "theme" and i.get("type") in PLAYER_TYPES
+
+
+def as_typed(raw, shown: str) -> str:
+    """neutral()'s text with the author's own first letter kept ("pfQuest" stays pfQuest, not PfQuest): neutral()
+    capitalises sentences, but a name or a user name is written the way its author wrote it."""
+    r = raw.strip() if isinstance(raw, str) else ""
+    if shown and r and shown[0] != r[0] and shown[0].lower() == r[0].lower() and shown[1:2] == r[1:2]:
+        return r[0] + shown[1:]
+    return shown
 
 
 def clean_line(v, n: int = 200) -> str:
@@ -376,6 +397,38 @@ def external_problems(x) -> list[str]:
     return out
 
 
+# The hub's rules for a project link, shared with the Workshop's instant links (stream/projects.py submit): a link that
+# breaks one goes to a person's review queue instead of the list. The same words the index and the external packs use,
+# plus cheats.
+DECOMPILED_RE = re.compile(r"(?i)wowdecomp|waystone|decompil|chumpton|repack|\bleak(?:s|ed)?\b")
+CHEAT_RE = re.compile(r"(?i)\bcheat(?:s|ing|er|ers)?\b|\bhack(?:s|ing|ed)?\b|aimbot|speed\s*hack|wall\s*hack|"
+                      r"\bexploit(?:s|ing)?\b|\bdupe\s*(?:bug|glitch)|\bbot(?:ting)?\s+(?:program|for\s+(?:pvp|farming|grinding))")
+# Licence names as other forges spell them (GitLab and Codeberg give a name, GitHub the SPDX id)
+_OPEN_NAME_RE = re.compile(r"(?i)\b(MIT|Apache|GPL|LGPL|AGPL|BSD|MPL|Mozilla Public|ISC|Unlicense|CC0|Zlib|Boost|WTFPL|"
+                           r"Creative Commons Attribution|CC[- ]BY|EPL|Eclipse Public|EUPL|Artistic|OFL|Open Font)\b")
+
+
+def licence_open(lic) -> bool:
+    lic = (lic or "").strip() if isinstance(lic, str) else ""
+    if not lic or lic.upper() in ("NOASSERTION", "OTHER", "NONE"):
+        return False
+    return lic in OPEN_LICENCES or bool(_OPEN_NAME_RE.search(lic)) and not re.search(r"(?i)non[- ]?commercial|\bNC\b", lic)
+
+
+def link_problems(url: str, texts, licence, licence_known: bool) -> list[str]:
+    """Why a project link must wait for a person ([] = list it now): decompiled, leaked or repack material, cheats, an
+    excluded account, or (once the forge has answered) no open licence."""
+    blob = " ".join([str(url or "")] + [str(t or "") for t in texts])
+    out = []
+    if DECOMPILED_RE.search(blob):
+        out.append("decompiled, leaked or repack material")
+    if CHEAT_RE.search(blob):
+        out.append("looks like a cheat or exploit")
+    if licence_known and not licence_open(licence):
+        out.append("no open licence")
+    return out
+
+
 def release_problem(r, repo: str) -> str:
     """"" when an entry's latest-release record ({tag, date, url}: the release's page on the repo's own forge) is
     fine, else what is wrong. The daily index refresh writes it (tools/hub-index/hub_index.py)."""
@@ -487,6 +540,22 @@ def data_dir() -> str:
                                              else "/app/hub")
 
 
+def _ratelimit():
+    """stream/ratelimit.py, shared through sys.modules (the portal loads it first); None when it is missing."""
+    m = sys.modules.get("wu_ratelimit")
+    if m is None:
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(
+                "wu_ratelimit", os.path.join(os.path.dirname(os.path.abspath(__file__)), "ratelimit.py"))
+            m = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(m)
+            sys.modules["wu_ratelimit"] = m
+        except Exception:   # noqa: BLE001
+            return None
+    return m if hasattr(m, "Limiter") else None
+
+
 def state_dir() -> str:
     return os.path.join(os.environ.get("WU_PORTAL_DATA", "/data"), "hub")
 
@@ -581,7 +650,8 @@ class Hub:
         self.store = store or Store()
         self.portal = lambda name: None
         self._cache: dict[str, tuple[float, float, object]] = {}
-        self._limit: dict[str, list[float]] = {}
+        self._limit: dict[str, list[float]] = {}   # only without stream/ratelimit.py (the global cap)
+        self._rl = None                            # the submissions limiter (stream/ratelimit.py), made on first use
         self._health: tuple[float, str] = (-1e9, "")
         self.lock = threading.Lock()
 
@@ -1023,8 +1093,6 @@ class Hub:
         bdg = []
         if r.get("home") or lineup_rank(r) == 0:
             bdg.append('<span class="hb-bdg o">Official</span>')
-        if r.get("temporary"):
-            bdg.append('<span class="hb-bdg">Temporary</span>')
         if r.get("featured"):
             bdg.append('<span class="hb-bdg f">Featured</span>')
         if r.get("verified"):
@@ -1032,6 +1100,8 @@ class Hub:
         if r.get("new"):
             bdg.append('<span class="hb-bdg">New</span>')
         meta = [COMPAT[client], net.CORES.get(r.get("core"), "AzerothCore")]
+        if r.get("home"):
+            meta.append(OFFICIAL_START)   # TODO(owner): the official realm's start line
         reg, est = net.region_of(r)
         if reg:
             meta.append(net.REGION_LABEL[reg] + (" (est.)" if est else ""))
@@ -1137,7 +1207,7 @@ class Hub:
                 '<!-- TODO(owner): the Hangout line, his words -->'
                 '<p class="hb-ho-l">Everyone meets in Dalaran: say hello, try minigolf and the game modes, then head out together. '
                 'Nothing to install.</p></div>'
-                f'<p class="hb-ho-a"><a class="hb-cta sm" href="/wrath">Play in your browser</a>{self.discord_btn()}</p></section>')
+                '<p class="hb-ho-a"><a class="hb-cta sm" href="/wrath">Play in your browser</a></p></section>')
 
     def how_strip(self) -> str:
         e = html.escape
@@ -1146,7 +1216,8 @@ class Hub:
                  ("Pick a realm", "Any server on the list, one click"))
         return ('<!-- TODO(owner): the "how it works" wording -->'
                 '<ol class="hb-how hb-rv" aria-label="How it works">'
-                + "".join(f"<li><b>{e(a)}</b><span>{e(b)}</span></li>" for a, b in steps) + "</ol>")
+                + "".join(f"<li><b>{e(a)}</b><span>{e(b)}</span></li>" for a, b in steps) + "</ol>"
+                '<p class="hb-how-more"><a href="/wrath/docs/network">How the Leyline network works</a></p>')
 
     @staticmethod
     def _crest(size: int = 44) -> str:
@@ -1312,7 +1383,7 @@ class Hub:
              [(dl, "Download the launcher", True), ("/wrath", "Play in your browser", False)],
              shot("home", "The Leyline launcher's home page: the server, your account, your game client and the PLAY button.")),
             ("host", "Server hosting software", "Host your own realm in one click",
-             "Run a realm from your own PC, on any core. The host pack is everything in one download: the realm, its "
+             "Run a realm from your own PC, on any core. The Host pack is everything in one download: the realm, its "
              "console with health checks and GM controls, the realm tools and the relay agent. Our code only, never game files.",
              ["Any core, your rules, your GM login", "No port forwarding: the relay lists it",
               "Start from the website or the launcher's Host page", "An invite link for friends"],
@@ -1321,7 +1392,7 @@ class Hub:
              "Every server on the Leyline network, hosted by players and ranked by players online, uptime and staff "
              "picks. Nothing can be bought. Hop from one realm to the next in a click.",
              ["Plays in your browser, or with your own client", "Filters for rules, region and language",
-              "Hero Key sign-in across realms (coming)"],
+              "Hero Key sign-in across community realms (coming)"],
              [(BASE + "/realms", "See the realms", False)], (self.realm_list_art(got) if got else
                                                             shot("realms", "The launcher's Realms page: every realm on the network with its players, uptime and badges."))),
             ("modes", "Minigolf & game modes", "Minigolf, and more modes in one click",
@@ -1360,8 +1431,7 @@ class Hub:
              ["A forum to share your realm, your mods and your Den", "What's hot and who made it, from real rankings",
               "News from the launcher and the realms"]
              + (["The Discord, linked from everywhere"] if discord else []),
-             [(FORUM, "Open the forum", False), (BASE + "/catalog", "Explore", False)]
-             + ([(discord, "Join the Discord", True)] if discord else []), community_art),
+             [(FORUM, "Open the forum", False), (BASE + "/catalog", "Explore", False)], community_art),
         ]
         out = []
         for n, (icon, eyebrow, title, lede, points, acts, art) in enumerate(secs):
@@ -1383,6 +1453,16 @@ class Hub:
                 + "".join(out) + "</div>")
 
     # ---------------------------------------------------------------- the front page's live and community parts
+    @staticmethod
+    def announce_new(r: dict, now: float | None = None) -> bool:
+        """A realm the front page may call a "New realm": new on the list, live, listed for NEW_GRACE_S at least (a
+        realm that comes and goes in a minute is never announced), and its name passed the word filter as the host
+        typed it (stream/network.py name_ok; the relay's community.nameOk)."""
+        if r.get("home") or r.get("official") or not r.get("new") or not r.get("live") or r.get("name_ok") is not True:
+            return False
+        t = iso_time(r.get("first_seen"))
+        return t is not None and (time.time() if now is None else now) - t >= NEW_GRACE_S
+
     def ticker(self, got) -> str:
         """The live band under the hero, from the realm list's own rows: who is playing where, and new realms. The moving
         copy is aria-hidden; screen readers get the first copy as a plain list. HUB_JS updates the counts (data-tick)."""
@@ -1396,10 +1476,11 @@ class Hub:
         for r in live:
             name = neutral(r.get("name")) or "a realm"
             key = 'data-tick="home"' if r.get("home") else f'data-tick="{e(r.get("id") or "")}"'
-            hang = r.get("hangout") or "hangout" in (r.get("tags") or []) or "hangout" in name.lower()
+            hang = not r.get("home") and (r.get("hangout") or "hangout" in (r.get("tags") or []) or "hangout" in name.lower())
             where = (f'in {"" if name.lower().startswith("the ") else "the "}{e(name)}' if hang else f"playing on {e(name)}")
             out.append(f'<li {key}><b class="hb-tn">{int(r["players"])}</b> {where}</li>')
-        for r in [r for r in rows if r.get("new") and not r.get("home")][:2]:
+        # new realms: past the grace time, names that passed the filter, claimed ones first
+        for r in sorted((r for r in rows if self.announce_new(r)), key=lambda r: not r.get("claimed"))[:2]:
             out.append(f'<li class="new">New realm: {e(neutral(r.get("name")) or "a realm")}</li>')
         if not out:
             return ""
@@ -1505,7 +1586,9 @@ class Hub:
             return ""
         e = html.escape
         net = self.portal("network")
-        picks = [r for r in got[0] if not r.get("home") and not r.get("official") and r.get("live") and r.get("id")][:3]
+        # live community realms whose names passed the filter, claimed ones first (stable: the list's own order inside)
+        picks = sorted((r for r in got[0] if not r.get("home") and not r.get("official") and r.get("live") and r.get("id")
+                        and r.get("name_ok") is not False), key=lambda r: not r.get("claimed"))[:3]
         if not picks:
             return ""
         cards = []
@@ -1525,7 +1608,7 @@ class Hub:
             cards.append(
                 f'<article class="hb-poster" style="--h1:{h1};--h2:{h2};--a:{ang}deg;--x:{x}%;--y:{y}%;--r:{rot}deg">'
                 '<span class="hb-poster-bg" aria-hidden="true"></span>'
-                f'<p class="hb-poster-p">{"New realm" if r.get("new") and not players else "" if players is None else f"<b>{players}</b> playing"}</p>'
+                f'<p class="hb-poster-p">{"New realm" if self.announce_new(r) and not players else "" if players is None else f"<b>{players}</b> playing"}</p>'
                 f'<h3>{e(name)}</h3><p class="hb-poster-l">{e(neutral(r.get("tagline"), 90) or COMPAT[client_of(r)])}</p>'
                 + (f'<p class="hb-poster-tags">{"".join(f"<span>{e(t)}</span>" for t in tags)}</p>' if tags else "")
                 + f'<p class="hb-poster-a">{"".join(acts)}</p></article>')
@@ -1550,20 +1633,20 @@ class Hub:
         return ('<!-- TODO(owner): the Hero Key line -->'
                 '<section class="hb-hkb hb-rv" id="herokey" aria-labelledby="hb-hk-h">'
                 f'<span class="hb-ico" aria-hidden="true"><svg viewBox="0 0 24 24">{NAV_ICONS["key"]}</svg></span>'
-                f'<p class="hb-hkb-t"><span class="hb-hkb-h"><b id="hb-hk-h">One key, every realm</b>{badge}</span>'
+                f'<p class="hb-hkb-t"><span class="hb-hkb-h"><b id="hb-hk-h">One key, every community realm</b>{badge}</span>'
                 f'<span class="hb-hkb-l">{e(line)}</span></p>{act}</section>')
 
     def top_creators(self, items: list) -> list[dict]:
         """Who made the top mods this month: the authors of the Hot list (installs in the last 30 days with rankings,
         the index's scores without), up to 4: {q (catalog search), name, n (mods in the top list), inst, top (item)}."""
-        pool = [i for i in items if i["source"] != "theme" and clean_line(i.get("author"), 60)]
+        pool = [i for i in items if player_mod(i) and clean_line(i.get("author"), 60)]
         if not pool:
             return []
         order, metrics = self._ranked(pool)
         by: dict[str, dict] = {}
         for rank, i in enumerate(order[:40]):
             a = clean_line(i["author"], 60)
-            shown = neutral(a, 60)
+            shown = as_typed(a, neutral(a, 60))
             if not shown or shown.lower() in ("unknown", "leyline"):
                 continue
             d = by.setdefault(a.lower(), {"q": a, "name": shown, "n": 0, "inst": 0, "best": rank, "top": i})
@@ -1579,13 +1662,13 @@ class Hub:
         author and kind, each linking to its page), Top creators (a compact avatar row, each searching the catalog for
         their work) and the latest news. The big featured slider above shows the pictures; this is the list."""
         e = html.escape
-        pool = [i for i in items if i["source"] != "theme"]
+        pool = [i for i in items if player_mod(i)]   # what a player installs: never a server core or a server tool
         hot = ""
         if pool:
             order, metrics = self._ranked(pool)
             rows = []
             for n, i in enumerate(order[:5]):
-                name = neutral(i["name"]) or "Untitled"
+                name = as_typed(i["name"], neutral(i["name"])) or "Untitled"
                 kind = self._kind(i)
                 if self.shot_count(i):
                     pic = f'<img src="/wrath/mods/{e(i["id"][4:])}/shot/0" alt="" loading="lazy" decoding="async" width="64" height="40">'
@@ -1597,7 +1680,7 @@ class Hub:
                 inst = ((metrics.get(i["id"]) or {}).get("installs") or {}).get("d30", 0)
                 rows.append(f'<li><a class="hb-hot-r" href="{BASE}/p/{_slug(i["id"])}"><span class="hb-hot-n" aria-hidden="true">{n + 1}</span>'
                             f'<span class="hb-hot-pic">{pic}</span><span class="hb-hot-t"><b>{e(name)}</b>'
-                            f'<i>by {e(neutral(i["author"]) or "unknown")}'
+                            f'<i>by {e(as_typed(i["author"], neutral(i["author"])) or "unknown")}'
                             + (f' · {int(inst)} install{"" if inst == 1 else "s"} this month' if inst else "") + '</i></span>'
                             f'<span class="hb-hot-k">{e(KIND_WORDS[kind][0])}</span></a></li>')
             hot = ('<div class="hb-cm-p hb-cm-hot" aria-labelledby="hb-hot-h" role="group"><h3 id="hb-hot-h" class="hb-cm-h">Hot right now</h3>'
@@ -1612,7 +1695,7 @@ class Hub:
                 bits = [f'{d["n"]} hot mod{"" if d["n"] == 1 else "s"}']
                 if d["inst"] > 0:
                     bits.append(f'{d["inst"]} install{"" if d["inst"] == 1 else "s"} this month')
-                top = neutral(d["top"]["name"]) or "Untitled"
+                top = as_typed(d["top"]["name"], neutral(d["top"]["name"])) or "Untitled"
                 cards.append(f'<li><a class="hb-crw-a" href="{BASE}/catalog?{e(q)}" title="{e(" · ".join(bits))} · Top: {e(top)}">'
                              f'<span class="hb-av" style="--h:{200 + hashlib.sha256(d["q"].lower().encode()).digest()[0] % 120}" aria-hidden="true">'
                              f'{e(d["name"][:1].upper())}</span><b>{e(d["name"])}</b>'
@@ -2390,19 +2473,20 @@ class Hub:
         body = ('<section class="ly-panel"><h1>Host a Beacon</h1>'
                 '<p>A Beacon is a realm someone runs on their own PC or server and puts on the Leyline list. Players '
                 'see it in the launcher and in the game\'s Leyline window and hop over with one click.</p>'
-                '<ol class="hb-list"><li>Get the host kit and start a realm: one command, your rules, your GM login.</li>'
-                '<li>Pick a preset or add realm scripts from the catalog.</li>'
+                '<ol class="hb-list"><li>Get the Host pack and start a realm: one command, your rules, your GM login.</li>'
+                '<li>Pick a ruleset: a Dalaran hangout, levelling from 1, duels, a private Den and more.</li>'
                 '<li>Turn on the Beacon: the relay lists it, no port forwarding needed.</li></ol>'
-                '<p>In the Leyline launcher: open Host, get the Host pack, pick a profile and your house rules, then '
+                '<p>In the Leyline launcher: open Host, get the Host pack, pick a ruleset and your house rules, then '
                 'set the realm list details (tags, region, language, player limit). Community realms are listed first '
                 'everywhere: on the website, in the launcher and in the game\'s Leyline window.</p>'
                 '<p class="hb-actions"><a class="ly-btn" href="/wrath/leyline">Get the launcher</a> '
                 '<a class="ly-btn hb-alt" href="/wrath/host">Start on the website</a></p>'
                 f'<p class="hb-actions"><a class="ly-btn" href="{e(host_url)}" rel="noopener noreferrer">The host guide</a> '
                 '<a class="ly-btn hb-alt" href="/wrath/realms">See live realms</a></p></section>'
-                f'<section class="ly-panel"><h2>Server presets and realm scripts</h2><p>'
-                f'<a href="{BASE}/catalog?cat=presets">Presets</a> · <a href="{BASE}/catalog?cat=realm-scripts">Realm scripts</a> · '
-                f'<a href="{BASE}/catalog?cat=encounters">Encounters</a></p></section>')
+                # no "add realm scripts" until a hosted realm can take per-realm mods: the catalog's server projects are
+                # for people who run a server by hand
+                f'<section class="ly-panel"><h2>Before you start</h2>{host_needs()}'
+                f'<p><a href="/wrath/docs/network">How the Leyline network works</a></p></section>')
         return self._shell("Host a Beacon · Leyline", body, BASE + "/beacon")
 
     def submit_page(self, msg: str = "", form: dict | None = None, done: bool = False) -> bytes:
@@ -2436,22 +2520,18 @@ class Hub:
 
     # ---------------------------------------------------------------- submissions
     def _rate_ok(self, ip: str, now: float) -> bool:
-        with self.lock:
-            if len(self._limit) > 5000:
-                self._limit.clear()
-            hits = [t for t in self._limit.get(ip, []) if now - t < 3600]
-            if len(hits) >= 5:
-                self._limit[ip] = hits
-                return False
-            hits.append(now)
-            self._limit[ip] = hits
-            day = [t for t in self._limit.get("*", []) if now - t < 86400]
-            if len(day) >= 200:
-                self._limit["*"] = day
-                return False
-            day.append(now)
-            self._limit["*"] = day
-            return True
+        """5 submissions an hour per address (IPv6: its /64) and 200 a day from everyone: stream/ratelimit.py, which
+        sweeps by time and keeps the daily cap apart (a flood of fresh addresses never resets it)."""
+        rl = _ratelimit()
+        if rl is None:   # without the shared limiter: the global cap only, never cleared
+            with self.lock:
+                day = [t for t in self._limit.get("*", []) if now - t < 86400]
+                ok = len(day) < 200
+                self._limit["*"] = day + ([now] if ok else [])
+                return ok
+        if self._rl is None:
+            self._rl = rl.Limiter(3600, max_keys=5000, global_keys=("submit:*",))
+        return self._rl.hit("submit:" + rl.bucket(ip or "?"), 5) and self._rl.cap("submit:*", 200, 86400)
 
     def submit(self, form: dict, ip: str, now: float | None = None) -> tuple[bool, str]:
         """Validates and queues one submission. (ok, message for the page)."""
@@ -2743,6 +2823,7 @@ border:1px solid var(--lk-border);border-radius:var(--lk-r);background:var(--lk-
 .hb-how li:first-child{border-left:0}
 .hb-how li::before{content:counter(hb-how);position:absolute;left:16px;top:13px;display:grid;place-items:center;width:24px;height:24px;border-radius:50%;
 background:var(--lk-accent-soft);color:var(--lk-accent-strong);font-weight:700;font-size:13px;box-shadow:0 0 0 1px var(--lk-accent)}
+.hb-how-more{margin:-12px 0 18px;text-align:center;font-size:13.5px}.hb-needs{margin:0 0 8px}
 .hb-how b{font-weight:650}.hb-how span{color:var(--lk-muted);font-size:13px}
 @media (max-width:720px){.hb-how{grid-template-columns:1fr}.hb-how li{border-left:0;border-top:1px solid var(--lk-border)}.hb-how li:first-child{border-top:0}}
 /* the feature sections, in the recommended order: full-width bands, words and a picture side by side, flipping sides */
@@ -3418,6 +3499,31 @@ FRONT_REALMS = 60       # rows sent on the front page (8 show until a filter is 
 HANGOUT_NAME = os.environ.get("LEYLINE_REALM_NAME", "").strip() or "Wrath Unleashed"
 HANGOUT_KIND = "Official realm"
 HANGOUT_LINE = "The official realm, where everyone meets in Dalaran. One click and you are in, in this browser."
+OFFICIAL_START = "Start at level 1 or boost to 80"   # TODO(owner): the official realm's start line
+# "New realm" on the front page (the ticker and the posters) only once a realm has been on the list this long: a realm
+# that is up for a minute and gone is never announced (stream/network.py first_seen, the relay's community.firstSeen)
+NEW_GRACE_S = 600
+# What a host needs, said up front (the /wrath/host page, the launcher's Host page and the Beacon page say the same)
+HOST_NEEDS = ("Docker", "your own game folder", "about 10 GB free")
+HOST_TIME = "The first start takes 5 to 20 minutes, and your PC must stay on for others to play."
+
+
+def iso_time(v) -> float | None:
+    """A "2026-10-30T12:34:56Z" time as a Unix time, or None."""
+    if not isinstance(v, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", v):
+        return None
+    try:
+        return float(calendar.timegm(time.strptime(v, "%Y-%m-%dT%H:%M:%SZ")))
+    except (ValueError, OverflowError):
+        return None
+
+
+def host_needs() -> str:
+    """The host's needs and time, one short block (HTML). The client version is a chip, never in the sentence."""
+    e = html.escape
+    return ('<!-- TODO(owner): the host needs wording -->'
+            f'<p class="hb-needs"><b>You need:</b> {e(HOST_NEEDS[0])}, {e(HOST_NEEDS[1])} '
+            f'<span class="hb-ver" title="Game client version">3.3.5a</span>, {e(HOST_NEEDS[2])}. {e(HOST_TIME)}</p>')
 OFFICIAL_NAMES = ("vanilla remastered",)   # an official realm known by name until its record carries official/pinned
 
 
@@ -3524,7 +3630,7 @@ HOST_CORES = (
      "A preservation fork is already in the kit, ready to be switched on for the next era.",
      "C++ scripts", "No bots"),
     ("vmangos", "vMaNGOS", "coming", ("Classic era",),
-     "The strongest classic core for content and progression; a profile is a small follow-up.",
+     "The strongest classic core for content and progression; a ruleset is a small follow-up.",
      "C++ scripts", "No bots"),
 )
 HOST_OWN = ("Your own", "Already run a server? Put it on the Leyline list with the relay agent and keep your own core.")

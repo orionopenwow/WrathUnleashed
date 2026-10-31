@@ -66,6 +66,7 @@ MAX_OFFERED_BUILD = 12340
 VR_REALM = os.environ.get("WU_VR_REALM", "").strip()
 VR_FILE = os.environ.get("WU_VR_FILE", "/app/vr-realm.id")
 VR_LINE = "An optional second realm, hosted by Leyline for now."
+OFFICIAL_START = "Start at level 1 or boost to 80"   # TODO(owner): the official realm's start line (stream/hub.py says the same)
 _vr = {"at": -1e9, "id": None}
 
 
@@ -127,6 +128,45 @@ def e(v) -> str:
 
 
 # ----------------------------------------------------------------------------------------------- records
+BRAND_RE = re.compile(r"(?i)world\s*of\s*warcraft|\bwow\b|warcraft|lich\s*king|blizzard")
+
+
+def neutral(text, n: int = 0) -> str:
+    """A host's text fit to show: the hub's neutral() (brand words and client numbers out) when the hub is loaded,
+    else the brand words dropped here. The relay filters too (wurelay/listing.py); this covers older relays."""
+    hub = P("hub_mod")
+    if hub is not None and hasattr(hub, "neutral"):
+        try:
+            return hub.neutral(text, n)
+        except Exception:   # noqa: BLE001
+            pass
+    s = " ".join(BRAND_RE.sub(" ", text).split()).strip(" -:,;/|") if isinstance(text, str) else ""
+    return s[:n] if n else s
+
+
+def neutral_name(raw, n: int = 32) -> str:
+    """A realm name fit to show: the brand words dropped (never "the game" in a name: hub.clean_name), then neutral()."""
+    hub = P("hub_mod")
+    if hub is not None and hasattr(hub, "clean_name") and isinstance(raw, str):
+        try:
+            raw = hub.clean_name(raw)
+        except Exception:   # noqa: BLE001
+            pass
+    return neutral(raw, n)
+
+
+def name_ok(raw) -> bool:
+    """The name passed the word filter as the host typed it (no brand word, no slur): only such a realm is ever
+    called a "New realm" on the front page or announced."""
+    if not isinstance(raw, str) or not raw.strip() or BRAND_RE.search(raw):
+        return False
+    hf = P("hostflow")
+    try:
+        return not (hf is not None and hasattr(hf, "has_slur") and hf.has_slur(raw))
+    except Exception:   # noqa: BLE001
+        return True
+
+
 def _nonneg(v):
     return v if isinstance(v, int) and not isinstance(v, bool) and 0 <= v < 1_000_000 else None
 
@@ -149,7 +189,15 @@ def extra(rec: dict) -> dict:
     port = prof.get("port") if isinstance(prof.get("port"), int) and not isinstance(prof.get("port"), bool) \
         and 1 <= prof["port"] <= 65535 else None
     sc = com.get("score")
+    raw = rec.get("name") if isinstance(rec.get("name"), str) else ""
+    shown = neutral_name(raw, 32)
+    rules = rec.get("rules") if isinstance(rec.get("rules"), list) else []
     return {
+        # the host's text as shown everywhere (the realm list, realms.json, the hub): never a brand word
+        "name": shown or "Unnamed realm",
+        "tagline": neutral(rec.get("tagline"), 80),
+        "rules": [t for t in (neutral(x, 120) for x in rules[:10]) if t],
+        "name_ok": com.get("nameOk") is not False and name_ok(raw) and shown == " ".join(raw.split()),
         "relay": relay, "port": port,
         "build": build or 12340,
         "core": prof.get("core") if prof.get("core") in CORES else "azerothcore",
@@ -298,7 +346,7 @@ def record_of(r: dict, sample: dict | None = None) -> dict:
         "maxPlayers": r.get("max_players"),
         "status": {"url": f"https://{relay}/r/{rid}/status.json", "format": "openvanilla-status-1"},
         "community": {
-            "realmId": rid, "relay": relay, "claimed": bool(r.get("claimed")),
+            "realmId": rid, "relay": relay, "claimed": bool(r.get("claimed")), "nameOk": bool(r.get("name_ok")), "firstSeen": r.get("first_seen") or None,
             "lastHeartbeat": {"online": bool(r.get("live")), "players": r.get("players"), "bots": r.get("bots")},
             "uptime": {"h24": r.get("up24"), "d7": r.get("up7")}, "new": bool(r.get("new")),
             "score": r.get("score", 0.0), "regionEstimate": r.get("region_est"),
@@ -400,7 +448,7 @@ def host_cta(where: str = "realms", pack_url: str | None = None) -> str:
             '<h2>Host your own realm</h2>'
             '<p>Community realms are the Leyline network. Anyone can run one from their own PC.</p>'
             '<ol><li>Get the Leyline launcher (or the Host pack) and Docker.</li>'
-            '<li>Open Host in the launcher: pick a profile, a name and your house rules. The realm runs on your PC.</li>'
+            '<li>Open Host in the launcher: pick a ruleset, a name and your house rules. The realm runs on your PC.</li>'
             '<li>Make it public: the relay lists it here, with no port forwarding. You are its GM.</li></ol>'
             f'<p><a class="btn primary" href="{LAUNCHER_URL}">Get the launcher</a> '
             f'<a class="btn" href="{HOST_URL}">Start on the website</a></p>'
@@ -457,7 +505,6 @@ def sample_card(st: dict, rec: dict | None, share_box=None, sample: dict | None 
     realm/sampler.sh; the realm's own name before that)."""
     sm = sample or {}
     name = sm.get("name") or SAMPLE_NAME
-    temporary = sm.get("temporary", True)
     blurb = sm.get("blurb_html") or ('<!-- TODO(owner): the sample hangout blurb -->'
                                      '<p>A place to try the game in your browser and meet people. Leyline runs it for '
                                      'now; the realms around it are run by players.</p>')
@@ -469,8 +516,9 @@ def sample_card(st: dict, rec: dict | None, share_box=None, sample: dict | None 
     r = {"live": live, "players": players, "bots": bots}
     return (f'<div class="realm sample" id="sample"><h2>{e(name)}</h2>'
             '<div class="tags"><span class="tag">Official</span>'
-            + ('<span class="badge warn">Temporary</span>' if temporary else '')
+            # no "Temporary" chip: players read it as "this realm gets wiped" (coordinator 2026-10-30)
             + f'<span class="tag">Run by Leyline</span><span class="tag ver">3.3.5a</span>{_players(r)}</div>'
+            + f'<p class="fine">{e(OFFICIAL_START)}</p>'
             + blurb
             # its relay record is there: the go intent lands players straight in Dalaran (stream/links.py)
             + ('<p><a class="btn primary" href="/wrath?go=h:dalaran">Play in Dalaran</a></p>' if rec else

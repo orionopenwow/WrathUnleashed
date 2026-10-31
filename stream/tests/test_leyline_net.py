@@ -99,6 +99,10 @@ class HostPack(unittest.TestCase):
         again = ln.add_hostpack(json.dumps(out).encode(), PACK)
         self.assertEqual(len([p for p in json.loads(again)["projects"] if p["id"] == "mod:host-pack"]), 1)
         self.assertEqual(ln.add_hostpack(b"<html>", PACK), b"<html>")
+        many = json.dumps({"format": 1, "projects": [{"id": "mod:a", "name": "Addon Kit"}, {"id": "mod:z", "name": "Zeta"}]}).encode()
+        got = json.loads(ln.add_hostpack(many, PACK))["projects"]
+        self.assertEqual([p["name"].lower() for p in got], sorted(p["name"].lower() for p in got), "in name order")
+        self.assertEqual(tuple(next(p for p in got if p["id"] == "mod:host-pack")), ln.ALL_JSON_KEYS, "all.json keys only")
         text = json.dumps(hp[0]).lower()
         for word in ("world of warcraft", "warcraft", "blizzard", "lich king"):
             self.assertNotIn(word, text)

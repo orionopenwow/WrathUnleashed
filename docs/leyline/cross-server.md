@@ -38,7 +38,7 @@ Each record is a Beacons schema 1 record plus a `community` block:
 |---|---|
 | `slug` | `c-<realm id>` (16 base32 characters made from the realm's Ed25519 key) |
 | `official` | always `false` |
-| `state` | `live` while heartbeats arrive, `offline` after 3 missed ones; gone after 24 hours |
+| `state` | `live` while heartbeats arrive, `offline` after 3 missed ones; gone after 6 hours |
 | `order` | always `1000`; then live first, then by name |
 | `profile` | `game` (`wrath-3.3.5a`), `version`, `build`, `ruleset`, `address`, `port` |
 | `connect` | `{"kind": "web-signin", "url": ".../join/<id>", "label": "Join this realm"}` |
@@ -70,9 +70,9 @@ The protocol is written down in `hosting/kit/tools/wunet/mux.py`, and the listin
 
 Today the listing only shows realms that keep a live tunnel to the relay. There are two ways to do that.
 
-**Run your realm through the host kit.** If your realm is AzerothCore 3.3.5a, the kit's agent can connect it to the relay:
+**Run your realm through the Host pack.** If your realm is AzerothCore 3.3.5a, the kit's agent can connect it to the relay:
 
-1. Set up the host kit (see [Hosting](hosting.md)).
+1. Set up the Host pack (see [Hosting](hosting.md)).
 2. Make it public: `leyline public`.
 3. Fill in `state/beacon.json` and `state/rules.txt` with your name, tagline, type, rules and Discord link, then run `leyline rules`.
 4. Your realm shows on the realm list within a minute. Players join through the relay with their own clients.

@@ -394,7 +394,7 @@ def record_view(r: dict, ep: dict | None, now: float) -> dict:
             "realmId": rid, "relay": relay, "signed": True, "claimed": False, "claimedBy": None,
             "lastSeen": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(beat["ts"])),
             "lastHeartbeat": {"online": bool(st.get("online")), "players": players, "bots": bots, "uptime_s": num("uptime_s")},
-            "uptime": {"h24": None, "d7": None}, "new": False,
+            "uptime": {"h24": None, "d7": None}, "new": False, "nameOk": rec["name_ok"],
             "score": listing.score(online, players, bots, None, None, False),
             "regionEstimate": None, "latency": None,
             "directConnect": False,

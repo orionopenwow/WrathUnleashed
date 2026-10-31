@@ -79,6 +79,29 @@ GM_RE = re.compile(r"^[A-Za-z0-9]{3,16}$")
 RID_RE = re.compile(r"^[a-z2-7]{16}$")
 B32 = "ABCDEFGHJKMNPQRSTVWXYZ23456789"
 BANNED = re.compile(r"(?i)world\s*of\s*warcraft|\bwow\b|warcraft|lich\s*king|blizzard")
+# A few slurs no realm name, tagline or house rule may carry. The same two lists as the relay's listing
+# (hosting/relay/wurelay/listing.py BANNED and SLURS; hosting/tests/test_network_listing.py checks they match): the
+# website and the relay ship apart, so each keeps its own copy.
+SLURS = ("beaner", "chink", "coon", "dyke", "fag", "faggot", "gook", "kike", "nigga", "nigger", "raghead", "retard",
+         "spic", "towelhead", "tranny", "wetback")
+_LEET = str.maketrans("013457@$!|", "oieastasii")
+_SLUR_RE = re.compile(r"(?<![a-z])(?:" + "|".join(sorted(SLURS, key=len, reverse=True)) + r")(?:s|z|es|ed)?(?![a-z])")
+
+
+def has_slur(text) -> bool:
+    """A slur in the text: as a word (with leetspeak undone), or squashed ("f.a.g.g.o.t") for the long ones."""
+    if not isinstance(text, str) or not text:
+        return False
+    low = text.lower().translate(_LEET)
+    if _SLUR_RE.search(low):
+        return True
+    squashed = re.sub(r"[^a-z]", "", low)
+    return any(len(w) >= 6 and w in squashed for w in SLURS)
+
+
+def name_ok(name) -> bool:
+    """A realm name fit for the front page: no brand word, no slur."""
+    return isinstance(name, str) and bool(name.strip()) and not BANNED.search(name) and not has_slur(name)
 PRESETS = {   # setup.py PROFILES, in the order the form shows them (dalaran first: the default)
     "dalaran": ("Dalaran hangout", "Light on your PC, no bots: everyone boosts to 80 and meets in Dalaran."),
     "main": ("Classic levelling", "The full world from level 1, with a one-time boost to 80 for anyone who wants it."),
@@ -256,7 +279,7 @@ def prefill(query: str) -> tuple[dict, list[str]]:
         dropped.append("preset")
     name = _one_line(one.get("name", ""))
     if name:
-        if NAME_RE.match(name) and not BANNED.search(name):
+        if NAME_RE.match(name) and name_ok(name):
             vals["name"] = name
         else:
             dropped.append("name")
@@ -443,6 +466,8 @@ def validate(form: dict) -> tuple[dict, dict]:
     for k, text in (("name", name), ("tagline", tag), ("rules", " ".join(lines))):
         if k not in err and BANNED.search(text):
             err[k] = "Please leave game and publisher brand names out: Leyline is its own project."
+        elif k not in err and has_slur(text):
+            err[k] = "Please pick words that are kind to everyone: that one isn't allowed on Leyline."
     opts, oerr = options(form, preset)
     out["options"] = opts
     err.update(oerr)
@@ -730,6 +755,16 @@ border-radius:5px;padding:9px 10px;font:15px system-ui,sans-serif}
 .hf .trio{display:grid;gap:10px;grid-template-columns:repeat(3,minmax(0,1fr))}
 @media (max-width:560px){.hf .trio{grid-template-columns:1fr}}
 .hf .tags{display:flex;flex-wrap:wrap;gap:6px 14px}.hf label.tag{display:inline-flex;gap:6px;font-weight:400;margin:4px 0}
+.hf .needs p{margin:4px 0}.hf .ver{display:inline-block;padding:0 7px;border-radius:999px;border:1px solid var(--ly-line);font-size:12.5px}
+.hf .live{border-color:rgba(94,240,160,.55)}.hf .live .link{user-select:all;-webkit-user-select:all;margin:6px 0}
+.hf .poster{position:relative;isolation:isolate;display:flex;flex-direction:column;justify-content:flex-end;max-width:280px;min-height:220px;
+padding:16px;border-radius:12px;overflow:hidden;border:1px solid rgba(140,170,255,.45);
+background:linear-gradient(var(--a),hsl(var(--h1) 55% 26%),hsl(var(--h2) 50% 16%) 70%,#11131a)}
+.hf .poster::before{content:"";position:absolute;inset:0;z-index:-1;opacity:.55;
+background:url(/wrath/art/leyline-crystal-256.webp) var(--x) var(--y)/58% no-repeat}
+.hf .poster::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,transparent 30%,rgba(10,12,18,.88))}
+.hf .poster h3{margin:0 0 4px;font-size:21px;color:#fff}.hf .poster-p{position:absolute;top:12px;left:14px;margin:0;font-size:12.5px;color:#dfe6ff}
+.hf .poster-l{margin:0;color:#d6dbea;font-size:14px}
 .hf .note{border:1px solid rgba(91,141,239,.55);background:rgba(91,141,239,.12);border-radius:6px;padding:10px 12px;font-size:14px}
 """
 
@@ -835,7 +870,7 @@ def form_page(owner: str, display: str, vals: dict | None = None, errs: dict | N
         '<header class="ly-hero"><h1>Your server</h1>'
         f'<p class="ly-lede">Signed in as {e(display)}. Your realm runs on your own PC, free, and players reach it '
         'through the Leyline relay: nobody sees your home address and you open no ports.</p></header>'
-        + mine_html +
+        + needs_panel() + mine_html +
         ('<section class="ly-panel"><p>You have made the most realms one account can for now '
          f'({PER_ACCOUNT}). Open one above to start it.</p></section>' if full else
          '<section class="ly-panel recipes"><h2>Start from a ready-made realm</h2><ul class="recipes-l">'
@@ -864,6 +899,48 @@ def form_page(owner: str, display: str, vals: dict | None = None, errs: dict | N
     return page("Your server", inner)
 
 
+# What a host needs and how long it takes, said before anything else (the launcher's Host page and the hub's Beacon
+# page say the same; stream/hub.py HOST_NEEDS). The client version is a chip, never in the sentence.
+NEEDS = ("Docker", "your own game folder", "about 10 GB free")
+NEEDS_TIME = "The first start takes 5 to 20 minutes, and your PC must stay on for others to play."
+NETWORK_DOC = "/wrath/docs/network"   # docs/leyline/network.md: how the Leyline network works, for players
+
+
+def needs_panel() -> str:
+    e = html.escape
+    return ('<!-- TODO(owner): the host needs wording -->'
+            '<section class="ly-panel needs" aria-label="What you need"><p><b>You need:</b> '
+            f'{e(NEEDS[0])}, {e(NEEDS[1])} <span class="ver" title="Game client version">3.3.5a</span>, {e(NEEDS[2])}.</p>'
+            f'<p>{e(NEEDS_TIME)} <a href="{NETWORK_DOC}">How the Leyline network works</a></p></section>')
+
+
+def poster_preview(rec: dict, rid: str) -> str:
+    """The card the front page shows for this realm (stream/hub.py posters(): the same backdrop from the realm id)."""
+    e = html.escape
+    h = hashlib.sha256(rid.encode()).digest()
+    h1 = 200 + h[0] % 90
+    h2 = (h1 + 40 + h[1] % 80) % 360
+    ang, x, y = h[2] % 180, 20 + h[3] % 60, 15 + h[4] % 50
+    line = rec.get("tagline") or PRESETS[rec["preset"]][1]
+    return (f'<div class="poster" style="--h1:{h1};--h2:{h2};--a:{ang}deg;--x:{x}%;--y:{y}%" aria-label="Your realm\'s card">'
+            f'<p class="poster-p">New realm</p><h3>{e(rec["name"])}</h3><p class="poster-l">{e(line)}</p></div>')
+
+
+def live_panel(rec: dict, share: str) -> str:
+    """"You're live": shown once the realm is online and listed. The share link, a line to paste into Discord, and the
+    card players see on the front page. TODO(owner): the wording."""
+    e = html.escape
+    dc = f"Come play on {rec['name']}, my realm on Leyline: {share}"
+    return ('<!-- TODO(owner): the "You\'re live" wording -->'
+            '<section class="ly-panel live" aria-labelledby="live-h"><h2 id="live-h">You\'re on the front page</h2>'
+            '<p>Your realm is live and listed: players see it on the front page and the realm list, in the launcher and in '
+            'the game. Share it:</p>'
+            f'<div class="link" tabindex="0">{e(share)}</div>'
+            '<p class="hint">For your Discord: tap the line to select it, then copy.</p>'
+            f'<div class="link" tabindex="0">{e(dc)}</div>'
+            f'<p class="hint">Your card on the front page:</p>{poster_preview(rec, rec["realm_id"])}</section>')
+
+
 def downloadable(rec: dict) -> bool:
     """The setup file is offered until the PC has registered the realm (or, for an older record, while the site
     still holds its key). Afterwards the PC holds everything: moving the realm = copying the kit folder."""
@@ -886,7 +963,7 @@ def start_page(rec: dict) -> bytes:
               'it to yourself. Your PC makes the realm\'s key itself: it never leaves your PC.</p>')
     else:
         dl = ('<p>Your PC holds this realm\'s key, so there is nothing more to download. To move the realm, '
-              'copy the kit folder (with its <b>state</b> folder) to the new PC.</p>')
+              'copy the Host pack folder (with its <b>state</b> folder) to the new PC.</p>')
     if rid:
         share = f"https://{host}/wrath/r/{rid}"
         invite = f"{join}/join/{rid}" + (f"#{rec['invite_secret']}" if rec["visibility"] == "private" else "")
@@ -903,16 +980,19 @@ def start_page(rec: dict) -> bytes:
                  'key your PC makes.</p>')
         gm = (f'<li>Make your GM account <b>{e(rec["gm"])}</b> on your own join link, with a password you choose. The '
               'link shows here (and in the setup window on your PC) once your PC is connected.</li>')
+    live = live_panel(rec, f"https://{host}/wrath/r/{rid}") if rid and state == "listed" else ""
     inner = (
         f'<header class="ly-hero"><h1>{e(rec["name"])}</h1>'
         f'<p class="ly-lede">{e(PRESETS[rec["preset"]][0])} · {e(rec["visibility"])} · GM {e(rec["gm"])}</p>'
         f'<span class="pill {e(state)}" role="status">{"&#9679; " if state in ("online", "listed") else ""}{e(text)}</span></header>'
+        + live +
         f'<section class="ly-panel"><h2>Your link</h2>{links}</section>'
+        + ("" if live else needs_panel()) +
         '<section class="ly-panel"><h2>Set up your PC</h2><ol>'
         f'<li>Install <a href="https://www.docker.com/products/docker-desktop/" rel="noopener noreferrer">Docker</a> '
-        f'and unzip the <a href="{e(kit)}" rel="noopener noreferrer">host kit</a>. The server uses your own game '
+        f'and unzip the <a href="{e(kit)}" rel="noopener noreferrer">Host pack</a>. The server uses your own game '
         'files, read on your PC; nothing is downloaded or shared.</li>'
-        f'<li>Download your realm\'s file into the kit folder and run it.{dl}</li>'
+        f'<li>Download your realm\'s file into the Host pack folder and run it.{dl}</li>'
         '<li>Leave it running. This page changes to <b>Online</b> when your PC connects to the relay.</li>'
         + gm +
         '</ol></section>'

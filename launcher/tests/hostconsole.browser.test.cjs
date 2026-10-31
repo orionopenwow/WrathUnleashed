@@ -235,18 +235,22 @@ test('no realm yet: the setup start (Vanilla+ always on, Link my server) and the
   assert.match(await page.textContent('.hc-pre'), /Host pack ready.*Docker ready/);
 
   // the guide beside it, and on its own tab; its links are names in the core's list, never a URL
-  assert.equal(await page.locator('.hc-side .hc-g').count(), 10);
+  assert.equal(await page.locator('.hc-side .hc-g').count(), 11);
   await page.click('#hc-tab-guide');
   assert.ok(await page.isVisible('#hc-pane-guide'));
   const topics = await page.$$eval('#hc-pane-guide .hc-g summary', (l) => l.map((x) => x.textContent));
-  assert.deepEqual(topics, ['Start your realm', 'Stop it', 'Update', 'Go public', 'Invite friends', 'Claim it with your Hero Key', 'Always on',
+  assert.deepEqual(topics, ['How the Leyline network works', 'Start your realm', 'Stop it', 'Update', 'Go public', 'Invite friends', 'Claim it with your Hero Key', 'Always on',
     'Link a server you already run', 'Backups', "When something's wrong"]);
   await page.click('#hc-pane-guide .hc-g[data-topic="alwayson"] summary');
   await page.click('#hc-pane-guide .hc-g[data-topic="alwayson"] .hc-more');
   await page.waitForFunction(() => window.__calls.some(([c]) => c === 'open_link'));
   assert.deepEqual((await calls(page, 'open_link'))[0], { name: 'alwayson' });
   const names = await page.$$eval('#hc-pane-guide .hc-more', (l) => [...new Set(l.map((x) => x.dataset.link))].sort());
-  assert.deepEqual(names, ['alwayson', 'hostdocs']);
+  assert.deepEqual(names, ['alwayson', 'hostdocs', 'network']);
+  // what a host needs and how long it takes, before the rulesets (and on the Host pack tab)
+  const needs = await page.textContent('#hc-pane-main .hc-needs');
+  assert.match(needs, /You need: Docker, your own game folder 3\.3\.5a, about 10 GB free\. The first start takes 5 to 20 minutes, and your PC must stay on for others to play\./);
+  assert.match(await page.textContent('#host-needs'), /about 10 GB free/);
   // the kit and its settings are one tab away
   await page.click('#hc-tab-kit');
   assert.ok(await page.isVisible('#hp-card') && await page.isVisible("#hc-pane-kit ol.steps"));

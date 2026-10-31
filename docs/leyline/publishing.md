@@ -17,15 +17,15 @@ python3 wu-mod.py pack my-mod -o dist
 
 ## 2. Submit a link
 
-Today there is no upload form. To send a mod:
+Use one path: **Add your project** on the Workshop, at [/wrath/mods/submit](https://play.openvanilla.app/wrath/mods/submit). Sign in, paste your project's public repo link (GitHub, GitLab or Codeberg), pick a category and the client it works with, and write one line about it.
 
-1. Put the zip and its `.sha256` somewhere public, such as a release on your own GitHub repository.
-2. Send the link to the Leyline team. The Discord is at [discord.gg/hVeUxYwbkr](https://discord.gg/hVeUxYwbkr).
-3. The team checks it with `wu-mod.py` and adds it to `mods/catalog/<your id>/` in the [repo](https://github.com/orionopenwow/WrathUnleashed/tree/main/mods).
+- Most links are listed straight away, credited to you and to the repo's author.
+- A link goes to a person's review queue instead of the list when its repo has no open licence, when its text names the game or its publisher, or when it looks like decompiled, leaked, repack or cheat material. You hear nothing more until it is checked; nothing of yours is lost.
+- Nothing is downloaded or hosted from a link: players install from your repo.
 
-The modders' guide in the repo (`mods/README-modders.md`) says realm mods get a human look before they go on Wrath. A web form for submitting a link, at `/wrath/mods/submit`, is coming soon.
+Want your mod in the packaged catalog (the one the mods step below puts on Wrath)? Put the zip and its `.sha256` in a release on your repo, add it with **Add your project**, and say so in the [Discord](https://discord.gg/hVeUxYwbkr). The team checks it with `wu-mod.py` and adds it to `mods/catalog/<your id>/` in the [repo](https://github.com/orionopenwow/WrathUnleashed/tree/main/mods). The modders' guide in the repo (`mods/README-modders.md`) says realm mods get a human look before they go on Wrath.
 
-The planned [Leyline Launcher](launcher.md) will publish mods from GitHub and allow all mods, with no review queue and no code signing yet.
+The [Leyline Launcher](launcher.md) installs mods from the same Workshop list.
 
 ## 3. The mods step
 

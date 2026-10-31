@@ -46,10 +46,10 @@ Beacons run 3.3.5a, so they need a 3.3.5a client.
 
 ## Hosting
 
-Hosting runs on your own PC. There are no hosted slots on our servers: the realm runs only while your PC does. See [Hosting](hosting.md) for the host kit itself.
+Hosting runs on your own PC. There are no hosted slots on our servers: the realm runs only while your PC does. See [Hosting](hosting.md) for the Host pack itself.
 
 1. **HOST A REALM** opens [play.openvanilla.app/wrath/host](https://play.openvanilla.app/wrath/host). Sign in, choose a name, a ruleset and house rules, and download your realm file (`leyline-<realm id>.bat` for Windows, `.sh` for Mac and Linux).
-2. Unzip the host kit and choose its folder in Leyline. You also need Docker Desktop.
+2. Unzip the Host pack and choose its folder in Leyline. You also need Docker Desktop.
 3. Leyline finds your realm file, in the kit or in Downloads, and copies it into the kit. START runs it in a window of its own. After the first run, START MY REALM runs the kit's own host script (`Host a Wrath realm.bat`, or `leyline host`).
 4. Leyline shows the realm's status from the relay: online, on the realm list, players and bots, and its realmlist address.
 

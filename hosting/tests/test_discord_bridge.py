@@ -391,6 +391,70 @@ class BridgeFlow(unittest.TestCase):
         self.assertFalse(any(c.startswith("wudiscord say") for c in r.commands))
 
 
+class Announce(unittest.TestCase):
+    """New-realm announcements: off by default; on, one line per claimed, filtered, listed-long-enough realm, once."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    @staticmethod
+    def rec(rid, name, age=1200, claimed=True, name_ok=True, live=True, **com):
+        import time as _t
+        return {"name": name, "state": "live" if live else "offline", "official": False,
+                "community": dict({"realmId": rid, "claimed": claimed, "nameOk": name_ok,
+                                   "firstSeen": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime(_t.time() - age))}, **com)}
+
+    def test_off_by_default(self):
+        br, d, _r, clock, _ = make(self.tmp)
+        self.assertFalse(br.cfg.announce)
+        br.fetch = lambda url: self.fail("the realm list must not be read while announcements are off")
+        br.start(); br.step()
+        self.assertEqual(d.posted, [])
+
+    def test_on_posts_each_good_realm_once_and_never_floods(self):
+        br, d, _r, clock, _ = make(self.tmp, {"WU_DISCORD_ANNOUNCE_REALMS": "1"})
+        listing = [self.rec("aaaaaaaaaaaaaaaa", "Old Realm")]
+        br.fetch = lambda url: listing
+        br.start(); br.step()
+        self.assertEqual(d.posted, [], "first run: what is already listed is marked seen, not posted")
+        listing += [self.rec("bbbbbbbbbbbbbbbb", "Frost Haven @everyone"),
+                    self.rec("cccccccccccccccc", "Too Fresh", age=60),
+                    self.rec("dddddddddddddddd", "Unclaimed", claimed=False),
+                    self.rec("eeeeeeeeeeeeeeee", "Filtered", name_ok=False),
+                    self.rec("ffffffffffffffff", "WoW Night"),
+                    self.rec("gggggggggggggggg", "Ours", sample=True),
+                    self.rec("hhhhhhhhhhhhhhhh", "Asleep", live=False)]
+        clock.t += 301; br.step()
+        self.assertEqual(len(d.posted), 1, d.posted)
+        ch, payload = d.posted[0]
+        self.assertEqual(ch, "100")
+        self.assertTrue(payload["content"].startswith("New realm listed: Frost Haven @"))
+        self.assertIn("https://play.openvanilla.app/wrath/r/bbbbbbbbbbbbbbbb", payload["content"])
+        self.assertNotIn("@everyone", payload["content"])
+        self.assertEqual(payload["allowed_mentions"], {"parse": []})
+        clock.t += 301; br.step()
+        self.assertEqual(len(d.posted), 1, "each realm once")
+        clock.t += 10; listing.append(self.rec("iiiiiiiiiiiiiiii", "Later")); br.step()
+        self.assertEqual(len(d.posted), 1, "not before WU_DISCORD_ANNOUNCE_EVERY")
+
+    def test_site_down_never_stops_the_bridge(self):
+        br, d, _r, clock, _ = make(self.tmp, {"WU_DISCORD_ANNOUNCE_REALMS": "1"})
+        def down(url):
+            raise OSError("refused")
+        br.fetch = down
+        br.start()
+        self.assertEqual(br.step(), [])
+
+    def test_documented_as_off_and_the_owners_choice(self):
+        doc = B.__doc__
+        self.assertIn("OFF by default", doc)
+        self.assertIn("owner", doc)
+        self.assertIn("WU_DISCORD_ANNOUNCE_REALMS", doc)
+
+
 class Secrets(unittest.TestCase):
     def test_token_only_in_the_header_and_never_logged(self):
         tmp = tempfile.mkdtemp()
