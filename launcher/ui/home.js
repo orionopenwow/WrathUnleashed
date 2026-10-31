@@ -3,7 +3,8 @@
 // modes.js for its list once (the same modes_list the Modes page makes). Every page jump goes through
 // window.LeylineNav.show(page, noLoad, tab). Everything from a catalog or the realm list is shown with textContent.
 //
-// The gallery: one slide per highlight (the featured mode, what's new, browser play, hosting, a Workshop mod), each a
+// The gallery: first, the launch slide (Join the Dalaran Hangout: Play now and Join the Discord); then one slide per
+// highlight (the featured mode, what's new, browser play, hosting, a Workshop mod), each a
 // big title, one short line and one button; a slide without its data is left out. It moves on every 7 s, stops while
 // the pointer is over it or something in it has focus, and never moves by itself under prefers-reduced-motion.
 // Dots, the arrows, and Left / Right while it has focus. The rows: Popular realms, Mods to try, Game modes, News and
@@ -40,6 +41,15 @@
   function slideDefs() {
     const out = [];
     const M = Modes();
+    // (0) launch (owner 2026-10-30): the Dalaran Hangout, the Wrath realm where everyone meets, is the front door.
+    // Play now selects it and presses PLAY (browser play when there is no 3.3.5a client); Join the Discord is the core's
+    // named link. TODO(owner): the kicker and the line, his words.
+    if (App.playHangout) {
+      out.push({ key: "hangout", kicker: "Open now · " + App.HANGOUT.kind, title: "Join the " + App.HANGOUT.name,
+        line: "Everyone meets in Dalaran. Say hello, then try /golf and /modes.",
+        side: lineupPanel, cta: "Play now", run: () => App.playHangout(),
+        cta2: "Join the Discord", run2: () => App.openLink("discord") });
+    }
     // (a) the featured mode with its key art
     if (M && M.ART[M.FEATURED] && !artFailed) {
       const a = M.ART[M.FEATURED];
@@ -94,6 +104,34 @@
     return box;
   }
 
+  // the launch slide's right side: the official lineup, the Hangout first, then Vanilla Remastered when the network
+  // lists it; a row opens Realms
+  function lineupPanel() {
+    const all = App.realms();
+    const hang = all.find((r) => r.official) || { official: true, name: App.HANGOUT.name, state: "live", players: null };
+    const rest = all.filter((r) => !r.official && (r.pinned || /^vanilla remastered$/i.test(String(r.name || "").trim())));
+    const box = el("div", "hs-side hs-realms hs-lineup");
+    const head = el("div", "hs-side-h");
+    head.append(el("span", "", "The official lineup"));
+    box.append(head);
+    for (const r of [hang, ...rest.slice(0, 3)]) {
+      const live = r.state === "live";
+      const row = el("button", "hs-rl" + (live ? " live" : ""));
+      row.type = "button";
+      row.title = `${r.name}: open Realms`;
+      row.addEventListener("click", () => go("realms"));
+      const name = el("span", "hs-rl-n");
+      name.append(el("b", "", r.name), el("i", "", r.official ? App.HANGOUT.kind : (live ? "Bring your own client" : "Offline for now")));
+      const meta = el("span", "hs-rl-m");
+      const ver = r.official ? "3.3.5a" : App.realmVersion(r);
+      if (ver) meta.append(el("span", "rl-ver sm", ver));
+      meta.append(el("span", "hs-rl-p", live && r.players != null ? `${r.players}` : "–"));
+      row.append(App.realmIcon(r.name, r.official), name, meta);
+      box.append(row);
+    }
+    return box;
+  }
+
   // the host slide's right side (owner 2026-10-30: "make this a small infographic for setup guide"): four steps
   function hostSteps() {
     const box = el("div", "hs-side hs-steps");
@@ -138,10 +176,16 @@
     const b = el("button", "btn primary hs-go", d.cta);
     b.type = "button";
     b.addEventListener("click", () => d.run(b));
+    let b2 = null;
+    if (d.cta2) {
+      b2 = el("button", "btn hs-go2", d.cta2);
+      b2.type = "button";
+      b2.addEventListener("click", () => d.run2(b2));
+    }
     // over key art the picture already shows the name: the heading stays for screen readers only
     body.append(el("small", "hs-kick", d.kicker), el("h2", "hs-title" + (d.art ? " sr" : ""), d.title));
     if (d.line) body.append(el("p", "hs-line", d.line));
-    body.append(b);
+    if (b2) { const row = el("div", "hs-acts"); row.append(b, b2); body.append(row); } else body.append(b);
     s.append(body);
     return s;
   }

@@ -204,3 +204,24 @@ html[data-base="light"] .hs-side { box-shadow: 0 14px 30px rgba(16, 24, 40, .12)
 .home-cue { height: 18px; padding: 0 12px; border-radius: 999px; color: var(--t-accent-strong);
   background: color-mix(in srgb, var(--t-accent) 14%, var(--t-chrome)); font-weight: 700; bottom: -18px; }
 .home-cue:hover { background: color-mix(in srgb, var(--t-accent) 24%, var(--t-chrome)); }
+
+/* ---------------------------------------------------------------- the launch slide: Join the Dalaran Hangout */
+.hs-hangout { --hs-wash: radial-gradient(95% 90% at 82% 18%, color-mix(in srgb, var(--t-accent-2) 30%, transparent), transparent 62%),
+  radial-gradient(80% 75% at 0% 100%, color-mix(in srgb, var(--t-accent) 22%, transparent), transparent 62%); }
+.hs-hangout .hs-title { font-size: 42px; }
+.hs-hangout .hs-line { -webkit-line-clamp: 3; }
+/* the crystal, faint, in the empty middle under the lineup (the slide has a side panel, so no .hs-deco) */
+.hs-hangout::after { content: ""; position: absolute; z-index: -1; pointer-events: none; right: 18%; bottom: -40px; width: 340px; height: 340px;
+  background: url("art/brand/leyline-swirl-256.webp") center / contain no-repeat; opacity: calc(var(--t-mark-opacity) * 1.6); }
+.hs-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+.hs-acts .hs-go { margin-top: 0; }
+.hs-lineup { justify-content: flex-start; bottom: auto; }
+.hs-lineup .hs-rl { min-height: 52px; }
+.hs-lineup .hs-rl-n { display: grid; gap: 1px; }
+.hs-lineup .hs-rl-n b, .hs-lineup .hs-rl-n i { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hs-lineup .hs-rl-n i { font: 500 12px var(--t-font); font-style: normal; color: var(--t-text-2); }
+@media (max-width: 1150px) { .hs-hangout .hs-title { font-size: 34px; } }
+
+/* the play bar's realm picker: the Hangout's label beside its name ("Dalaran Hangout · the Wrath realm") */
+.pb-opt-kind { flex: none; font-size: 12px; font-weight: 500; color: var(--t-text-2); white-space: nowrap; }
+.pb-opt-kind::before { content: "· "; }

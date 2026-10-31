@@ -185,7 +185,7 @@ const NET = [
   { slug: 'c-b', realm_id: 'b', name: 'Busy Den', state: 'live', build: '3.3.5a', version: '3.3.5a', core: 'azerothcore', tags: [], players: 30, bots: 0, address: 'relay.openvanilla.app:40002' },
   { slug: 'c-c', realm_id: 'c', name: 'Asleep', state: 'offline', build: '3.3.5a', version: '3.3.5a', core: 'azerothcore', tags: [], players: 0, bots: 0, address: 'relay.openvanilla.app:40004' },
 ];
-async function openNet() {
+async function openNet(net = NET) {
   const ctx = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1400, height: 860 } });
   const page = await ctx.newPage();
   const errors = [];
@@ -199,7 +199,7 @@ async function openNet() {
       if (cmd === 'realms_list') r.realms = net;
       return r;
     };
-  }, NET);
+  }, net);
   await page.goto(INDEX);
   await page.waitForFunction(() => window.LeylineNav && document.querySelector('#page-play.on') && window.__calls.some(([c]) => c === 'realms_list'));
   await page.waitForFunction(() => document.getElementById('pb-realm').textContent === 'Dalaran Hangout');
@@ -216,7 +216,7 @@ test('the realm picker: a drop-up list of your realms, live realms, browser play
   assert.equal(await page.getAttribute('#pb-realm-btn', 'aria-expanded'), 'true');
   assert.equal(await page.getAttribute('#pb-rmenu', 'role'), 'listbox');
   assert.deepEqual(await rrows(page), [
-    '# Your realms', 'Dalaran Hangout|3.3.5a|5 playing|true|', '---',
+    '# Official', 'Dalaran Hangout|3.3.5a|5 playing|true|', '---',
     '# On the network', 'Busy Den|3.3.5a|30 playing|false|', 'Small Den|3.3.5a|3 playing|false|', '---',
     'Play in your browser||Nothing to install|false|', 'Solo||Coming soon|false|true', '---',
     '+ Make a realm|||false|', 'Find more realms…|||false|',
@@ -256,6 +256,23 @@ test('the realm picker: a drop-up list of your realms, live realms, browser play
   await page.click('#pb-realm-btn');
   await page.click('#pb-rmenu >> text=Find more realms…');
   assert.equal(await pageOn(page), 'page-realms');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('the realm picker: the official lineup first, the Dalaran Hangout labelled the Wrath realm, then Vanilla Remastered', async () => {
+  const vr = { slug: 'c-v', realm_id: 'v', name: 'Vanilla Remastered', state: 'live', build: '1.12.1', version: '1.12.1', core: 'vmangos', tags: [], players: 2, bots: 0, address: 'relay.openvanilla.app:40050' };
+  const { page, ctx, errors } = await openNet([Object.assign({}, NET[0], { name: 'Leyline Sample Hangout' }), NET[1], NET[2], vr, NET[3]]);
+  await page.click('#pb-realm-btn');
+  const rows = await rrows(page);
+  assert.deepEqual(rows.slice(0, 4), ['# Official', 'Dalaran Hangout|3.3.5a|5 playing|true|', 'Vanilla Remastered|1.12.1|2 playing|false|', '---'],
+    'one name for the official realm whatever the list calls it; the lineup pinned under it');
+  assert.ok(!rows.slice(4).some((x) => x.startsWith('Vanilla Remastered')), 'not twice');
+  assert.equal(await page.textContent('#pb-rmenu .pb-opt-kind'), 'the Wrath realm');
+  assert.equal(await page.locator('#pb-rmenu .pb-opt-kind').count(), 1, 'only the Hangout has the label');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#pb-rmenu .pb-opt-kind'), '::before').content), '"· "');
+  await page.click('#pb-rmenu >> text=Vanilla Remastered');
+  assert.equal(await page.inputValue('#play-custom'), 'relay.openvanilla.app:40050');
   assert.deepEqual(errors, []);
   await ctx.close();
 });
