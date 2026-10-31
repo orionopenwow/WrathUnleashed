@@ -918,6 +918,46 @@ check("window answers never go to the chat while the window drives", (function()
 for _, p in ipairs({ wp, wd, me, ws }) do for _, x in ipairs(replies(p, "msg")) do allMsgs[#allMsgs + 1] = x end end
 
 -- names: no brand names, and companions are called bots
+-- raw module commands from players: the same limits as .recruit --------------------------------------------
+local rw = player({ guid = 700, level = 30 })
+check("raw: list passes through", cmd(rw, "playerbots bot list") == nil and cmd(rw, ".playerbots bot remove all") == nil)
+check("raw: other module commands untouched", cmd(rw, "playerbots rndbot stats") == nil)
+check("raw: addclass handled, not passed through", cmd(rw, ".playerbots bot addclass mage") == false)
+check("raw: addclass runs one addclass of that class through the queue", count(rw, "^playerbots bot addclass mage$") == 1
+    and #T.pending[700] == 1 and last(rw):match("Recruiting a Mage bot"))
+check("raw: the cooldown applies", cmd(rw, "playerbots bot addclass priest") == false and count(rw, "addclass") == 1
+    and last(rw):match("recruit again in"))
+clock = clock + 31
+for _ = 1, 3 do cmd(rw, "bot addclass warrior"); clock = clock + 31 end
+check("raw: .bot alias and the per-player cap (4 in a party)", count(rw, "addclass") == 4 and #T.pending[700] == 4)
+cmd(rw, "playerbots bot addclass rogue")
+check("raw: past the cap: refused with the reason", count(rw, "addclass") == 4 and last(rw):match("the most allowed"))
+check("raw: addaccount refused, friendly", cmd(rw, "playerbots bot addaccount SOMEONE") == false
+    and count(rw, "addaccount") == 0 and last(rw):match("%.recruit"))
+check("raw: init=epic refused", cmd(rw, "playerbot bot init=epic all") == false and count(rw, "init=epic") == 0)
+check("raw: add a list refused", cmd(rw, "playerbots bot add Aa,Bb") == false and count(rw, " add Aa") == 0)
+check("raw: addclass of an unknown class: usage", cmd(rw, "playerbots bot addclass bard") == false and last(rw):match("Usage"))
+local rdk = player({ guid = 701, level = 30 })
+check("raw: no dk below its level", cmd(rdk, "playerbots bot addclass dk") == false and count(rdk, "addclass") == 0
+    and last(rdk):match("Death Knights join"))
+local gm = player({ guid = 702, level = 30 })
+function gm:GetGMRank() return 2 end
+check("raw: GMs pass straight through", cmd(gm, "playerbots bot addclass mage") == nil and #gm.cmds == 0)
+local off = player({ guid = 703, built = false })
+check("raw: without bots built: coming soon", cmd(off, "playerbots bot addclass mage") == false and last(off):match("coming soon"))
+env.OV_COMPANIONS = "0"
+local rq = player({ guid = 704, level = 30 })
+check("raw: bots off: refused", cmd(rq, "playerbots bot addclass mage") == false and count(rq, "addclass") == 0
+    and last(rq):match("Bots are off"))
+env.OV_COMPANIONS = nil
+check("raw: our own adds aren't caught by the guard", (function()
+    local own = player({ guid = 705, level = 30 })
+    function own:RunCommand(c) self.cmds[#self.cmds + 1] = c; self.hook = events[42](42, self, c) end
+    clock = clock + 31
+    cmd(own, "recruit tank")
+    return #own.cmds == 1 and own.hook == nil
+end)())
+
 check("no brand names in anything players saw", (function()
     for _, m in ipairs(allMsgs) do
         local l = m:lower()

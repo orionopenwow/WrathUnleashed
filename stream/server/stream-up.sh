@@ -75,6 +75,7 @@ esac
 log "4/6 Sign-in gate (wu-portal)"
 [ -f "$WU/portal/wrath_portal.py.before-stream" ] || cp -p "$WU/portal/wrath_portal.py" "$WU/portal/wrath_portal.py.before-stream"
 install -m 644 "$ST/wrath_portal.py" "$WU/portal/wrath_portal.py"
+[ ! -f "$ST/ratelimit.py" ] || install -m 644 "$ST/ratelimit.py" "$WU/portal/ratelimit.py"   # the shared rate limits (optional: the portal has a stand-in)
 [ -f "$ST/links.py" ] && install -m 644 "$ST/links.py" "$WU/portal/links.py"   # the /r /h /q /m /u share links (optional)
 # The Modes hub (stream/modes.py and its data, /wrath/modes and the go intent; optional, always as a pair).
 if [ -f "$ST/modes.py" ] && [ -f "$ST/modes_data.py" ]; then install -m 644 "$ST/modes.py" "$ST/modes_data.py" "$WU/portal/"; fi
@@ -128,6 +129,11 @@ $MARK_BEGIN: the browser client streams the "mini" slice here, behind the
 $STREAM_HOST {
 	# compresses what wu-play doesn't already send compressed (the page, scripts, /__env.js)
 	encode zstd gzip
+	# nothing here sends more than a few KB (the gate's JSON): refuse big bodies before they reach wu-portal or
+	# wu-play. The server timeouts (read_header, read_body, idle) are global options: tools/security/caddy-apply.sh
+	request_body {
+		max_size 2MB
+	}
 	@gate path /__gate /__env.js
 	handle @gate {
 		reverse_proxy wu-portal:8091 {

@@ -63,6 +63,7 @@ import logging
 import os
 import re
 import secrets
+import sys
 import threading
 import time
 import urllib.parse
@@ -172,23 +173,20 @@ def _now() -> float:
     return time.time()
 
 
-class Window:
-    """A sliding-window counter: hit(key, limit) is False once key has had limit hits in the window."""
-    def __init__(self, seconds: float, clock=time.monotonic):
-        self.seconds, self.q, self.lock, self.clock = seconds, {}, threading.Lock(), clock
+def _ratelimit():
+    """stream/ratelimit.py, shared through sys.modules (the portal loads it first, with a stand-in when it is missing)."""
+    m = sys.modules.get("wu_ratelimit")
+    if m is None:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "wu_ratelimit", os.path.join(os.path.dirname(os.path.abspath(__file__)), "ratelimit.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        sys.modules["wu_ratelimit"] = m
+    return m
 
-    def hit(self, key: str, limit: int) -> bool:
-        now = self.clock()
-        with self.lock:
-            q = self.q.setdefault(key, collections.deque())
-            while q and now - q[0] > self.seconds:
-                q.popleft()
-            if len(q) >= limit:
-                return False
-            q.append(now)
-            if len(self.q) > 20000:
-                self.q = {k: v for k, v in self.q.items() if v}
-            return True
+
+Window = _ratelimit().Limiter   # a sliding-window counter (stream/ratelimit.py)
 
 
 class SocialError(Exception):
@@ -659,7 +657,7 @@ class Social:
 
     # ------------------------------------------------------------------ launcher sign-in: device codes and tokens
     def device_start(self, ip: str) -> dict:
-        if not self.lim_ip.hit("dev|" + ip, 10):
+        if not self.lim_ip.hit("dev|" + _ratelimit().bucket(ip), 10):
             raise SocialError(429, "Too many sign-in attempts. Wait a few minutes.")
         t = self.clock()
         with self.lock:
@@ -1156,7 +1154,7 @@ def get(h, path: str, query: dict) -> None:
     sub = path[len(API):].strip("/")
     if sub == "ways":   # which sign-in buttons to show (no sign-in needed: the launcher asks before it has one)
         prof = _profiles()
-        if not store.lim_ip.hit("ways|" + h.ip(), 120):
+        if not store.lim_ip.hit("ways|" + _ratelimit().bucket(h.ip()), 120):
             return _json(h, 429, {"error": "Slow down a little."})
         return _json(h, 200, prof.ways() if prof is not None else {"herokey": True, "google": True, "discord": False})
     a = _auth(h, False)
@@ -1233,7 +1231,7 @@ def post(h, path: str) -> None:
         doc = _body(h)
         if doc is None:
             return _json(h, 400, {"error": "Bad request."})
-        if not store.lim_ip.hit("poll|" + ip, 400):
+        if not store.lim_ip.hit("poll|" + _ratelimit().bucket(ip), 400):
             return _json(h, 429, {"status": "slow_down"})
         try:
             return _json(h, 200, store.device_poll(doc.get("device_code")))
@@ -1352,17 +1350,22 @@ def _signin(h, code: str = "", via: str = "") -> None:
     h.redirect(prof.signin_url(nxt))
 
 
-def link_page(h, query: dict, note: str = "") -> None:
+def link_page(h, query: dict, note: str = "", typed: str = "") -> None:
+    """/wrath/link. A code in the link (?code=, the launcher opens it) is only a hint: the player types the code their
+    launcher shows, and only a same-site POST of that typed code (do=check, with this session's form token) reaches
+    Approve. So a link someone else sent can't get a one-click approval for their launcher."""
     e = html.escape
     raw = (query.get("code") or [""])[0]
-    code = store.device_lookup(raw)
+    code = store.device_lookup(typed) if typed else ""
+    hint = store.device_lookup(raw) if raw and not typed else ""
     shown = (code[:4] + "-" + code[4:]) if code else ""
     try:
         who = cookie_user(h)
     except OSError:
         return _page(h, 503, "Link the launcher", "<h1>Link the launcher</h1><p>The website isn't answering right now. Try again shortly.</p>")
     if who is None:
-        return _signin(h, shown or (raw if CODE_RE.fullmatch(raw or "") else ""), (query.get("via") or [""])[0])
+        hint_shown = (hint[:4] + "-" + hint[4:]) if hint else (raw if CODE_RE.fullmatch(raw or "") else "")
+        return _signin(h, hint_shown, (query.get("via") or [""])[0])
     acct, _display = who
     sess = _session(h.headers.get("Cookie", ""))
     p = store.ensure(acct, _display)
@@ -1371,7 +1374,7 @@ def link_page(h, query: dict, note: str = "") -> None:
         parts.append(f"<p><b>{e(note)}</b></p>")
     if code:
         parts.append(
-            f"<p>Your Leyline launcher on this computer shows this code. Only approve it if it's the same:</p>"
+            f"<p>You typed this code. Only approve it if your Leyline launcher on this computer shows the same:</p>"
             f'<p class="code">{e(shown)}</p>'
             f"<p>The launcher signs in as <b>{e(p['name'])}#{e(p['tag'])}</b>. "
             "It never sees your password, and you can revoke it here any time.</p>"
@@ -1382,12 +1385,22 @@ def link_page(h, query: dict, note: str = "") -> None:
             f'<form method="post" action="{LINK_PAGE}"><input type="hidden" name="code" value="{e(code)}">'
             f'<input type="hidden" name="t" value="{_form_token(sess, "deny:" + code)}">'
             '<button class="ly-btn ghost" name="do" value="deny">Not me</button></form></div>')
-    elif raw:
-        parts.append("<p>That code has expired or was already used. Start again from the launcher.</p>")
     else:
-        parts.append(f'<form method="get" action="{LINK_PAGE}"><p>Type the code your launcher shows: '
-                     '<input type="text" name="code" maxlength="9" autocomplete="off" required> '
-                     '<button class="ly-btn">Next</button></p></form>')
+        if typed:
+            parts.append("<p>That code doesn't match one waiting for approval (it may have expired). "
+                         "Check the code in your launcher and type it again, or start again from the launcher.</p>")
+        elif raw and not hint:
+            parts.append("<p>The code in this link has expired or was already used. Start again from the launcher.</p>")
+        if hint:
+            hs = hint[:4] + "-" + hint[4:]
+            parts.append(f'<p>This link came with the code <span class="code">{e(hs)}</span>. Compare it with the code '
+                         "your Leyline launcher shows on this computer. <b>If someone sent you this link, stop here</b>: "
+                         "approving it would let their launcher sign in as you.</p>")
+        parts.append(f'<form method="post" action="{LINK_PAGE}"><p><label>Type the code shown in your launcher: '
+                     '<input type="text" name="code" maxlength="9" autocomplete="off" autocapitalize="characters" '
+                     'spellcheck="false" placeholder="XXXX-XXXX" required></label> '
+                     f'<input type="hidden" name="t" value="{_form_token(sess, "check")}">'
+                     '<button class="ly-btn" name="do" value="check">Next</button></p></form>')
     toks = store.tokens(acct)
     if toks:
         rows = "".join(
@@ -1421,9 +1434,11 @@ def link_post(h) -> None:
     if not store.lim_ip.hit("link|" + acct, 30):
         return _page(h, 429, "Link the launcher", "<p>Too many tries. Wait a few minutes.</p>")
     act, code, tid = form.get("do", ""), store.device_lookup(form.get("code")), form.get("id", "")
-    want = f"{act}:{code}" if act in ("approve", "deny") else f"revoke:{tid}"
+    want = f"{act}:{code}" if act in ("approve", "deny") else ("check" if act == "check" else f"revoke:{tid}")
     if not hmac.compare_digest(form.get("t", ""), _form_token(sess, want)):
         return link_page(h, {}, "That form timed out. Try again.")
+    if act == "check":   # the code the player typed: Approve shows only for that
+        return link_page(h, {}, typed=(form.get("code") or "").strip()[:12] or "-")
     if act in ("approve", "deny"):
         if not code or not store.device_answer(code, acct, act == "approve"):
             return link_page(h, {}, "That code has expired. Start again from the launcher.")

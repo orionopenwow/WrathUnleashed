@@ -18,6 +18,8 @@ echo "== 1/2 sign-in page (wu-portal)"
 cp -p "$WU/portal/wrath_portal.py" "$BK/wrath_portal.py"
 had_links=""
 if [ -f "$WU/portal/links.py" ]; then cp -p "$WU/portal/links.py" "$BK/links.py"; had_links=1; fi
+had_ratelimit=""
+if [ -f "$WU/portal/ratelimit.py" ]; then cp -p "$WU/portal/ratelimit.py" "$BK/ratelimit.py"; had_ratelimit=1; fi
 had_demo=""
 if [ -f "$WU/portal/demo.py" ]; then cp -p "$WU/portal/demo.py" "$BK/demo.py"; had_demo=1; fi
 had_armory=""
@@ -62,6 +64,7 @@ if [ -d "$WU/portal/art" ]; then cp -a "$WU/portal/art" "$BK/art"; had_art=1; fi
 put_back() {
   cp -p "$BK/wrath_portal.py" "$WU/portal/wrath_portal.py"
   if [ -n "$had_links" ]; then cp -p "$BK/links.py" "$WU/portal/links.py"; else rm -f "$WU/portal/links.py"; fi
+  if [ -n "$had_ratelimit" ]; then cp -p "$BK/ratelimit.py" "$WU/portal/ratelimit.py"; else rm -f "$WU/portal/ratelimit.py"; fi
   if [ -n "$had_demo" ]; then cp -p "$BK/demo.py" "$WU/portal/demo.py"; else rm -f "$WU/portal/demo.py"; fi
   if [ -n "$had_armory" ]; then cp -p "$BK/armory.py" "$WU/portal/armory.py"; else rm -f "$WU/portal/armory.py"; fi
   if [ -n "$had_modes" ]; then cp -p "$BK/modes.py" "$WU/portal/modes.py"; [ ! -f "$BK/modes_data.py" ] || cp -p "$BK/modes_data.py" "$WU/portal/modes_data.py"
@@ -93,6 +96,9 @@ put_back() {
 }
 python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' wrath_portal.py
 install -m 644 wrath_portal.py "$WU/portal/wrath_portal.py"
+# the shared rate limits (ratelimit.py: swept by time, bounded, global caps, IPv6 /64), used by the portal, social.py,
+# profiles.py, hub_rank.py, admin.py and hub.py; the portal runs a stand-in without it
+if [ -f ratelimit.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' ratelimit.py && install -m 644 ratelimit.py "$WU/portal/ratelimit.py"; fi
 # the share links (/wrath/r/<id> and friends): optional, the portal runs without them
 if [ -f links.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' links.py && install -m 644 links.py "$WU/portal/links.py"; fi
 # the Modes hub (/wrath/modes and the go intent): modes.py and its data, optional, always as a pair
@@ -143,6 +149,12 @@ if [ -f projects.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.arg
 if [ -f leyline_net.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' leyline_net.py && install -m 644 leyline_net.py "$WU/portal/leyline_net.py"
   install -d -m 755 "$WU/portal-data/leyline"
   if [ -f hostpack.json ]; then python3 -I -c 'import json,sys;json.load(open(sys.argv[1]))' hostpack.json && install -m 644 hostpack.json "$WU/portal/hostpack.json"; fi
+fi
+# reviewed upstream addons merged into /wrath/mods/all.json (stream/upstream_addons.py and the list curate.py publishes):
+# optional, always as a pair
+if [ -f upstream_addons.py ] && [ -f upstream-addons.json ]; then
+  python3 -I -c 'import ast,sys,json;ast.parse(open(sys.argv[1]).read());json.load(open(sys.argv[2]))' upstream_addons.py upstream-addons.json && {
+    install -m 644 upstream_addons.py "$WU/portal/upstream_addons.py"; install -m 644 upstream-addons.json "$WU/portal/upstream-addons.json"; }
 fi
 # Leyline friends and messages (/wrath/api/social, /wrath/link): optional; its store is $WU/portal-data/social.sqlite3
 if [ -f social.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' social.py && install -m 644 social.py "$WU/portal/social.py"; fi

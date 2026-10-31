@@ -46,6 +46,7 @@ import logging
 import os
 import re
 import secrets
+import sys
 import threading
 import time
 import urllib.parse
@@ -248,7 +249,6 @@ _get = None
 store: Profiles | None = None
 _ways = {"at": -1e9, "ttl": 0, "doc": None}
 _ways_lock = threading.Lock()
-_lim: dict[str, list] = {}
 
 
 def bind(getter) -> None:
@@ -291,17 +291,24 @@ def host() -> str:
     return P("PUBLIC_HOST") or "play.openvanilla.app"
 
 
+def _ratelimit():
+    """stream/ratelimit.py, shared through sys.modules (the portal loads it first, with a stand-in when it is missing)."""
+    m = sys.modules.get("wu_ratelimit")
+    if m is None:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "wu_ratelimit", os.path.join(os.path.dirname(os.path.abspath(__file__)), "ratelimit.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        sys.modules["wu_ratelimit"] = m
+    return m
+
+
+_lim = _ratelimit().Limiter(600)   # sign-in and profile saves (stream/ratelimit.py: swept by time, bounded)
+
+
 def _hit(key: str, limit: int, seconds: float = 600) -> bool:
-    t = time.monotonic()
-    q = [x for x in _lim.get(key, []) if t - x < seconds]
-    if len(q) >= limit:
-        _lim[key] = q
-        return False
-    q.append(t)
-    _lim[key] = q
-    if len(_lim) > 20000:
-        _lim.clear()
-    return True
+    return _lim.hit(key, limit, seconds)
 
 
 # ------------------------------------------------------------------ which ways the website offers
@@ -648,7 +655,7 @@ def go_way(h, way: str, query: dict) -> None:
     nxt = safe_next((query.get("next") or [""])[0])
     if way not in WAYS or not ways().get(way):
         return _go(h, signin_url(nxt))
-    if not _hit("go|" + h.ip(), 40):
+    if not _hit("go|" + _ratelimit().bucket(h.ip()), 40):
         h.send(429, b"Too many sign-in attempts. Wait a few minutes.\n", "text/plain")
         return
     # Ours: where to come back to. The website's: where its own sign-in lands (it checks it is a path on this site).
@@ -784,7 +791,7 @@ def get(h, path: str, query: dict) -> None:
     if path.startswith(AVATAR + "/"):
         return serve_avatar(h, path[len(AVATAR) + 1:], query)
     lim = P("browse_limit")
-    if lim is not None and not lim.hit(h.ip(), 600):
+    if lim is not None and not lim.hit(_ratelimit().bucket(h.ip()), 600):
         return h.send(429, b"too many requests\n", "text/plain")
     if path == SIGNIN:
         return page_signin(h, query)

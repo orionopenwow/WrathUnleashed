@@ -37,6 +37,7 @@ import math
 import os
 import re
 import secrets
+import sys
 import threading
 import time
 import urllib.parse
@@ -256,24 +257,20 @@ CREATE TABLE IF NOT EXISTS hub_first_seen (mod TEXT PRIMARY KEY, day INTEGER NOT
 """
 
 
-class Window:
-    """A sliding-window counter: hit(key, limit) is False once key had limit hits in the window."""
+def _ratelimit():
+    """stream/ratelimit.py, shared through sys.modules (the portal loads it first, with a stand-in when it is missing)."""
+    m = sys.modules.get("wu_ratelimit")
+    if m is None:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "wu_ratelimit", os.path.join(os.path.dirname(os.path.abspath(__file__)), "ratelimit.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        sys.modules["wu_ratelimit"] = m
+    return m
 
-    def __init__(self, seconds: float, clock=time.monotonic):
-        self.seconds, self.q, self.lock, self.clock = seconds, {}, threading.Lock(), clock
 
-    def hit(self, key: str, limit: int) -> bool:
-        now = self.clock()
-        with self.lock:
-            q = self.q.setdefault(key, collections.deque())
-            while q and now - q[0] > self.seconds:
-                q.popleft()
-            if len(q) >= limit:
-                return False
-            q.append(now)
-            if len(self.q) > 50000:
-                self.q = {k: v for k, v in self.q.items() if v}
-            return True
+Window = _ratelimit().Limiter   # a sliding-window counter (stream/ratelimit.py)
 
 
 class RankError(Exception):
@@ -303,7 +300,7 @@ class Ranks:
         self._salt_day, self._salt = -1, b""
         self.lim_ip = Window(3600, mono)
         self.lim_ip_mod = Window(DAY, mono)
-        self.lim_day = Window(DAY, mono)
+        self.lim_day = Window(DAY, mono, global_keys=("all",))   # "all": a global cap, never evicted
         self.lim_acct = Window(3600, mono)
         self.ttl = float(os.environ.get("WU_HUB_RANK_TTL", "300") or 300)
         self._cache: tuple[float, int, dict] | None = None
@@ -318,7 +315,7 @@ class Ranks:
         day = _today(self.clock())
         if day != self._salt_day:
             self._salt_day, self._salt = day, secrets.token_bytes(32)
-        return hmac.new(self._salt, (ip or "?").encode(), hashlib.sha256).hexdigest()[:20]
+        return hmac.new(self._salt, (_ratelimit().bucket(ip) or "?").encode(), hashlib.sha256).hexdigest()[:20]   # IPv6: its /64
 
     def who(self, acct: str) -> str:
         return self._h("acct", acct.upper())
@@ -569,7 +566,7 @@ def _rating_doc(mid: str) -> dict:
 
 def get(h, path: str, query: dict) -> None:
     limit = _get("browse_limit")
-    if limit is not None and not limit.hit(h.ip(), 600):
+    if limit is not None and not limit.hit(_ratelimit().bucket(h.ip()), 600):
         return _json(h, 429, {"error": "Too many requests."})
     if store is None:
         return _json(h, 404, {"error": "Rankings are off here."})
