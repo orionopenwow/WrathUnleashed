@@ -384,3 +384,4 @@
 1139a ship Save to GitHub: search across the title bar, no account button, the friends panel docked and slim (GitHub then rebuilds Leyline.exe)
 1140a ship Save to GitHub: the friends panel in the top right, a shorter search box (GitHub then rebuilds Leyline.exe)
 1141a ship Save to GitHub: the friends panel merged into the title bar, a visible scroll bar on Home (GitHub then rebuilds Leyline.exe)
+1142a ship Save to GitHub: a see-through title bar (GitHub then rebuilds Leyline.exe)
