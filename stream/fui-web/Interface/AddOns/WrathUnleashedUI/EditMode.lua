@@ -110,7 +110,7 @@ function E.SpawnMenu(down)
     if down then B.ShowMenu(true) elseif not E.menuPinned then B.ShowMenu(false) end
 end
 
--- The client: a click in the world, with the ground point under the cursor (WoW coordinates, already on the
+-- The client: a click in the world, with the ground point under the cursor (game coordinates, already on the
 -- grid when Snap is on) and the clicked object's id; either may be nil.
 function E.Clicked(x, y, z, objectId, shift)
     local p = E.pending
