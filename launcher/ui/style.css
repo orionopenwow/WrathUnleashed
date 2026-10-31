@@ -120,7 +120,7 @@ button { font-family: inherit; }
 code { font: 12px ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--t-text); background: var(--t-surface-2);
   border-radius: 5px; padding: 1px 5px; user-select: text; }
 :is(button, select, input, a):focus-visible { outline: 2px solid var(--t-accent); outline-offset: 2px; }
-main, .problems, .sx-list, .sx-msgs { scrollbar-color: var(--t-border-strong) transparent; scrollbar-width: thin; }
+main, .problems { scrollbar-color: var(--t-border-strong) transparent; scrollbar-width: thin; }
 svg { flex: none; }
 
 /* ---------------------------------------------------------------- window frame */

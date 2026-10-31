@@ -1,6 +1,9 @@
-// The launcher's Community › Friends tab (ui/social.js) in Chromium, with a fake Tauri core: the Community menu item and
-// its Friends tab work with app.js's navigation, Home's friends panel (groups, counts, search, folding, your menu), sign-in by code, the friends list with presence and unread, a conversation, sending,
-// accepting a request, names shown as text (never markup), and a revoked sign-in going back to the sign-in screen.
+// Home's right panel (ui/social.js) in Chromium, with a fake Tauri core (owner 2026-10-30: "remove the friends area and
+// concept in favor of discord encouragement and keep the profile thing up there where it is now"): the profile row stays
+// (avatar, your name with its menu: Manage account and Sign out, no Appear online/offline; signed out: Sign in, the
+// code shown in the panel, signed in after you approve), under it a Join the Discord card and the forum's latest three
+// threads (a row opens the thread on the Forum page). No friends list, chat, friend badge or presence anywhere; names
+// and titles shown as text, never markup; a revoked sign-in goes back to Sign in.
 //
 //   NODE_PATH=$(npm root -g) node --test launcher/tests/social.browser.test.cjs
 'use strict';
@@ -11,20 +14,16 @@ const { chromium } = require('playwright');
 
 const INDEX = 'file://' + path.join(__dirname, '..', 'ui', 'index.html');
 
-// The fake core: get_state for app.js, the social_* commands for social.js. window.__calls records them.
-const FAKE = () => {
+const THREADS = [
+  { id: 7, cat: 'realms', title: 'Frost Haven: a cosy realm', author: 'Bramble', tag: '4655', created: 1, bumped: 2, replies: 3, pinned: false, locked: false },
+  { id: 8, cat: 'dens', title: '<img src=x onerror=window.__xss=1>', author: 'Kestrel', tag: '1', created: 1, bumped: 2, replies: 1, pinned: false, locked: false },
+  { id: 9, cat: 'help', title: 'Game folder not found', author: 'Alice', tag: '4821', created: 1, bumped: 2, replies: 0, pinned: false, locked: false },
+];
+
+// The fake core: get_state for app.js, the social_* and forum_* commands. window.__calls records them.
+const FAKE = (opts) => {
   const calls = (window.__calls = []);
-  let signed = false, polls = 0, v = 1, revoked = false;
-  const me = { pid: 'aaaaaaaaaa', name: 'Alice', tag: '4821', main: '', show_main: false, offline: false, status: 'launcher' };
-  const st = {
-    v, me, outgoing: [], blocked: [],
-    incoming: [{ pid: 'cccccccccc', name: 'Carol', tag: '1111', at: 1 }],
-    friends: [
-      { pid: 'bbbbbbbbbb', name: 'Bob', tag: '2222', main: '', status: 'game', realm: 'WrathUnleashed', char: 'Bobbert', unread: 2 },
-      { pid: 'dddddddddd', name: '<img src=x onerror=window.__xss=1>', tag: '3333', main: '', status: 'offline', realm: '', char: '', unread: 0 },
-    ],
-  };
-  const thread = [{ id: 1, mine: false, text: 'hi <b>alice</b>', at: 1700000000, via: 'game' }];
+  let signed = !!(opts && opts.signed), polls = 0, revoked = false;
   window.__TAURI__ = { core: { invoke: async (cmd, args) => {
     calls.push([cmd, args]);
     switch (cmd) {
@@ -33,19 +32,18 @@ const FAKE = () => {
         browser_url: 'https://play.openvanilla.app/wrath', windows: false, data_dir: '/tmp' };
       case 'social_status': return signed;
       case 'social_signin_start': return { state: 'pending', user_code: 'BCDF-GHJK', verify_url: 'https://play.openvanilla.app/wrath/link?code=BCDF-GHJK' };
-      case 'social_signin_poll': polls++; if (polls >= 1) { signed = true; return { state: 'signed_in', user_code: 'BCDF-GHJK', verify_url: '' }; }
-        return { state: 'pending' };
-      case 'social_call': {
+      case 'social_signin_poll': polls++; signed = true; return { state: 'signed_in', user_code: 'BCDF-GHJK', verify_url: '' };
+      case 'social_signout': signed = false; return null;
+      case 'social_call':
         if (revoked) throw 'signed_out';
-        const a = args.action, p = args.args || {};
-        if (a === 'state') return st;
-        if (a === 'events') return new Promise((r) => { window.__wake = () => r(Object.assign({}, st, { v: ++v })); });
-        if (a === 'thread') return { messages: thread };
-        if (a === 'read') { st.friends[0].unread = 0; return { ok: true }; }
-        if (a === 'send') { const m = { id: 9, mine: true, text: p.text, at: 1700000100, via: 'launcher' }; thread.push(m); return { ok: true, message: m }; }
-        if (a === 'accept') { st.incoming = []; st.friends.push({ pid: 'cccccccccc', name: 'Carol', tag: '1111', status: 'offline', realm: '', char: '', unread: 0 }); return { ok: true, text: "You're friends now." }; }
-        return { ok: true, text: 'ok' };
-      }
+        if (args.action === 'me') return { me: { pid: 'aaaaaaaaaa', name: opts && opts.evil ? '<b>Alice</b>' : 'Alice', tag: '4821', main: '', offline: false } };
+        throw 'unexpected social call ' + args.action;
+      case 'forum_call':
+        if (args.action === 'latest') return { threads: window.__threads.slice(0, args.args.n || 8) };
+        if (args.action === 'categories') return { format: 1, categories: [{ id: 'realms', name: 'Share your realm', line: 'x', staff_only: false, threads: 1, posts: 1, last: null }] };
+        if (args.action === 'thread') return { thread: Object.assign({}, window.__threads[0], { id: args.args.id }), posts: [], page: 1, pages: 1, more: false };
+        throw 'unexpected forum call';
+      case 'open_link': return null;
       default: throw 'unknown ' + cmd;
     }
   } } };
@@ -56,144 +54,101 @@ let browser;
 test.before(async () => { browser = await chromium.launch(); });
 test.after(async () => { await browser.close(); });
 
-test('Community › Friends: sign in, list, chat, accept, text only, sign-out on revoke', async () => {
-  const page = await browser.newPage();
+async function open(opts) {
+  const page = await browser.newPage({ viewport: { width: 1400, height: 860 } });
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
-  await page.addInitScript(FAKE);
+  await page.addInitScript((t) => { window.__threads = t; }, THREADS);
+  await page.addInitScript(FAKE, opts || {});
   await page.goto(INDEX);
-  assert.equal(await page.locator('.nav[data-page="friends"]').count(), 0, 'no Friends menu item of its own');
-  const nav = page.locator('.nav[data-page="community"]');
-  assert.equal(await nav.count(), 1, 'one Community menu item');
-  await nav.click();
-  assert.ok(await page.locator('#page-community').evaluate((e) => e.classList.contains('on')), "app.js's navigation shows the page");
-  assert.ok(await page.locator('#pane-friends').evaluate((e) => e.classList.contains('on')), 'on its Friends tab');
-  assert.equal(await page.getAttribute('#tab-community-friends', 'aria-selected'), 'true');
-  assert.ok(await page.locator('#sx-out').isVisible(), 'signed out: the sign-in screen');
+  return { page, errors };
+}
 
-  await page.click('#sx-signin');
-  assert.equal(await page.textContent('#sx-code-text'), 'BCDF-GHJK');
-  await page.waitForSelector('#sx-in:not([hidden])', { timeout: 9000 });
-  assert.match(await page.textContent('#sx-me'), /Alice#4821/);
-  const rows = page.locator('#sx-friends .sx-friend');
-  assert.equal(await rows.count(), 2);
-  assert.equal(await page.locator('#hf-list .hf-group[data-group="friends"] .sx-friend').count(), 2, "Home's friends panel lists them too");
-  assert.match(await rows.nth(0).textContent(), /Bob.*In game: Bobbert on WrathUnleashed.*2/);
-  assert.equal(await page.textContent('#nav-friends-count'), '3', 'unread + requests on the Community menu item');
-  assert.equal(await page.textContent('#tab-friends-count'), '3', 'and on the Friends tab');
-  assert.match(await rows.nth(1).textContent(), /<img src=x/, 'a name is shown as text');
-  assert.equal(await page.evaluate(() => window.__xss), undefined, 'and never runs');
-
-  await rows.nth(0).click();
-  await page.waitForSelector('.sx-msg');
-  assert.match(await page.textContent('.sx-msg'), /hi <b>alice<\/b>.*in game/);
-  assert.ok(await page.evaluate(() => window.__calls.some(([c, a]) => c === 'social_call' && a.action === 'read')), 'opening marks it read');
-  await page.fill('#sx-say', 'hello bob');
-  await page.press('#sx-say', 'Enter');
-  await page.waitForSelector('.sx-msg.mine');
-  const sent = await page.evaluate(() => window.__calls.find(([c, a]) => c === 'social_call' && a.action === 'send')[1].args);
-  assert.deepEqual(sent, { to: 'bbbbbbbbbb', text: 'hello bob' });
-
-  await page.click('.sx-req button:has-text("ACCEPT")');
-  await page.waitForFunction(() => document.querySelectorAll('#sx-friends .sx-friend').length === 3);
-
-  await page.click('#sx-block');
-  assert.equal(await page.textContent('#sx-block'), 'SURE?', 'block asks once more');
-  await page.click('#sx-block');
-  await page.waitForFunction(() => window.__calls.some(([c, a]) => c === 'social_call' && a.action === 'block' && a.args.pid === 'bbbbbbbbbb'));
-
-  await page.evaluate(() => { window.__revoke(); window.__wake(); });
-  await page.waitForSelector('#sx-out:not([hidden])');
-  assert.match(await page.textContent('#sx-status'), /signed out/i);
-  assert.deepEqual(errors, []);
-});
-
-// Home's right column: the friends list (owner 2026-10-30): your own row and its menu, Favorites and Friends with
-// online / total counts (folding remembered), the search box, a row opening the chat; signed out, one line and Sign in.
-test("Home's friends panel: your row, the groups and their counts, folding, search, a row opens the chat", async () => {
-  const page = await browser.newPage();
-  const errors = [];
-  page.on('pageerror', (e) => errors.push(String(e)));
-  await page.addInitScript(FAKE);
-  await page.addInitScript(() => {
-    const inner = window.__TAURI__.core.invoke;
-    window.__TAURI__.core.invoke = async (cmd, args) => {
-      if (cmd === 'social_status') return true;
-      const r = await inner(cmd, args);
-      if (cmd === 'social_call' && args.action === 'state' && !r.__done) {
-        r.__done = true;
-        r.friends[0].favorite = true;
-        r.friends.push({ pid: 'eeeeeeeeee', name: 'Kestrel', tag: '5555', main: '', status: 'launcher', realm: '', char: '', unread: 0 });
-      }
-      return r;
-    };
-  });
-  await page.goto(INDEX);
-  await page.evaluate(() => localStorage.removeItem('leyline.friends.folded'));
-  await page.reload();
+test('no friends anywhere: no Friends tab, chat, friends list, badge or presence', async () => {
+  const { page, errors } = await open({ signed: true });
   await page.waitForFunction(() => document.querySelector('#hf-me .hf-me-name') && document.querySelector('#hf-me .hf-me-name').textContent === 'Alice');
-  assert.equal(await page.textContent('#hf-me .hf-me-st'), 'Online');
-  assert.ok(await page.isVisible('#hf-me .hf-me-av .sx-dot'), 'a status dot on your avatar');
-  const heads = () => page.$$eval('#hf-list .hf-ghead', (h) => h.map((x) => x.textContent));
-  assert.deepEqual(await heads(), ['Favorites – 1/1', 'Friends – 2/3']);
-  const rows = (g) => page.$$eval(`#hf-list .hf-group[data-group="${g}"] .sx-friend .sx-ft b`, (b) => b.map((x) => x.textContent));
-  assert.deepEqual(await rows('fav'), ['Bob']);
-  assert.deepEqual(await rows('friends'), ['Bob', 'Kestrel', '<img src=x onerror=window.__xss=1>'], 'in game, online, then offline');
-  const bob = page.locator('#hf-list .hf-group[data-group="friends"] .sx-friend').first();
-  assert.ok(await bob.evaluate((e) => e.classList.contains('st-game')), 'the name in the status colour');
-  assert.equal(await bob.locator('.sx-ft i').textContent(), 'In game: Bobbert on WrathUnleashed');
-  assert.ok(await page.locator('#hf-list .sx-friend.st-offline').evaluate((e) => getComputedStyle(e.querySelector('.sx-av')).filter !== 'none'), 'offline greyed');
-  assert.equal(await page.locator('#home-friends .sx-av').first().evaluate((e) => e.getBoundingClientRect().width), 38, 'your 38px avatar (the slim panel)');
-  assert.equal(await bob.locator('.sx-av').evaluate((e) => e.getBoundingClientRect().width), 32, '32px rows (the slim panel)');
-  // search filters the rows, the counts stay the group's
-  await page.fill('#hf-q', 'kes');
-  assert.deepEqual(await rows('friends'), ['Kestrel']);
-  assert.deepEqual(await rows('fav'), []);
-  assert.deepEqual(await heads(), ['Favorites – 1/1', 'Friends – 2/3']);
-  await page.fill('#hf-q', 'nobody');
-  assert.match(await page.textContent('#hf-list .hf-group[data-group="friends"]'), /No one by that name/);
-  await page.fill('#hf-q', '');
-  // folding: the triangle, remembered
-  await page.click('#hf-list .hf-group[data-group="fav"] .hf-ghead');
-  assert.equal(await page.getAttribute('#hf-list .hf-group[data-group="fav"] .hf-ghead', 'aria-expanded'), 'false');
-  assert.ok(await page.isHidden('#hf-list .hf-group[data-group="fav"] .hf-rows'));
-  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('leyline.friends.folded'))), { fav: true, friends: false });
-  await page.reload();
-  await page.waitForFunction(() => document.querySelector('#hf-list .hf-group[data-group="fav"] .sx-friend'));
-  assert.ok(await page.isHidden('#hf-list .hf-group[data-group="fav"] .hf-rows'), 'still folded after a reload');
-  // your menu: Appear offline
-  await page.click('#hf-me-btn');
-  assert.deepEqual(await page.$$eval('#hf-me [role="menuitem"]', (b) => b.map((x) => x.textContent)), ['Appear online', 'Appear offline', 'Manage account', 'Sign out']);
-  await page.click('#hf-me [role="menuitem"]:has-text("Appear offline")');
-  await page.waitForFunction(() => window.__calls.some(([c, a]) => c === 'social_call' && a.action === 'profile'));
-  assert.ok(await page.evaluate(() => window.__calls.some(([c, a]) => c === 'social_call' && a.action === 'profile' && a.args.offline === true)));
-  // a row opens the chat; add a friend focuses the field on Community › Friends
-  await page.click('#hf-list .hf-group[data-group="friends"] .sx-friend >> nth=0');
-  assert.ok(await page.locator('#pane-friends').evaluate((e) => e.classList.contains('on')));
-  await page.waitForFunction(() => window.__calls.some(([c, a]) => c === 'social_call' && a.action === 'thread' && a.args.with === 'bbbbbbbbbb'));
-  await page.evaluate(() => window.LeylineNav.show('play'));
-  await page.click('#hf-add');
-  await page.waitForFunction(() => document.activeElement && document.activeElement.id === 'sx-add');
-  await page.evaluate(() => window.LeylineNav.show('play'));
-  await page.click('#home-friends .hf-open');
-  assert.ok(await page.locator('#pane-friends').evaluate((e) => e.classList.contains('on')));
-  assert.equal(await page.evaluate(() => window.__xss), undefined);
+  assert.equal(await page.locator('#page-community, #pane-friends, #sx-chat, #sx-friends, #hf-list, #hf-tools, #hf-q, #hf-add, #nav-friends-count, #tab-friends-count, .sx-dot, .sx-friend').count(), 0);
+  assert.equal(await page.locator('.nav[data-page="community"], .nav[data-page="friends"]').count(), 0);
+  const text = await page.evaluate(() => document.body.innerText);
+  assert.doesNotMatch(text, /\bfriends? list|add a friend|friend request|appear (on|off)line|search friends/i);
+  assert.ok(!(await page.evaluate(() => window.__calls.some(([c, a]) => c === 'social_call' && ['state', 'events'].includes(a.action)))), 'no friends state or presence poll');
   assert.deepEqual(errors, []);
   await page.close();
 });
 
-test("Home's friends panel signed out: one line and SIGN IN, no search", async () => {
-  const page = await browser.newPage();
-  const errors = [];
-  page.on('pageerror', (e) => errors.push(String(e)));
-  await page.addInitScript(FAKE);
-  await page.goto(INDEX);
-  await page.waitForSelector('#hf-list .hf-out');
-  assert.equal(await page.textContent('#hf-me .hf-me-st'), 'Not signed in');
-  assert.ok(await page.isHidden('#hf-tools'));
-  await page.click('#hf-list .hf-out button:has-text("SIGN IN")');
-  assert.ok(await page.locator('#pane-friends').evaluate((e) => e.classList.contains('on')));
-  await page.waitForFunction(() => window.__calls.some(([c]) => c === 'social_signin_start'), 'starts the sign-in');
+test('signed in: the profile row stays where it was, with Manage account and Sign out', async () => {
+  const { page, errors } = await open({ signed: true });
+  await page.waitForFunction(() => document.querySelector('#hf-me .hf-me-name') && document.querySelector('#hf-me .hf-me-name').textContent === 'Alice');
+  assert.equal(await page.textContent('#hf-me .hf-me-st'), '#4821');
+  assert.equal(await page.getAttribute('#hf-me-btn', 'title'), 'Alice#4821');
+  // docked where the friends panel was: top right, beside the window buttons, full height to the play bar
+  const r = await page.evaluate(() => {
+    const b = document.getElementById('home-side').getBoundingClientRect();
+    return { right: Math.round(innerWidth - b.right), top: Math.round(b.top), w: Math.round(b.width), me: Math.round(document.getElementById('hf-me').getBoundingClientRect().top) };
+  });
+  assert.equal(r.right, 0); assert.equal(r.top, 0); assert.equal(r.w, 216); assert.ok(r.me < 60, 'the profile row is the top of it');
+  await page.click('#hf-me-btn');
+  assert.deepEqual(await page.$$eval('#hf-me [role="menuitem"]', (b) => b.map((x) => x.textContent)), ['Manage account', 'Sign out']);
+  await page.click('#hf-me [role="menuitem"]:has-text("Manage account")');
+  assert.ok(await page.evaluate(() => window.__calls.some(([c, a]) => c === 'open_link' && a.name === 'account')));
+  await page.click('#hf-me-btn');
+  await page.click('#hf-me [role="menuitem"]:has-text("Sign out")');
+  await page.waitForSelector('#hf-signin');
+  assert.ok(await page.evaluate(() => window.__calls.some(([c]) => c === 'social_signout')));
+  assert.match(await page.textContent('#hf-status'), /Signed out/);
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('signed out: Sign in shows the code in the panel, then your name', async () => {
+  const { page, errors } = await open();
+  await page.waitForSelector('#hf-signin');
+  assert.equal(await page.textContent('#hf-me .hf-me-st'), 'Signed out');
+  await page.click('#hf-signin');
+  await page.waitForSelector('#hf-code:not([hidden])');
+  assert.match(await page.textContent('#hf-code'), /BCDF-GHJK/);
+  await page.waitForFunction(() => document.querySelector('#hf-me .hf-me-name') && document.querySelector('#hf-me .hf-me-name').textContent === 'Alice', null, { timeout: 9000 });
+  assert.ok(await page.isHidden('#hf-code'));
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('under the profile: Join the Discord and the latest three threads; a row opens the thread', async () => {
+  const { page, errors } = await open({ signed: true, evil: true });
+  await page.waitForFunction(() => document.querySelectorAll('#hf-fm-list .hf-fm-row').length === 3);
+  assert.equal(await page.textContent('#hf-dc-h'), 'Join the Discord');
+  await page.click('.hf-dc-go');
+  assert.ok(await page.evaluate(() => window.__calls.some(([c, a]) => c === 'open_link' && a.name === 'discord')), 'opens the Discord through openLink');
+  assert.ok(await page.evaluate(() => window.__calls.some(([c, a]) => c === 'forum_call' && a.action === 'latest' && a.args.n === 3)));
+  const rows = await page.$$eval('#hf-fm-list .hf-fm-row', (r) => r.map((x) => x.textContent));
+  assert.match(rows[0], /Frost Haven: a cosy realm.*Bramble · 3 replies/);
+  assert.match(rows[1], /<img src=x/, 'a title is text');
+  await page.waitForFunction(() => document.querySelector('#hf-me .hf-me-name'));
+  assert.equal(await page.textContent('#hf-me .hf-me-name'), '<b>Alice</b>', 'a name is text');
+  assert.equal(await page.evaluate(() => window.__xss), undefined);
+  await page.click('#hf-fm-list .hf-fm-row >> nth=0');
+  assert.ok(await page.locator('#page-forum').evaluate((e) => e.classList.contains('on')), 'the Forum page');
+  await page.waitForFunction(() => window.__calls.some(([c, a]) => c === 'forum_call' && a.action === 'thread' && a.args.id === 7));
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('the forum unreachable: one quiet line, the Discord card still there', async () => {
+  const { page, errors } = await open();
+  await page.addInitScript(() => { window.__threads = null; });
+  await page.reload();
+  await page.waitForFunction(() => /isn't reachable/.test(document.getElementById('hf-fm-list').textContent));
+  assert.ok(await page.isVisible('.hf-dc-go'));
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('a revoked sign-in goes back to Sign in', async () => {
+  const { page, errors } = await open({ signed: true });
+  await page.waitForFunction(() => document.querySelector('#hf-me-btn'));
+  await page.evaluate(() => { window.__revoke(); return window.LeylineSocial.refresh(); });
+  await page.waitForSelector('#hf-signin');
+  assert.match(await page.textContent('#hf-status'), /signed out/i);
   assert.deepEqual(errors, []);
   await page.close();
 });

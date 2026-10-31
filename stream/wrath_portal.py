@@ -27,6 +27,8 @@ Two listeners, both inside Docker networks only (never published on the host):
          GET /wrath/admin[/...], POST /wrath/admin/act   staff only: the Leyline Admin Console (stream/admin.py,
                                docs/ADMIN-CONSOLE.md); GET /wrath/leyline/{flags,channel,news,themes,realm-overrides}.json
                                are its public feeds for the launcher
+         GET/POST /wrath/leyline/forum[/...], GET /wrath/forum/api/...   the Leyline forum (stream/forum.py): read
+                               by anyone, posts from signed-in website accounts; its JSON is for the launcher
 
   :7878  a SOAP bridge for the realm service, on its network under the name "mangosd". The
          realm service was written for the 1.12 server: it speaks SOAP with the urn:MaNGOS
@@ -225,6 +227,9 @@ if hostflow is not None:
 social = _load_module("wu_social", "social.py")   # Leyline friends and messages (stream/social.py)
 if social is not None:
     social.bind(lambda name: globals()[name])
+forum = _load_module("wu_forum", "forum.py")   # the Leyline forum: /wrath/leyline/forum, /wrath/forum/api (stream/forum.py)
+if forum is not None:
+    forum.bind(lambda name: globals()[name])
 hub_rank = _load_module("wu_hub_rank", "hub_rank.py")   # mods.json, installs and ratings (stream/hub_rank.py)
 if hub_rank is not None:
     hub_rank.bind(lambda name: globals()[name])
@@ -2775,6 +2780,9 @@ class PageHandler(BaseHTTPRequestHandler):
         if social is not None and social.match(path):   # Leyline friends and messages (stream/social.py)
             social.post(self, path)
             return
+        if forum is not None and forum.match(path):   # the forum's forms (stream/forum.py)
+            forum.post(self, path)
+            return
         if hub_rank is not None and hub_rank.match(path):   # POST /wrath/api/hub/install|rate (stream/hub_rank.py)
             hub_rank.post(self, path)
             return
@@ -2849,6 +2857,9 @@ class PageHandler(BaseHTTPRequestHandler):
             return
         if path.startswith("/wrath/art/"):
             self.art(urllib.parse.unquote(path[len("/wrath/art/"):]))
+            return
+        if forum is not None and forum.match(path):   # the forum and its JSON (stream/forum.py)
+            forum.get(self, path, query)
             return
         twin = hub_mod.twin(path, query) if hub_mod is not None and hasattr(hub_mod, "twin") else None
         if twin:   # an older page with a twin on the Leyline front door (stream/hub.py TWINS): one site, one page each
@@ -3115,6 +3126,8 @@ def main() -> int:
     threading.Thread(target=_layer_sweeper, daemon=True, name="layer-sweeper").start()
     if social is not None:
         social.setup()   # the store in /data and the realm bridge thread (stream/social.py)
+    if forum is not None:
+        forum.setup()   # the forum's store in /data (stream/forum.py)
     try:
         page.serve_forever()
     except KeyboardInterrupt:

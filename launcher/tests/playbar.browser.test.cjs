@@ -2,7 +2,8 @@
 // Tauri core: the client picker opens a drop-up list (actions on top, the families with no folder greyed "Not found",
 // your folders nearest the button with the picked one marked), a greyed row opens Find your game files, picking a
 // row changes the client, the keyboard (Up / Down / Home / End / Enter / Esc) and a click outside, the realm picker (a
-// drop-up list of realms, browser play, Solo, Make a realm, Find more; picking selects and saves), no mode switch, no
+// drop-up list of realms, browser play, My Den, Make a realm, Find more; picking selects and saves; My Den plays the
+// Den this PC hosts, or opens the Host page with Make my Den picked), no mode switch, no
 // version text in the bar, and the guide: plain words, no download links, browser play.
 //
 //   NODE_PATH=$(npm root -g) node --test launcher/tests/playbar.browser.test.cjs
@@ -209,7 +210,7 @@ const rrows = (page) => page.$$eval('#pb-rmenu > li', (l) => l.map((x) => (x.cla
   : [x.querySelector('.pb-opt-name').textContent, (x.querySelector('.rl-ver') || {}).textContent || '', (x.querySelector('.pb-opt-sub') || {}).textContent || '',
     x.getAttribute('aria-selected'), x.getAttribute('aria-disabled') || ''].join('|'))));
 
-test('the realm picker: a drop-up list of your realms, live realms, browser play, Solo, Make a realm and Find more', async () => {
+test('the realm picker: a drop-up list of your realms, live realms, browser play, My Den, Make a realm and Find more', async () => {
   const { page, ctx, errors } = await openNet();
   assert.equal(await page.isVisible('#pb-rmenu'), false);
   await page.click('#pb-realm-btn');
@@ -218,7 +219,7 @@ test('the realm picker: a drop-up list of your realms, live realms, browser play
   assert.deepEqual(await rrows(page), [
     '# Official', 'Dalaran Hangout|3.3.5a|5 playing|true|', '---',
     '# On the network', 'Busy Den|3.3.5a|30 playing|false|', 'Small Den|3.3.5a|3 playing|false|', '---',
-    'Play in your browser||Nothing to install|false|', 'Solo||Coming soon|false|true', '---',
+    'Play in your browser||Nothing to install|false|', 'My Den||Make your Den|false|', '---',
     '+ Make a realm|||false|', 'Find more realms…|||false|',
   ], 'live realms by players; offline ones left out');
   assert.equal(await page.evaluate(() => document.activeElement.querySelector('.pb-opt-name').textContent), 'Dalaran Hangout', 'the picked row has the focus');
@@ -243,8 +244,7 @@ test('the realm picker: a drop-up list of your realms, live realms, browser play
   assert.equal(await page.evaluate(() => window.LeylineApp.mode()), 'browser');
   await page.click('#pb-realm-btn');
   assert.equal(await page.getAttribute('#pb-rmenu .pb-browser', 'aria-selected'), 'true');
-  await page.click('#pb-rmenu .pb-solo', { force: true });
-  assert.ok(await page.isVisible('#pb-rmenu'), 'Solo is disabled: nothing happens');
+  assert.equal(await page.locator('#pb-rmenu .pb-solo').count(), 0, 'Solo (coming soon) gave way to My Den');
   await page.click('#pb-rmenu >> text=Dalaran Hangout');
   assert.equal(await page.evaluate(() => window.LeylineApp.mode()), 'online');
   assert.equal(await page.inputValue('#play-realm'), 'official');
@@ -304,6 +304,107 @@ test('the realm picker by keyboard: Up opens, arrows and Home / End, Enter picks
   assert.equal(await page.isVisible('#pb-menu'), false, 'and the other way round');
   await page.mouse.click(700, 300);
   assert.equal(await page.isVisible('#pb-rmenu'), false, 'a click outside closes it');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+// My Den (docs/DEN.md): the kit's state/host.json profile "den" says this PC hosts one
+const DEN_KIT = { dir: '/home/me/kit', is_kit: true, has_windows_script: true, has_unix_script: true, problems: [], seeds: [],
+  realm: { realm_id: 'abcdefghijk2345a', name: 'My Den', visibility: 'private', relay: 'relay.openvanilla.app', profile: 'den' } };
+const DEN_INVITE = 'https://relay.openvanilla.app/join/abcdefghijk2345a#k3y';
+async function openDen(hostKit, clients = [TWO[1], TWO[0]]) {
+  const ctx = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1400, height: 860 } });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.route('https://play.openvanilla.app/**', (r) => r.fulfill({ path: PICTURE, contentType: 'image/webp' }));
+  await page.addInitScript(FAKE, { clients });   // the 1.12.1 folder picked: the Den takes the 3.3.5a one
+  await page.addInitScript((hostKit) => {
+    const inner = window.__TAURI__.core.invoke;
+    window.__kit = hostKit;
+    window.__TAURI__.core.invoke = async (cmd, args) => {
+      switch (cmd) {
+        case 'host_info': window.__calls.push([cmd, args]); return JSON.parse(JSON.stringify(window.__kit));
+        case 'host_invite': window.__calls.push([cmd, args]); return window.__kit.realm ? 'https://relay.openvanilla.app/join/abcdefghijk2345a#k3y' : null;
+        case 'join_invite': window.__calls.push([cmd, args]); return { address: 'relay.openvanilla.app:40007', name: 'My Den' };
+        case 'play': window.__calls.push([cmd, args]); return 'Started My Wrath.';
+        case 'host_profiles': window.__calls.push([cmd, args]); return [[
+          { id: 'vanillaplus', label: 'x', version: '3.3.5a', core: 'azerothcore', in_kit: true, clients: [{ id: 'c335a-1', name: 'My Wrath', path: '/g' }], note: null },
+          { id: 'den', label: 'x', version: '3.3.5a', core: 'azerothcore', in_kit: true, clients: [{ id: 'c335a-1', name: 'My Wrath', path: '/g' }], note: null },
+          { id: 'dalaran', label: 'x', version: '3.3.5a', core: 'azerothcore', in_kit: true, clients: [{ id: 'c335a-1', name: 'My Wrath', path: '/g' }], note: null },
+        ], null];
+        case 'host_choose': window.__calls.push([cmd, args]); return { profile: args.profile, client_dir: '' };
+        case 'hostpack_info': return { installed: { version: '7' }, available: { version: '7' }, update: false, kit_dir: '/home/me/kit' };
+        case 'docker_info': return { state: 'ready', version: '27', help: '', get_url: '' };
+        case 'host_listing': return { tags: [], region: null, language: null, max_players: null, direct: false };
+        case 'host_console': return { set_up: true, linked: false, name: 'My Den', realm_id: 'abcdefghijk2345a', profile: 'den', core: 'azerothcore',
+          visibility: 'private', signup: 'invite', browser: false, max_players: 10, docker: true, services: [], gm: false, gm_note: null };
+        case 'host_status': return { realm_id: args.realmId, online: true, name: 'My Den', visibility: 'private', players: 1, bots: 0, listed: false };
+        default: return inner(cmd, args);
+      }
+    };
+  }, hostKit);
+  await page.goto(INDEX);
+  await page.waitForFunction(() => window.LeylineNav && document.querySelector('#page-play.on') && window.__calls.some(([c]) => c === 'realms_list'));
+  await page.waitForFunction(() => window.__calls.some(([c]) => c === 'host_info'));
+  return { page, ctx, errors };
+}
+const callsOf = (page, cmd) => page.evaluate((cmd) => window.__calls.filter(([c]) => c === cmd).map(([, a]) => a), cmd);
+
+test('My Den hosted on this PC: the row plays it through its own invite link with the 3.3.5a client', async () => {
+  const { page, ctx, errors } = await openDen(DEN_KIT);
+  await page.click('#pb-realm-btn');
+  const den = (await rrows(page)).find((x) => x.startsWith('My Den'));
+  assert.equal(den, 'My Den|3.3.5a|On this PC|false|', 'its version, and on this PC');
+  assert.equal(await page.locator('#pb-rmenu .pb-den .pb-den-ic svg').count(), 1, 'the house mark');
+  await page.click('#pb-rmenu .pb-den');
+  await page.waitForFunction(() => window.__calls.some(([c]) => c === 'play'));
+  assert.equal(await page.isVisible('#pb-rmenu'), false);
+  assert.deepEqual(await callsOf(page, 'join_invite'), [{ client: 'c335a-1', link: DEN_INVITE }], 'the relay knock with the Den\'s own invite');
+  assert.deepEqual(await callsOf(page, 'play'), [{ client: 'c335a-1', realm: 'relay.openvanilla.app:40007' }], 'then PLAY, on the Wrath folder');
+  assert.equal(await page.inputValue('#play-client'), 'c335a-1');
+  assert.equal(await page.inputValue('#play-custom'), 'relay.openvanilla.app:40007');
+  assert.equal(await page.textContent('#pb-realm'), 'My Den', 'the bar names it');
+  assert.equal(await page.textContent('#pb-realm-ver'), '3.3.5a');
+  assert.ok(await page.evaluate(() => document.querySelector('#pb-realm-ic.pb-mark-ic svg')), 'and shows the house mark');
+  await page.click('#pb-realm-btn');
+  const rows = await rrows(page);
+  assert.ok(rows.includes('My Den|3.3.5a|On this PC|true|'), 'now marked');
+  assert.ok(!rows.some((x) => x.startsWith('relay.openvanilla.app:40007')), 'not again as an address under Your realms');
+  assert.equal(await pageOn(page), 'page-play');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('My Den not hosted: the row opens the Host page with Make my Den picked', async () => {
+  const { page, ctx, errors } = await openDen({ dir: '/home/me/kit', is_kit: true, has_windows_script: true, has_unix_script: true, problems: [], seeds: [], realm: null });
+  await page.click('#pb-realm-btn');
+  assert.ok((await rrows(page)).includes('My Den||Make your Den|false|'));
+  await page.click('#pb-rmenu .pb-den');
+  assert.equal(await pageOn(page), 'page-host');
+  await page.waitForFunction(() => window.__calls.some(([c]) => c === 'host_choose'));
+  assert.deepEqual((await callsOf(page, 'host_choose'))[0], { profile: 'den', clientId: 'c335a-1' });
+  await page.waitForFunction(() => document.querySelector('.hc-rs[data-profile="den"].on'));
+  assert.equal(await page.getAttribute('.hc-rs[data-profile="den"]', 'aria-checked'), 'true');
+  assert.equal(await page.textContent('#hc-start'), 'Start My Den');
+  assert.equal(await callsOf(page, 'join_invite').then((l) => l.length), 0, 'nothing joined, nothing started');
+  assert.equal(await callsOf(page, 'play').then((l) => l.length), 0);
+  // made since: the row plays it now
+  await page.evaluate((k) => { window.__kit = k; }, DEN_KIT);
+  await page.click('.nav[data-page="play"]');
+  await page.click('#pb-realm-btn');
+  await page.waitForFunction(() => document.querySelector('#pb-rmenu .pb-den .pb-opt-sub').textContent === 'On this PC');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('My Den hosted but no 3.3.5a folder: Clients, with what to add', async () => {
+  const { page, ctx, errors } = await openDen(DEN_KIT, [TWO[1]]);
+  await page.click('#pb-realm-btn');
+  await page.click('#pb-rmenu .pb-den');
+  assert.equal(await pageOn(page), 'page-clients');
+  assert.match(await page.textContent('#cl-status'), /3\.3\.5a game folder/);
+  assert.equal(await callsOf(page, 'join_invite').then((l) => l.length), 0);
   assert.deepEqual(errors, []);
   await ctx.close();
 });

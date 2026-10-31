@@ -16,6 +16,8 @@ Leyline look, with a little plain script (only for the typed confirm). Nothing h
     GET  /wrath/admin/themes           theme packs (the Workshop category "themes"): approve, reject, feature
     GET  /wrath/admin/reports          .bug reports (ov_admin.lua), message reports (stream/social.py), community link
                                        reports (stream/projects.py): resolve, notes
+    GET  /wrath/admin/forum            the forum (stream/forum.py): reported posts (hide, done, dismiss), threads (pin, lock,
+                                       hide, merge a duplicate into another), hidden posts (show again)
     GET  /wrath/admin/health           what this server can see of itself (and Autopilot, when it is reachable)
     GET  /wrath/admin/staff            who is staff (owner: grant and revoke)
     GET  /wrath/admin/audit            every admin action: who, what, when, before and after
@@ -824,6 +826,12 @@ def social_store():
     return getattr(mod, "store", None) if mod is not None else None
 
 
+def forum_store():
+    """stream/forum.py's store, or None when the forum is not on this portal."""
+    mod = P("forum")
+    return getattr(mod, "store", None) if mod is not None else None
+
+
 def notes() -> dict:
     doc = _read_json(_apath("notes.json"), {})
     return {k: v for k, v in doc.items() if isinstance(v, dict) and ":" in k}
@@ -959,7 +967,7 @@ document.querySelectorAll('form[data-confirm]').forEach(function(f){
 
 TABS = (("", "Dashboard"), ("catalog", "Catalog"), ("workshop", "Workshop"), ("hub", "Index"), ("realms", "Realms"),
         ("releases", "Releases"), ("flags", "Flags"), ("themes", "Themes"), ("reports", "Reports"),
-        ("health", "Health"), ("staff", "Staff"), ("audit", "Audit"))
+        ("forum", "Forum"), ("health", "Health"), ("staff", "Staff"), ("audit", "Audit"))
 
 
 def _css() -> str:
@@ -1110,6 +1118,12 @@ def dashboard(user: dict) -> str:
             soc_n = len(social_store().reports("open", 1000))
         except Exception:   # noqa: BLE001
             soc_n = None
+    fm_n = None
+    if forum_store() is not None:
+        try:
+            fm_n = len(forum_store().reports("open", 1000))
+        except Exception:   # noqa: BLE001
+            fm_n = None
     themes = theme_items()
     th_pending = sum(1 for t in themes if t["state"] != "approved") if themes_review() else 0
     dec = hub_decisions()
@@ -1125,7 +1139,7 @@ def dashboard(user: dict) -> str:
                + stat(len(projs), "Community links") + stat(sum(1 for p in projs if p.get("hidden")), "Links hidden")
                + stat(ws_live, "Workshop items live") + stat(len(hub_entries()), "Index entries") + stat(len(themes), "Theme packs"))
     reports = (stat((bc.get("new", 0) + bc.get("seen", 0)) if bc_ok else None, "Open .bug reports")
-               + stat(soc_n, "Open message reports") + stat(links_reported, "Reported links")
+               + stat(soc_n, "Open message reports") + stat(fm_n, "Open forum reports") + stat(links_reported, "Reported links")
                + stat(len(P("network").reports("open")) if P("network") is not None else None, "Open realm reports"))
     queues = (stat(len(ws_pending) if ws_ok else None, "Workshop waiting") + stat(hub_pending, "Index submissions")
               + stat(th_pending, "Theme packs waiting"))
@@ -1142,7 +1156,7 @@ def dashboard(user: dict) -> str:
             f'<p class="fine"><a href="/wrath/admin/workshop">Workshop</a> · <a href="/wrath/admin/hub">Index</a> · '
             f'<a href="/wrath/admin/themes">Themes</a></p></section>'
             f'<section class="ly-panel"><h2>Reports</h2><div class="ad-stats">{reports}</div>'
-            f'<p class="fine"><a href="/wrath/admin/reports">Open the reports</a></p></section>'
+            f'<p class="fine"><a href="/wrath/admin/reports">Open the reports</a> · <a href="/wrath/admin/forum">The forum</a></p></section>'
             f'<section class="ly-panel"><h2>Catalog</h2><div class="ad-stats">{catalog}</div></section>'
             f'<section class="ly-panel"><h2>Launchers in the wild</h2>{lv_html}</section>')
 
@@ -1646,6 +1660,68 @@ def reports_page(user: dict, query: dict) -> str:
             f'dismiss, hide or flag a realm on the Realms tab.</p>{realm_html}</section>'
             f'<section class="ly-panel"><h2>Message reports</h2>{msg_html}</section>'
             f'<section class="ly-panel"><h2>Workshop link reports</h2>{links_html}</section>')
+
+
+# ------------------------------------------------------------------------------------------------ the forum
+def forum_page(user: dict, query: dict) -> str:
+    """The forum's queue (stream/forum.py), the way the reports work: reported posts first, then the threads (pin, lock,
+    hide, merge a duplicate into another: "consolidate"), then the hidden posts. Nothing here deletes anything."""
+    store = forum_store()
+    if store is None:
+        return '<section class="ly-panel"><h2>Forum</h2><p class="fine">The forum (stream/forum.py) is not on this portal.</p></section>'
+    back = "/wrath/admin/forum"
+    page = "/wrath/leyline/forum"
+    show = (query.get("show") or ["open"])[0]
+    show = show if show in ("open", "done", "dismissed", "all") else "open"
+    rrow = []
+    for r in store.reports("" if show == "all" else show, 200):
+        rid, st = r["id"], r["status"]
+        acts = ""
+        if st == "open":
+            if not r["post_hidden"]:
+                acts += act(user, "forum.post.hide", str(r["post"]), "Hide the post", back)
+            acts += (act(user, "forum.report.done", str(rid), "Done", back,
+                         '<input type="text" name="outcome" maxlength="300" placeholder="outcome" aria-label="Outcome">')
+                     + act(user, "forum.report.dismiss", str(rid), "Dismiss", back))
+        else:
+            acts += act(user, "forum.report.reopen", str(rid), "Reopen", back)
+        rrow.append(f'<tr><td class="name"><b>{e(r["author_name"] or "?")[:40]}</b> reported by {e(r["reporter_name"] or "?")[:40]}'
+                    f'<span class="sub">{_when(r["at"])} · {e(r["reason"])} · in <a href="{page}/t/{r["thread"]}#p{r["post"]}">'
+                    f'{e(r["thread_title"] or "?")[:80]}</a>{" · note: " + e(r["note"])[:200] if r["note"] else ""}</span>'
+                    f'{_tags((st, "good" if st != "open" else "hot"), ("hidden", "") if r["post_hidden"] else ("", ""))}'
+                    + (f'<span class="sub">outcome: {e(r["outcome"])[:300]}</span>' if r["outcome"] else "")
+                    + f'<div class="body">{e(r["post_body"])[:2000]}</div></td><td>{acts}</td></tr>')
+    tabs = " · ".join(f'<a href="{back}?show={s}">{"<b>" + s + "</b>" if s == show else s}</a>' for s in ("open", "done", "dismissed", "all"))
+    reports = (f'<p>{tabs}</p>' + ('<table class="ly-table"><thead><tr><th>Reported post</th><th>Actions</th></tr></thead><tbody>'
+                                    + "".join(rrow) + '</tbody></table>' if rrow else '<p class="fine">No forum reports here.</p>'))
+    q = (query.get("q") or [""])[0][:60]
+    trow = []
+    for t in store.staff_threads(q, 60):
+        tid = str(t["id"])
+        acts = (act(user, "forum.thread.unpin" if t["pinned"] else "forum.thread.pin", tid, "Unpin" if t["pinned"] else "Pin", back)
+                + act(user, "forum.thread.unlock" if t["locked"] else "forum.thread.lock", tid, "Unlock" if t["locked"] else "Lock", back)
+                + act(user, "forum.thread.unhide" if t["hidden"] else "forum.thread.hide", tid, "Show" if t["hidden"] else "Hide", back,
+                      confirm=None if t["hidden"] else tid, danger=not t["hidden"])
+                + act(user, "forum.thread.merge", tid, "Merge into", back,
+                      '<input type="text" name="into" inputmode="numeric" pattern="[0-9]{1,9}" size="6" placeholder="thread #" '
+                      'aria-label="Merge into thread number" required>', confirm=tid, danger=True))
+        trow.append(f'<tr><td class="name"><b>#{tid} <a href="{page}/t/{tid}">{e(t["title"])}</a></b>'
+                    f'<span class="sub">{e(t["cat"])} · by {e(t["author"])} · {t["replies"]} replies · {_when(t["bumped"])}</span>'
+                    f'{_tags(("pinned", "good") if t["pinned"] else ("", ""), ("locked", "") if t["locked"] else ("", ""), ("hidden", "hot") if t["hidden"] else ("", ""))}'
+                    f'</td><td>{acts}</td></tr>')
+    search = (f'<form method="get" action="{back}"><input type="text" name="q" value="{e(q)}" maxlength="60" placeholder="title" '
+              'aria-label="Search titles"> <button type="submit">Search</button></form>')
+    threads = search + ('<table class="ly-table"><thead><tr><th>Thread</th><th>Actions</th></tr></thead><tbody>' + "".join(trow)
+                        + '</tbody></table>' if trow else '<p class="fine">No threads.</p>')
+    hrow = [f'<tr><td class="name"><b>{e(p["name"])}</b><span class="sub">post {p["id"]} in <a href="{page}/t/{p["thread"]}">thread #{p["thread"]}</a> · '
+            f'{_when(p["created"])}</span><div class="body">{e(p["body"])[:600]}</div></td>'
+            f'<td>{act(user, "forum.post.unhide", str(p["id"]), "Show again", back)}</td></tr>' for p in store.hidden_posts(50)]
+    hidden = ('<table class="ly-table"><thead><tr><th>Hidden post</th><th></th></tr></thead><tbody>' + "".join(hrow)
+              + '</tbody></table>') if hrow else '<p class="fine">No hidden posts.</p>'
+    return (f'<section class="ly-panel"><h2>Reported posts</h2>{reports}</section>'
+            f'<section class="ly-panel"><h2>Threads</h2><p class="fine">Pin keeps a thread at the top of its category. Merge moves a '
+            f'duplicate\'s posts into another thread (type the duplicate\'s number to confirm); its address then leads there.</p>{threads}</section>'
+            f'<section class="ly-panel"><h2>Hidden posts</h2>{hidden}</section>')
 
 
 # ------------------------------------------------------------------------------------------------ health
@@ -2152,6 +2228,62 @@ def a_msg_status(status):
     return fn
 
 
+def _forum():
+    store = forum_store()
+    if store is None:
+        raise Refused("The forum is not on this portal.")
+    return store, P("forum").ForumError
+
+
+def _forum_id(target: str) -> int:
+    if not target.isdigit() or len(target) > 9:
+        raise Refused("Not a forum id.")
+    return int(target)
+
+
+def a_forum_thread(field, on):
+    def fn(user, target, form):
+        store, err = _forum()
+        try:
+            return store.set_thread(_forum_id(target), field, on)
+        except err as ex:
+            raise Refused(ex.text)
+    return fn
+
+
+def a_forum_post(on):
+    def fn(user, target, form):
+        store, err = _forum()
+        try:
+            return store.set_post_hidden(_forum_id(target), on)
+        except err as ex:
+            raise Refused(ex.text)
+    return fn
+
+
+def a_forum_merge(user, target, form):
+    store, err = _forum()
+    into = str(form.get("into") or "").strip()
+    try:
+        return store.merge(_forum_id(target), _forum_id(into))
+    except err as ex:
+        raise Refused(ex.text)
+
+
+def a_forum_report(status):
+    def fn(user, target, form):
+        store, _ = _forum()
+        rid = _forum_id(target)
+        before = next(({"status": r["status"]} for r in store.reports("", 1000) if r["id"] == rid), None)
+        if before is None:
+            raise Refused("No such report.")
+        outcome = _clean_line(form.get("outcome"), 300) or {"done": "handled", "dismissed": "dismissed", "open": "reopened"}[status]
+        if not store.resolve_report(rid, user["name"] + " (" + user["account"] + ")", outcome, status):
+            raise Refused("The report did not change.")
+        return before, {"status": status, "outcome": outcome}
+    return fn
+
+
 def a_bug_set(user, target, form):
     status = form.get("status")
     if not target.isdigit() or len(target) > 10 or status not in BUG_STATES:
@@ -2240,6 +2372,18 @@ ACTIONS = {
     "msg.dismiss": (a_msg_status("dismissed"), "staff", None),
     "msg.reopen": (a_msg_status("open"), "staff", None),
     "bug.set": (a_bug_set, "staff", None),
+    "forum.post.hide": (a_forum_post(True), "staff", None),
+    "forum.post.unhide": (a_forum_post(False), "staff", None),
+    "forum.thread.pin": (a_forum_thread("pinned", True), "staff", None),
+    "forum.thread.unpin": (a_forum_thread("pinned", False), "staff", None),
+    "forum.thread.lock": (a_forum_thread("locked", True), "staff", None),
+    "forum.thread.unlock": (a_forum_thread("locked", False), "staff", None),
+    "forum.thread.hide": (a_forum_thread("hidden", True), "staff", True),
+    "forum.thread.unhide": (a_forum_thread("hidden", False), "staff", None),
+    "forum.thread.merge": (a_forum_merge, "staff", True),
+    "forum.report.done": (a_forum_report("done"), "staff", None),
+    "forum.report.dismiss": (a_forum_report("dismissed"), "staff", None),
+    "forum.report.reopen": (a_forum_report("open"), "staff", None),
     "staff.grant": (a_staff_grant, "owner", None),
     "staff.revoke": (a_staff_revoke, "owner", True),
 }
@@ -2351,6 +2495,8 @@ def get(h, path: str, query: dict) -> None:
         title, body = "Themes", themes_page(user)
     elif tab == "reports":
         title, body = "Reports", reports_page(user, query)
+    elif tab == "forum":
+        title, body = "Forum", forum_page(user, query)
     elif tab == "health":
         title, body = "Health", health_page(user)
     elif tab == "staff":

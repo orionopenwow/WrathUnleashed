@@ -400,3 +400,7 @@
 1147c scripts Realm scripts: Den room and build tools, Leyline official field, mode intent rules (live reload; a 5-minute warning if a restart is needed)
 1147d foreverui Den edit mode, Builder, Coin Dash and mode fixes (addon)
 1147e ship Save to GitHub: all of the above
+1148a vr-beacon-off Owner: Wrath only for now. Take Vanilla Remastered off Leyline (key kept; vr-beacon brings it back)
+1148b ov112-realm-off Stop the 1.12 login and world servers (kept, not removed; frees about 2 GB for the Wrath realm)
+1149a signin Site: the Forum (/wrath/leyline/forum, its JSON for the launcher, admin Forum tab); Community becomes Forum
+1149b ship Save to GitHub: Forum and My Den in the launcher, friends removed (GitHub then rebuilds Leyline.exe)

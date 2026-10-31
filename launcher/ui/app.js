@@ -71,15 +71,16 @@ document.querySelectorAll("[data-link]").forEach((b) => b.addEventListener("clic
 $("tb-account").addEventListener("click", () => openLink("account"));
 
 // ------------------------------------------------------------------ navigation
-// The side menu matches the website's (stream/hub.py nav_items): Home (play), Realms, Mods, Host, Community, News,
-// then Settings and Help. Mods and Community are one page each with tabs. The page ids from before (mymods,
-// discover, friends, hub) still work everywhere: show() maps them to the page + tab, so a remembered page, a
+// The side menu matches the website's (stream/hub.py nav_items): Home (play), Realms, Mods, Host, Forum, News,
+// then Settings and Help. Mods is one page with tabs. The page ids from before (mymods, discover, and community,
+// friends and hub, which became the Forum on 2026-10-30) still work everywhere: show() maps them to the page + tab, so a remembered page, a
 // data-page-go button or a leyline:// link lands where it used to; a page with tabs alone opens its last tab. Modes has no menu item
 // but is still a page (Home's featured mode, Realms › MODES, show("modes")).
-const TABS = { mods: ["installed", "discover"], community: ["friends", "hub"] };
+const TABS = { mods: ["installed", "discover"] };
 const ALIASES = { mymods: ["mods", "installed"], installed: ["mods", "installed"], discover: ["mods", "discover"],
-  friends: ["community", "friends"], hub: ["community", "hub"] };
-const loaders = { "mods:discover": () => loadCatalog(), "mods:installed": () => loadInstalled(), realms: () => loadRealms(), host: () => loadHost() };
+  community: ["forum", ""], friends: ["forum", ""], hub: ["forum", ""], chat: ["forum", ""] };
+const loaders = { "mods:discover": () => loadCatalog(), "mods:installed": () => loadInstalled(), realms: () => loadRealms(), host: () => loadHost(),
+  forum: () => window.LeylineForum && window.LeylineForum.load() };
 let currentPage = "play";
 let currentTab = "";
 const lastTab = {};
@@ -216,6 +217,7 @@ function officialName() { return HANGOUT.name; }
 function realmLabel() {
   if (isOfficial()) return officialName();
   const a = chosenRealm();
+  if (a && a === denAddress()) return DEN.name;
   const r = realmsCache.find((x) => x.address === a);
   return r ? r.name : (a || "Another realm");
 }
@@ -239,7 +241,7 @@ function renderRealmRows() {
     const txt = el("span", "rr-txt");
     txt.append(el("span", "name", name));
     if (ver) { const v = el("span", "rl-ver sm", ver); v.title = "Game client version"; txt.append(v); }
-    b.append(realmIcon(name, official, "sm"), txt, dot);
+    b.append(!official && name === DEN.name && custom === denAddress() ? markIcon("den") : realmIcon(name, official, "sm"), txt, dot);
     b.title = ver ? `${name} · ${ver}` : name;
     b.addEventListener("click", () => {
       $("play-realm").value = official ? "official" : "custom";
@@ -254,7 +256,8 @@ function renderRealmRows() {
   const custom = !isOfficial() ? chosenRealm() : (saved && saved !== state.official_realm ? saved : "");
   if (custom) {
     const beacon = realmsCache.find((x) => x.address === custom);
-    add(beacon ? beacon.name : custom, false, realmVersion(beacon));
+    if (custom === denAddress()) add(DEN.name, false, DEN.build);   // this PC's Den (the play bar's My Den)
+    else add(beacon ? beacon.name : custom, false, realmVersion(beacon));
   }
 }
 
@@ -500,9 +503,65 @@ $("ff-browser").addEventListener("click", () => { setMode("browser"); show("play
 
 // ------------------------------------------------------------------ the play bar's realm picker: a drop-up list
 // (owner 2026-10-30: the ONLINE / SOLO / BROWSER switch gave way to it.) Your realms first (the official one and the
-// one you picked before), then the live realms on the network by players, then Play in your browser and Solo (coming
-// soon), and at the bottom + Make a realm and Find more realms…. Picking a realm selects it the way the side bar's
+// one you picked before), then the live realms on the network by players, then Play in your browser and My Den, and
+// at the bottom + Make a realm and Find more realms…. Picking a realm selects it the way the side bar's
 // Your realms does; browser play is a row. The same keys as the client list.
+// My Den (docs/DEN.md, owner 2026-10-30; it took Solo's place): the private room to build in, hosted on this PC (the
+// host kit's state/host.json profile "den", read by host_info). Hosted: the row plays it as the Host page's Play
+// would, through the realm's own invite link (host_invite, then join_invite: the relay's knock, the client pointed
+// at the Den), then PLAY. Not hosted: the Host page with Make my Den picked (hostconsole.js "leyline:host-ruleset").
+const DEN = { name: "My Den", profile: "den", build: "3.3.5a" };
+const denHosted = () => !!(kit && kit.realm && kit.realm.profile === DEN.profile);
+function denAddress() {
+  try { return localStorage.getItem("leyline.den") || ""; } catch (_) { return ""; }
+}
+// the kit as it is now (the realm picker asks each time it opens: the Den may have been made since)
+async function readKit() {
+  try { kit = await invoke("host_info"); } catch (_) { /* a preview page, or no kit */ }
+  return kit;
+}
+// marks for the rows that are not a realm on the list: a house for My Den, a globe for browser play
+const MARKS = {
+  den: '<svg viewBox="0 0 16 16" width="14" height="14" focusable="false"><path d="M2.5 7.4 8 2.8l5.5 4.6M4 6.3v6.9h8V6.3M6.6 13.2V9.6h2.8v3.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  web: '<svg viewBox="0 0 16 16" width="14" height="14" focusable="false"><g fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="5.6"/><path d="M2.4 8h11.2M8 2.4c1.6 1.6 2.3 3.5 2.3 5.6S9.6 12 8 13.6M8 2.4C6.4 4 5.7 5.9 5.7 8s.7 4 2.3 5.6"/></g></svg>',
+};
+function markIcon(kind) {
+  const box = el("span", "rl-ic sm pb-mark-ic pb-" + kind + "-ic");
+  box.setAttribute("aria-hidden", "true");
+  box.innerHTML = MARKS[kind];
+  return box;
+}
+const denIcon = () => markIcon("den");
+// the chosen realm is this PC's Den (the address its invite gave)
+const denChosen = () => mode !== "browser" && !isOfficial() && !!chosenRealm() && chosenRealm() === denAddress();
+async function playDen() {
+  const c = currentClient();
+  const own = c && c.build === DEN.build ? c : (state && state.settings.clients.find((x) => x.build === DEN.build));
+  if (!own) {
+    show("clients");
+    say("cl-status", `Your Den plays with a ${DEN.build} client: add your ${DEN.build} game folder, then pick My Den again.`, "warn");
+    return;
+  }
+  say("play-status", "Opening your Den…");
+  let link = null;
+  try { link = await invoke("host_invite"); } catch (_) { /* no kit */ }
+  if (!link) { say("play-status", "Your Den has no invite link yet: start it once on the Host page.", "warn"); return; }
+  let j;
+  try { j = await invoke("join_invite", { client: own.id, link }); }
+  catch (e) { say("play-status", `${e} Is your Den running? Start it on the Host page.`, "bad"); return; }
+  try { localStorage.setItem("leyline.den", j.address); } catch (_) { /* the bar then shows the address */ }
+  $("play-client").value = own.id;
+  $("play-realm").value = "custom";
+  $("play-custom").value = j.address;
+  if (mode === "browser") setMode("online");
+  realmChanged();
+  saveSelection();
+  $("play-form").requestSubmit();
+}
+function makeDen() {
+  show("host");
+  document.dispatchEvent(new CustomEvent("leyline:host-ruleset", { detail: { profile: DEN.profile } }));
+}
 let rmenuOpen = false;
 const realmRowsOf = (m) => [...m.querySelectorAll(".pb-opt")];
 function pickRealm(r) {
@@ -549,13 +608,17 @@ function renderRealmMenu() {
   const mine = [];
   const saved = !isOfficial() ? here : (state.settings.selected_realm && state.settings.selected_realm !== state.official_realm ? state.settings.selected_realm : "");
   const savedRealm = saved ? realmAt(saved) : null;
-  if (saved && savedRealm && !inLineup(savedRealm)) mine.push(realmRow(savedRealm));
+  if (saved && saved === denAddress() && denHosted()) { /* the Den: its own row below */ }
+  else if (saved && savedRealm && !inLineup(savedRealm)) mine.push(realmRow(savedRealm));
   else if (saved && !savedRealm) mine.push(row("pb-realm-opt", saved, { icon: realmIcon(saved, false, "sm"), selected: online && !isOfficial(), sub: "Your address", run: () => pickRealm({ official: false, address: saved }) }));
   const live = (realmsCache || []).filter((r) => !r.official && !inLineup(r) && r.state === "live" && r.address && r.address !== saved && !hiddenBuild(r.build))
     .sort((x, y) => (y.players || 0) - (x.players || 0)).slice(0, 6).map(realmRow);
   const other = [
-    row("pb-browser", "Play in your browser", { sub: "Nothing to install", selected: !online, run: () => setMode("browser") }),
-    row("pb-solo", "Solo", { sub: "Coming soon", disabled: true, title: "Solo play on this PC arrives in a later Leyline release", run: () => {} }),
+    row("pb-browser", "Play in your browser", { icon: markIcon("web"), sub: "Nothing to install", selected: !online, run: () => setMode("browser") }),
+    denHosted()
+      ? row("pb-den", DEN.name, { icon: denIcon(), ver: DEN.build, sub: "On this PC", selected: online && !isOfficial() && !!here && here === denAddress(),
+        title: "Your Den on this PC: play it", run: playDen })
+      : row("pb-den", DEN.name, { icon: denIcon(), sub: "Make your Den", title: "A private room to build in: you and the friends you invite", run: makeDen }),
   ];
   const acts = [
     row("pb-act", "+ Make a realm", { run: () => show("host") }),
@@ -574,9 +637,21 @@ function openRealmMenu() {
   rmenuOpen = true;
   $("pb-rmenu").hidden = false;
   $("pb-realm-btn").setAttribute("aria-expanded", "true");
-  const rows = realmRowsOf($("pb-rmenu"));
-  const at = rows.find((r) => r.getAttribute("aria-selected") === "true") || rows[0];
-  if (at) at.focus();
+  const focusPicked = () => {
+    const rows = realmRowsOf($("pb-rmenu"));
+    const at = rows.find((r) => r.getAttribute("aria-selected") === "true") || rows[0];
+    if (at) at.focus();
+  };
+  focusPicked();
+  // My Den: hosted on this PC or not, as the kit says now (the row changes only when that changed)
+  const had = denHosted();
+  readKit().then(() => {
+    if (!rmenuOpen || denHosted() === had) return;
+    const i = realmRowsOf($("pb-rmenu")).indexOf(document.activeElement);
+    renderRealmMenu();
+    const rows = realmRowsOf($("pb-rmenu"));
+    if (i >= 0 && rows[i]) rows[i].focus(); else focusPicked();
+  });
 }
 function closeRealmMenu(refocus) {
   if (!rmenuOpen) return;
@@ -639,11 +714,13 @@ function renderPlayBar() {
   $("pb-realm-btn").title = mode === "browser" ? "Plays in your browser: choose a realm instead" : `${realmLabel()}: choose another realm`;
   // the realm's icon and client version beside its name (none in the browser)
   const official = isOfficial();
-  const rv = mode === "browser" ? null : official ? "3.3.5a" : realmVersion(realmAt(chosenRealm()));
+  const rv = mode === "browser" ? null : official ? "3.3.5a" : denChosen() ? DEN.build : realmVersion(realmAt(chosenRealm()));
   $("pb-realm-ver").hidden = !rv;
   $("pb-realm-ver").textContent = rv || "";
   $("pb-realm-ic").hidden = mode === "browser";
   if (mode !== "browser") fillRealmIcon($("pb-realm-ic"), realmLabel(), official);
+  $("pb-realm-ic").classList.toggle("pb-mark-ic", denChosen());
+  if (denChosen()) $("pb-realm-ic").innerHTML = MARKS.den;
   if (rmenuOpen) renderRealmMenu();
   renderClientMenu();
   $("play-caption").textContent = mode === "browser" ? "IN YOUR BROWSER" : (c ? `ONLINE  ·  ${c.name.toUpperCase()}` : "ONLINE");
@@ -983,7 +1060,7 @@ function renderCatalog() {
   for (const p of list) grid.append(projectCard(p, c));
 }
 
-// Rating stars on a card's picture (shown on hover and focus). Rating needs the Community › Friends sign-in (the
+// Rating stars on a card's picture (shown on hover and focus). Rating needs the Leyline sign-in on Home (the
 // same website sign-in).
 function rateStars(p) {
   const stars = el("span", "stars");
@@ -1006,7 +1083,7 @@ async function rateProject(p, n, box) {
     if (ranked && ranked.metrics && ranked.metrics[p.id] && r && r.rating) ranked.metrics[p.id].rating = r.rating;
     say("cat-status", `Thanks: you rated ${p.name} ${n} star${n > 1 ? "s" : ""}.`, "ok");
   } catch (e) {
-    say("cat-status", String(e) === "signed_out" ? "Sign in under Community › Friends to rate mods (the same sign-in as the website)." : String(e), "bad");
+    say("cat-status", String(e) === "signed_out" ? "Sign in on Home (top right) to rate mods (the same sign-in as the website)." : String(e), "bad");
   }
 }
 
@@ -1239,7 +1316,7 @@ async function handleDeepLink() {
 // "Your realm" tab (leyline://host?manage=<what>): the Host page with what to do for that control. Nothing starts.
 const HOST_WORDS = {
   core: { azerothcore: "AzerothCore", cmangos: "CMaNGOS" },
-  preset: { dalaran: "Dalaran hangout", main: "Classic levelling", brawl: "Brawl", progression: "Progression", vanillaplus: "Vanilla+",
+  preset: { den: "My Den", dalaran: "Dalaran hangout", main: "Classic levelling", brawl: "Brawl", progression: "Progression", vanillaplus: "Vanilla+",
     "cmangos-1.12.1": "CMaNGOS Classic", "cmangos-2.4.3": "CMaNGOS TBC" },
   type: { normal: "Normal", pvp: "PvP", rp: "RP", rppvp: "RP-PvP" },
   start: { level1: "Level 1 only", boost: "Level 1, or the boost to 80" },
@@ -1261,7 +1338,9 @@ const HOST_MANAGE = {
 
 function hostChoices(id) {
   const p = new URLSearchParams(id);
-  return HOST_LABELS.filter(([k]) => p.has(k)).map(([k, label]) => {
+  // a Den has no bots and no player limit to choose (the kit sets both)
+  const den = p.get("preset") === "den";
+  return HOST_LABELS.filter(([k]) => p.has(k) && !(den && (k === "bots" || k === "max"))).map(([k, label]) => {
     const v = p.get(k);
     const words = HOST_WORDS[k] && HOST_WORDS[k][v];
     return [label, words || (["xp", "loot", "rep"].includes(k) ? v + "x" : k === "tags" ? v.split(",").join(", ") : v)];
@@ -2045,6 +2124,7 @@ refresh().then(() => {
   loadCatalog(true).then(handleDeepLink);
   loadRealms(true);
   loadUpdateState();
+  readKit();   // the realm picker's My Den: hosted on this PC or not
   setupDrop();
   let page = "play";
   try { page = localStorage.getItem("leyline.page") || "play"; } catch (_) { /* fine */ }

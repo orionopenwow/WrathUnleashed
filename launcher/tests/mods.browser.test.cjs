@@ -189,7 +189,7 @@ test('rating stars: saved, or the sign-in note', async () => {
   await page.close();
   ({ page, errors } = await open({ signedOut: true }));
   await card(page, 'mod:bravo').locator('.stars button').first().click();
-  await page.waitForFunction(() => /Sign in under Community › Friends/.test(document.getElementById('cat-status').textContent));
+  await page.waitForFunction(() => /Sign in on Home \(top right\)/.test(document.getElementById('cat-status').textContent));
   assert.deepEqual(errors, []);
   await page.close();
 });

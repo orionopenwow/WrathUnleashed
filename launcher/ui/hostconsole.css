@@ -226,6 +226,14 @@ button.hc-pill:hover { background: color-mix(in srgb, currentColor 10%, transpar
 .hc-rs-h em { margin-left: auto; font: 700 10.5px var(--t-font); font-style: normal; padding: 1px 7px; border-radius: 999px; color: var(--hc-gold-text); background: color-mix(in srgb, var(--hc-gold) 14%, transparent); border: 1px solid var(--hc-gold-line); }
 .hc-rs-l { color: var(--t-muted); font-size: 12px; line-height: 1.4; }
 .hc-go { display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+/* Make my Den picked: what the kit sets for it, in place of the bots and player-limit choices */
+.hc-den { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+.hc-den[hidden] { display: none; }
+.hc-den li {
+  display: inline-flex; align-items: baseline; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: 12px;
+  border: 1px solid var(--hc-row-border); background: var(--hc-inset); color: var(--t-muted);
+}
+.hc-den b { font-weight: 700; color: var(--t-text); }
 .hc-linkcard {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding: 12px 14px;
   border-radius: var(--t-radius-sm); border: 1px dashed var(--t-border-strong);

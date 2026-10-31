@@ -132,7 +132,7 @@ check("front page: creators and Host a Beacon", "/wrath/leyline-preview/creators
 check("front page: a TODO(owner) for the tagline, no words in the owner's voice", "TODO(owner)" in front)
 # the owner's mockup (2026-10-30): header nav, the hero, Platform Status, Community Spotlight, the footer
 # the header mirrors the launcher's pages (owner 2026-10-30: "servers, mods, addons, etc ... it should all work in browser too")
-NAV_ORDER = ["Play", "Realms", "Mods", "Addons", "Host", "Community", "More"]
+NAV_ORDER = ["Play", "Realms", "Mods", "Addons", "Host", "Forum", "More"]   # owner 2026-10-30: "change community to forum"
 
 
 def header_of(page):
@@ -152,12 +152,12 @@ check("side menu (owner 2026-10-30: \"make all the tools come from the side by d
       and "body.hb .hb-top{position:fixed;inset:0 auto 0 0;width:var(--hb-side)" in front
        and ":root:has(#hb-side:checked){--hb-side:72px}" in front and 'localStorage.setItem("leyline.side"' in HB.HUB_JS
       and "@media (max-width:1080px){.hb-side-t,.hb-side-b{display:none}}" in front)
-check("header: Play, Realms, Mods, Addons, Host, Community, More (Modes, Gallery and Status out of the menu)", labels == NAV_ORDER, labels)
+check("header: Play, Realms, Mods, Addons, Host, Forum, More (Modes, Gallery and Status out of the menu)", labels == NAV_ORDER, labels)
 hrefs = dict(re.findall(r'<a class="hb-ni[^"]*" href="([^"]+)"[^>]*><svg.*?</svg><span>([^<]+)</span>', nav, re.S)[i][::-1] for i in range(6))
 check("header: each item goes to the launcher page's web twin", hrefs == {
       "Play": "/wrath", "Realms": "/wrath/leyline-preview/realms", "Mods": "/wrath/leyline-preview/catalog",
       "Addons": "/wrath/leyline-preview/catalog?cat=addons", "Host": "/wrath/host",
-      "Community": "/wrath/leyline-preview#community"} and "addons" in HB.CATEGORY_IDS, hrefs)
+      "Forum": "/wrath/leyline/forum"} and "addons" in HB.CATEGORY_IDS, hrefs)
 more = re.search(r'<details class="hb-more-d"><summary class="hb-ni[^"]*">.*?<span>More</span></summary><div class="hb-more-m">(.*?)</div></details>', nav, re.S)
 check("header: More is a details dropdown (no script needed) with Forge, Agents, Docs, News, Creators",
       more and re.findall(r"<span>([^<]+)</span>", more.group(1)) == ["Forge", "Agents", "Docs", "News", "Creators"]
@@ -192,25 +192,25 @@ check("Platform status: the pills wrap on a phone (never wider than the page), d
       and ".hb-pdot.ok,.hb-pill.ok .hb-pdot{background:var(--lk-ok)}" in front)
 check("Platform status: a failing source is red, never a made-up OK", '<em class="bad">' in stats and '<span class="hb-pill bad"><i class="hb-pdot" aria-hidden="true"></i><b>Sign-in</b><span><em class="bad">Offline</em>' in stats)
 check("Platform status: no client downloads (we never download clients)", "Client" not in stats and "download" not in stats.lower())
-spot = re.search(r'<section class="hb-sec hb-cm hb-rv" id="community".*?</section>', front, re.S).group(0)
+spot = re.search(r'<section class="hb-sec hb-cm hb-rv" id="forum".*?</section>', front, re.S).group(0)
 spots = re.findall(r'<li><a class="hb-hot-r" href="/wrath/leyline-preview/p/([^"]+)"><span class="hb-hot-n" aria-hidden="true">(\d)</span>'
                    r'<span class="hb-hot-pic">.*?</span><span class="hb-hot-t"><b>([^<]+)</b><i>by ([^<]+?)(?: · \d+ installs? this month)?</i></span>'
                    r'<span class="hb-hot-k">([^<]+)</span></a></li>', spot, re.S)
 names = {e["id"].replace(":", "-"): (HB.neutral(e["name"]), HB.neutral(e["author"])) for e in INDEX["entries"]}
-check("Community, Hot right now: a ranked list of five real items (rank, name, author, kind), each linking to its page",
+check("Forum and Discord, Hot right now: a ranked list of five real items (rank, name, author, kind), each linking to its page",
       [x[1] for x in spots] == ["1", "2", "3", "4", "5"] and all(k in ("Mod", "Addon", "Game mode", "Theme") for *_, k in spots)
       and all(names.get(slug) == (html.escape(HB.neutral(n)), html.escape(HB.neutral(a))) or names.get(slug) == (HB.neutral(n), HB.neutral(a))
               for slug, _, n, a, _ in spots if slug in names) and any(slug in names for slug, *_ in spots), spots)
-check("Community: one section (Hot right now, Top creators, News), no repeated big cards, no separate spotlight, creators or news sections",
+check("Forum and Discord: one section (the Discord, the latest threads, News, Hot right now, Top creators), no repeated big cards, no separate spotlight, creators or news sections",
       'class="hb-spot"' not in front and 'class="hb-cr"' not in front and "Community Spotlight" not in front and "Creator spotlight" not in front
-      and front.count('id="community"') == 1 and '<h2 id="hb-cm-h">Community</h2>' in spot and 'id="creators-top"' in spot
+      and front.count('id="forum"') == 1 and 'id="community"' not in front and '<h2 id="hb-cm-h">Forum and Discord</h2>' in spot and 'id="creators-top"' in spot
       and spot.index('id="hb-hot-h"') < spot.index('id="creators-top"') and front.count("<section") == front.count("</section>"))
-check("Community: two columns on wide screens, one on a phone",
+check("Forum and Discord: two columns on wide screens, one on a phone",
       ".hb-cm-g{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)" in front
       and "@media (max-width:900px){.hb-cm-g{grid-template-columns:minmax(0,1fr)}}" in front)
 foot = re.search(r'<footer class="hb-foot">.*?</footer>', front, re.S).group(0)
-check("footer: Docs, Download, Community, Status, the wordmark, Join the Discord and GitHub only",
-      all(f">{x}<" in foot for x in ("Docs", "Download", "Community", "Status", "GitHub")) and "<b>Leyline</b>" in foot
+check("footer: Docs, Download, Forum, Status, the wordmark, Join the Discord and GitHub only",
+      all(f">{x}<" in foot for x in ("Docs", "Download", "Forum", "Status", "GitHub")) and ">Community<" not in foot and "<b>Leyline</b>" in foot
       and f'href="{wp.DISCORD_URL}" rel="noopener noreferrer"' in foot and "</svg>Join the Discord</a>" in foot)
 # launch (2026-10-30): the Dalaran Hangout is the front door, the Discord everywhere
 ho = re.search(r'<section class="hb-ho[^"]*" id="hangout".*?</section>', front, re.S)
@@ -219,9 +219,9 @@ check("launch: under the hero, The Dalaran Hangout is open, Play in your browser
       and '<a class="hb-cta sm" href="/wrath">Play in your browser</a>' in ho.group(0)
       and f'href="{wp.DISCORD_URL}"' in ho.group(0) and "TODO(owner): the Hangout line" in ho.group(0)
       and front.index('class="hb-hero"') < front.index('id="hangout"') < front.index('id="realms"'))
-cm = re.search(r'<section class="hb-sec hb-cm hb-rv" id="community".*?</section>', front, re.S)
-check("launch: the community section opens with Join the Discord, and the Community feature section links it too",
-      cm and 'class="hb-cm-dc"' in cm.group(0) and f'href="{wp.DISCORD_URL}"' in cm.group(0)
+cm = re.search(r'<section class="hb-sec hb-cm hb-rv" id="forum".*?</section>', front, re.S)
+check("launch: the Forum and Discord section opens with a big Join the Discord, and the Community feature section links it and the forum",
+      cm and cm.group(0).index('class="hb-cm-dc big"') < cm.group(0).index('class="hb-cm-g') and re.search(r'id="f-community".*?href="/wrath/leyline/forum"', front, re.S) and f'href="{wp.DISCORD_URL}"' in cm.group(0)
       and re.search(r'id="f-community".*?Join the Discord</a>', front, re.S))
 check("launch: the Hangout row comes first, named, labelled the Wrath realm",
       re.search(r'<li class="hb-rl home[^"]*" data-home="1"[^>]*>.*?<b>Dalaran Hangout</b><span class="hb-rl-k">the Wrath realm</span>', front))
@@ -239,7 +239,7 @@ check("feature sections: a heading, a lede, points and a first link each", all(f
 hrefs = [re.findall(r'href="([^"]+)"', f[6]) for f in fs]
 check("feature sections: links to pages that exist, nothing paid", [h[0] for h in hrefs][1:] == [
       "/wrath/host", "/wrath/leyline-preview/realms", "/wrath?go=mode:minigolf", "/wrath/leyline-preview/catalog?sort=hot",
-      "/wrath/leyline-preview/forge", "/wrath/leyline-preview/agents", "/wrath/leyline-preview/catalog"] and hrefs[0][0].startswith("https://github.com/orionopenwow/Leyline/releases")
+      "/wrath/leyline-preview/forge", "/wrath/leyline-preview/agents", "/wrath/leyline/forum"] and hrefs[0][0].startswith("https://github.com/orionopenwow/Leyline/releases")
       and not re.search(r"(?i)support|donat|\bvip\b|\bshop\b", " ".join(f[6] for f in fs)))
 check("feature sections: a TODO(owner) to reorder them", "TODO(owner): the order of the products" in open(HB.__file__).read())
 check("feature sections: the game modes line from playmodes.json, Hero Key as coming", "Minigolf" in fs[3][4]
@@ -260,10 +260,10 @@ check("how it works: three steps, launcher, game folder or browser, realm", how 
       "Get the launcher", "Point it at your game folder", "Pick a realm"] and "play in your browser" in how.group(1)
       and "TODO(owner): the \"how it works\" wording" in front)
 order = [front.index(x) for x in ('class="hb-hero"', 'id="realms"', 'class="hb-how', 'id="features"', 'id="f-launcher"', 'id="f-agents"',
-                                  'id="status"', 'id="community"')]
+                                  'id="status"', 'id="forum"')]
 order = [front.index(x) for x in ('class="hb-hero"', 'id="realms"', 'class="hb-how', 'id="features"', 'id="f-launcher"', 'id="f-agents"',
-                                  'id="community"', 'id="status"')] + [front.rindex('class="hb-fine"')]
-check("front page order: hero, realms, how it works, the feature sections, community, the status bar, the fine print", order == sorted(order), order)
+                                  'id="forum"', 'id="status"')] + [front.rindex('class="hb-fine"')]
+check("front page order: hero, realms, how it works, the feature sections, forum and Discord, the status bar, the fine print", order == sorted(order), order)
 check("realm list without a relay: our realm still there, one click", 'data-home="1"' in front and 'class="hb-play" href="/wrath"' in front
       and f'>{wp.PUBLIC_HOST}</code>' in front and "may be a little out of date" in front)
 check("polish: hover lift and the reveal stop for reduced motion", "@media (prefers-reduced-motion:reduce)" in front
@@ -584,10 +584,10 @@ def portal_with(name):
 HB.hub.portal = portal_with
 fp = req("/wrath/leyline-preview")[2].decode()
 order = [fp.find(x) for x in ('class="hb-hero"', 'class="hb-tick"', 'id="realms"', 'class="hb-how', 'class="hb-nums', 'id="features"',
-                              'id="f-agents"', 'id="hosted"', 'id="herokey"', 'id="community"', 'id="creators-top"', 'id="news"',
+                              'id="f-agents"', 'id="hosted"', 'id="herokey"', 'id="forum"', 'id="news"', 'id="creators-top"',
                               'id="status"')] + [fp.rfind('class="hb-fine"')]
-check("front page order: hero, ticker, realms, how it works, numbers, features, hosted, the Hero Key line, community (hot, "
-      "creators, news), the status bar, the fine print", -1 not in order and order == sorted(order), order)
+check("front page order: hero, ticker, realms, how it works, numbers, features, hosted, the Hero Key line, forum and Discord (news, "
+      "then hot and creators), the status bar, the fine print", -1 not in order and order == sorted(order), order)
 tick = re.search(r'<section class="hb-tick".*?</section>', fp, re.S).group(0)
 plain = re.search(r'<ul class="hb-tick-l">(.*?)</ul>', tick, re.S).group(1)
 lis = re.findall(r"<li[^>]*>(.*?)</li>", plain)
@@ -735,7 +735,7 @@ ms = ms.group(0) if ms else ""
 ms_imgs = re.findall(r'<li><a class="hb-ms-t" href="[^"]+"(?: rel="noopener noreferrer")?><img src="([^"]+)" alt="[^"]+" width="\d+" height="\d+" loading="lazy"', ms)
 check("mod strip: near the foot (after the community section, before the status bar and the fine print), real pictures only (mods and in game, no launcher "
       "shots, no drawn tiles), twice for the loop with the copy hidden from screen readers",
-      ms and fp.find('id="community"') < fp.find('class="hb-ms ') < fp.find('id="status"') < fp.rfind('class="hb-fine"') and len(ms_imgs) >= 6
+      ms and fp.find('id="forum"') < fp.find('class="hb-ms ') < fp.find('id="status"') < fp.rfind('class="hb-fine"') and len(ms_imgs) >= 6
       and not any("leyline-ui-" in u for u in ms_imgs) and '<ul class="hb-ms-l dup" aria-hidden="true" inert>' in ms
       and ms.count("<li>") == 2 * ms.split('class="hb-ms-l dup"')[0].count("<li>"), ms_imgs)
 check("mod strip: stops on hover and focus, does not move with reduced motion",
@@ -1199,7 +1199,7 @@ check("gallery: mod tiles use the thumbnail, and the credit is in the caption th
 check("gallery page: the fine print says where the pictures come from", "preview image from its GitHub page" in galx)
 frontx = req("/wrath/leyline-preview")[2].decode()
 top = HB.hub._ranked([i for i in HB.hub.items() if i["source"] != "theme"])[0][0]
-spot = re.search(r'id="community".*?</section>', frontx, re.S).group(0)
+spot = re.search(r'id="forum".*?</section>', frontx, re.S).group(0)
 hot1 = re.search(r'<span class="hb-hot-pic">(.*?)</span><span class="hb-hot-t">', spot, re.S).group(1)
 if top.get("thumb"):
     check("Hot right now: the top item's thumbnail, credited", f'src="{top["thumb"]}"' in hot1 and f'title="{html.escape(TCRED)}"' in hot1, hot1)

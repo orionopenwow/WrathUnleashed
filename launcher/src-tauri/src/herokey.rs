@@ -4,7 +4,7 @@
 //! card does, in order:
 //!
 //! 1. asks the website for a ticket for that realm (`POST /wrath/api/social/herokey {realm}`, with the launcher's
-//!    own revocable session token from the Friends sign-in, `crate::social`): a signed assertion for that realm and
+//!    own revocable session token from the Leyline sign-in on Home, `crate::social`): a signed assertion for that realm and
 //!    a one-time login (`HK...` + a random password) made for this sign-in only;
 //! 2. posts the assertion to the realm's relay (`POST https://<relay>/api/realms/<id>/herokey`); the realm's agent
 //!    checks the website's signature and sets that login on the player's account there (made on first use). The

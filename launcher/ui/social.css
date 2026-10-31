@@ -1,63 +1,17 @@
-/* Leyline Launcher: Community › Friends (social.js). Uses style.css's tokens. */
-.sx { max-width: 1040px; }
-.sx-head:has(.sx-me:empty) { display: none; }
-.sx-head { display: flex; align-items: baseline; justify-content: flex-end; gap: 12px; margin: -6px 0 8px; }
-.sx-me { color: var(--muted); font-size: 13px; user-select: text; }
-.sx-code { font: 700 34px/1.2 ui-monospace, Consolas, monospace; letter-spacing: 0.16em; color: var(--gold-hi); margin: 6px 0 4px; user-select: text; }
-.sx-grid { display: grid; grid-template-columns: minmax(250px, 340px) minmax(0, 1fr); gap: 14px; min-height: 420px; }
-.sx-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.sx-add { margin-top: 0; }
-.sx-add input, .sx-say input, .sx-report input, .sx-more input:not([type]) { flex: 1; min-width: 0; }
-.sx-req { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 8px; border-radius: var(--t-radius-sm);
-  background: var(--t-accent-soft); border: 1px solid var(--t-border); font-size: 13px; }
-.sx-req span { flex: 1; min-width: 120px; }
-.sx-req.out { background: none; color: var(--muted); }
-.sx-list { display: flex; flex-direction: column; gap: 3px; overflow: auto; max-height: 360px; }
-.sx-friend { display: flex; align-items: center; gap: 12px; padding: 6px 8px; border: 1px solid transparent; border-radius: var(--t-radius-sm);
-  background: none; color: var(--text); text-align: left; cursor: pointer; font: 13px var(--t-font); }
-.sx-friend:hover { background: color-mix(in srgb, var(--t-text) 6%, transparent); }
-.sx-friend.on { border-color: var(--t-border); background: var(--t-accent-soft); }
-/* the avatar: a letter on a hue from the name, the status badge on its lower right corner */
+/* Leyline Launcher: Home's profile panel (social.js) and the Forum page (forum.js). Uses style.css's tokens. */
+/* the avatar: a letter on a hue from the name */
 .sx-av { position: relative; flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
   background: linear-gradient(145deg, hsl(var(--h, 220) 45% 46%), hsl(calc(var(--h, 220) + 30) 50% 30%));
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
 .sx-av b { font: 700 15px var(--t-font); color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
-.sx-dot { position: absolute; right: -2px; bottom: -2px; width: 13px; height: 13px; border-radius: 50%;
-  background: #6b7280; border: 3px solid var(--t-bg, #11141c); box-sizing: border-box; }
-.sx-dot.game { background: #59bf40; }
-.sx-dot.launcher { background: #57cbde; }
-.sx-ft { display: grid; min-width: 0; flex: 1; line-height: 1.25; }
-.sx-ft b { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sx-ft i { font-style: normal; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* name and line in the status colour: in game green, online blue, offline grey and dimmed */
-.sx-friend.st-game .sx-ft b, .sx-friend.st-game .sx-ft i { color: #8fd36f; }
-.sx-friend.st-launcher .sx-ft b, .sx-friend.st-launcher .sx-ft i { color: #6dcff6; }
-.sx-friend.st-offline .sx-ft b, .sx-friend.st-offline .sx-ft i { color: #8a8f98; }
-.sx-friend.st-offline .sx-av { filter: grayscale(1) brightness(.7); }
-.sx-more { margin-top: auto; color: var(--muted); font-size: 13px; }
-.sx-more summary { cursor: pointer; }
-.sx-more > * + * { margin-top: 8px; }
-.sx-chat { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--t-border); border-radius: var(--t-radius); background: var(--t-surface-2); }
-.sx-chat-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--t-border); min-height: 46px; }
-.sx-chat-head b { font: 700 15px var(--t-font); color: var(--t-text); }
-.sx-chat-head span { color: var(--muted); font-size: 12px; }
-.sx-actions { display: flex; gap: 6px; }
-.sx-report { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--t-border); font-size: 13px; }
-.sx-report .hint { flex-basis: 100%; }
-.sx-msgs { flex: 1; overflow: auto; padding: 10px; display: flex; flex-direction: column; gap: 6px; min-height: 240px; max-height: 420px; user-select: text; }
-.sx-msg { align-self: flex-start; max-width: 78%; padding: 6px 10px; border-radius: 12px; background: var(--t-raised); display: grid; gap: 2px; }
-.sx-msg.mine { align-self: flex-end; background: var(--t-accent-soft); border: 1px solid color-mix(in srgb, var(--t-accent) 35%, transparent); }
-.sx-text { white-space: pre-wrap; overflow-wrap: anywhere; }
-.sx-when { font-size: 11px; color: var(--muted); }
-.sx-say { display: flex; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--t-border); }
-@media (max-width: 1100px) { .sx-grid { grid-template-columns: 1fr; } }
+.sx-code { font: 700 22px/1.2 ui-monospace, Consolas, monospace; letter-spacing: 0.12em; color: var(--gold-hi); margin: 2px 0; user-select: text; }
 
-/* Home's right column: the friends list, full height, scrolling inside (owner 2026-10-30, after a game launcher's) */
-.home .card.home-friends { display: flex; flex-direction: column; gap: 0; min-height: 0; padding: 0; overflow: hidden; }
+/* Home's right column: your profile on top (owner 2026-10-30: "keep the profile thing up there where it is now"), then the
+   Discord and the forum's latest threads ("remove the friends area ... in favor of discord encouragement") */
+.home .card.home-side { display: flex; flex-direction: column; gap: 0; min-height: 0; padding: 0; overflow: hidden; }
 .hf-me { display: flex; align-items: center; gap: 12px; padding: 14px 14px 12px; border-bottom: var(--t-border-w) solid var(--t-panel-border); }
 .sx-av.hf-me-av { width: 44px; height: 44px; }
 .sx-av.hf-me-av b { font-size: 17px; }
-.hf-me-av .sx-dot { width: 14px; height: 14px; }
 .sx-av.hf-anon { background: color-mix(in srgb, var(--t-text) 22%, var(--t-surface)); }
 .hf-me > div { flex: 1; min-width: 0; display: grid; gap: 1px; }
 .hf-me-pick { position: relative; }
@@ -66,81 +20,50 @@
 .hf-me-name { font: 700 15px/1.25 var(--t-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hf-caret { width: 14px; height: 14px; flex: none; fill: none; stroke: var(--t-muted); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .hf-me-st { font-size: 12.5px; color: var(--t-muted); }
-.hf-me-st.st-launcher { color: #6dcff6; }
-.hf-me-st.st-game { color: #8fd36f; }
 .hf-me-menu {
   position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; min-width: 170px; display: grid; padding: 5px;
   border-radius: var(--t-radius-sm); background: var(--t-surface);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--t-text) 8%, transparent), 0 14px 32px rgba(0, 0, 0, 0.4);
 }
 .hf-me-menu button { padding: 8px 10px; border: 0; border-radius: var(--t-radius-xs); background: none; color: var(--t-text); font: 500 13px var(--t-font); text-align: left; cursor: pointer; }
-.hf-me-menu button.on::after { content: " ✓"; color: var(--t-accent); }
 .hf-me-menu button:hover, .hf-me-menu button:focus-visible { background: var(--t-accent-soft); outline: none; }
-.hf-me .hf-open { flex: none; }
-.hf-tools { display: flex; align-items: center; gap: 6px; padding: 10px 12px 6px; }
-.hf-tools[hidden] { display: none; }
-.hf-tools .icon-btn { width: 32px; height: 32px; flex: none; }
-.hf-tools input[type="search"] { flex: 1; min-width: 0; height: 32px; }
 .hf-list { flex: 1; min-height: 0; overflow: auto; padding: 4px 6px 10px; scrollbar-width: thin; scrollbar-color: var(--t-border-strong) transparent; }
-.hf-group + .hf-group { margin-top: 4px; }
-.hf-ghead { display: flex; align-items: center; gap: 6px; width: 100%; padding: 8px 6px 6px; border: 0; background: none; cursor: pointer;
   color: var(--t-muted); font: 600 12px var(--t-font); letter-spacing: 0.02em; text-align: left; }
-.hf-ghead:hover { color: var(--t-text); }
-.hf-ghead:focus-visible { outline: 2px solid var(--t-accent); outline-offset: -2px; border-radius: 6px; }
-.hf-tri { width: 0; height: 0; border-left: 4.5px solid transparent; border-right: 4.5px solid transparent; border-top: 6px solid currentColor; transition: transform 0.15s; }
-.hf-group.folded .hf-tri { transform: rotate(-90deg); }
-.hf-gname { color: var(--t-text-2); }
-.hf-gcount { font-variant-numeric: tabular-nums; }
-.hf-rows { display: grid; gap: 1px; }
-.hf-rows[hidden] { display: none; }
-.hf-rows .sx-friend { padding: 5px 8px; gap: 11px; }
-.hf-rows .sx-av { width: 40px; height: 40px; }
-.home-friends .sx-dot { border-color: color-mix(in srgb, var(--t-surface) 70%, var(--t-raised)); }
-.hf-none { margin: 4px 8px 8px; }
-.hf-out { display: grid; justify-items: start; gap: 12px; padding: 14px 10px; }
-.hf-out p { margin: 0; font-size: 13px; color: var(--t-text-2); line-height: 1.45; }
-html[data-base="light"] .sx-friend.st-game .sx-ft b, html[data-base="light"] .sx-friend.st-game .sx-ft i, html[data-base="light"] .hf-me-st.st-game { color: #2f8a1d; }
-html[data-base="light"] .sx-friend.st-launcher .sx-ft b, html[data-base="light"] .sx-friend.st-launcher .sx-ft i, html[data-base="light"] .hf-me-st.st-launcher { color: #1b7fae; }
-html[data-base="light"] .sx-friend.st-offline .sx-ft b, html[data-base="light"] .sx-friend.st-offline .sx-ft i { color: #7a808a; }
 html[data-base="light"] .hf-me-menu { box-shadow: 0 0 0 1px rgba(16, 24, 40, 0.08), 0 12px 28px rgba(16, 24, 40, 0.16); }
 
-/* the friends panel docks to the title bar and the window's right edge, full height, no gap (owner 2026-10-30) */
-.home .card.home-friends { margin: -18px -20px 0 0; border-radius: 0 0 0 var(--t-radius); align-self: stretch;
+/* the panel docks to the title bar and the window's right edge, full height, no gap (owner 2026-10-30) */
+.home .card.home-side { margin: -18px -20px 0 0; border-radius: 0 0 0 var(--t-radius); align-self: stretch;
   box-shadow: -10px 0 30px rgba(0, 0, 0, .25); }
-/* a slim friends column (owner 2026-10-30: "make the friends pane way skinnier") */
+/* a slim column (owner 2026-10-30: "make the friends pane way skinnier") */
 .home { grid-template-columns: minmax(0, 1fr) 216px; gap: 12px; }
-.home .card.home-friends .hf-me { padding: 12px 10px 10px; gap: 10px; }
-.home .card.home-friends .sx-av.hf-me-av { width: 38px; height: 38px; }
-.home .card.home-friends .sx-friend { gap: 10px; padding: 5px 6px; }
-.home .card.home-friends .sx-av { width: 34px; height: 34px; }
-.home .card.home-friends .sx-ft b { font-size: 13.5px; }
-.home .card.home-friends .sx-ft i { font-size: 12px; }
+.home .card.home-side .hf-me { padding: 12px 10px 10px; gap: 10px; }
+.home .card.home-side .sx-av.hf-me-av { width: 38px; height: 38px; }
+.home .card.home-side .sx-av { width: 34px; height: 34px; }
+.home .card.home-side .sx-ft b { font-size: 13.5px; }
+.home .card.home-side .sx-ft i { font-size: 12px; }
 @media (max-width: 1150px) { .home { grid-template-columns: minmax(0, 1fr) 200px; } }
-.home .card.home-friends .hf-tools { gap: 4px; padding: 6px 8px; }
-.home .card.home-friends .hf-group { padding-left: 2px; padding-right: 2px; }
-.home .card.home-friends .sx-friend { padding: 4px 4px; gap: 8px; }
-.home .card.home-friends .sx-av { width: 32px; height: 32px; }
-.home .card.home-friends .sx-av b { font-size: 13px; }
-/* owner 2026-10-30: "tuck the friends list up towards the top right": on Home the friends panel runs from just under the
+.home .card.home-side .sx-av { width: 32px; height: 32px; }
+.home .card.home-side .sx-av b { font-size: 13px; }
+/* owner 2026-10-30: "tuck the friends list up towards the top right": on Home the panel runs from just under the
    window buttons to the play bar, beside the title bar's search; its grid column stays as the space it leaves */
-body:has(#page-play.on) .home .card.home-friends {
+body:has(#page-play.on) .home .card.home-side {
   position: fixed; top: 30px; right: 0; bottom: 96px; width: 216px; margin: 0; z-index: 20;
   border-radius: var(--t-radius) 0 0 0; box-shadow: -12px 0 30px rgba(0, 0, 0, .3);
 }
 body:has(#page-play.on) .titlebar .winbtns { margin-left: 216px; }
-@media (max-width: 1150px) { body:has(#page-play.on) .home .card.home-friends { width: 200px; } body:has(#page-play.on) .titlebar .winbtns { margin-left: 200px; } }
+@media (max-width: 1150px) { body:has(#page-play.on) .home .card.home-side { width: 200px; } body:has(#page-play.on) .titlebar .winbtns { margin-left: 200px; } }
 /* everything on Home stays clear of the docked panel: the hero row and the rows below the fold */
 body:has(#page-play.on) main { padding-right: calc(216px + 20px); }
 body:has(#page-play.on) .home { grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 1150px) { body:has(#page-play.on) main { padding-right: calc(200px + 16px); } }
 /* owner 2026-10-30: "remove the bubble border and merge into header": the panel is part of the window's chrome, from the
    very top (the window buttons sit on it) to the play bar, in the title bar's colour, square, one hairline on its left */
-body:has(#page-play.on) .home .card.home-friends {
+body:has(#page-play.on) .home .card.home-side {
   top: 0; border-radius: 0; box-shadow: none; padding-top: 26px;
   background: var(--t-chrome); -webkit-backdrop-filter: none; backdrop-filter: none;
   border: 0; border-left: var(--t-border-w) solid var(--t-border);
 }
-body:has(#page-play.on) .home .card.home-friends .hf-me { border-bottom: 0; padding-top: 6px; }
+body:has(#page-play.on) .home .card.home-side .hf-me { border-bottom: 0; padding-top: 6px; }
 body:has(#page-play.on) .titlebar .winbtns { position: relative; z-index: 30; }
 /* owner 2026-10-30: "give apparent scroll bar so people know there's more below": on Home the content area ends at the
    docked panel (so its scroll bar shows beside it), and the scroll bar is a visible bar, not a hairline */
@@ -151,8 +74,86 @@ main::-webkit-scrollbar { width: 10px; }
 main::-webkit-scrollbar-track { background: color-mix(in srgb, var(--t-text) 5%, transparent); }
 main::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--t-accent) 55%, var(--t-border-strong)); border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
 
-/* the docked friends panel is part of the title bar, so it is see-through the same way */
-body:has(#page-play.on) .home .card.home-friends {
+/* the docked panel is part of the title bar, so it is see-through the same way */
+body:has(#page-play.on) .home .card.home-side {
   background: color-mix(in srgb, var(--t-chrome) 82%, transparent);
   -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
 }
+
+/* under the profile: the sign-in code, then the Discord card and the forum's latest threads */
+.hf-me .hf-signin { flex: none; }
+.hf-me-t .hf-me-st { white-space: nowrap; }
+.hf-code { padding: 0 12px 10px; font-size: 12.5px; color: var(--t-text-2); }
+.hf-code[hidden] { display: none; }
+.hf-code p { margin: 0 0 4px; line-height: 1.4; }
+.hf-code-acts { display: flex; gap: 12px; flex-wrap: wrap; }
+.hf-body { flex: 1; min-height: 0; overflow: auto; display: grid; align-content: start; gap: 12px; padding: 4px 10px 12px;
+  scrollbar-width: thin; scrollbar-color: var(--t-border-strong) transparent; }
+.hf-dc { display: grid; gap: 6px; padding: 14px 12px; border-radius: var(--t-radius-sm);
+  border: var(--t-border-w) solid color-mix(in srgb, var(--t-accent) 40%, var(--t-border));
+  background: linear-gradient(150deg, color-mix(in srgb, var(--t-accent) 22%, transparent), color-mix(in srgb, var(--t-accent-2, var(--t-accent)) 10%, transparent) 70%); }
+.hf-dc-ic { width: 26px; height: 26px; fill: none; stroke: var(--t-accent); stroke-width: 1.8; stroke-linejoin: round; }
+.hf-dc-ic circle { fill: var(--t-accent); stroke: none; }
+.hf-dc h3 { margin: 0; font: 700 15px var(--t-font); color: var(--t-text); }
+.hf-dc p { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--t-text-2); }
+.hf-dc .hf-dc-go { justify-self: stretch; margin-top: 4px; }
+.hf-fm-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 2px; }
+.hf-fm h3 { margin: 0; font: 700 11px var(--t-font); letter-spacing: 0.1em; text-transform: uppercase; color: var(--t-muted); }
+.hf-fm-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
+.hf-fm-list .hint { padding: 4px 2px; }
+.hf-fm-row { display: grid; gap: 1px; width: 100%; padding: 7px 6px; border: 0; border-radius: var(--t-radius-xs, 6px); background: none;
+  color: var(--t-text); text-align: left; cursor: pointer; font: 13px var(--t-font); }
+.hf-fm-row:hover, .hf-fm-row:focus-visible { background: color-mix(in srgb, var(--t-text) 6%, transparent); outline: none; }
+.hf-fm-row b { font-weight: 600; font-size: 13px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.hf-fm-row span { font-size: 11.5px; color: var(--t-muted); }
+.hf-status { margin: 0; padding: 0 2px; }
+
+/* the Forum page (forum.js) */
+.fm .panel-head { align-items: center; }
+.fm-search { display: flex; gap: 6px; flex: 1 1 260px; max-width: 420px; margin-left: auto; }
+.fm-search input { flex: 1; min-width: 0; height: 30px; }
+.fm-dc { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin: 0 0 14px; padding: 12px 14px;
+  border-radius: var(--t-radius-sm); border: var(--t-border-w) solid color-mix(in srgb, var(--t-accent) 35%, var(--t-border));
+  background: linear-gradient(120deg, color-mix(in srgb, var(--t-accent) 16%, transparent), transparent 75%); }
+.fm-dc p { margin: 0; flex: 1 1 280px; font-size: 13px; color: var(--t-text-2); }
+.fm-dc b { color: var(--t-text); }
+.fm-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 1050px) { .fm-two { grid-template-columns: minmax(0, 1fr); } }
+.fm-box { min-width: 0; border: var(--t-border-w) solid var(--t-border); border-radius: var(--t-radius-sm); background: var(--t-card, var(--t-surface-2)); overflow: hidden; }
+.fm .fm-box > h3 { margin: 0; padding: 10px 14px; font: 700 11px var(--t-font); letter-spacing: 0.1em; text-transform: uppercase; color: var(--t-accent);
+  border-bottom: var(--t-border-w) solid var(--t-border); }
+.fm-list { list-style: none; margin: 0; padding: 0; }
+.fm-list li + li { border-top: var(--t-border-w) solid var(--t-border); }
+.fm-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 14px; border: 0; background: none; color: var(--t-text);
+  text-align: left; cursor: pointer; font: 13px var(--t-font); }
+.fm-row:hover, .fm-row:focus-visible { background: color-mix(in srgb, var(--t-text) 5%, transparent); outline: none; }
+.fm-row-t { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.fm-row-t b { font-weight: 650; font-size: 14px; overflow-wrap: anywhere; }
+.fm-row-t small { color: var(--t-muted); font-size: 12px; }
+.fm-row-t .fm-last { color: var(--t-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-row-n { flex: none; color: var(--t-muted); font-size: 12px; text-align: right; white-space: nowrap; }
+.fm-tag { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: 999px; font: 700 10.5px var(--t-font); letter-spacing: .04em;
+  vertical-align: 2px; background: var(--t-accent-soft); color: var(--t-accent); }
+.fm-tag.lock { background: color-mix(in srgb, var(--t-bad, #ff7f76) 16%, transparent); color: var(--t-bad, #ff7f76); }
+.fm-empty { margin: 0; padding: 16px 14px; color: var(--t-muted); }
+.fm-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 16px; margin: 0 0 12px; }
+.fm-crumb { font-size: 12px; color: var(--t-muted); }
+.fm-crumb .link-s { font-size: 12px; }
+.fm .fm-title { margin: 2px 0 0; font: 800 19px/1.25 var(--t-font); color: var(--t-text); overflow-wrap: anywhere; text-transform: none; letter-spacing: 0; }
+.fm-head .hint { margin: 2px 0 0; }
+.fm-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.fm-post { padding: 12px 14px; }
+.fm-post + .fm-post { border-top: var(--t-border-w) solid var(--t-border); }
+.fm-by { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0 0 6px; font-size: 12px; color: var(--t-muted); }
+.fm-by > b { color: var(--t-text); font-size: 13.5px; }
+.sx-av.fm-av { width: 26px; height: 26px; }
+.sx-av.fm-av b { font-size: 12px; }
+.fm-team { padding: 1px 7px; border-radius: 999px; background: var(--t-accent); color: var(--t-on-accent, #fff); font: 700 10.5px var(--t-font); }
+.fm-when { margin-left: auto; }
+.fm-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; color: var(--t-text); user-select: text; }
+.fm-link { display: inline; padding: 0; border: 0; background: none; color: var(--t-accent); font: inherit; text-decoration: underline;
+  text-underline-offset: 2px; cursor: pointer; overflow-wrap: anywhere; text-align: left; }
+.fm-gone { margin: 0; color: var(--t-muted); font-style: italic; }
+.fm-pager { display: flex; justify-content: center; gap: 18px; margin: 10px 0 0; }
+.fm-pager:empty { display: none; }
+.fm-fine { margin-top: 10px; }

@@ -8,12 +8,13 @@
 //! it sends is an anonymous "this mod was installed" (a mod id, a build and a fresh random id per install, never
 //! an account or machine id; Settings turns it off: `rankings`). Its network
 //! calls: the Workshop catalog and mod zips (`catalog`, `mods`), the hub's rankings (`rankings`), the relay's realm list, realm lookup and
-//! invite knock (`realms`, `host`), the official realm's status file (`status`) and GitHub's release list
-//! (`update`). Each has an 8 second timeout; the listings fall back to a cached copy.
+//! invite knock (`realms`, `host`), the official realm's status file (`status`), the website's forum, read only
+//! (`forum`), and GitHub's release list (`update`). Each has an 8 second timeout; the listings fall back to a cached copy.
 
 pub mod catalog;
 pub mod clients;
 pub mod deeplink; // leyline://install/<id> (hub rankings agent)
+pub mod forum; // the Forum page: reading the website's forum (stream/forum.py)
 pub mod herokey; // Hero Key sign-in to community realms (docs/HERO-KEY-SSO.md; the herokey_sso flag)
 pub mod host;
 pub mod launch;
@@ -48,6 +49,8 @@ pub const LINKS: &[(&str, &str)] = &[
     ("docs", "https://play.openvanilla.app/wrath/docs"),
     ("mods", "https://play.openvanilla.app/wrath/mods"),
     ("discord", "https://discord.gg/hVeUxYwbkr"),
+    ("forum", forum::PAGE), // the website's forum: posting happens there (forum.rs)
+    ("forumnew", "https://play.openvanilla.app/wrath/leyline/forum/new"),
     ("support", "https://ko-fi.com/orionvanilla"),
     ("github", "https://github.com/orionopenwow/Leyline"),
     ("host", host::HOST_PAGE),
@@ -73,6 +76,12 @@ mod link_tests {
         assert_eq!(super::link("discord"), Some("https://discord.gg/hVeUxYwbkr"));
         assert!(super::link("https://example.com").is_none());
         assert!(super::LINKS.iter().all(|(_, u)| u.starts_with("https://")));
+    }
+
+    #[test]
+    fn the_forum_links_to_the_site() {
+        assert_eq!(super::link("forum"), Some("https://play.openvanilla.app/wrath/leyline/forum"));
+        assert_eq!(super::link("forumnew"), Some("https://play.openvanilla.app/wrath/leyline/forum/new"));
     }
 
     #[test]

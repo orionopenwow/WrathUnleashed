@@ -1,4 +1,6 @@
-//! Leyline friends and messages in the launcher (the Friends page, `ui/social.js`).
+//! The Leyline sign-in in the launcher (Home's profile, `ui/social.js`): the name it shows, mod ratings and Hero Key
+//! sign-in to community realms use it. The friends and messages actions below are no longer used by the UI (the
+//! friends area went on 2026-10-30, in favour of the Discord and the forum); the server still answers them.
 //!
 //! The server is the Wrath portal's `/wrath/api/social` (`stream/social.py`); docs/SOCIAL.md has the whole picture.
 //! Sign-in is the website's own, in the player's browser: the launcher asks for a device code, opens
