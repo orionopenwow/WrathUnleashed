@@ -684,6 +684,7 @@ function M.Capture(on)
 end
 
 local function begin(title, keys, origin)
+    if M.HideStartChoice then M.HideStartChoice() end
     M.score, M.notes, M.banner, M.texts, M.textOrder = {}, {}, title, {}, {}
     setHud(true)
     hud.banner:SetText(title)
@@ -916,6 +917,57 @@ end
 local listener = CreateFrame("Frame")
 listener:RegisterEvent("CHAT_MSG_ADDON")
 listener:SetScript("OnEvent", function(_, _, prefix, msg, channel, sender) M.OnMessage(prefix, msg, channel, sender) end)
+
+-- ---------------------------------------------------------------- leaving the world ends your game
+-- A game is only ever one you chose in this visit to the world: logging out, a loading screen or a disconnect
+-- ends it here as the realm does there (ov_modes.lua leaves you on logout and map change), so a game left running
+-- in the client can't greet you (or the next character on this page) when you come back.
+local leaving = CreateFrame("Frame")
+leaving:RegisterEvent("PLAYER_LEAVING_WORLD")
+leaving:RegisterEvent("PLAYER_LOGOUT")
+leaving:SetScript("OnEvent", function()
+    if M.state ~= "idle" or M.host then M.Leave() end
+    M.invite, M.lobby = nil, nil
+    if W.Golf and W.Golf.Leave and (W.Golf.playing or W.Golf.lobby or W.Golf.session) then W.Golf.Leave() end
+    if W.Golf then W.Golf.invite = nil end
+end)
+
+-- ---------------------------------------------------------------- the start-choice window
+-- A new character on the main realm gets "Begin your adventure at level 1 / Boost to level 80" (ov_main.lua), sent
+-- again a few times after login because a browser client can drop the first one. Goodbye closes it without telling
+-- the realm, so it kept coming back (smoke 2026-10-30). Here: when it shows, ".boost seen" (no more resends this
+-- session); closed without a pick (Goodbye, Esc), ".boost later" (kept for the character; .boost still opens it).
+-- While a mode or minigolf plays it is closed at once and nothing is sent: the realm asks again later.
+local choice = { open = false, picked = false, hiding = false, seen = false }
+local function isStartChoice()
+    if type(GetGossipOptions) ~= "function" then return false end
+    local t = { GetGossipOptions() }
+    for i = 1, #t do if type(t[i]) == "string" and t[i]:find("Boost to level 80", 1, true) then return true end end
+    return false
+end
+local function playing() return M.state ~= "idle" or (W.Golf and W.Golf.playing) and true or false end
+local function tellRealm(cmd) if type(SendChatMessage) == "function" then pcall(SendChatMessage, cmd, "SAY") end end
+function M.HideStartChoice()
+    if choice.open and type(CloseGossip) == "function" then choice.hiding = true; CloseGossip() end
+end
+local gossip = CreateFrame("Frame")
+gossip:RegisterEvent("GOSSIP_SHOW")
+gossip:RegisterEvent("GOSSIP_CLOSED")
+gossip:SetScript("OnEvent", function(_, event)
+    if event == "GOSSIP_SHOW" then
+        choice.open, choice.picked, choice.hiding = isStartChoice(), false, false
+        if not choice.open then return end
+        if playing() then return M.HideStartChoice() end
+        if not choice.seen then choice.seen = true; tellRealm(".boost seen") end
+    elseif event == "GOSSIP_CLOSED" then
+        if choice.open and not choice.picked and not choice.hiding then tellRealm(".boost later") end
+        choice.open, choice.hiding = false, false
+    end
+end)
+if type(hooksecurefunc) == "function" and type(SelectGossipOption) == "function" then
+    hooksecurefunc("SelectGossipOption", function() if choice.open then choice.picked = true end end)
+end
+M.startChoice = choice   -- tests
 
 -- ---------------------------------------------------------------- the built-in mode (for Play solo and the realm's list)
 

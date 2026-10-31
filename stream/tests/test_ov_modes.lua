@@ -141,6 +141,13 @@ end
 local function tap(k) key(k, true); key(k, false) end
 local function drew(prefix) local c = 0 for _, d in ipairs(draws) do if d:sub(1, #prefix) == prefix then c = c + 1 end end return c end
 
+-- the new-character choice menu as the client sees it (Modes.lua "the start-choice window")
+local gossipOpts, chat, closedGossip = {}, {}, 0
+function GetGossipOptions() return unpack(gossipOpts) end
+function SendChatMessage(text, kind) chat[#chat + 1] = text end
+function CloseGossip() closedGossip = closedGossip + 1 end
+function SelectGossipOption() end
+function hooksecurefunc(name, fn) if name == "SelectGossipOption" then local old = SelectGossipOption; SelectGossipOption = function(...) old(...); fn(...) end end end
 dofile(dir .. "/ModeAPI.lua")
 dofile(dir .. "/Modes.lua")
 dofile(dir .. "/ModeDevices.lua")
@@ -952,6 +959,47 @@ end
 
 local all = table.concat(seen, "\n"):lower()
 check("no brand names or shop words on screen", not all:find("blizzard") and not all:find("warcraft") and not all:find(" buy") and not all:find("shop"))
+
+-- ================================================================ the start-choice window, leaving the world
+local function eventFrame(ev) for _, f in ipairs(frames) do if f.events[ev] then return f end end end
+local gf = eventFrame("GOSSIP_SHOW")
+local function showChoice() gossipOpts = { "Begin your adventure at level 1", "gossip", "Boost to level 80 (spec gear, professions, Dalaran)", "gossip" }; gf:Fire("OnEvent", "GOSSIP_SHOW") end
+M.Stop()
+chat = {}
+showChoice()
+check("start choice: when it shows, the realm hears it arrived (no more resends)", chat[1] == ".boost seen")
+gf:Fire("OnEvent", "GOSSIP_CLOSED")
+check("start choice: Goodbye without a pick tells the realm to stop asking", chat[2] == ".boost later")
+showChoice()
+check("start choice: 'seen' only once a session", #chat == 2)
+SelectGossipOption(1)
+gf:Fire("OnEvent", "GOSSIP_CLOSED")
+check("start choice: closed after a pick is not Goodbye", #chat == 2)
+gossipOpts = { "Talk to the innkeeper", "gossip" }
+gf:Fire("OnEvent", "GOSSIP_SHOW"); gf:Fire("OnEvent", "GOSSIP_CLOSED")
+check("start choice: other gossip windows are left alone", #chat == 2)
+M.Solo(M.BUILTIN)
+closedGossip = 0
+showChoice()
+check("start choice: while a mode plays it is closed at once", closedGossip == 1)
+gf:Fire("OnEvent", "GOSSIP_CLOSED")
+check("start choice: ... and that isn't Goodbye (the realm asks again later)", #chat == 2)
+M.Leave()
+showChoice()
+closedGossip = 0
+M.Solo(M.BUILTIN)
+check("start choice: starting a mode closes an open one", closedGossip == 1)
+gf:Fire("OnEvent", "GOSSIP_CLOSED")
+check("start choice: ... without counting as Goodbye", #chat == 2)
+
+-- leaving the world ends the game here (no round greets you when you come back)
+local lf = eventFrame("PLAYER_LEAVING_WORLD")
+check("a solo game is running before leaving", M.state == "solo" and M.host ~= nil)
+lf:Fire("OnEvent", "PLAYER_LEAVING_WORLD")
+check("leaving the world ends it", M.state == "idle" and M.host == nil and not M.capturing)
+M.invite = { id = 9, host = "Bo", title = "Bumper Balls" }
+lf:Fire("OnEvent", "PLAYER_LOGOUT")
+check("logging out drops a pending invite", M.invite == nil and M.lobby == nil)
 
 realPrint(string.format("%d passed, %d failed", pass, fail))
 os.exit(fail == 0 and 0 or 1)
