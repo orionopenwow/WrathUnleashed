@@ -368,3 +368,5 @@
 1127a ship Save to GitHub: friends lists with avatars and status colours (GitHub then rebuilds Leyline.exe)
 1128a signin Site: the featured row slides through the best latest mods
 1128b ship Save to GitHub: launcher Home gallery and rows, play bar with client drop-up, Find your game files, darker colours (GitHub then rebuilds Leyline.exe)
+1129a signin Site: the bottom of the front page in four sections (Hero Key line, Community, Mods in play, status bar)
+1129b ship Save to GitHub: the front page's bottom
