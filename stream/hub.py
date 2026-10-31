@@ -827,12 +827,18 @@ class Hub:
                 '<div class="hb-more-m">' + "".join(item(*m, cls="hb-mi") for m in more) + "</div></details>")
         extra = '<div class="hb-nav-x">' + "".join(item(*m) for m in more) + "</div>"
         who = getattr(_REQ, "who", None)
+        prof = self.portal("profiles")
+        prof = prof if prof is not None and getattr(prof, "store", None) is not None else None
         if who:
             name = clean_name(who[1] or who[0]) or "Account"
-            acct = (f'<a class="hb-acct" href="/wrath/account" aria-label="Your account: {e(name)}">'
-                    f'<span class="hb-av" aria-hidden="true">{e(name[:1].upper())}</span><span class="hb-acct-n">{e(name)}</span></a>')
+            pic = prof.avatar_url(who[0]) if prof is not None else ""
+            av = (f'<img class="hb-av" src="{e(pic)}" alt="" width="26" height="26">' if pic
+                  else f'<span class="hb-av" aria-hidden="true">{e(name[:1].upper())}</span>')
+            acct = (f'<a class="hb-acct" href="{"/wrath/profile" if prof is not None else "/wrath/account"}" aria-label="Your account: {e(name)}">'
+                    f'{av}<span class="hb-acct-n">{e(name)}</span></a>')
         else:
-            acct = ('<a class="hb-signin" href="/login?next=%2Fwrath"><img src="/wrath/art/leyline-crystal-128.png" alt="" width="26" height="26">'
+            sin = prof.signin_url("/wrath") if prof is not None else "/login?next=%2Fwrath"
+            acct = (f'<a class="hb-signin" href="{e(sin)}"><img src="/wrath/art/leyline-crystal-128.png" alt="" width="26" height="26">'
                     'Sign In</a>')
         dl = self._download()
         dl_a = (f'<a class="hb-dl" href="{e(dl)}" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true">'
@@ -2539,6 +2545,7 @@ border:1px solid var(--lk-border-strong);background:transparent;color:var(--lk-t
 .hb-acct{gap:8px;padding:0 12px 0 4px}.hb-acct-n{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hb-av{display:grid;place-items:center;flex:none;width:32px;height:32px;border-radius:50%;font-weight:800;font-size:14px;color:#fff;
 background:linear-gradient(135deg,var(--lk-accent),var(--lk-accent-2))}
+img.hb-av{display:block;object-fit:cover;background:none}
 .hb-menu-t{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
 .hb-menu-b{display:none;cursor:pointer;padding:7px 12px;border:1px solid var(--lk-border-strong);border-radius:var(--lk-r-sm);font-weight:600;font-size:14px}
 .hb-menu-t:focus-visible+.hb-menu-b{outline:2px solid var(--lk-accent-strong);outline-offset:2px}

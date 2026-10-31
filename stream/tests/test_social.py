@@ -257,7 +257,7 @@ form = urllib.parse.urlencode({"code": tok.group(1), "t": tok.group(2), "do": "a
 st, page, _ = call("POST", "/wrath/link", raw=form, sess="alice", headers={"Origin": "https://evil.example"})
 check("approve from another site refused", st == 403)
 st, page, _ = call("POST", "/wrath/link", raw=form, sess="alice")
-check("approved", st == 200 and "go back to the launcher" in page and "Linked launchers" in page)
+check("approved", st == 200 and "close this tab" in page and "Linked launchers" in page)
 time.sleep(DEV_WAIT := 3.2)
 st, doc, _ = call("POST", API + "device/poll", {"device_code": dev["device_code"]})
 check("poll: the token, once", doc.get("status") == "ok" and re.fullmatch(r"[A-Za-z0-9_-]{43}", doc.get("token", "")), doc)

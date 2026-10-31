@@ -784,6 +784,7 @@ vertical-align:2px;background:var(--lk-accent-soft);color:var(--lk-accent-strong
 .fm-by{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin:0 0 8px;font-size:13px;color:var(--lk-muted)}
 .fm-by b{color:var(--lk-text);font-size:14.5px}.fm-by .fm-av{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;
 font-weight:800;font-size:13px;color:#fff;background:linear-gradient(135deg,var(--lk-accent),var(--lk-accent-2))}
+.fm-by img.fm-av{display:block;object-fit:cover;background:none}
 .fm-by .fm-team{padding:1px 7px;border-radius:999px;background:var(--lk-accent);color:#fff;font-size:11px;font-weight:700}
 .fm-by a{margin-left:auto;color:var(--lk-muted);font-size:12.5px}
 .fm-text{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6;color:var(--lk-text)}
@@ -838,7 +839,27 @@ def _shell(h, title: str, body: str, path: str, who, status: int = 200) -> None:
 
 
 def _signin_url(path: str) -> str:
+    fn = P("signin_url")   # the Leyline sign-in (stream/profiles.py) when the portal has it
+    if callable(fn):
+        try:
+            return fn(path)
+        except Exception:   # noqa: BLE001
+            pass
     return "/login?next=" + urllib.parse.quote(path, safe="")
+
+
+def _avatar(acct: str, name: str) -> str:
+    """The poster's picture (stream/profiles.py), else their initial."""
+    e = html.escape
+    prof = P("profiles")
+    if prof is not None and getattr(prof, "store", None) is not None:
+        try:
+            u = prof.avatar_url(acct)
+            if u:
+                return f'<img class="fm-av" src="{e(u)}" alt="" width="28" height="28" loading="lazy">'
+        except Exception:   # noqa: BLE001
+            pass
+    return f'<span class="fm-av" aria-hidden="true">{e(name[:1].upper())}</span>'
 
 
 def _discord_card() -> str:
@@ -954,7 +975,7 @@ def page_thread(h, who, tid: str, query: dict, note: str = "", text: str = "", s
         team = '<span class="fm-team">Team</span>' if p["staff"] else ""
         tag = f'<small>#{e(p["tag"])}</small>' if p["tag"] else ""
         rep = (f'<a href="{PAGE}/report?p={p["id"]}" rel="nofollow">Report</a>' if (who and who["acct"] != p["author"]) else "")
-        out.append(f'<article class="fm-post" id="p{p["id"]}"><p class="fm-by"><span class="fm-av" aria-hidden="true">{e(p["name"][:1].upper())}</span>'
+        out.append(f'<article class="fm-post" id="p{p["id"]}"><p class="fm-by">{_avatar(p["author"], p["name"])}'
                    f'<b>{e(p["name"])}</b>{tag}{team}<span>{_ago(p["created"])}</span>{rep}</p>'
                    f'<p class="fm-text">{render(p["body"])}</p></article>')
     nav = ""

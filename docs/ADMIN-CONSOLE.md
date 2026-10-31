@@ -42,6 +42,7 @@ These people are staff too, without a grant:
 | **Flags** | The P2P/torrent feature flags (owner only to change). |
 | **Themes** | Theme packs (the Workshop category `themes`): approve, reject, feature. |
 | **Reports** | `.bug` reports (seen, resolve, won't fix), message reports (done, dismiss, reopen), reported community links; notes on any of them. |
+| **Profiles** | Player profiles (`stream/profiles.py`, docs/SIGN-IN.md): find by name, Name#1234 or game account; reset the picture, the bio, or the name (to Player, typed confirm). The old value stays in the profile history shown there; nothing is deleted. |
 | **Health** | What the server can see: SOAP, `ov_admin.lua`, the relay listing, the Workshop export's age, the mods catalog, writable folders, the checker, GitHub, and game data streaming on/off (read-only). |
 | **Audit** | Every action: who, what, when, before and after, and refusals. |
 

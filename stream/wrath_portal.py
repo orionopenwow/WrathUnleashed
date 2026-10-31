@@ -227,6 +227,9 @@ if hostflow is not None:
 social = _load_module("wu_social", "social.py")   # Leyline friends and messages (stream/social.py)
 if social is not None:
     social.bind(lambda name: globals()[name])
+profiles = _load_module("wu_profiles", "profiles.py")   # /wrath/signin, /wrath/profile, /wrath/avatar (stream/profiles.py)
+if profiles is not None:
+    profiles.bind(lambda name: globals()[name])
 forum = _load_module("wu_forum", "forum.py")   # the Leyline forum: /wrath/leyline/forum, /wrath/forum/api (stream/forum.py)
 if forum is not None:
     forum.bind(lambda name: globals()[name])
@@ -242,6 +245,13 @@ if admin is not None:
     admin.bind(lambda name: globals()[name])
     if creations is not None:
         creations.adjust = admin.adjust_catalog
+
+
+def signin_url(nxt: str = "/wrath") -> str:
+    """The sign-in for a page of ours: the Leyline sign-in (stream/profiles.py), else the website's own."""
+    if profiles is not None and profiles.store is not None:
+        return profiles.signin_url(nxt)
+    return "/login?next=" + urllib.parse.quote(nxt, safe="")
 
 
 def host_plus(where: str) -> str:
@@ -1062,7 +1072,7 @@ RULE = '<hr class="rule wu-divider">'
 def signed_out_page() -> bytes:
     return render(
         f'{crest(REALM_NAME)}<p class="sub">Wrath · on the Leyline network</p>{RULE}'
-        '<p class="center"><a class="btn primary" href="/login?next=%2Fwrath">Sign in with Google or your Hero Key</a></p>'
+        f'<p class="center"><a class="btn primary" href="{html.escape(signin_url("/wrath"))}">Sign in</a></p>'
         '<p class="fine center">Played here before? Use the same sign-in. Your Wrath login appears here.</p>'
         '<p class="fine center"><a href="/wrath/realms">All realms</a>, including community realms hosted by players · '
         '<a href="/wrath/leyline">What is Leyline?</a></p>',
@@ -1852,7 +1862,8 @@ def site_nav(current: str = "", signed_in: bool = False) -> str:
     links_html = "".join(_nav_item(k, label, href, current) for k, label, href in items)
     links_html += _nav_item("server", "Server", HOST_URL, current, external=True)
     links_html += _nav_item("discord", "Discord", DISCORD_URL, current, external=True)
-    end = "" if signed_in else _nav_item("signin", "Sign in", "/login?next=%2Fwrath", current)
+    end = (_nav_item("profile", "Profile", "/wrath/profile", current) if signed_in and profiles is not None and profiles.store is not None
+           else "" if signed_in else _nav_item("signin", "Sign in", signin_url("/wrath"), current))
     return ('<nav class="ly-nav" id="ly-site-nav" aria-label="Leyline">'
             + (_nav_item("leyline", "Leyline", "/wrath/leyline", current, "ly-brand").replace(">Leyline</a>", ">" + spin(26) + "Leyline</a>")
                if BRAND else _nav_item("leyline", "Leyline", "/wrath/leyline", current, "ly-brand"))
@@ -2777,6 +2788,9 @@ class PageHandler(BaseHTTPRequestHandler):
         if path in ("/__gate", "/__layer"):
             self.stream_layer(urllib.parse.parse_qs(split.query))
             return
+        if profiles is not None and profiles.match(path):   # the profile forms (stream/profiles.py)
+            profiles.post(self, path)
+            return
         if social is not None and social.match(path):   # Leyline friends and messages (stream/social.py)
             social.post(self, path)
             return
@@ -2860,6 +2874,9 @@ class PageHandler(BaseHTTPRequestHandler):
             return
         if forum is not None and forum.match(path):   # the forum and its JSON (stream/forum.py)
             forum.get(self, path, query)
+            return
+        if profiles is not None and profiles.match(path):   # sign-in, profile and pictures (stream/profiles.py)
+            profiles.get(self, path, query)
             return
         twin = hub_mod.twin(path, query) if hub_mod is not None and hasattr(hub_mod, "twin") else None
         if twin:   # an older page with a twin on the Leyline front door (stream/hub.py TWINS): one site, one page each
@@ -3126,6 +3143,8 @@ def main() -> int:
     threading.Thread(target=_layer_sweeper, daemon=True, name="layer-sweeper").start()
     if social is not None:
         social.setup()   # the store in /data and the realm bridge thread (stream/social.py)
+    if profiles is not None:
+        profiles.setup()   # the profiles' store in /data (stream/profiles.py)
     if forum is not None:
         forum.setup()   # the forum's store in /data (stream/forum.py)
     try:

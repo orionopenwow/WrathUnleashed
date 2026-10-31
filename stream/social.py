@@ -18,11 +18,13 @@ Three ways in, one store:
                 the sender (the logged-in character's own account), never the client
 
 The JSON API, under /wrath/api/social (Caddy sends /wrath* here; /api/* belongs to the website's own service):
-    GET  me                       {me, csrf}               (csrf only for cookie sign-in)
+    GET  me                       {me, csrf}               (csrf only for cookie sign-in); with stream/profiles.py also
+                                  me.profile {bio, avatar, avatar_url, setup}, avatars, ways, manage_url
+    GET  ways                     (no sign-in) {herokey, google, discord}: the sign-in buttons to show (stream/profiles.py)
     GET  state                    {v, me, friends, incoming, outgoing, blocked}
     GET  events?since=<v>         waits up to 25 s for a change, then the state ({v, same: true} when none)
     GET  thread?with=<pid>[&before=<id>]   {messages: [{id, mine, text, at, via}]} (50 at a time, oldest first)
-    POST profile  {name?, main?, show_main?, offline?}
+    POST profile  {name?, main?, show_main?, offline?, bio?, avatar?, setup?}   (bio, avatar, setup: stream/profiles.py)
     POST request  {to}             "Name#1234", a unique name, or a character name seen on the realm
     POST accept|decline|remove|unblock {pid};  POST block {pid} or {to}
     POST send     {to: pid, text}
@@ -32,7 +34,9 @@ The JSON API, under /wrath/api/social (Caddy sends /wrath* here; /api/* belongs 
     POST device/poll {device_code}  {status: pending|ok|denied|expired, token?}
     POST token/revoke            the launcher signs itself out (Bearer)
     POST herokey {realm}         Hero Key sign-in to a community realm (herokey_sso flag; docs/HERO-KEY-SSO.md)
-  GET/POST /wrath/link           the approval page (and the list of linked launchers, with Revoke)
+  GET/POST /wrath/link           the approval page (and the list of linked launchers, with Revoke). Signed out, it goes
+                                 to the Leyline sign-in (/wrath/signin, stream/profiles.py); ?via=herokey|google|discord
+                                 (the launcher's three buttons) goes straight to that way
 
 Privacy: presence only between accepted friends (both said yes); "appear offline" shows you offline to
 everyone; a block hides everything both ways (friendship and requests removed, no messages, no presence, no
@@ -1150,6 +1154,11 @@ def get(h, path: str, query: dict) -> None:
     if path == LINK_PAGE:
         return link_page(h, query)
     sub = path[len(API):].strip("/")
+    if sub == "ways":   # which sign-in buttons to show (no sign-in needed: the launcher asks before it has one)
+        prof = _profiles()
+        if not store.lim_ip.hit("ways|" + h.ip(), 120):
+            return _json(h, 429, {"error": "Slow down a little."})
+        return _json(h, 200, prof.ways() if prof is not None else {"herokey": True, "google": True, "discord": False})
     a = _auth(h, False)
     if a is None:
         return
@@ -1162,6 +1171,11 @@ def get(h, path: str, query: dict) -> None:
     if sub == "me":
         p = store.ensure(acct)
         doc = {"me": {"pid": p["pid"], "name": p["name"], "tag": p["tag"], "main": p["main"], "offline": p["offline"]}}
+        prof = _profiles()
+        if prof is not None:
+            extra_doc = prof.public(acct)
+            doc["me"]["profile"] = extra_doc.pop("profile")
+            doc.update(extra_doc)
         if how == "cookie":
             doc["csrf"] = csrf_for(extra)
         return _json(h, 200, doc)
@@ -1224,8 +1238,26 @@ def post(h, path: str) -> None:
     pid = lambda: store.by_pid(doc.get("pid"))   # noqa: E731
     try:
         if sub == "profile":
+            prof = _profiles()
+            check_name = prof.name_problem if prof is not None else name_error
+            if "name" in doc and check_name(doc.get("name")):   # refused before anything changes: no half-saved profile
+                return _json(h, 400, {"error": check_name(doc.get("name"))})
+            if prof is not None and any(k in doc for k in ("bio", "avatar", "setup")):
+                try:
+                    prof.save(acct, {k: doc[k] for k in ("bio", "avatar", "setup") if k in doc}, by="self:" + via)
+                except prof.ProfileError as e:
+                    return _json(h, e.status, {"error": e.text})
+            if "name" in doc and prof is not None:
+                try:
+                    prof.set_name(acct, doc.get("name"), by="self:" + via)
+                except prof.ProfileError as e:
+                    return _json(h, e.status, {"error": e.text})
+                _who_cache.clear()
             p = store.set_profile(acct, {k: doc[k] for k in ("name", "main", "show_main", "offline") if k in doc})
-            return _json(h, 200, {"ok": True, "me": {k: p[k] for k in ("pid", "name", "tag", "main", "show_main", "offline")}})
+            out = {"ok": True, "me": {k: p[k] for k in ("pid", "name", "tag", "main", "show_main", "offline")}}
+            if prof is not None:
+                out["me"]["profile"] = prof.public(acct)["profile"]
+            return _json(h, 200, out)
         if sub == "request":
             return _json(h, 200, {"ok": True, "text": store.request(acct, doc.get("to"))})
         if sub == "accept":
@@ -1282,9 +1314,23 @@ def _form_token(sess: str, action: str) -> str:
     return hmac.new(store.key, ("link|" + sess + "|" + action).encode(), hashlib.sha256).hexdigest()[:32]
 
 
-def _signin(h, code: str = "") -> None:
+def _profiles():
+    """stream/profiles.py when it is on this portal (its store open), else None."""
+    try:
+        mod = P("profiles")
+    except KeyError:
+        return None
+    return mod if mod is not None and getattr(mod, "store", None) is not None else None
+
+
+def _signin(h, code: str = "", via: str = "") -> None:
     nxt = LINK_PAGE + (f"?code={code}" if code else "")
-    h.redirect("/login?next=" + urllib.parse.quote(nxt, safe=""))
+    prof = _profiles()
+    if prof is None:
+        return h.redirect("/login?next=" + urllib.parse.quote(nxt, safe=""))
+    if via in prof.WAYS:   # the launcher's button for that way: straight on to it (the chooser when it isn't offered)
+        return h.redirect(f"{prof.SIGNIN}/go/{via}?next=" + urllib.parse.quote(nxt, safe=""))
+    h.redirect(prof.signin_url(nxt))
 
 
 def link_page(h, query: dict, note: str = "") -> None:
@@ -1297,7 +1343,7 @@ def link_page(h, query: dict, note: str = "") -> None:
     except OSError:
         return _page(h, 503, "Link the launcher", "<h1>Link the launcher</h1><p>The website isn't answering right now. Try again shortly.</p>")
     if who is None:
-        return _signin(h, shown or (raw if CODE_RE.fullmatch(raw or "") else ""))
+        return _signin(h, shown or (raw if CODE_RE.fullmatch(raw or "") else ""), (query.get("via") or [""])[0])
     acct, _display = who
     sess = _session(h.headers.get("Cookie", ""))
     p = store.ensure(acct, _display)
@@ -1308,7 +1354,7 @@ def link_page(h, query: dict, note: str = "") -> None:
         parts.append(
             f"<p>Your Leyline launcher on this computer shows this code. Only approve it if it's the same:</p>"
             f'<p class="code">{e(shown)}</p>'
-            f"<p>The launcher gets a sign-in for friends and messages as <b>{e(p['name'])}#{e(p['tag'])}</b>. "
+            f"<p>The launcher signs in as <b>{e(p['name'])}#{e(p['tag'])}</b>. "
             "It never sees your password, and you can revoke it here any time.</p>"
             '<div class="row">'
             f'<form method="post" action="{LINK_PAGE}"><input type="hidden" name="code" value="{e(code)}">'
@@ -1362,7 +1408,8 @@ def link_post(h) -> None:
     if act in ("approve", "deny"):
         if not code or not store.device_answer(code, acct, act == "approve"):
             return link_page(h, {}, "That code has expired. Start again from the launcher.")
-        return link_page(h, {}, "Done: go back to the launcher." if act == "approve" else "Refused. The launcher was not linked.")
+        return link_page(h, {}, "Done. The launcher signs in by itself: you can close this tab." if act == "approve"
+                         else "Refused. The launcher was not linked.")
     if act == "revoke":
         ok = store.revoke(acct, short_id=tid)
         if ok:
