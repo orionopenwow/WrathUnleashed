@@ -50,7 +50,9 @@
   const CHECKS = [["pc", "The servers on your PC"], ["tunnel", "The tunnel to the relay"], ["login", "A login through the relay"],
     ["invite", "Your invite link"], ["list", "Your place on the realm list"]];
   const TOOLS = [["invite", "Invite links"], ["friends", "Accounts for friends"], ["vis", "Public or private"],
-    ["signup", "Who may sign up"], ["logs", "Server logs"], ["rules", "House rules"]];
+    ["signup", "Who may sign up"], ["browser", "Browser players"], ["max", "Max players"], ["logs", "Server logs"], ["rules", "House rules"]];
+  // tools that change a setting of the kit's own realm: not for a linked server (its own settings), browser only on AzerothCore
+  const toolShown = (k, c) => !(c.linked && (k === "browser" || k === "max" || k === "signup")) && !(k === "browser" && (c.core || "azerothcore") !== "azerothcore");
   // the cores the host pack runs (stream/hub.py HOST_CORES): one click only for what the kit hosts today
   const CORES = [["azerothcore", "AzerothCore", "One click"], ["cmangos", "CMaNGOS", "One click"], ["trinitycore", "TrinityCore", "Coming"],
     ["vmangos", "vMaNGOS", "Coming"], ["own", "Your own", "Relay agent"]];
@@ -444,6 +446,8 @@
       li.classList.toggle("cur", cur);
       if (cur) li.setAttribute("aria-current", "true"); else li.removeAttribute("aria-current");
     }
+    for (const b of ui.tools.querySelectorAll(".hc-tool")) b.parentElement.hidden = !toolShown(b.dataset.tool, c);
+    if (openTool && !toolShown(openTool, c)) toggleTool(openTool);
     if (!c.docker && con) say("Docker is not answering: start Docker Desktop, then refresh.", "warn");
     if (openTool) fillTool(openTool, true);
   }
@@ -526,7 +530,7 @@
     const d = ui.drawer;
     // a refresh repaints only the choices that show the realm's state, and never over something being typed
     const typing = [...d.querySelectorAll("input, textarea")].some((i) => i.value || document.activeElement === i);
-    if (keep && d.dataset.tool === k && ((k !== "vis" && k !== "signup") || typing)) return;
+    if (keep && d.dataset.tool === k && ((k !== "vis" && k !== "signup" && k !== "browser") || typing)) return;
     d.dataset.tool = k;
     d.replaceChildren();
     const head = mk("div", "hc-drawer-h");
@@ -568,6 +572,21 @@
       const now = c.signup || "invite";
       d.append(seg([["invite", "Invite link only"], ["open", "Anyone"], ["off", "Nobody new"]], now, (v, b) => { if (v !== now) tool("signup-" + v, null, b); }),
         mk("p", "hc-fine", "Who may make an account on your join page."));
+    } else if (k === "browser") {
+      const now = c.browser ? "on" : "off";
+      d.append(seg([["on", "On · browsers can join"], ["off", "Off · desktop clients only"]], now, (v, b) => { if (v !== now) tool("browser-" + v, null, b); }),
+        mk("p", "hc-fine", "The browser client has no anti-cheat module, so it can join only while the core's client anti-cheat (Warden) is off. The server's own checks stay on. Applies at the next start."));
+    } else if (k === "max") {
+      const n = mk("input", "hc-token");
+      n.type = "number"; n.min = "0"; n.max = "10000"; n.placeholder = "0 = the ruleset's own";
+      if (c.max_players) n.value = String(c.max_players);
+      const row = mk("div", "hc-row");
+      row.append(n, btn("Save", "btn small primary", (ev) => {
+        const v = n.value.trim() || "0";
+        if (!/^\d{1,5}$/.test(v) || Number(v) > 10000) { say("Max players: 0 to 10000.", "warn"); n.focus(); return; }
+        tool("max", v, ev.currentTarget);
+      }));
+      d.append(row, mk("p", "hc-fine", "The most players at once: the server turns away the next one, and the realm list shows it. Applies at the next start."));
     } else if (k === "logs") {
       const pre = mk("pre", "hc-logs", "Reading the logs…");
       const row = mk("div", "hc-row");

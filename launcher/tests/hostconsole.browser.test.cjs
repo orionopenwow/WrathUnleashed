@@ -30,7 +30,7 @@ const FAKE = (setUp) => {
       case 'deep_link_take': return null;
       case 'host_info': return { dir: '/home/me/kit', is_kit: !window.__noKit, has_windows_script: true, has_unix_script: true, problems: [], seeds: [], realm };
       case 'host_console': return { set_up: !!realm, linked: false, name: realm ? realm.name : '', realm_id: realm ? realm.realm_id : '',
-        profile: 'vanillaplus', core: 'azerothcore', visibility, signup: 'invite', herokey: false, claim_sent: false,
+        profile: 'vanillaplus', core: 'azerothcore', visibility, signup: 'invite', herokey: false, claim_sent: false, browser: true, max_players: 0,
         relay: 'relay.openvanilla.app', relay_connected: true, relay_error: null, docker: true,
         services: [svc('database', 'ok', 'ready'), svc('login', 'ok', 'ready'), svc('world', 'ok', 'ready'), svc('agent', 'ok', 'connected')],
         uptime: '3 days', gm: true, gm_note: null, invite: 'https://relay.openvanilla.app/join/abcdefghijk2345a' };
@@ -104,7 +104,7 @@ test('a realm set up on this PC: the Host page is its console', async () => {
   assert.deepEqual(await page.$$eval('.hc-chk li span', (l) => l.map((x) => x.textContent)),
     ['The servers on your PC', 'The tunnel to the relay', 'A login through the relay', 'Your invite link', 'Your place on the realm list']);
   assert.deepEqual(await page.$$eval('.hc-tool', (l) => l.map((x) => x.textContent)),
-    ['Invite links', 'Accounts for friends', 'Public or private', 'Who may sign up', 'Server logs', 'House rules']);
+    ['Invite links', 'Accounts for friends', 'Public or private', 'Who may sign up', 'Browser players', 'Max players', 'Server logs', 'House rules']);
   assert.deepEqual(await page.$$eval('.hc-core', (l) => l.map((x) => [x.dataset.core, x.querySelector('span span').textContent])),
     [['azerothcore', 'One click'], ['cmangos', 'One click'], ['trinitycore', 'Coming'], ['vmangos', 'Coming'], ['own', 'Relay agent']]);
   assert.equal(await page.getAttribute('.hc-core[data-core="azerothcore"]', 'aria-current'), 'true', 'the core this realm runs');
@@ -183,6 +183,15 @@ test('the health check, and the realm tools', async () => {
   await page.click('.hc-tool[data-tool="signup"]');
   await page.click('.hc-seg-b[data-value="open"]');
   await page.waitForFunction(() => window.__calls.some(([c, a]) => c === 'host_tool' && a.name === 'signup-open'));
+  // browser players (Warden off) and max players (the server's cap)
+  await page.click('.hc-tool[data-tool="browser"]');
+  assert.equal(await page.getAttribute('.hc-seg-b[data-value="on"]', 'aria-pressed'), 'true');
+  await page.click('.hc-seg-b[data-value="off"]');
+  await page.waitForFunction(() => window.__calls.some(([c, a]) => c === 'host_tool' && a.name === 'browser-off'));
+  await page.click('.hc-tool[data-tool="max"]');
+  await page.fill('.hc-drawer input[type=number]', '25');
+  await page.click('.hc-drawer button:has-text("Save")');
+  await page.waitForFunction(() => window.__calls.some(([c, a]) => c === 'host_tool' && a.name === 'max' && a.arg === '25'));
   // house rules
   await page.click('.hc-tool[data-tool="rules"]');
   await page.waitForFunction(() => document.querySelector('.hc-rules') && document.querySelector('.hc-rules').value === 'Be kind.\nNo gold selling.');

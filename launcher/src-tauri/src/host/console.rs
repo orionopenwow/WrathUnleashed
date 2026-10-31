@@ -111,6 +111,10 @@ pub struct Console {
     pub visibility: String,
     pub signup: String,
     pub herokey: bool,
+    /// Browser players: Warden off so the browser client can join (setup.py `browser`; AzerothCore rulesets).
+    pub browser: bool,
+    /// The most players at once (setup.py `listing --max-players`: the server's cap and the list's); 0 = not set.
+    pub max_players: u32,
     /// A claim token was given (`leyline claim`); the listing says when it is claimed.
     pub claim_sent: bool,
     pub relay: String,
@@ -168,6 +172,8 @@ pub fn read(kit: &Path, ps: Option<&str>) -> Console {
         c.visibility = Some(short(d, "visibility", 8)).filter(|v| v == "public" || v == "private").unwrap_or_default();
         c.signup = Some(short(d, "signup", 8)).filter(|v| ["invite", "open", "off"].contains(&v.as_str())).unwrap_or_default();
         c.herokey = d.get("herokey").and_then(Value::as_bool) == Some(true);
+        c.browser = d.get("warden").and_then(Value::as_bool) == Some(false);
+        c.max_players = d.get("player_limit").and_then(Value::as_u64).filter(|n| (1..=10000).contains(n)).unwrap_or(0) as u32;
         c.claim_sent = !short(d, "claim", 64).is_empty();
         c.relay = Some(short(d, "relay", 128)).filter(|r| crate::realms::relay_ok(r)).unwrap_or_else(|| crate::realms::RELAY.into());
     }
@@ -514,6 +520,17 @@ pub fn tool_cmd(name: &str, arg: Option<&str>) -> Result<(Vec<String>, String), 
         "signup-invite" => (v(&["signup", "invite"]), "Accounts: only people with your invite link.".into()),
         "signup-open" => (v(&["signup", "open"]), "Accounts: anyone can make one on your join page.".into()),
         "signup-off" => (v(&["signup", "off"]), "Accounts: nobody new for now.".into()),
+        "browser-on" => (v(&["browser", "on"]), "Browser players on: the anti-cheat is off. Restart the realm to apply it.".into()),
+        "browser-off" => (v(&["browser", "off"]), "Browser players off: desktop clients only. Restart the realm to apply it.".into()),
+        "max" => {
+            let t = arg.map(str::trim).unwrap_or("");
+            let n: u32 = match t.parse() {
+                Ok(n) if t.len() <= 5 && t.chars().all(|c| c.is_ascii_digit()) && n <= 10000 => n,
+                _ => return Err("Max players: a number from 0 to 10000 (0 = the ruleset's own).".into()),
+            };
+            let done = if n == 0 { "Max players: the ruleset's own.".to_string() } else { format!("Max players: {n}. The server's cap applies at the next start.") };
+            (vec!["listing".into(), "--max-players".into(), n.to_string()], done)
+        }
         "claim" => {
             let t = arg.map(str::trim).unwrap_or("");
             let ok = (16..=64).contains(&t.len()) && t.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
@@ -776,6 +793,9 @@ mod tests {
         assert!(tool_cmd("claim", Some("short")).is_err() && tool_cmd("claim", Some("abcdefghijklmnop; rm")).is_err());
         assert!(tool_cmd("friend", Some("BOB")).is_err(), "never an account or a password");
         assert!(tool_cmd("visibility", Some("public")).is_err());
+        assert_eq!(tool_cmd("browser-off", None).unwrap().0, vec!["browser", "off"]);
+        assert_eq!(tool_cmd("max", Some(" 25 ")).unwrap().0, vec!["listing", "--max-players", "25"]);
+        assert!(tool_cmd("max", Some("-1")).is_err() && tool_cmd("max", Some("10001")).is_err() && tool_cmd("max", Some("5; rm")).is_err());
 
         let none = tempfile::tempdir().unwrap();
         assert!(tool(none.path(), "public", None).unwrap_err().contains("docker-compose.host.yml"));
