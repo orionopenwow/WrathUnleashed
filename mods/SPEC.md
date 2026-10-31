@@ -110,3 +110,83 @@ where players browse them at `/wrath/mods`.
 - This is the MVP from the community release plan ("Leyline mod package"). Later steps there: `wu-mod test` against a local test realm, human review for anything realm-side, and signed packages once approved.
 - The client Open Mod API (`claude/open-mod-api-plan.md`) describes `mod.toml` and signed `.ovpack` packages with client permissions (`ui`, `packets`, `data`, `render`, `wasm`, `compat`). Those cover the client; the permissions here cover the realm. When the M1 loader lands, `mod.json` should map onto `mod.toml` field by field rather than become a second format.
 - Realm-to-addon messages use the existing OVMOD channel (`ov_modapi.lua`), the server half of `Mod.Packet`.
+
+## Upstream addons (the addon marketplace)
+
+Third-party addons for the 3.3.5a client that the Workshop lists and the Leyline launcher installs **straight from the
+author's own repo** (all.json `source: "upstream"`, id `up:<slug>`). They are not mod packages and need no `mod.json`.
+We never host them: the launcher downloads the author's release asset, or the commit archive pinned to a 40-hex commit.
+A copy on our site (`install.from: "mirror"`) is allowed only when `mirror_allowed` is true: an open licence **and** no
+`.blp` files. Every entry is curated by `tools/addon-curate/curate.py` and only published once a person has reviewed it.
+
+**What is never listed** (owner, 2026-10-31): paid or cracked products; anything with native code, injection or memory
+editing (`.dll`, `.asi`, `.exe`, or that needs a patched client); UIs that bundle stock game art by their own TOC
+(link-out only, or left out); re-upload collections of other people's addons (never an install source). Full interface
+replacements (ElvUI and the like) are allowed with `replaces_ui: true`, which the launcher shows as "Replaces your whole
+interface; may conflict with the Leyline UI". Display names never carry the game's brand words; the launcher also cleans
+TOC titles it shows in My Mods.
+
+**The rules** are one file, `launcher/src-tauri/src/upstream-rules.json`, built into the launcher (`upstream.rs`) and read
+by curate.py; `upstream-cases.json` beside it is run by both test suites so they cannot disagree.
+
+| Rule | Upstream addons (curated) | Mod packages |
+|---|---|---|
+| Game data `.mpq .m2 .wmo .adt .dbc .skin .anim .wdt .wdl .db2 .bls`, native code `.dll .asi .exe .so .dylib`, archives `.zip .rar .7z` (by extension or first bytes), anywhere in the download | refused, whole entry | refused |
+| `.blp` textures | only when the entry says `blp: "author-art"` (the author's own art, from upstream only, never mirrored; names like stock interface art are flagged for the reviewer) | refused |
+| Folder names | letters, digits, `_ . + ! -`, may start with `!` or `_` (`!BugGrabber`, `xCT+`); not `Blizzard_*` or the realm's own | starts with a letter |
+| `## Interface:` | holds 30300, alone or in a list (`30300, 11508`) | exactly 30300 |
+| Dev files (`.pkgmeta`, `.luacheckrc`, `.editorconfig`, `.github/`, `.yml`, `README`, `LICENSE`, screenshots, scripts) | skipped, never installed | error |
+| Repo layout | addon folders up to two levels deep, or the repo **is** the addon (its `.toc` at the top: the folder is named after the `.toc` for this client, `Questie-335`, `pfQuest-wotlk`) | `ui/<Name>/` |
+| Size | 32 MB a file, 256 MB, 12000 files | 10 MB, 50 MB, 2000 |
+| Updates | when the catalog's `install.rev` differs from the installed one (versions such as `r736` or `3x05` are not compared) | semver |
+
+**Checks at install** (launcher, `upstream.rs`): `install.url` must be the entry's own `repo` in one of these shapes:
+`https://github.com/<o>/<r>/releases/download/<tag>/<file>.zip`, `https://github.com/<o>/<r>/archive/<commit>.zip`,
+`https://gitlab.com/<o>/<r>/-/archive/<commit>/<r>-<commit>.zip`, `https://codeberg.org/<o>/<r>/archive/<commit>.zip`
+(or our own `/wrath/mods/` for a mirror). Redirects are followed by hand, https only, to `objects.githubusercontent.com`,
+`release-assets.githubusercontent.com`, `codeload.github.com`, `gitlab.com` or `codeberg.org`. Then the zip's sha256 when
+the entry has one (release assets and mirrors; GitHub's commit archives are not byte-stable), and always every file:
+each installed file's sha256 against `install.files`, or the digest of the whole set (`install.files_digest`: sha256 of
+the sorted `<path>\0<sha256>\n` lines). Only then is anything moved into the client, through the mod manager, as
+`up:<slug>` in `Leyline/mods.json`, so Remove, turn off and on, and keeping the player's edited files work as for any mod.
+An entry that is not reviewed, claims native code, or whose install block does not check out is shown as a plain link.
+
+### The entry (`mods/upstream.json`, written by curate.py)
+
+| Field | Meaning |
+|---|---|
+| `id`, `source` | `up:<slug>`, `"upstream"` |
+| `name`, `display_name` | the main addon folder; the clean name we show |
+| `description` | our own words, one or two sentences |
+| `category`, `tags` | `addons`; sub-categories: `full-ui unit-frames raid-frames action-bars nameplates meters boss-mods raid-tools auras cooldowns combat-text quests maps minimap bags auction gear tooltips chat social class professions pvp skins libraries quality-of-life` |
+| `builds` | `["3.3.5a"]` |
+| `author`, `author_url`, `repo` | the repo owner and the canonical repo link (the credit and the Source link) |
+| `licence`, `licence_source` | SPDX-style id from the repo's licence file (or the TOC's `X-License`), `""` when none; the file it came from |
+| `mirror_allowed` | open licence and no `.blp`: only then may we host a copy |
+| `version` | the main addon's TOC version (or the short commit) |
+| `install` | `from` (`release-asset`, `commit-archive`, `mirror`), `url`, `mirror_url?`, `rev` (tag or 40-hex commit), `sha256?` (byte-stable downloads only), `size`, `file_count`, `strip_prefix` (the archive's top folder), `folders` (archive folder → addon folder; `""` = the repo is the addon), `skip` (what curation left out, informational), `files` (`<Addon>/<path>` → sha256), `files_digest` |
+| `addons`, `toc` | the addon folders it installs, and each one's Interface, title, version, author |
+| `requires`, `conflicts` | other `up:` ids it needs (from the TOCs' `## Dependencies`, plus the seed's), and ones installing the same folders |
+| `replaces_ui`, `native` | a whole-interface replacement; always `false` |
+| `blp`, `blp_files` | `none` or `author-art`, and which files |
+| `flags`, `notes` | for the reviewer: TOC files that are missing, textures named like stock art, brand words, the seed's notes |
+| `review` | `{by, at, notes}`: empty `by` is pending; only reviewed entries are published |
+| `compat` | `{realm: "Wrath Unleashed", status: works/untested/broken, checked_at}` |
+| `pending_update` | a newer upstream rev of an approved entry, with the file diff; the approved install stays live until it is approved |
+
+all.json carries the reviewed entries without `files` and `skip` (the digest stands for the list); see `all-json.md`.
+`failed` (with the reason) and `excluded` (with the owner's rule) list what is not in.
+
+### Curating and reviewing
+
+```
+python3 -I tools/addon-curate/curate.py run [--only ID ...]      # resolve, download, check, hash: new entries are pending
+python3 -I tools/addon-curate/curate.py list                     # id, status, licence, files, flags; and the failures
+python3 -I tools/addon-curate/curate.py approve up:skada --by Owner [--notes "..."] [--works]
+python3 -I tools/addon-curate/curate.py unapprove up:skada
+```
+
+`approve` (and `run`) write `stream/upstream-addons.json`, the reviewed entries in the all.json shape, which
+`stream/upstream_addons.py` merges into `/wrath/mods/all.json` (checked again there). The seeds are
+`tools/addon-curate/seeds-addons.json` (repo, our name and words, tags, `replaces_ui`, `requires`, or `exclude` with the
+reason). For the Admin Console, curate.py has `pending_entries(path)` and `approve_entry(path, id, by, notes, works)`.
