@@ -568,7 +568,7 @@ html[data-base="light"] .pb-menu { box-shadow: 0 -10px 30px rgba(16, 24, 40, 0.1
 /* owner 2026-10-30 22:20: "this exactly, cut this and use it": PLAY is the owner's button picture (stone frame, red
    face, gold "Play"), cut out with its bevelled corners: art/play-button.webp (730x199, sharp on high-DPI screens). */
 .play {
-  position: relative; width: auto; height: 76px; aspect-ratio: 730 / 199; padding: 0;
+  position: relative; width: auto; height: 77px; aspect-ratio: 730 / 199; padding: 0;
   border: 0; border-radius: 0; background: url("art/play-button.webp") center / 100% 100% no-repeat;
   box-shadow: none; filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.55));
   transition: filter 0.12s, transform 0.08s;
