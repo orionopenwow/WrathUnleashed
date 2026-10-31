@@ -140,7 +140,7 @@ test('Key art: on the Azeroth Survivors card and as the featured slide of Home\'
   await page.waitForFunction(() => { const i = document.querySelector('#hero .hero-slide[data-key="mode"] img'); return i && i.complete && i.naturalWidth > 0; });
   assert.equal(await slide.locator('.hs-title').textContent(), 'Azeroth Survivors');
   assert.match(await slide.locator('.hs-kick').textContent(), /Featured mode/);
-  assert.equal(await slide.locator('img').getAttribute('src'), 'art/modes/azeroth-survivors.webp');
+  assert.equal(await slide.locator('img.hs-art').getAttribute('src'), 'art/modes/azeroth-survivors.webp');
   assert.ok(await slide.evaluate((s) => s.classList.contains('has-art')), 'the art fills the slide');
   const ban = slide.locator('.hs-go');
   await ban.click();

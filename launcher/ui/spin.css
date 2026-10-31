@@ -31,5 +31,5 @@
 /* a server pill that is checking: the spinner takes the dot's place */
 .srv-state:has(.busy) > .dot, .pill:has(.busy) > .dot { display: none; }
 /* the header mark: just the cut mark, spinning (calmer, class slow); no ring or disc behind it (owner 2026-10-30) */
-.brand .ly-spin { width: 40px; height: 40px; background: none; box-shadow: none; }
+.brand .ly-spin { width: 46px; height: 46px; flex: none; background: none; box-shadow: none; filter: drop-shadow(0 0 10px rgba(91, 141, 239, 0.35)); }
 .brand .ly-spin::before, .brand .ly-spin::after { inset: 0; }

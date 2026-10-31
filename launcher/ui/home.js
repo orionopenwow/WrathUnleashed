@@ -54,11 +54,11 @@
     // (c) browser play (left out when it is already on)
     if (App.mode() !== "browser") {
       out.push({ key: "browser", kicker: "Nothing to install", title: "Play in your browser", line: "Your game folder, straight in a browser tab.",
-        cta: "Use browser play", run: (b) => { App.setMode("browser"); b.textContent = "Browser play is on"; b.disabled = true; } });
+        side: realmsPanel, cta: "Use browser play", run: (b) => { App.setMode("browser"); b.textContent = "Browser play is on"; b.disabled = true; } });
     }
     // (d) hosting
     out.push({ key: "host", kicker: "Host", title: "Host an always-on realm", line: "Vanilla+ or your own rules, on the Leyline network.",
-      cta: "Start hosting", run: () => go("host") });
+      side: hostSteps, cta: "Start hosting", run: () => go("host") });
     // (e) a Workshop mod: the first packaged one
     const p = App.catalog().projects.find((x) => x.source === "packaged");
     if (p) out.push({ key: "mod", kicker: "Workshop spotlight", title: p.name, line: firstSentence(p.description) || "A mod from the Workshop.",
@@ -66,6 +66,53 @@
     return out;
   }
   let artFailed = false;
+
+  // the browser slide's right side (owner 2026-10-30: "list many example servers in this pane"): the realms on the
+  // network now, live ones first, up to seven; a row opens Realms
+  function realmsPanel() {
+    const all = App.realms().filter((r) => !App.hiddenBuild(r.build));
+    if (!all.length) return null;
+    const rank = (r) => (r.official ? 0 : r.state === "live" ? 1 : 2);
+    const list = all.slice().sort((a, b) => rank(a) - rank(b) || (b.players || 0) - (a.players || 0)).slice(0, 8);
+    const box = el("div", "hs-side hs-realms");
+    const head = el("div", "hs-side-h");
+    head.append(el("span", "", "On the network"), el("span", "hs-side-n", `${all.length} realm${all.length === 1 ? "" : "s"}`));
+    box.append(head);
+    for (const r of list) {
+      const row = el("button", "hs-rl" + (r.state === "live" || r.official ? " live" : ""));
+      row.type = "button";
+      row.title = `${r.name}: open Realms`;
+      row.addEventListener("click", () => go("realms"));
+      const name = el("span", "hs-rl-n", r.name);
+      const ver = App.realmVersion(r);
+      const meta = el("span", "hs-rl-m");
+      if (ver) meta.append(el("span", "rl-ver sm", ver));
+      meta.append(el("span", "hs-rl-p", r.players != null ? `${r.players}` : "–"));
+      row.append(App.realmIcon(r.name, r.official), name, meta);
+      box.append(row);
+    }
+    return box;
+  }
+
+  // the host slide's right side (owner 2026-10-30: "make this a small infographic for setup guide"): four steps
+  function hostSteps() {
+    const box = el("div", "hs-side hs-steps");
+    box.append(el("div", "hs-side-h", "Set up in four steps"));
+    const ol = el("ol", "hs-st");
+    [["Pick a ruleset", "Vanilla+, Dalaran hangout or your own"],
+     ["Press Start", "The host pack runs it on this PC"],
+     ["Listed in a minute", "The relay: no ports, your address hidden"],
+     ["Invite friends", "Share the link, or go public"]].forEach(([t, l], i) => {
+      const li = el("li", "");
+      li.append(el("span", "hs-st-n", String(i + 1)));
+      const tx = el("span", "hs-st-t");
+      tx.append(el("b", "", t), el("i", "", l));
+      li.append(tx);
+      ol.append(li);
+    });
+    box.append(ol);
+    return box;
+  }
 
   function slideNode(d) {
     const s = el("div", "hero-slide hs-" + d.key);
@@ -77,16 +124,22 @@
       const img = M.artImg(M.FEATURED, "hs-art");
       img.alt = "";
       img.addEventListener("error", () => { artFailed = true; build(); });
+      // the key art carries the mode's own lettering: show it whole (never cropped) over a soft blur of itself
+      const bg = img.cloneNode(true);
+      bg.className = "hs-art-bg";
+      bg.setAttribute("aria-hidden", "true");
       s.classList.add("has-art");
-      s.append(img);
+      s.append(bg, img);
     } else {
-      s.append(el("span", "hs-deco"));
+      const side = d.side ? d.side() : null;
+      if (side) { s.classList.add("has-side"); s.append(side); } else s.append(el("span", "hs-deco"));
     }
     const body = el("div", "hs-body");
     const b = el("button", "btn primary hs-go", d.cta);
     b.type = "button";
     b.addEventListener("click", () => d.run(b));
-    body.append(el("small", "hs-kick", d.kicker), el("h2", "hs-title", d.title));
+    // over key art the picture already shows the name: the heading stays for screen readers only
+    body.append(el("small", "hs-kick", d.kicker), el("h2", "hs-title" + (d.art ? " sr" : ""), d.title));
     if (d.line) body.append(el("p", "hs-line", d.line));
     body.append(b);
     s.append(body);
@@ -269,7 +322,7 @@
   if (main) main.addEventListener("scroll", cue, { passive: true });
 
   // ---------------------------------------------------------------- data in
-  document.addEventListener("leyline:realms", renderRealms);
+  document.addEventListener("leyline:realms", () => { renderRealms(); build(); });
   document.addEventListener("leyline:catalog", () => { build(); renderMods(); });
   document.addEventListener("leyline:modes", () => { build(); renderModes(); });
   build();
