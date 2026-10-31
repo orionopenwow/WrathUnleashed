@@ -75,8 +75,9 @@ test('Community › Friends: sign in, list, chat, accept, text only, sign-out on
   assert.equal(await page.textContent('#sx-code-text'), 'BCDF-GHJK');
   await page.waitForSelector('#sx-in:not([hidden])', { timeout: 9000 });
   assert.match(await page.textContent('#sx-me'), /Alice#4821/);
-  const rows = page.locator('.sx-friend');
+  const rows = page.locator('#sx-friends .sx-friend');
   assert.equal(await rows.count(), 2);
+  assert.equal(await page.locator('#hf-list .sx-friend').count(), 2, "Home's Friends card lists them too");
   assert.match(await rows.nth(0).textContent(), /Bob.*In game: Bobbert on WrathUnleashed.*2/);
   assert.equal(await page.textContent('#nav-friends-count'), '3', 'unread + requests on the Community menu item');
   assert.equal(await page.textContent('#tab-friends-count'), '3', 'and on the Friends tab');
@@ -94,7 +95,7 @@ test('Community › Friends: sign in, list, chat, accept, text only, sign-out on
   assert.deepEqual(sent, { to: 'bbbbbbbbbb', text: 'hello bob' });
 
   await page.click('.sx-req button:has-text("ACCEPT")');
-  await page.waitForFunction(() => document.querySelectorAll('.sx-friend').length === 3);
+  await page.waitForFunction(() => document.querySelectorAll('#sx-friends .sx-friend').length === 3);
 
   await page.click('#sx-block');
   assert.equal(await page.textContent('#sx-block'), 'SURE?', 'block asks once more');
