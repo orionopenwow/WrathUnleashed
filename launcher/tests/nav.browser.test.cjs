@@ -83,7 +83,8 @@ test('the side menu matches the website, with the same line icons', async () => 
   await page.waitForFunction(() => document.querySelector('#realm-rows .realm-row .name').textContent === 'Dalaran Hangout');
   assert.equal(await page.getAttribute('#realm-rows .realm-row .rl-ic img', 'src'), 'art/brand/leyline-crystal-256.webp');
   assert.equal(await page.textContent('#realm-rows .realm-row .rl-ver'), '3.3.5a');
-  assert.equal(await page.textContent('#srv-ver'), '3.3.5a', "Home's server card too");
+  assert.equal(await page.textContent('#pb-realm-ver'), '3.3.5a', 'the play bar too');
+  assert.equal(await page.locator('#page-play #srv-name, #page-play #client-now').count(), 0, 'no SERVER or GAME CLIENT card on Home');
   const text = await page.evaluate(() => document.body.innerText);
   assert.doesNotMatch(text, /world of warcraft|\bwow\b|warcraft|lich king|blizzard/i);
   assert.deepEqual(errors, []);

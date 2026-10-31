@@ -240,8 +240,8 @@ test('Realms page: 4.3.4 / 5.4.8 are hidden until the override', async () => {
   const { page, errors } = await openWithCata(false);
   assert.ok(!(await names(page)).includes('Cata Den'), 'a 4.3.4 realm is not listed');
   assert.deepEqual(await page.$$eval('#rl-f-build option', (o) => o.map((x) => x.value)), ['', '1.12.1', '3.3.5a']);
-  await page.click('.nav[data-page="play"]');
-  await page.click('#client-change');
+  await page.click('#pb-client');
+  await page.click('#pb-menu >> text=Add a game folder…');
   const cata = await page.locator('#page-clients .card', { hasText: 'My Cata' }).textContent();
   assert.match(cata, /other build/); assert.doesNotMatch(cata, /4\.3\.4|15595|40300/);
   assert.doesNotMatch(await page.textContent('#page-clients .lede'), /4\.3\.4|5\.4\.8/);
