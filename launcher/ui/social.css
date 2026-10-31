@@ -121,3 +121,15 @@ html[data-base="light"] .hf-me-menu { box-shadow: 0 0 0 1px rgba(16, 24, 40, 0.0
 .home .card.home-friends .sx-friend { padding: 4px 4px; gap: 8px; }
 .home .card.home-friends .sx-av { width: 32px; height: 32px; }
 .home .card.home-friends .sx-av b { font-size: 13px; }
+/* owner 2026-10-30: "tuck the friends list up towards the top right": on Home the friends panel runs from just under the
+   window buttons to the play bar, beside the title bar's search; its grid column stays as the space it leaves */
+body:has(#page-play.on) .home .card.home-friends {
+  position: fixed; top: 30px; right: 0; bottom: 96px; width: 216px; margin: 0; z-index: 20;
+  border-radius: var(--t-radius) 0 0 0; box-shadow: -12px 0 30px rgba(0, 0, 0, .3);
+}
+body:has(#page-play.on) .titlebar .winbtns { margin-left: 216px; }
+@media (max-width: 1150px) { body:has(#page-play.on) .home .card.home-friends { width: 200px; } body:has(#page-play.on) .titlebar .winbtns { margin-left: 200px; } }
+/* everything on Home stays clear of the docked panel: the hero row and the rows below the fold */
+body:has(#page-play.on) main { padding-right: calc(216px + 20px); }
+body:has(#page-play.on) .home { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 1150px) { body:has(#page-play.on) main { padding-right: calc(200px + 16px); } }

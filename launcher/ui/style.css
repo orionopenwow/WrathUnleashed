@@ -200,8 +200,8 @@ svg { flex: none; }
 /* owner 2026-10-30: no account button in the title bar (Manage account is in the friends panel's menu, and Settings);
    the search box runs the whole width of the bar, up to the window buttons */
 #tb-account { display: none !important; }
-.titlebar .search { flex: 1 1 auto; max-width: none; margin-right: 8px; }
-.titlebar .tb-fill { flex: 0 0 0; }
+.titlebar .search { flex: 0 1 520px; max-width: 520px; margin-right: 8px; }
+.titlebar .tb-fill { flex: 1 1 0; }
 #tb-account {
   height: 38px; padding: 0 4px 0 4px; gap: 8px; border-radius: var(--t-radius-sm);
   background: var(--t-surface); border: var(--t-border-w) solid var(--t-border);
