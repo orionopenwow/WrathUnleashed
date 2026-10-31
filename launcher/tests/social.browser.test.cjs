@@ -143,8 +143,8 @@ test("Home's friends panel: your row, the groups and their counts, folding, sear
   assert.ok(await bob.evaluate((e) => e.classList.contains('st-game')), 'the name in the status colour');
   assert.equal(await bob.locator('.sx-ft i').textContent(), 'In game: Bobbert on WrathUnleashed');
   assert.ok(await page.locator('#hf-list .sx-friend.st-offline').evaluate((e) => getComputedStyle(e.querySelector('.sx-av')).filter !== 'none'), 'offline greyed');
-  assert.equal(await page.locator('#home-friends .sx-av').first().evaluate((e) => e.getBoundingClientRect().width), 44, 'your 44px avatar');
-  assert.equal(await bob.locator('.sx-av').evaluate((e) => e.getBoundingClientRect().width), 40, '40px rows');
+  assert.equal(await page.locator('#home-friends .sx-av').first().evaluate((e) => e.getBoundingClientRect().width), 38, 'your 38px avatar (the slim panel)');
+  assert.equal(await bob.locator('.sx-av').evaluate((e) => e.getBoundingClientRect().width), 32, '32px rows (the slim panel)');
   // search filters the rows, the counts stay the group's
   await page.fill('#hf-q', 'kes');
   assert.deepEqual(await rows('friends'), ['Kestrel']);
