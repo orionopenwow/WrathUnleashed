@@ -121,8 +121,25 @@ def clean_record(rec: dict) -> dict:
         "region": rec.get("region") if rec.get("region") in REGIONS else None,
         "max_players": _int_in(rec.get("max_players"), 1, 10000),
         "direct": rec.get("direct") is True,
+        "signup": rec.get("signup") if rec.get("signup") in SIGNUPS else None,
     }
     return out
+
+
+SIGNUPS = ("open", "invite", "off")
+
+
+def join_note(signup):
+    """The realm list's Join line, by who may make accounts on the join page (the agent's signup, else the record's):
+    no "make a game account there" where the join page makes none (a linked server, the operator's own realm, or a
+    host who closed sign-ups)."""
+    if signup == "off":
+        return "Opens the realm's join page: log in with the account you already have on this server, then set your realmlist."
+    if signup == "invite":
+        return "Opens the realm's join page: make a game account there with the host's invite link, then set your realmlist."
+    if signup == "open":
+        return "Opens the realm's join page: make a game account there, then set your realmlist."
+    return "Opens the realm's join page, then set your realmlist."
 
 
 class Listing:
@@ -219,6 +236,9 @@ class Listing:
                  claim=claim, relay=_text(beat.get("relay"), 253) or (self.cfg.name if self.cfg else None))
         self.entries[rid] = e
         self.dirty = True
+        sess = self.relay.sessions.get(rid) if self.relay is not None else None
+        if sess is not None and online_now and getattr(sess, "listed_at", 1) is None:
+            sess.listed_at = time.time()   # the first beat of this tunnel: "listed in N s" on the host's page
         if self.relay is not None and getattr(self.relay, "mesh", None):
             self.relay.mesh.local_beat(beat, sig, now)   # the Leyline mesh (off unless RELAY_MESH=1)
         return 200, {"ok": True, "listed": True, "next_in": 60, "claimed": bool(e.get("claimed_by"))}
@@ -248,6 +268,13 @@ class Listing:
         total = sum(v for k, v in (e.get("up") or {}).items() if k.isdigit() and int(k) >= lo
                     and isinstance(v, (int, float)))
         return max(0, min(100, round(100 * total / covered)))
+
+    def signup_of(self, rid, rec):
+        """Who may make accounts: the connected agent's own setting (it can change without a new record), else the
+        record's."""
+        s = self.relay.sessions.get(rid) if self.relay is not None else None
+        su = getattr(s, "signup", None)
+        return su if su in SIGNUPS else rec.get("signup")
 
     def rtt_ms(self, rid):
         s = self.relay.sessions.get(rid) if self.relay is not None else None
@@ -320,7 +347,7 @@ class Listing:
             "language": rec.get("language"),
             "maxPlayers": rec.get("max_players"),
             "connect": {"kind": "web-signin", "url": f"{join}/join/{rid}", "label": "Join this realm",
-                        "note": "Opens the realm's join page: make a game account there, then set your realmlist."},
+                        "note": join_note(self.signup_of(rid, rec))},
             "rules": rec["rules"],
             "features": [],
             "media": {"icon": None, "screenshots": [], "trailer": None},

@@ -384,7 +384,7 @@ def record_view(r: dict, ep: dict | None, now: float) -> dict:
         "tags": rec["tags"], "region": rec["region"], "language": rec["language"], "maxPlayers": rec["max_players"],
         "connect": {"kind": "web-signin", "url": f"https://{relay}/join/{rid}" if relay else None,
                     "label": "Join this realm",
-                    "note": "Opens the realm's join page: make a game account there, then set your realmlist."},
+                    "note": listing.join_note(rec.get("signup"))},
         "rules": rec["rules"], "features": [], "media": {"icon": None, "screenshots": [], "trailer": None},
         "discord": rec["discord"],
         "status": {"url": f"https://{relay}/r/{rid}/status.json" if relay else None, "format": "openvanilla-status-1"},

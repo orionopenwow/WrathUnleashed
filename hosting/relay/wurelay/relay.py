@@ -281,6 +281,7 @@ class Session:
         self.bucket = mux.TokenBucket(relay.cfg.kbps * 1024)
         self.last_frame = time.monotonic()
         self.connected_at = time.time()
+        self.listed_at = None       # the first heartbeat the listing took from this tunnel (listing.py)
         self.pending: dict[int, asyncio.Future] = {}
         self.next_req = 1
         self.closed = False
@@ -1028,6 +1029,11 @@ class Relay:
                "status_url": f"https://{self.cfg.name}/r/{rid}/status.json"}
         if s and s.herokey:
             doc["herokey"] = True
+        if s and s.visibility == "public" and self.listing:
+            # the host's page (stream/hostflow.py): "listed in N s" from the tunnel coming up to the first heartbeat
+            doc["listed"] = s.listed_at is not None and rid not in self.blocked
+            if doc["listed"]:
+                doc["listed_in_s"] = round(max(0.0, s.listed_at - s.connected_at), 1)
         return httpd.response(200, doc, headers=self.cors(req, True))
 
     def api_knock(self, req, rid):
