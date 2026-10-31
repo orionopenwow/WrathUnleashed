@@ -69,6 +69,8 @@ are starred out.
 
 ## The JSON API
 
+Profiles (bio, picture, the sign-in ways) ride on `me` and `profile` when stream/profiles.py is on: see docs/SIGN-IN.md.
+
 Everything is under `/wrath/api/social/`. Caddy already sends `/wrath*` to wu-portal; `/api/*` on the site
 belongs to the website's own service.
 

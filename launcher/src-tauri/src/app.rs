@@ -923,6 +923,7 @@ pub fn run() {
             crate::social::commands::social_signin_cancel,
             crate::social::commands::social_call,
             crate::social::commands::social_signout,
+            crate::social::commands::social_ways,
             // the Forum page: reading the website's forum, opening its pages (forum.rs)
             crate::forum::commands::forum_call,
             crate::forum::commands::forum_open,

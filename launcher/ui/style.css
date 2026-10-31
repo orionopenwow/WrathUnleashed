@@ -565,6 +565,21 @@ html[data-base="light"] .pb-menu { box-shadow: 0 -10px 30px rgba(16, 24, 40, 0.1
 .play:disabled { opacity: 0.5; filter: none; cursor: default; }
 .caption { display: none; }
 @media (max-width: 1150px) { .playbar { grid-template-columns: 240px minmax(0, 1fr) auto; gap: 14px; } .play { width: 220px; } }
+/* owner 2026-10-30 22:20: "this exactly, cut this and use it": PLAY is the owner's button picture (stone frame, red
+   face, gold "Play"), cut out with its bevelled corners: art/play-button.webp (730x199, sharp on high-DPI screens). */
+.play {
+  position: relative; width: auto; height: 77px; aspect-ratio: 730 / 199; padding: 0;
+  border: 0; border-radius: 0; background: url("art/play-button.webp") center / 100% 100% no-repeat;
+  box-shadow: none; filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.55));
+  transition: filter 0.12s, transform 0.08s;
+}
+.play::before, .play::after { content: none; }
+.play:hover { filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.55)) brightness(1.15) saturate(1.05); }
+.play:active { transform: translateY(1px); filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.55)) brightness(0.92); }
+.play:disabled { opacity: 0.5; filter: grayscale(0.4); cursor: default; }
+.play:focus-visible { outline: 2px solid #ffd100; outline-offset: 3px; }
+@media (max-width: 1150px) { .play { width: auto; height: 64px; } }
+
 @media (prefers-reduced-motion: reduce) { .pb-caret { transition: none; } }
 
 /* ---------------------------------------------------------------- Find your game files */

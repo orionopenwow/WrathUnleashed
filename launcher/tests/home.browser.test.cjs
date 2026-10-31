@@ -1,6 +1,7 @@
 // The launcher's Home page (ui/home.js, ui/home.css) in Chromium with a fake Tauri core: the hero gallery (Join the Dalaran
-// Hangout first, with Play now and Join the Discord; then the featured
-// mode with its key art, what's new, browser play, hosting, a Workshop mod; a slide without its data left out), its dots,
+// Hangout first, with Play now and Join the Discord, the lineup, what's on and the latest forum threads; then the featured
+// mode with its key art, what's new, browser play with the realms, hosting, your Den, a Workshop mod with its screenshots;
+// a slide without its data left out; live counts; network strings shown as text, never HTML), its dots,
 // arrows and Left / Right keys, moving on by itself and not under prefers-reduced-motion, and the rows below the fold
 // (Popular realms, Mods to try, Game modes, News, Host your own) shown with their data, hidden when empty, each click
 // landing on its page.
@@ -17,7 +18,7 @@ const INDEX = 'file://' + path.join(__dirname, '..', 'ui', 'index.html');
 const PICTURE = path.join(__dirname, '..', 'ui', 'art', 'leyline-bg.webp');   // the site's backdrop, stood in
 const MODES = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'stream', 'playmodes.json'), 'utf8')).modes;
 
-const FAKE = ({ empty, browser, ms, modes, noClients }) => {
+const FAKE = ({ empty, browser, ms, modes, noClients, forumDown, forumWait }) => {
   const calls = (window.__calls = []);
   try {
     localStorage.removeItem('leyline.page');
@@ -29,12 +30,12 @@ const FAKE = ({ empty, browser, ms, modes, noClients }) => {
   const R = (o) => Object.assign({}, base, o);
   const realms = empty ? [R({ slug: 'official', name: 'Dalaran Hangout', official: true, state: 'offline', address: 'play.openvanilla.app' })] : [
     R({ slug: 'official', name: 'Dalaran Hangout', official: true, players: 5, address: 'play.openvanilla.app' }),
-    R({ slug: 'c-a', realm_id: 'a', name: 'Busy Den', players: 30, address: 'relay.openvanilla.app:40002' }),
+    R({ slug: 'c-a', realm_id: 'a', name: 'Busy Den', players: 30, max_players: 60, is_new: true, kind: 'Fun', address: 'relay.openvanilla.app:40002' }),
     R({ slug: 'c-b', realm_id: 'b', name: 'Old Keep', build: '1.12.1', version: '1.12.1', players: 3, address: 'relay.openvanilla.app:40003' }),
     R({ slug: 'c-c', realm_id: 'c', name: 'Hidden Cata', build: '4.3.4', version: '4.3.4', players: 9 }),
     R({ slug: 'c-d', realm_id: 'd', name: 'Quiet Glade', players: null }),
     R({ slug: 'c-e', realm_id: 'e', name: 'Fifth Live', players: 1 }),
-    R({ slug: 'c-f', realm_id: 'f', name: 'Asleep', state: 'offline' }),
+    R({ slug: 'c-f', realm_id: 'f', name: 'Asleep <b>zz</b>', state: 'offline' }),
   ];
   const P = (id, name, o) => Object.assign({ id, name, source: 'packaged', download: 'https://x/' + id, builds: ['3.3.5a'], category: 'ui', kind: 'ui',
     description: name + ' makes things better. And more.', author: 'Someone', licence: 'MIT' }, o || {});
@@ -66,6 +67,15 @@ const FAKE = ({ empty, browser, ms, modes, noClients }) => {
       case 'play': return 'Started.';
       case 'open_browser_play': return null;
       case 'select': return null;
+      case 'forum_call':
+        if (args.action !== 'latest') return { threads: [], categories: [] };
+        if (forumDown) throw 'The forum is not reachable.';
+        if (forumWait) await new Promise((r) => setTimeout(r, forumWait));
+        return { threads: [
+          { id: 7, title: 'Golf night <img src=x onerror="window.__xss=1">', author: '<b>Pell</b>', replies: 1, created: 1, bumped: Math.floor(Date.now() / 1000) - 120, cat: 'general' },
+          { id: 8, title: 'Den tour', author: 'Thistle', replies: 4, created: 1, bumped: 1, cat: 'dens' },
+          { id: 9, title: 'Third', author: 'K', replies: 0, created: 1, bumped: 1, cat: 'general' },
+          { id: 10, title: 'Fourth is never shown', author: 'K', replies: 0, created: 1, bumped: 1, cat: 'general' }] };
       default: throw 'unknown ' + cmd;
     }
   } } };
@@ -98,7 +108,7 @@ const where = (page) => page.evaluate(() => ({ page: document.querySelector('.pa
 test('the gallery: every slide with its data, a title, one line and one button; art for the featured mode', async () => {
   const { page, ctx, errors } = await open({ ms: 600000 });
   await page.waitForFunction(() => window.LeylineHome.slides().includes('mod'));
-  assert.deepEqual(await keys(page), ['hangout', 'mode', 'news', 'browser', 'host', 'mod']);
+  assert.deepEqual(await keys(page), ['hangout', 'mode', 'news', 'browser', 'host', 'den', 'mod']);
   for (const s of await page.$$('#hero-slides .hero-slide')) {
     assert.equal(await s.$$eval('.hs-title', (x) => x.length), 1);
     const want = (await s.getAttribute('data-key')) === 'hangout' ? 2 : 1;
@@ -116,9 +126,10 @@ test('the gallery: every slide with its data, a title, one line and one button; 
   assert.equal(await page.textContent('.hero-slide[data-key="news"] .hs-title'), 'EVERY CLIENT, EVERY SERVER', 'the newest entry');
   assert.equal(await page.textContent('.hero-slide[data-key="mod"] .hs-title'), 'Better Bars', 'the first packaged project');
   assert.equal(await page.textContent('.hero-slide[data-key="mod"] .hs-line'), 'Better Bars makes things better.', 'one short line');
-  assert.equal(await page.locator('#hero-dots .hero-dot').count(), 6);
+  assert.equal(await page.textContent('.hero-slide[data-key="den"] .hs-title'), 'Make your Den');
+  assert.equal(await page.locator('#hero-dots .hero-dot').count(), 7);
   assert.deepEqual(await current(page), { on: ['hangout'], dot: 0, i: 0 });
-  assert.equal(await page.locator('.hero-slide[inert]').count(), 5, 'the hidden slides take no focus');
+  assert.equal(await page.locator('.hero-slide[inert]').count(), 6, 'the hidden slides take no focus');
   const text = await page.evaluate(() => document.body.innerText);
   assert.doesNotMatch(text, /world of warcraft|\bwow\b|warcraft|lich king|blizzard/i);
   assert.deepEqual(errors, []);
@@ -129,7 +140,9 @@ test('slides without their data are left out (no catalog, no art, browser play a
   const { page, ctx, errors } = await open({ empty: true, browser: true, noArt: true, ms: 600000 });
   await page.waitForFunction(() => window.__calls.some(([c]) => c === 'mods_catalog'));
   await page.waitForFunction(() => !window.LeylineHome.slides().includes('mode'));
-  assert.deepEqual(await keys(page), ['hangout', 'news', 'host']);
+  assert.deepEqual(await keys(page), ['hangout', 'news', 'host', 'den']);
+  assert.deepEqual(await page.locator('.hero-slide[data-key="hangout"] .hs-chip').allTextContents(), [], 'no counts without live realms');
+  assert.equal(await page.locator('.hero-slide[data-key="hangout"] .hs-whats').count(), 0, "no what's on without the modes list");
   assert.equal(await page.locator('#hero-slides .hero-slide img.hs-art').count(), 0, 'no key art (the lineup crystal icon is not art)');
   assert.deepEqual(errors, []);
   await ctx.close();
@@ -137,19 +150,21 @@ test('slides without their data are left out (no catalog, no art, browser play a
 
 test('dots, arrows and the Left / Right keys move the gallery; the buttons do what they say', async () => {
   const { page, ctx, errors } = await open({ ms: 600000 });
-  await page.waitForFunction(() => window.LeylineHome.slides().length === 6);
+  await page.waitForFunction(() => window.LeylineHome.slides().length === 7);
   await page.click('#hero-dots .hero-dot[data-i="4"]');
   assert.deepEqual(await current(page), { on: ['host'], dot: 4, i: 4 });
   await page.click('#hero-next');
   assert.equal((await current(page)).i, 5);
   await page.click('#hero-next');
+  await page.click('#hero-next');
   assert.equal((await current(page)).i, 0, 'wraps round');
   await page.click('#hero-prev');
-  assert.equal((await current(page)).i, 5);
+  assert.equal((await current(page)).i, 6);
   await page.focus('#hero-dots .hero-dot[aria-current="true"]');
   await page.keyboard.press('ArrowRight');
   assert.equal((await current(page)).i, 0);
   assert.equal(await page.evaluate(() => document.activeElement.dataset.i), '0', 'the focus follows the dot');
+  await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('ArrowLeft');
   assert.deepEqual(await current(page), { on: ['host'], dot: 4, i: 4 });
@@ -159,6 +174,7 @@ test('dots, arrows and the Left / Right keys move the gallery; the buttons do wh
   assert.equal((await current(page)).i, 5);
   assert.ok(await page.evaluate(() => document.getElementById('hero').contains(document.activeElement)));
 
+  await page.evaluate(() => window.LeylineHome.show(6));
   await page.click('.hero-slide[data-key="mod"] .hs-go');
   assert.deepEqual(await where(page), { page: 'page-mods', panes: ['pane-discover'] });
   await page.evaluate(() => window.LeylineNav.show('play'));
@@ -300,5 +316,142 @@ test('rows without data stay hidden; Host your own is always there', async () =>
   assert.deepEqual(hidden, [true, true, true, false, false], 'only News (built in) and Host your own');
   assert.equal(await page.locator('#hm-realms-row .hm-card').count(), 0);
   assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+const showKey = (page, k) => page.evaluate((k) => window.LeylineHome.show(window.LeylineHome.slides().indexOf(k)), k);
+
+test('the launch slide is full: live counts, the lineup, three modes with pictures, the latest forum threads as text', async () => {
+  const { page, ctx, errors } = await open({ ms: 600000 });
+  await page.waitForFunction(() => document.querySelectorAll('.hero-slide[data-key="hangout"] .hs-forum .hs-fr').length === 3);
+  await page.waitForFunction(() => document.querySelector('.hero-slide[data-key="hangout"] .hs-mt'));
+  const hang = page.locator('.hero-slide[data-key="hangout"]');
+  // live realms with an offered build: the Hangout 5, Busy Den 30, Old Keep 3, Quiet Glade (no count), Fifth Live 1
+  assert.deepEqual(await hang.locator('.hs-chip').allTextContents(), ['5 in the Hangout now', '39 playing on 5 realms']);
+  assert.deepEqual(await hang.locator('.hs-mt').evaluateAll((b) => b.map((x) => [x.dataset.mode, x.querySelector('i').textContent, !!x.querySelector('svg')])),
+    [['minigolf', '/golf', true], ['bumper-balls', '/modes', true], ['coin-dash', '/modes', true]], 'live modes on the realm, each with its drawn picture');
+  // forum strings are text: the title's tag is shown, not made; three at most
+  const rows = await hang.locator('.hs-forum .hs-fr').evaluateAll((b) => b.map((x) => [x.querySelector('b').textContent, x.querySelector('i').textContent]));
+  assert.equal(rows[0][0], 'Golf night <img src=x onerror="window.__xss=1">');
+  assert.match(rows[0][1], /^<b>Pell<\/b> · 1 reply · 2m ago$/);
+  assert.deepEqual(rows.slice(1).map((r) => r[0]), ['Den tour', 'Third']);
+  assert.equal(await page.locator('#hero img[src="x"], #hero .hs-forum b b').count(), 0, 'no element made from a forum string');
+  assert.equal(await page.evaluate(() => window.__xss), undefined);
+  assert.equal(await page.evaluate(() => window.__calls.filter(([c, a]) => c === 'forum_call' && a.action === 'latest' && a.args.n === 3).length >= 1), true);
+  // a thread opens on the Forum page, a mode on Modes
+  await hang.locator('.hs-forum .hs-fr').nth(1).click();
+  assert.equal((await where(page)).page, 'page-forum');
+  assert.deepEqual(await page.evaluate(() => window.LeylineForum.view()), { kind: 'thread', id: 8 });
+  await page.evaluate(() => window.LeylineNav.show('play'));
+  await showKey(page, 'hangout');
+  await hang.locator('.hs-mt[data-mode="bumper-balls"]').click();
+  assert.equal((await where(page)).page, 'page-modes');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('the forum unreachable: one row to the Forum page; the card keeps its size while the threads come in', async () => {
+  let { page, ctx, errors } = await open({ ms: 600000, forumDown: true });
+  await page.waitForSelector('.hero-slide[data-key="hangout"] .hs-fr-none');
+  assert.equal(await page.textContent('.hero-slide[data-key="hangout"] .hs-fr-none b'), 'Say hello on the forum');
+  await page.click('.hero-slide[data-key="hangout"] .hs-fr-none button');
+  assert.equal((await where(page)).page, 'page-forum');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+
+  ({ page, ctx, errors } = await open({ ms: 600000, forumWait: 700 }));
+  await page.waitForSelector('.hero-slide[data-key="hangout"] .hs-fr-wait');
+  const box = () => page.evaluate(() => {
+    const c = document.querySelector('.hero-slide[data-key="hangout"] .hs-forum-card').getBoundingClientRect();
+    const b = document.querySelector('.hero-slide[data-key="hangout"] .hs-body').getBoundingClientRect();
+    return { card: Math.round(c.height), body: Math.round(b.top), hero: Math.round(document.getElementById('hero').getBoundingClientRect().height) };
+  });
+  const before = await box();
+  await page.waitForSelector('.hero-slide[data-key="hangout"] .hs-forum .hs-fr');
+  assert.deepEqual(await box(), before, 'no layout shift when the threads arrive');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('the realms beside browser play: kind, New, version, players and a bar of how full; names as text', async () => {
+  const { page, ctx, errors } = await open({ ms: 600000 });
+  await page.waitForFunction(() => document.querySelectorAll('.hero-slide[data-key="browser"] .hs-rich .hs-rl').length > 3);
+  const rows = await page.locator('.hero-slide[data-key="browser"] .hs-rich .hs-rl').evaluateAll((b) => b.map((x) => ({
+    name: x.querySelector('.hs-rl-n b').textContent, sub: x.querySelector('.hs-rl-n i').textContent,
+    ver: (x.querySelector('.rl-ver') || {}).textContent, p: x.querySelector('.hs-rl-p').textContent, bar: x.querySelector('.hs-rl-bar i').style.width })));
+  assert.deepEqual(rows[0], { name: 'Dalaran Hangout', sub: 'Run by Leyline', ver: '3.3.5a', p: '5', bar: '6%' });
+  assert.deepEqual(rows[1], { name: 'Busy Den', sub: 'FunNew', ver: '3.3.5a', p: '30', bar: '50%' }, 'its limit is 60');
+  assert.ok(!rows.some((r) => r.name === 'Hidden Cata'), 'a build not offered is left out');
+  assert.deepEqual(rows[rows.length - 1], { name: 'Asleep <b>zz</b>', sub: 'Offline for now', ver: '3.3.5a', p: '–', bar: '0%' });
+  assert.equal(await page.locator('.hero-slide[data-key="browser"] .hs-rl-n b b').count(), 0);
+  assert.deepEqual(await page.locator('.hero-slide[data-key="browser"] .hs-chip').allTextContents(), ['39 playing now', '5 realms live']);
+  assert.equal(await page.locator('.hero-slide[data-key="browser"] .hs-win svg').count(), 1, 'the drawn browser window');
+  assert.deepEqual(await page.locator('.hero-slide[data-key="host"] .hs-chip').allTextContents(), ['4 community realms live', '1 new on the list', 'No ports to open']);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('the Den slide opens the Host page with the Den picked; the Workshop slide shows site screenshots only', async () => {
+  const { page, ctx, errors } = await open({ ms: 600000 });
+  await page.waitForFunction(() => window.LeylineHome.slides().includes('mod'));
+  assert.equal(await page.locator('.hero-slide[data-key="den"] .hs-den-step svg').count(), 3, 'three drawn rooms');
+  await page.evaluate(() => document.addEventListener('leyline:host-ruleset', (e) => { window.__ruleset = e.detail.profile; }));
+  await showKey(page, 'den');
+  await page.click('.hero-slide[data-key="den"] .hs-go');
+  assert.equal((await where(page)).page, 'page-host');
+  assert.equal(await page.evaluate(() => window.__ruleset), 'den');
+  await page.evaluate(() => window.LeylineNav.show('play'));
+
+  const mod = page.locator('.hero-slide[data-key="mod"]');
+  assert.equal(await mod.locator('.hs-shot.front img').getAttribute('src'), 'https://play.openvanilla.app/wrath/mods/bars/shot/0');
+  assert.equal(await mod.locator('.hs-shot.front .hs-shot-cap b').textContent(), 'Better Bars');
+  assert.deepEqual(await mod.locator('.hs-more .hs-wm b').allTextContents(), ['Map Plus', 'One Bag', 'Fifth Mod', 'Linked Thing']);
+  assert.deepEqual(await mod.locator('.hs-chip').allTextContents(), ['4 ready to install', '2 categories']);
+  const srcs = await page.$$eval('#hero img', (i) => i.map((x) => x.getAttribute('src')));
+  assert.ok(srcs.every((u) => u.startsWith('https://play.openvanilla.app/wrath/') || u.startsWith('art/')), 'pictures from the site or the launcher only: ' + srcs.join(' '));
+  assert.deepEqual(await page.evaluate(() => [
+    window.LeylineHome.thumbUrl({ id: 'x', thumb: 'https://evil.example/a.png' }),
+    window.LeylineHome.thumbUrl({ id: 'x', thumb: '/wrath/../etc/passwd' }),
+    window.LeylineHome.thumbUrl({ id: 'x', screenshots: ['/wrath/mods/x/shot/2'] }),
+    window.LeylineHome.thumbUrl({ id: 'link:1', source: 'community', repo: 'https://github.com/Some/Repo' }),
+  ]), ['', '', 'https://play.openvanilla.app/wrath/mods/x/shot/2', 'https://play.openvanilla.app/wrath/art/hub-thumbs/some__repo.webp']);
+  await showKey(page, 'mod');
+  await mod.locator('.hs-more .hs-wm').first().click();
+  assert.deepEqual(await where(page), { page: 'page-mods', panes: ['pane-discover'] });
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('every slide fits at 1100 px and 1400 px: words, panel and picture apart, nothing off the slide; motion only when allowed', async () => {
+  for (const viewport of [{ width: 1100, height: 760 }, { width: 1400, height: 860 }]) {
+    const { page, ctx, errors } = await open({ ms: 600000 }, { viewport });
+    await page.waitForFunction(() => window.LeylineHome.slides().length === 7 && document.querySelector('.hs-forum .hs-fr'));
+    for (const k of await keys(page)) {
+      await showKey(page, k);
+      await page.waitForTimeout(500);
+      const r = await page.evaluate(() => {
+        const s = document.querySelector('.hero-slide.on');
+        const box = (q) => { const e = s.querySelector(q); if (!e) return null; const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom }; };
+        const hero = document.getElementById('hero').getBoundingClientRect();
+        const words = [...s.querySelectorAll('.hs-body > *')].map((e) => e.getBoundingClientRect());
+        return { key: s.dataset.key, hero: { l: hero.left, r: hero.right, t: hero.top, b: hero.bottom }, side: box('.hs-side'), ill: box('.hs-ill'),
+          body: { l: Math.min(...words.map((w) => w.left)), r: Math.max(...words.map((w) => w.right)), t: Math.min(...words.map((w) => w.top)), b: Math.max(...words.map((w) => w.bottom)) },
+          scroll: document.querySelector('main').scrollWidth - document.querySelector('main').clientWidth };
+      });
+      const apart = (a, b) => a.r <= b.l + 1 || b.r <= a.l + 1 || a.b <= b.t + 1 || b.b <= a.t + 1;
+      const inside = (a) => a.l >= r.hero.l - 1 && a.r <= r.hero.r + 1 && a.t >= r.hero.t - 1 && a.b <= r.hero.b + 1;
+      assert.equal(r.scroll, 0, `${k} @${viewport.width}: no sideways scroll`);
+      assert.ok(inside(r.body), `${k} @${viewport.width}: the words on the slide`);
+      if (r.side) { assert.ok(apart(r.side, r.body), `${k} @${viewport.width}: the panel clear of the words ${JSON.stringify(r)}`); assert.ok(inside(r.side), `${k} @${viewport.width}: the panel on the slide`); }
+      if (r.ill) assert.ok(apart(r.ill, r.body), `${k} @${viewport.width}: the picture clear of the words`);
+    }
+    const anim = await page.evaluate(() => { window.LeylineHome.show(0); return getComputedStyle(document.querySelector('.hero-slide.on .il-float')).animationName; });
+    assert.equal(anim, 'hs-float');
+    assert.deepEqual(errors, []);
+    await ctx.close();
+  }
+  const { page, ctx } = await open({ ms: 600000 }, { reducedMotion: 'reduce' });
+  await page.waitForSelector('.hero-slide.on .il-float');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.hero-slide.on .il-float')).animationName), 'none', 'still under reduced motion');
   await ctx.close();
 });

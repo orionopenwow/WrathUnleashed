@@ -45,6 +45,8 @@ had_social=""
 if [ -f "$WU/portal/social.py" ]; then cp -p "$WU/portal/social.py" "$BK/social.py"; had_social=1; fi
 had_forum=""
 if [ -f "$WU/portal/forum.py" ]; then cp -p "$WU/portal/forum.py" "$BK/forum.py"; had_forum=1; fi
+had_profiles=""
+if [ -f "$WU/portal/profiles.py" ]; then cp -p "$WU/portal/profiles.py" "$BK/profiles.py"; had_profiles=1; fi
 had_network=""
 if [ -f "$WU/portal/network.py" ]; then cp -p "$WU/portal/network.py" "$BK/network.py"; had_network=1; fi
 had_admin=""
@@ -77,6 +79,7 @@ put_back() {
   if [ -n "$had_projects" ]; then cp -p "$BK/projects.py" "$WU/portal/projects.py"; else rm -f "$WU/portal/projects.py"; fi
   if [ -n "$had_social" ]; then cp -p "$BK/social.py" "$WU/portal/social.py"; else rm -f "$WU/portal/social.py"; fi
   if [ -n "$had_forum" ]; then cp -p "$BK/forum.py" "$WU/portal/forum.py"; else rm -f "$WU/portal/forum.py"; fi
+  if [ -n "$had_profiles" ]; then cp -p "$BK/profiles.py" "$WU/portal/profiles.py"; else rm -f "$WU/portal/profiles.py"; fi
   if [ -n "$had_network" ]; then cp -p "$BK/network.py" "$WU/portal/network.py"; else rm -f "$WU/portal/network.py"; fi
   if [ -n "$had_admin" ]; then cp -p "$BK/admin.py" "$WU/portal/admin.py"; [ ! -f "$BK/wu-mod.py" ] || cp -p "$BK/wu-mod.py" "$WU/portal/"
   else rm -f "$WU/portal/admin.py" "$WU/portal/wu-mod.py"; fi
@@ -144,6 +147,9 @@ fi
 if [ -f social.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' social.py && install -m 644 social.py "$WU/portal/social.py"; fi
 # the Leyline forum (/wrath/leyline/forum, /wrath/forum/api): optional; its store is $WU/portal-data/forum.sqlite3
 if [ -f forum.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' forum.py && install -m 644 forum.py "$WU/portal/forum.py"; fi
+# Leyline profiles and the sign-in chooser (/wrath/signin, /wrath/profile, /wrath/avatar): optional; its store is
+# $WU/portal-data/profiles.sqlite3
+if [ -f profiles.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' profiles.py && install -m 644 profiles.py "$WU/portal/profiles.py"; fi
 # the Leyline network (/wrath/realms in the network's order, /wrath/realms.json, realm reports): optional; its reports
 # live in $WU/portal-data/network (/data/network)
 if [ -f network.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' network.py && install -m 644 network.py "$WU/portal/network.py"; fi
@@ -288,6 +294,8 @@ c10=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/
 echo "  /wrath/api/social/me Leyline friends (401 signed out = on): $c10"
 c10f=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/forum/api/categories || true)
 echo "  /wrath/forum/api/categories the Leyline forum (200 = on): $c10f"
+c11p=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/avatar/p/star.svg || true)
+echo "  /wrath/avatar/p/star.svg    Leyline profiles and sign-in (200 = on): $c11p"
 c11=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/admin || true)
 echo "  /wrath/admin Admin Console (302 to sign-in = on): $c11"
 c12=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://play.openvanilla.app/wrath/leyline-preview || true)

@@ -404,3 +404,5 @@
 1148b ov112-realm-off Stop the 1.12 login and world servers (kept, not removed; frees about 2 GB for the Wrath realm)
 1149a signin Site: the Forum (/wrath/leyline/forum, its JSON for the launcher, admin Forum tab); Community becomes Forum
 1149b ship Save to GitHub: Forum and My Den in the launcher, friends removed (GitHub then rebuilds Leyline.exe)
+1150a signin Site: sign-in chooser (Hero Key, Google; Discord when turned on), profile step, profiles and pictures, forum avatars, admin Profiles tab
+1151a ship Save to GitHub: launcher Manage account and sign-in choices, richer Home gallery, PLAY picture button, Discord in the title bar, side panel hidden (GitHub then rebuilds Leyline.exe)

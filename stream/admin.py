@@ -16,6 +16,8 @@ Leyline look, with a little plain script (only for the typed confirm). Nothing h
     GET  /wrath/admin/themes           theme packs (the Workshop category "themes"): approve, reject, feature
     GET  /wrath/admin/reports          .bug reports (ov_admin.lua), message reports (stream/social.py), community link
                                        reports (stream/projects.py): resolve, notes
+    GET  /wrath/admin/profiles         player profiles (stream/profiles.py): find one, reset its picture, bio or name
+                                       (the old value stays in the profile history and the audit log)
     GET  /wrath/admin/forum            the forum (stream/forum.py): reported posts (hide, done, dismiss), threads (pin, lock,
                                        hide, merge a duplicate into another), hidden posts (show again)
     GET  /wrath/admin/health           what this server can see of itself (and Autopilot, when it is reachable)
@@ -967,7 +969,7 @@ document.querySelectorAll('form[data-confirm]').forEach(function(f){
 
 TABS = (("", "Dashboard"), ("catalog", "Catalog"), ("workshop", "Workshop"), ("hub", "Index"), ("realms", "Realms"),
         ("releases", "Releases"), ("flags", "Flags"), ("themes", "Themes"), ("reports", "Reports"),
-        ("forum", "Forum"), ("health", "Health"), ("staff", "Staff"), ("audit", "Audit"))
+        ("forum", "Forum"), ("profiles", "Profiles"), ("health", "Health"), ("staff", "Staff"), ("audit", "Audit"))
 
 
 def _css() -> str:
@@ -1660,6 +1662,70 @@ def reports_page(user: dict, query: dict) -> str:
             f'dismiss, hide or flag a realm on the Realms tab.</p>{realm_html}</section>'
             f'<section class="ly-panel"><h2>Message reports</h2>{msg_html}</section>'
             f'<section class="ly-panel"><h2>Workshop link reports</h2>{links_html}</section>')
+
+
+# ------------------------------------------------------------------------------------------------ profiles
+def _profiles_mod():
+    mod = P("profiles")
+    return mod if mod is not None and getattr(mod, "store", None) is not None else None
+
+
+def profiles_page(user: dict, query: dict) -> str:
+    """Player profiles (stream/profiles.py): find one by name, name#tag or game account; reset its picture, bio or name.
+    The old values stay in the profile history (shown here) and the audit log; nothing is deleted."""
+    mod = _profiles_mod()
+    soc = P("social")
+    st = getattr(soc, "store", None) if soc is not None else None
+    if mod is None or st is None:
+        return '<section class="ly-panel"><h2>Profiles</h2><p class="fine">Profiles (stream/profiles.py) are not on this portal.</p></section>'
+    back = "/wrath/admin/profiles"
+    q = _clean_line((query.get("q") or [""])[0], 40)
+    if q:
+        name, _, tag = q.partition("#")
+        rows = st.q("SELECT acct FROM social_accounts WHERE acct = ? OR name_lc = ? OR (name_lc LIKE ? ESCAPE '\\') "
+                    "ORDER BY name_lc LIMIT 40",
+                    (q.upper(), name.lower(), name.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"))
+        accts = [r[0] for r in rows if not tag or (st.profile(r[0]) or {}).get("tag") == tag]
+    else:
+        accts = mod.store.recent(40)
+    out = []
+    for acct in accts:
+        p = st.profile(acct)
+        if not p:
+            continue
+        pr = mod.store.get(acct)
+        hist = mod.store.history(acct, 5)
+        hist_html = ("<details><summary>History</summary><ul>" + "".join(
+            f'<li>{e(_iso(hh["at"]))} {e(hh["field"])}: {e(hh["old"][:80]) or "(empty)"} &rarr; {e(hh["new"][:80]) or "(empty)"} '
+            f'<span class="fine">by {e(hh["by"])}</span></li>' for hh in hist) + "</ul></details>") if hist else ""
+        acts = ((act(user, "profile.reset.avatar", acct, "Reset picture", back) if pr["avatar"] else "")
+                + (act(user, "profile.reset.bio", acct, "Reset bio", back) if pr["bio"] else "")
+                + (act(user, "profile.reset.name", acct, "Reset name", back, confirm=acct, danger=True) if p["name"] != "Player" else ""))
+        out.append(f'<tr><td><img src="{e(mod.avatar_url(acct))}" alt="" width="36" height="36" style="border-radius:50%"></td>'
+                   f'<td><b>{e(p["name"])}</b>#{e(p["tag"])}<br><span class="fine">{e(acct)}</span></td>'
+                   f'<td style="max-width:340px;white-space:pre-wrap">{e(pr["bio"]) or "<span class=fine>(no bio)</span>"}{hist_html}</td>'
+                   f'<td>{acts}</td></tr>')
+    form = (f'<form method="get" action="{back}"><input type="search" name="q" value="{e(q)}" maxlength="40" '
+            'placeholder="Name, Name#1234 or game account" aria-label="Find a profile"> <button type="submit">Find</button></form>')
+    table = ('<table><thead><tr><th></th><th>Player</th><th>Bio</th><th>Reset</th></tr></thead><tbody>' + "".join(out)
+             + '</tbody></table>') if out else '<p class="fine">No profiles here.</p>'
+    return (f'<section class="ly-panel"><h2>Profiles</h2><p class="fine">{"Matches" if q else "Changed most recently"}. A reset puts the '
+            'picture back to the initial, empties the bio, or renames to Player; the old value stays in the history.</p>'
+            f'{form}{table}</section>')
+
+
+def a_profile_reset(field):
+    def fn(user, target, form):
+        mod = _profiles_mod()
+        if mod is None:
+            raise Refused("Profiles are not on this portal.")
+        if not re.fullmatch(r"[A-Z0-9]{1,16}", target or ""):
+            raise Refused("Not a game account.")
+        try:
+            return mod.admin_reset(target, field, "staff:" + user.get("account", ""))
+        except mod.ProfileError as ex:
+            raise Refused(ex.text)
+    return fn
 
 
 # ------------------------------------------------------------------------------------------------ the forum
@@ -2372,6 +2438,9 @@ ACTIONS = {
     "msg.dismiss": (a_msg_status("dismissed"), "staff", None),
     "msg.reopen": (a_msg_status("open"), "staff", None),
     "bug.set": (a_bug_set, "staff", None),
+    "profile.reset.avatar": (a_profile_reset("avatar"), "staff", None),
+    "profile.reset.bio": (a_profile_reset("bio"), "staff", None),
+    "profile.reset.name": (a_profile_reset("name"), "staff", True),
     "forum.post.hide": (a_forum_post(True), "staff", None),
     "forum.post.unhide": (a_forum_post(False), "staff", None),
     "forum.thread.pin": (a_forum_thread("pinned", True), "staff", None),
@@ -2497,6 +2566,8 @@ def get(h, path: str, query: dict) -> None:
         title, body = "Reports", reports_page(user, query)
     elif tab == "forum":
         title, body = "Forum", forum_page(user, query)
+    elif tab == "profiles":
+        title, body = "Profiles", profiles_page(user, query)
     elif tab == "health":
         title, body = "Health", health_page(user)
     elif tab == "staff":
