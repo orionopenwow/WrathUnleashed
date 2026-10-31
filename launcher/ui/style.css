@@ -715,42 +715,91 @@ html[data-base="light"] .dc-meta .ver-s { color: var(--t-accent); }
 .realm-list { display: grid; gap: 10px; }
 .realm-card .state { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; }
 .rules { margin: 0; padding-left: 18px; font-size: 12px; color: var(--t-text-2); }
-/* a realm, as on the website's realm list (stream/hub.py realm_row, .hb-rl): icon · name, version chip, badges and
-   the meta line · players online with a fill bar · the actions. Hover lifts it; an offline realm is dimmed. */
+/* a realm row (owner 2026-10-30: "way more intuitive and clean and clear"): icon · name, version and one tag over one
+   short line (type · core) · players with an online dot and a fill bar · PLAY. No outline; the picked realm is lit;
+   an offline realm is dimmed. */
 .realm-card.rl {
-  grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "ic main pop" "ic acts acts";
-  align-items: center; gap: 8px 16px; padding: 13px 16px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--t-card) 100%, var(--t-text) 3%), var(--t-card));
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
-  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+  grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "ic main pop acts";
+  align-items: center; gap: 4px 18px; padding: 12px 14px 12px 12px;
+  border-color: transparent; background: var(--t-card);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16), 0 4px 14px rgba(0, 0, 0, 0.14);
+  transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s, background 0.15s;
 }
-.realm-card.rl:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--t-accent) 55%, var(--t-card-border)); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32); }
-.realm-card.rl.official {
-  border-style: solid; border-color: color-mix(in srgb, var(--t-accent) 50%, var(--t-card-border));
-  background: linear-gradient(90deg, color-mix(in srgb, var(--t-accent) 20%, transparent), color-mix(in srgb, var(--t-accent-2) 9%, transparent) 55%, transparent), var(--t-card);
-  box-shadow: inset 3px 0 0 var(--t-accent), 0 8px 22px rgba(0, 0, 0, 0.26);
+.realm-card.rl:hover { transform: translateY(-1px); border-color: transparent; background: color-mix(in srgb, var(--t-card) 92%, var(--t-text) 8%); box-shadow: 0 8px 22px rgba(0, 0, 0, 0.26); }
+.realm-card.rl.official { border-style: solid; border-color: transparent; }
+.realm-card.rl.on {
+  border-color: transparent;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--t-accent) 18%, transparent), transparent 70%), var(--t-card);
+  box-shadow: inset 3px 0 0 var(--t-accent), 0 0 0 1px color-mix(in srgb, var(--t-accent) 55%, transparent), 0 6px 18px rgba(0, 0, 0, 0.2);
 }
-.realm-card.rl.featured { border-color: color-mix(in srgb, var(--t-accent-2) 55%, var(--t-card-border)); }
-.realm-card.rl.on { border-color: var(--t-accent); box-shadow: 0 0 0 1px var(--t-accent), 0 8px 22px rgba(0, 0, 0, 0.26); }
-.realm-card.rl.linked { border-color: var(--t-accent); box-shadow: 0 0 0 2px var(--t-accent), 0 0 24px color-mix(in srgb, var(--t-accent) 35%, transparent); }
-.realm-card.rl.off { opacity: 0.66; }
+.realm-card.rl.linked { border-color: transparent; box-shadow: 0 0 0 2px var(--t-accent), 0 0 24px color-mix(in srgb, var(--t-accent) 35%, transparent); }
+.realm-card.rl.off { opacity: 0.6; }
 .realm-card.rl.off:hover, .realm-card.rl.off:focus-within { opacity: 0.9; }
-.rl > .rl-ic { grid-area: ic; align-self: start; }
-.rl-main { grid-area: main; display: grid; gap: 4px; min-width: 0; }
-.rl-pop { grid-area: pop; display: grid; justify-items: end; gap: 3px; align-self: start; text-align: right; white-space: nowrap; font-size: 13px; color: var(--t-text-2); }
-.rl-pop .state { font-weight: 600; font-size: 13px; }
-.realm-card.rl .is-online { color: var(--t-text-2); }
+.rl > .rl-ic { grid-area: ic; }
+.rl-main { grid-area: main; display: grid; gap: 3px; min-width: 0; }
+.rl-pop { grid-area: pop; display: grid; justify-items: end; gap: 5px; text-align: right; white-space: nowrap; font-size: 12.5px; color: var(--t-muted); min-width: 92px; }
+.rl-pop .state { font-weight: 500; font-size: 12.5px; }
+.realm-card.rl .is-online { color: var(--t-muted); }
 .rl-pop b.rl-n { color: var(--t-text); font-weight: 700; font-variant-numeric: tabular-nums; }
-.rl-pop .rl-bots { color: var(--t-muted); font-size: 12px; }
-.rl > .acts { grid-area: acts; margin-top: 2px; }
-.rl-title { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
-.realm-card.rl .name { font-size: 15.5px; font-weight: 650; }
+.rl > .acts { grid-area: acts; display: flex; align-items: center; gap: 8px; margin: 0; }
+.rl-play { min-width: 82px; height: 34px; font-size: 12px; letter-spacing: 0.06em; }
+.rl-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.realm-card.rl .name { font-size: 15px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.rl-ok { flex: none; display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: var(--t-ok); color: #fff; font: 800 9px/1 var(--t-font); }
 .rl-meta { display: flex; flex-wrap: wrap; gap: 0; font-size: 12.5px; color: var(--t-muted); }
-.rl-meta span + span::before { content: "·"; margin: 0 6px; color: var(--t-muted); }
-.rl-meta .ok { color: var(--t-ok); }
-.rl-meta .warn { color: var(--t-warn); }
-.rl-main .desc { font-size: 13px; }
-.rl-main .hint { font-size: 11.5px; }
+.rl-note { font-size: 11.5px; color: var(--t-muted); font-style: italic; }
+.rl-links { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.rl-links .link-s { font-size: 11.5px; font-weight: 500; color: var(--t-muted); }
+.rl-links .link-s:hover, .rl-links .link-s:focus-visible { color: var(--t-accent); }
+.rl-empty { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; padding: 22px 12px; color: var(--t-muted); font-size: 13px; }
+/* the toolbar: Find a realm · FILTERS (a count when any are on) · the client, MODES, refresh and … on the right */
+.rl-tools { gap: 8px; margin: 0 0 8px; }
+.rl-tools input[type="search"] { flex: 1 1 220px; min-width: 160px; }
+.rl-tools .toolbar-fill { flex: 0 0 0; margin-left: auto; }
+select.rl-client { field-sizing: content; width: auto; min-width: 0; max-width: 180px; height: 36px; font-weight: 600; }
+.rl-pop-wrap { position: relative; }
+.rl-fbtn { display: inline-flex; align-items: center; gap: 7px; height: 36px; }
+.rl-fbtn svg, .icon-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.rl-fbtn.on { color: var(--t-accent-strong); background: var(--t-accent-soft); border-color: color-mix(in srgb, var(--t-accent) 50%, transparent); }
+.rl-fcount { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; background: var(--t-accent); color: var(--t-on-accent); font: 700 10.5px/1 var(--t-font); }
+.icon-btn {
+  display: inline-grid; place-items: center; width: 36px; height: 36px; padding: 0; cursor: pointer;
+  border-radius: var(--t-radius-sm); border: var(--t-border-w) solid var(--t-border); background: var(--t-surface-2); color: var(--t-text-2);
+}
+.icon-btn:hover, .icon-btn.open { border-color: var(--t-border-strong); color: var(--t-text); }
+.icon-btn:focus-visible { outline: 2px solid var(--t-accent); outline-offset: 1px; }
+#rl-more svg { fill: currentColor; stroke: none; }
+.rl-popover {
+  position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; display: grid; gap: 12px; width: 300px; padding: 14px;
+  border-radius: var(--t-radius); background: var(--t-surface); color: var(--t-text);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--t-text) 8%, transparent), 0 18px 40px rgba(0, 0, 0, 0.4);
+}
+.rl-popover[hidden] { display: none; }
+.rl-fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.rl-fgrid select { height: 32px; }
+.rl-pop-foot { display: flex; justify-content: flex-end; }
+.rl-menu { left: auto; right: 0; width: 240px; gap: 2px; padding: 6px; }
+.rl-menu button { padding: 9px 10px; border: 0; border-radius: var(--t-radius-xs); background: none; color: var(--t-text); text-align: left; cursor: pointer; font: 500 13px var(--t-font); }
+.rl-menu button:hover, .rl-menu button:focus-visible { background: var(--t-accent-soft); color: var(--t-accent-strong); outline: none; }
+.net-line { display: flex; align-items: center; gap: 7px; margin: 0 0 10px; font-size: 12.5px; color: var(--t-muted); font-weight: 500; }
+.net-line:not(:empty)::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--t-ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--t-ok) 22%, transparent); }
+#page-realms #rl-status:empty { display: none; }
+/* Host your own: one slim banner */
+.rl-host-banner {
+  display: flex; align-items: center; gap: 14px; margin: 16px 0 0; padding: 12px 14px; border-radius: var(--t-radius);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--t-accent) 14%, transparent), color-mix(in srgb, var(--t-accent-2) 8%, transparent) 60%, transparent), var(--t-card);
+}
+.rl-host-banner p { flex: 1; margin: 0; font-size: 13px; color: var(--t-muted); min-width: 0; }
+.rl-host-banner p b { color: var(--t-text); font-weight: 650; }
+.rl-host-ic { flex: none; position: relative; width: 34px; height: 34px; }
+.rl-host-ic img { position: absolute; inset: -18%; width: 136%; height: 136%; object-fit: contain; display: block; }
+.rl-host-acts { display: flex; gap: 8px; flex: none; }
+.rl-other { margin: 14px 0 0; }
+.rl-other > summary { cursor: pointer; font-size: 12.5px; color: var(--t-muted); list-style: none; padding: 4px 0; }
+.rl-other > summary::before { content: "›"; display: inline-block; width: 14px; transition: transform 0.15s; }
+.rl-other[open] > summary::before { transform: rotate(90deg); }
+.rl-other > summary:hover { color: var(--t-text); }
+.rl-other h3 { font-size: 14px; margin: 14px 0 6px; }
 /* the coloured initial (a hue from the name), or the crystal mark for the official realm */
 .rl-ic {
   position: relative; display: grid; place-items: center; flex: none; width: 42px; height: 42px; border-radius: 12px; overflow: hidden;
@@ -778,13 +827,12 @@ html[data-base="light"] .dc-meta .ver-s { color: var(--t-accent); }
 /* players online: a small fill bar */
 .rl-bar { display: block; width: 92px; height: 4px; border-radius: 99px; background: color-mix(in srgb, var(--t-text) 10%, transparent); overflow: hidden; }
 .rl-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--t-ok), color-mix(in srgb, var(--t-ok) 55%, #fff)); }
-code.rl-addr { padding: 4px 8px; border-radius: 8px; background: var(--t-surface-2); color: var(--t-text-2); font-size: 12px; user-select: all; overflow-wrap: anywhere; }
-@media (max-width: 820px) { .realm-card.rl { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "ic main" "ic pop" "ic acts"; } .rl-pop { justify-items: start; text-align: left; } }
+@media (max-width: 820px) { .realm-card.rl { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "ic main acts" "ic pop acts"; } .rl-pop { justify-items: start; text-align: left; grid-auto-flow: column; align-items: center; } .rl-host-banner { flex-wrap: wrap; } }
 @media (prefers-reduced-motion: reduce) { .realm-card.rl { transition: none; } .realm-card.rl:hover { transform: none; } }
-html[data-base="light"] .realm-card.rl, html[data-base="light"] .realm-card.rl:hover { box-shadow: 0 4px 14px rgba(16, 24, 40, 0.08); }
+html[data-base="light"] .realm-card.rl { box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 4px 14px rgba(16, 24, 40, 0.06); }
+html[data-base="light"] .realm-card.rl:hover { box-shadow: 0 8px 20px rgba(16, 24, 40, 0.1); }
+html[data-base="light"] .rl-popover { box-shadow: 0 0 0 1px rgba(16, 24, 40, 0.08), 0 16px 36px rgba(16, 24, 40, 0.16); }
 html[data-base="light"] .rl-ic.crystal { background: radial-gradient(circle at 50% 40%, #e9eefb, #cfd8f0); box-shadow: inset 0 0 0 1px rgba(58, 111, 220, 0.4); }
-.net-line { margin: 0 0 6px; color: var(--t-accent); font-weight: 600; }
-.rl-filters label.inline select { min-width: 120px; }
 .host-cta { margin-top: 16px; box-shadow: none; background: var(--t-card); }
 .drop {
   display: grid; justify-items: center; gap: 3px; padding: 20px 14px; margin: 4px 0 8px;

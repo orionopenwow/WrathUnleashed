@@ -1,8 +1,9 @@
 // The launcher's Realms page and the Host page's realm list details (ui/app.js, ui/host.js) in Chromium, with a fake
 // Tauri core: the network order as realms.rs gives it, the network line, each realm dressed like the website's realm
-// list (icon, gold client version, badges: official, featured, verified, new, temporary; the meta line with uptime;
-// players with a fill bar; offline dimmed), the filters (build, rules tag, region, language, has players now), "Only realms my clients can play",
-// Report, direct connect only with the p2p_hosting flag on, Host your own, and saving the details.
+// list made simple (the official realm first; icon, gold client version, one tag: Official or Featured; one line, type ·
+// core, the rest on hover; players with a fill bar; offline dimmed), the search box, the FILTERS popover (build, rules
+// tag, region, language, has players now, "Only realms my clients can play") with its count, the … menu, Report,
+// direct connect only with the p2p_hosting flag on, the Host your own banner, the empty state, and saving the details.
 //
 //   NODE_PATH=$(npm root -g) node --test launcher/tests/realms.browser.test.cjs
 'use strict';
@@ -40,6 +41,8 @@ const FAKE = (p2p) => {
       case 'host_listing': return details;
       case 'host_listing_set': details = args.details; return 'Saved. The realm list shows them within a minute.';
       case 'open_url': return null;
+      case 'back_to_official': return 'Back on the official realm.';
+      case 'restore_realmlist': return 'Your own realmlist is back.';
       case 'deep_link_take': { const l = window.__link || null; window.__link = null; return l; }
       default: throw 'unknown ' + cmd;
     }
@@ -62,69 +65,140 @@ async function open(p2p) {
 }
 const names = (page) => page.$$eval('#rl-list .realm-card .name', (n) => n.map((x) => x.textContent));
 
-test('Realms page: the network order, line, badges, filters, Report, Host your own', async () => {
+test('Realms page: the official realm first, the slim line, one tag, players, Report, Host your own', async () => {
   const { page, errors } = await open(false);
-  assert.deepEqual(await names(page), ['Picked', 'Leyline Sample Hangout', 'Busy Den', 'Asleep'], 'featured, the sample, by score, offline');
-  assert.equal(await page.textContent('#rl-net'), '3 realms · 33 players online · 40 bots');
+  assert.deepEqual(await names(page), ['Leyline Sample Hangout', 'Picked', 'Busy Den', 'Asleep'], 'the official realm first, then the network order');
+  assert.equal(await page.textContent('#rl-net'), '3 realms · 33 playing');
+  assert.equal(await page.getAttribute('#rl-net', 'title'), '40 bots too');
   const cards = page.locator('#rl-list .realm-card');
-  const picked = await cards.nth(0).textContent();
-  assert.match(picked, /Featured/); assert.match(picked, /Verified/); assert.match(picked, /97% up · 7 d/);
-  assert.match(picked, /PvP/); assert.match(picked, /Europe/); assert.match(picked, /de/);
   const badges = (i) => cards.nth(i).locator('.rl-bdg').allTextContents();
-  assert.deepEqual(await badges(0), ['Featured', 'Verified', 'Needs your own 1.12.1 client']);
-  assert.deepEqual(await badges(1), ['Official', 'Temporary']);
-  assert.deepEqual(await badges(2), ['New']);
-  assert.deepEqual(await cards.locator('.rl-ver').allTextContents(), ['1.12.1', '3.3.5a', '3.3.5a', '3.3.5a'], 'the gold client version');
-  assert.match(await cards.nth(1).locator('.rl-meta').textContent(), /Run by Leyline/);
+  assert.deepEqual(await badges(0), ['Official'], 'no badge pile: Official or Featured only');
+  assert.deepEqual(await badges(1), ['Featured']);
+  assert.deepEqual(await badges(2), []);
+  assert.equal(await cards.nth(0).locator('.rl-bdg').getAttribute('title'), 'Temporary: our own realm for now');
+  assert.equal(await cards.nth(1).locator('.rl-ok').getAttribute('title'), 'Verified host: checked by Leyline staff');
+  assert.equal(await cards.nth(1).locator('.rl-note').textContent(), 'Needs your own 1.12.1 client', 'a quiet note only when it applies');
+  assert.equal(await cards.nth(2).locator('.rl-note').count(), 0);
+  assert.equal(await page.locator('#rl-list .rl-addr').count(), 0, 'no address chip');
+  assert.equal(await cards.nth(1).locator('.rl-meta').textContent(), 'PvE · vMaNGOS', 'one line: type · core');
+  const more = await cards.nth(1).locator('.rl-meta').getAttribute('title');
+  assert.match(more, /Community realm/); assert.match(more, /Europe/); assert.match(more, /PvP/); assert.match(more, /97% up · 7 d/);
+  assert.match(more, /Realmlist: relay\.openvanilla\.app:40020/);
+  assert.match(await cards.nth(2).locator('.rl-meta').getAttribute('title'), /New.*North America east \(estimated\).*70% up · 24 h/);
+  assert.match(await cards.nth(0).locator('.rl-meta').getAttribute('title'), /Run by Leyline/);
+  assert.ok(await cards.nth(0).evaluate((e) => e.classList.contains('on')), 'the picked realm is lit');
+  assert.deepEqual(await cards.locator('.rl-ver').allTextContents(), ['3.3.5a', '1.12.1', '3.3.5a', '3.3.5a'], 'the gold client version');
   // the icon: the crystal mark for the official realm, else the initial on a colour from the name
-  assert.equal(await cards.nth(1).locator('.rl-ic img').getAttribute('src'), 'art/brand/leyline-crystal-256.webp');
-  assert.equal(await cards.nth(0).locator('.rl-ic').textContent(), 'P');
+  assert.equal(await cards.nth(0).locator('.rl-ic img').getAttribute('src'), 'art/brand/leyline-crystal-256.webp');
+  assert.equal(await cards.nth(1).locator('.rl-ic').textContent(), 'P');
   const hue = (i) => cards.nth(i).locator('.rl-ic').evaluate((e) => e.style.getPropertyValue('--h'));
-  assert.match(await hue(0), /^\d+$/);
-  assert.notEqual(await hue(0), await hue(2), 'a hue from the name');
-  const busy = await cards.nth(2).textContent();
-  assert.match(busy, /New/); assert.match(busy, /70% up · 24 h/); assert.match(busy, /North America east \(estimated\)/);
-  assert.match(busy, /30 of 100 playing/); assert.match(busy, /40 bots/);
+  assert.match(await hue(1), /^\d+$/);
+  assert.notEqual(await hue(1), await hue(2), 'a hue from the name');
+  assert.equal(await cards.nth(2).locator('.rl-pop').textContent(), '30 / 100');
+  assert.equal(await cards.nth(2).locator('.rl-pop .state').getAttribute('title'), '30 of 100 playing · 40 bots');
   assert.equal(await cards.nth(2).locator('.rl-bar i').evaluate((e) => e.style.width), '30%', 'players fill the bar');
   assert.ok(await cards.nth(3).evaluate((e) => e.classList.contains('off') && getComputedStyle(e).opacity < 1), 'an offline realm is dimmed');
   assert.equal(await cards.nth(3).locator('.rl-bar').count(), 0);
-  assert.equal(await cards.nth(0).locator('.acts .btn').first().textContent(), 'PLAY');
-  assert.doesNotMatch(busy, /Direct connect/, 'direct connect only with p2p_hosting on');
-  assert.equal(await cards.nth(1).locator('button:has-text("Report")').count(), 0, 'no Report on the sample');
+  assert.equal(await cards.nth(1).locator('.acts .btn').first().textContent(), 'PLAY');
+  assert.doesNotMatch(await cards.nth(2).textContent(), /Direct connect/, 'direct connect only with p2p_hosting on');
+  assert.equal(await cards.nth(0).locator('button:has-text("Report")').count(), 0, 'no Report on the sample');
   await cards.nth(2).locator('button:has-text("Report")').click();
   assert.ok(await page.evaluate(() => window.__calls.some(([c, a]) => c === 'open_url' && a.url === 'https://play.openvanilla.app/wrath/realms/report?realm=bbbbbbbbbbbbbbbb')));
-
-  // filters
-  const opts = await page.$$eval('#rl-f-tag option', (o) => o.map((x) => x.value));
-  assert.deepEqual(opts, ['', 'bots', 'pvp', 'rp']);
-  await page.selectOption('#rl-f-tag', 'pvp');
-  assert.deepEqual(await names(page), ['Picked', 'Leyline Sample Hangout'], 'tag filter; the sample stays');
-  await page.selectOption('#rl-f-tag', '');
-  await page.selectOption('#rl-f-region', 'na-east');
-  assert.deepEqual(await names(page), ['Leyline Sample Hangout', 'Busy Den'], 'an estimated region counts');
-  await page.selectOption('#rl-f-region', '');
-  await page.check('#rl-f-now');
-  assert.deepEqual(await names(page), ['Picked', 'Leyline Sample Hangout', 'Busy Den'], 'has players now');
-  await page.uncheck('#rl-f-now');
-  await page.selectOption('#rl-f-build', '1.12.1');
-  assert.deepEqual(await names(page), ['Picked', 'Leyline Sample Hangout']);
-  await page.selectOption('#rl-f-build', '');
-  await page.check('#rl-mine');
-  assert.deepEqual(await names(page), ['Leyline Sample Hangout', 'Busy Den', 'Asleep'], 'Only realms my clients can play still works');
-  await page.uncheck('#rl-mine');
-
-  // Host your own: three steps, opens the Host page
-  assert.equal(await page.locator('#rl-host-cta ol.steps li').count(), 3);
+  // the search box
+  await page.fill('#rl-q', 'busy');
+  assert.deepEqual(await names(page), ['Busy Den']);
+  await page.fill('#rl-q', 'nothing like it');
+  assert.match(await page.textContent('#rl-list .rl-empty'), /No realm called/);
+  await page.click('#rl-list .rl-empty button');
+  assert.equal(await page.inputValue('#rl-q'), '');
+  assert.equal((await names(page)).length, 4);
+  // Host your own: a slim banner, two buttons to the Host page
+  assert.equal(await page.locator('#rl-host-cta ol').count(), 0);
+  await page.click('#rl-host-link');
+  assert.ok(await page.locator('#page-host').evaluate((e) => e.classList.contains('on')));
+  await page.click('.nav[data-page="realms"]');
   await page.click('#rl-host');
   assert.ok(await page.locator('#page-host').evaluate((e) => e.classList.contains('on')));
   assert.deepEqual(errors, []);
+});
+
+test('Realms page: the FILTERS popover, its count, Clear filters; the … menu', async () => {
+  const { page, errors } = await open(false);
+  assert.ok(await page.isHidden('#rl-filters'), 'closed at first');
+  assert.ok(await page.isHidden('#rl-fcount'), 'no count with no filters');
+  await page.click('#rl-filters-btn');
+  assert.ok(await page.isVisible('#rl-filters'));
+  assert.equal(await page.getAttribute('#rl-filters-btn', 'aria-expanded'), 'true');
+  const opts = await page.$$eval('#rl-f-tag option', (o) => o.map((x) => x.value));
+  assert.deepEqual(opts, ['', 'bots', 'pvp', 'rp']);
+  await page.selectOption('#rl-f-tag', 'pvp');
+  assert.deepEqual(await names(page), ['Leyline Sample Hangout', 'Picked'], 'tag filter; the sample stays');
+  assert.equal(await page.textContent('#rl-fcount'), '1');
+  assert.equal(await page.getAttribute('#rl-filters-btn', 'aria-label'), 'Filters, 1 on');
+  await page.selectOption('#rl-f-tag', '');
+  await page.selectOption('#rl-f-region', 'na-east');
+  assert.deepEqual(await names(page), ['Leyline Sample Hangout', 'Busy Den'], 'an estimated region counts');
+  await page.check('#rl-f-now');
+  assert.equal(await page.textContent('#rl-fcount'), '2');
+  await page.selectOption('#rl-f-region', '');
+  assert.deepEqual(await names(page), ['Leyline Sample Hangout', 'Picked', 'Busy Den'], 'has players now');
+  await page.uncheck('#rl-f-now');
+  await page.selectOption('#rl-f-build', '1.12.1');
+  assert.deepEqual(await names(page), ['Leyline Sample Hangout', 'Picked']);
+  await page.selectOption('#rl-f-build', '');
+  await page.check('#rl-mine');
+  assert.deepEqual(await names(page), ['Leyline Sample Hangout', 'Busy Den', 'Asleep'], 'Only realms my clients can play still works');
+  await page.selectOption('#rl-f-build', '1.12.1');
+  assert.equal(await page.textContent('#rl-fcount'), '2');
+  assert.match(await page.textContent('#rl-list .rl-empty'), /No realms match these filters/);
+  await page.click('#rl-f-clear');
+  assert.ok(await page.isHidden('#rl-fcount'));
+  assert.equal(await page.isChecked('#rl-mine'), false);
+  assert.equal((await names(page)).length, 4);
+  // Escape and a click outside close it
+  await page.keyboard.press('Escape');
+  assert.ok(await page.isHidden('#rl-filters'));
+  await page.click('#rl-filters-btn');
+  await page.click('#rl-net');
+  assert.ok(await page.isHidden('#rl-filters'));
+  // the … menu: Back to the official realm, Use my own realmlist
+  assert.ok(await page.isHidden('#rl-back'));
+  await page.click('#rl-more');
+  assert.deepEqual(await page.$$eval('#rl-menu [role="menuitem"]', (b) => b.map((x) => x.textContent)), ['Back to the official realm', 'Use my own realmlist']);
+  await page.click('#rl-back');
+  assert.ok(await page.isHidden('#rl-menu'), 'a choice closes the menu');
+  assert.ok(await page.evaluate(() => window.__calls.some(([c]) => c === 'back_to_official')));
+  assert.deepEqual(errors, []);
+});
+
+test('Realms page: no community realms: one line and HOST ONE', async () => {
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.addInitScript(FAKE, false);
+  await page.addInitScript(() => {
+    const inner = window.__TAURI__.core.invoke;
+    window.__TAURI__.core.invoke = async (cmd, args) => {
+      const r = await inner(cmd, args);
+      if (cmd === 'realms_list') r.realms = r.realms.filter((x) => x.official);
+      return r;
+    };
+  });
+  await page.goto(INDEX);
+  await page.click('.nav[data-page="realms"]');
+  await page.waitForFunction(() => document.querySelector('#rl-list .rl-empty'));
+  assert.match(await page.textContent('#rl-list .rl-empty'), /No community realms yet/);
+  await page.click('#rl-list .rl-empty button:has-text("HOST ONE")');
+  assert.ok(await page.locator('#page-host').evaluate((e) => e.classList.contains('on')));
+  assert.deepEqual(errors, []);
+  await page.close();
 });
 
 test('Direct connect shows with p2p_hosting on; the Host page saves the realm list details', async () => {
   const { page, errors } = await open(true);
   await page.click('#rl-refresh');
   await page.waitForTimeout(100);
-  assert.match(await page.locator('#rl-list .realm-card').nth(2).textContent(), /Direct connect available/);
+  assert.match(await page.locator('#rl-list .realm-card').nth(2).textContent(), /Direct connect available/, 'on the one line');
   await page.click('.nav[data-page="host"]');
   await page.waitForFunction(() => document.querySelector('#hl-card input[value="rp"]') && document.querySelector('#hl-card input[value="rp"]').checked);
   assert.equal(await page.inputValue('#hl-card select'), 'eu');
@@ -226,7 +300,7 @@ test('Hero Key sign-in: hidden with the flag off; on: live community realms only
   await page.waitForTimeout(100);
   const cards = page.locator('#rl-list .realm-card');
   const hk = (i) => cards.nth(i).locator('button:has-text("Sign in with your Hero Key")').count();
-  assert.deepEqual([await hk(0), await hk(1), await hk(2), await hk(3)], [1, 0, 1, 0], 'live community realms only (not the official one, not offline)');
+  assert.deepEqual([await hk(0), await hk(1), await hk(2), await hk(3)], [0, 1, 1, 0], 'live community realms only (not the official one, first, not offline)');
   await cards.nth(2).locator('button:has-text("Sign in with your Hero Key")').click();
   await page.waitForFunction(() => /one-time password/.test(document.querySelector('#rl-status').textContent));
   assert.match(await page.textContent('#rl-status'), /HKABCDEFGHIJKLMN.*Q7W8E9R2T3Y4U5I6.*10 minutes/);
