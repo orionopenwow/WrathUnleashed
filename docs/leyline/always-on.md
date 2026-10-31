@@ -44,7 +44,7 @@ That's it. The first start takes 5 to 20 minutes (the databases). Your realm is 
 | `vanillaplus` | **Vanilla+**: the original world only, level 60, 1.5x experience, the later races and classes closed. Made to stay up. | the Wrath client, the browser and the launcher |
 | `progression` | 1x from level 1, each character moves through the three eras at their own pace. | the Wrath client, the browser and the launcher |
 | `main` | The full world from level 1 at 3x, with an optional boost. | the Wrath client, the browser and the launcher |
-| `cmangos-1.12.1` | **True Vanilla**: a plain realm on the CMaNGOS core, for the Vanilla client itself. The kit builds it from source on your machine. | their own Vanilla client |
+| True Vanilla (pick it on the Host page or in the launcher) | A plain realm on the CMaNGOS core, for the Vanilla client itself. The kit builds it from source on your machine. | their own Vanilla client |
 
 Vanilla+ plays on the Wrath client, so anyone with the launcher or a browser can join. True Vanilla needs players to have the Vanilla client.
 
