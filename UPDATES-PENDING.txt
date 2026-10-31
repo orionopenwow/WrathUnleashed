@@ -373,3 +373,4 @@
 1130a hostkit Host pack: the console's GM controls (ov_hostctl queue)
 1130b signin Host page: the new host pack
 1130c ship Save to GitHub: the host console in the launcher (GitHub then rebuilds Leyline.exe)
+1131a ship Save to GitHub: fix the launcher build (the core test), the opener swaps in the new Leyline.exe (GitHub then rebuilds Leyline.exe)
