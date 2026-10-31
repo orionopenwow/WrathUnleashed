@@ -217,6 +217,11 @@ end
 
 OVMod.On("wubrand", "ask", function(player) OVMod.SendBrand(player) end)
 
+-- The hello (owner 2026-10-30): WrathUnleashedUI applies its one-time defaults (bars, keys, camera, auto loot, the
+-- level 80 fill, Shift-P) and its instant quests only on a Leyline realm, which it knows by this answer to its ask at
+-- login ("wuhello" "ask" -> "wuhello" "hi" "1"). Every Leyline realm loads this file, brand on or off.
+OVMod.On("wuhello", "ask", function(player) if player then OVMod.Send(player, "wuhello", "hi", "1") end end)
+
 local function onBrandLogin(event, player)
     if not player or not OVMod.BrandOn() then return end
     -- a moment after login, when the addon listens (it also asks itself at PLAYER_ENTERING_WORLD)

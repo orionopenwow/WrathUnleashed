@@ -114,8 +114,10 @@ check("/collections registered", SLASH_WUCOLLECTIONS1 == "/collections" and Slas
 check("micro button after Group Finder, collections icon", micro and micro.after == "LFDMicroButton"
     and micro.atlasSet == "collections" and type(micro.onClick) == "function")
 
--- the first login sets Shift-P once per character
+-- the first login sets Shift-P once per character, on a Leyline realm only (its hello, WrathUnleashedUI.lua W.WhenLeyline)
 for _, f in ipairs(frames) do if f.events.PLAYER_ENTERING_WORLD then f:Fire("OnEvent", "PLAYER_ENTERING_WORLD") end end
+check("another server (no hello yet): Shift-P left alone", clicks["SHIFT-P"] == nil)
+WrathUnleashedUI.SetLeyline()
 check("Shift-P clicks the toggle button", clicks["SHIFT-P"] == "WrathUnleashedCollectionsToggle" and saved > 0)
 check("...once per character", WrathUnleashedUIChar.collectionsKey == true)
 clicks["SHIFT-P"] = nil
