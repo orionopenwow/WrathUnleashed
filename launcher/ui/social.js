@@ -90,6 +90,7 @@
     signedIn = false; state = null; selected = null;
     $("sx-out").hidden = false; $("sx-in").hidden = true; $("sx-code").hidden = true; $("sx-me").textContent = "";
     setBadge(0);
+    renderHome();
   }
 
   function showSignedIn() {
@@ -97,6 +98,35 @@
   }
 
   const STATUS = { game: "In game", launcher: "In the launcher", offline: "Offline" };
+
+  // Home's Friends card (owner 2026-10-30): who is on, in game first; a click opens the chat on Community › Friends.
+  const RANK = { game: 0, launcher: 1, offline: 2 };
+  function goFriends(pid) {
+    if (window.LeylineNav) window.LeylineNav.show("community", false, "friends");
+    if (pid) openChat(pid);
+  }
+  function renderHome() {
+    const box = $("hf-list");
+    if (!box) return;
+    box.textContent = "";
+    if (!signedIn || !state) {
+      box.appendChild(el("p", "hint", "Sign in to see who's on."));
+      const b = el("button", "btn wide", "SIGN IN"); b.type = "button"; b.onclick = () => goFriends();
+      box.appendChild(b);
+      return;
+    }
+    const fs = state.friends.slice().sort((a, b) => (RANK[a.status] ?? 3) - (RANK[b.status] ?? 3) || a.name.localeCompare(b.name));
+    if (!fs.length) { box.appendChild(el("p", "hint", `No friends yet. You are ${state.me.name}#${state.me.tag}`)); return; }
+    for (const f of fs) {
+      const b = el("button", "sx-friend"); b.type = "button"; b.setAttribute("role", "listitem");
+      b.appendChild(el("span", "sx-dot " + f.status));
+      const t = el("span", "sx-ft"); t.append(el("b", "", f.name), el("i", "", where(f))); b.appendChild(t);
+      if (f.unread) b.appendChild(el("span", "badge", String(f.unread)));
+      b.onclick = () => goFriends(f.pid);
+      box.appendChild(b);
+    }
+  }
+  if ($("hf-all")) $("hf-all").addEventListener("click", () => goFriends());
   function where(f) { return f.status === "game" ? `In game: ${f.char} on ${f.realm}` : STATUS[f.status] || ""; }
 
   function render() {
@@ -138,6 +168,7 @@
       list.appendChild(b);
     }
     setBadge(unread);
+    renderHome();
     // blocked
     const bl = $("sx-blocked"); bl.textContent = "";
     for (const x of state.blocked) {
