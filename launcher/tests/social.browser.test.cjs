@@ -143,8 +143,8 @@ test("Home's friends panel: your row, the groups and their counts, folding, sear
   assert.ok(await bob.evaluate((e) => e.classList.contains('st-game')), 'the name in the status colour');
   assert.equal(await bob.locator('.sx-ft i').textContent(), 'In game: Bobbert on WrathUnleashed');
   assert.ok(await page.locator('#hf-list .sx-friend.st-offline').evaluate((e) => getComputedStyle(e.querySelector('.sx-av')).filter !== 'none'), 'offline greyed');
-  assert.equal(await page.locator('#home-friends .sx-av').first().evaluate((e) => e.getBoundingClientRect().width), 44, 'your 44px avatar');
-  assert.equal(await bob.locator('.sx-av').evaluate((e) => e.getBoundingClientRect().width), 40, '40px rows');
+  assert.equal(await page.locator('#home-friends .sx-av').first().evaluate((e) => e.getBoundingClientRect().width), 38, 'your 38px avatar (the slim panel)');
+  assert.equal(await bob.locator('.sx-av').evaluate((e) => e.getBoundingClientRect().width), 32, '32px rows (the slim panel)');
   // search filters the rows, the counts stay the group's
   await page.fill('#hf-q', 'kes');
   assert.deepEqual(await rows('friends'), ['Kestrel']);
@@ -163,7 +163,7 @@ test("Home's friends panel: your row, the groups and their counts, folding, sear
   assert.ok(await page.isHidden('#hf-list .hf-group[data-group="fav"] .hf-rows'), 'still folded after a reload');
   // your menu: Appear offline
   await page.click('#hf-me-btn');
-  assert.deepEqual(await page.$$eval('#hf-me [role="menuitem"]', (b) => b.map((x) => x.textContent)), ['Appear online', 'Appear offline', 'Sign out']);
+  assert.deepEqual(await page.$$eval('#hf-me [role="menuitem"]', (b) => b.map((x) => x.textContent)), ['Appear online', 'Appear offline', 'Manage account', 'Sign out']);
   await page.click('#hf-me [role="menuitem"]:has-text("Appear offline")');
   await page.waitForFunction(() => window.__calls.some(([c, a]) => c === 'social_call' && a.action === 'profile'));
   assert.ok(await page.evaluate(() => window.__calls.some(([c, a]) => c === 'social_call' && a.action === 'profile' && a.args.offline === true)));

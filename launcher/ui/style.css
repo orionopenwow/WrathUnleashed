@@ -197,6 +197,11 @@ svg { flex: none; }
 /* the online pill is off the title bar (owner 2026-10-30: "remove the online bubble"); the realm's state shows in
    the play bar and on Home's Server card. The account button: the same 38px height and radius as the search box. */
 #tb-status { display: none !important; }
+/* owner 2026-10-30: no account button in the title bar (Manage account is in the friends panel's menu, and Settings);
+   the search box runs the whole width of the bar, up to the window buttons */
+#tb-account { display: none !important; }
+.titlebar .search { flex: 1 1 auto; max-width: none; margin-right: 8px; }
+.titlebar .tb-fill { flex: 0 0 0; }
 #tb-account {
   height: 38px; padding: 0 4px 0 4px; gap: 8px; border-radius: var(--t-radius-sm);
   background: var(--t-surface); border: var(--t-border-w) solid var(--t-border);

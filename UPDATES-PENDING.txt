@@ -381,3 +381,4 @@
 1136a ship Save to GitHub: Mods Discover with pictures, a bigger header mark with a drop shadow (GitHub then rebuilds Leyline.exe)
 1137a ship Save to GitHub: Realms made clear, the play bar's realm picker (GitHub then rebuilds Leyline.exe)
 1138a ship Save to GitHub: Home's friends panel in place of the Server and Game client cards (GitHub then rebuilds Leyline.exe)
+1139a ship Save to GitHub: search across the title bar, no account button, the friends panel docked and slim (GitHub then rebuilds Leyline.exe)
