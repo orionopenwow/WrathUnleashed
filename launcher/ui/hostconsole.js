@@ -625,7 +625,10 @@
     ui.linkBtn = btn("Link my server", "btn small", linkServer);
     ui.linkBtn.id = "hc-link";
     link.append(lt, ui.linkBtn);
-    sw.append(top, rune(), lede, mk("p", "hc-bh", "Pick a ruleset"), ui.rules, go, ui.status, link, rune(), mk("p", "hc-bh", "Runs on"), coreChips(linkServer));
+    // before anything else, while the Host pack or Docker is missing (owner 2026-10-30: "make getting the host pack more obvious")
+    ui.ready = mk("div", "hc-ready");
+    ui.ready.hidden = true;
+    sw.append(top, rune(), lede, ui.ready, mk("p", "hc-bh", "Pick a ruleset"), ui.rules, go, ui.status, link, rune(), mk("p", "hc-bh", "Runs on"), coreChips(linkServer));
     const side = mk("aside", "hc-box hc-side");
     side.append(mk("p", "hc-bh", "Guide"), guideList(true));
     wrap.append(sw, side);
@@ -660,7 +663,7 @@
     const name = picked ? (RULESETS[picked] || [picked])[0] : null;
     ui.go.disabled = !ready || !picked;
     ui.go.textContent = name ? `Start ${name}` : "Start";
-    ui.goHint.textContent = !ready ? "Get the Host pack first (Kit & settings)." : !picked ? "Pick a ruleset."
+    ui.goHint.textContent = !ready ? "Get the Host pack first (step 1 above)." : !picked ? "Pick a ruleset."
       : picked === "vanillaplus" ? "Always on: it comes back after a reboot." : "The first start takes 5 to 20 minutes.";
   }
   async function pick(id) {
@@ -681,6 +684,51 @@
     if (!(kit && kit.is_kit)) { say("Get the Host pack first (Kit & settings).", "warn"); return; }
     say("Opening Link my server…");
     try { say(await call("host_link_start"), "ok"); } catch (e) { say(String(e), "bad"); }
+  }
+
+  // the two things a host needs first, as two big numbered steps; gone once both are ready
+  function paintReady(p, d, haveKit) {
+    const box = ui.ready;
+    if (!box) return;
+    const dockOk = !d || d.state === "ready";
+    box.hidden = haveKit && dockOk;
+    if (box.hidden) return;
+    box.replaceChildren(mk("p", "hc-ready-h", "Before you start"));
+    const step = (n, done, title, line, action) => {
+      const r = mk("div", "hc-step" + (done ? " done" : ""));
+      const num = mk("span", "hc-step-n", done ? "✓" : String(n));
+      num.setAttribute("aria-hidden", "true");
+      const t = mk("div", "hc-step-t");
+      t.append(mk("b", "", title), mk("span", "", line));
+      r.append(num, t);
+      if (action) r.append(action);
+      box.append(r);
+    };
+    const av = p && p.available, inst = p && p.installed;
+    let kitBtn = null;
+    if (!haveKit) {
+      const label = inst ? "Use the Host pack" : "Get the Host pack";
+      kitBtn = btn(label, "btn primary hc-step-go", () => getPack(kitBtn, inst && p.kit_dir));
+      kitBtn.id = "hc-get-pack";
+      if (!inst && !av) kitBtn.disabled = true;
+    }
+    const kitLine = haveKit ? "Installed and ready." : inst ? "Downloaded: one click to use it."
+      : av ? `One download${av.size ? `, ${Math.ceil(av.size / 1024)} KB` : ""}: the realm, its console and the relay agent. No game files.`
+      : "Not listed right now: try again in a minute.";
+    step(1, haveKit, "Get the Host pack", kitLine, kitBtn);
+    let dockBtn = null;
+    if (!dockOk) dockBtn = btn("Get Docker", "btn hc-step-go", () => call("open_link", { name: (d.get_url || "").includes("engine") ? "dockerengine" : "docker" }).catch(() => {}));
+    step(2, dockOk, "Get Docker", dockOk ? "Docker is running." : "Free. It runs the realm's servers. Start it once it's installed.", dockBtn);
+  }
+  async function getPack(b, dir) {
+    b.disabled = true;
+    b.textContent = dir ? "Setting up…" : "Downloading…";
+    try {
+      if (!dir) { const r = await call("hostpack_install"); dir = r[1]; }
+      await call("set_host_kit", { path: dir });
+      say("The Host pack is ready.", "ok");
+      if (typeof loadHost === "function") loadHost();   // app.js: re-read the kit
+    } catch (e) { say(String(e), "bad"); b.disabled = false; b.textContent = "Try again"; }
   }
 
   async function loadSetup() {
@@ -705,6 +753,8 @@
       return c;
     };
     const haveKit = kit && kit.is_kit;
+    paintReady(p, d, haveKit);
+    if (ui.ready && !ui.ready.hidden) return;   // the steps say it already: no pills in the corner
     pre.append(chip(haveKit, haveKit ? "Host pack ready" : (p && p.installed ? "Host pack: use it" : "Get the Host pack"), haveKit ? null : () => tab("kit")));
     if (d) pre.append(chip(d.state === "ready", d.state === "ready" ? "Docker ready" : "Get Docker", d.state === "ready" ? null : () => call("open_link", { name: (d.get_url || "").includes("engine") ? "dockerengine" : "docker" }).catch(() => {})));
   }

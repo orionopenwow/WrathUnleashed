@@ -28,7 +28,7 @@ const FAKE = (setUp) => {
         wine: { enabled: false, command: 'wine', prefix: '' } }, official_realm: 'play.openvanilla.app',
         browser_url: 'https://play.openvanilla.app/wrath', windows: true, data_dir: '/tmp' };
       case 'deep_link_take': return null;
-      case 'host_info': return { dir: '/home/me/kit', is_kit: true, has_windows_script: true, has_unix_script: true, problems: [], seeds: [], realm };
+      case 'host_info': return { dir: '/home/me/kit', is_kit: !window.__noKit, has_windows_script: true, has_unix_script: true, problems: [], seeds: [], realm };
       case 'host_console': return { set_up: !!realm, linked: false, name: realm ? realm.name : '', realm_id: realm ? realm.realm_id : '',
         profile: 'vanillaplus', core: 'azerothcore', visibility, signup: 'invite', herokey: false, claim_sent: false,
         relay: 'relay.openvanilla.app', relay_connected: true, relay_error: null, docker: true,
@@ -60,8 +60,11 @@ const FAKE = (setUp) => {
         { id: 'main', label: 'x', version: '3.3.5a', core: 'azerothcore', in_kit: true, clients: [{ id: 'c1', name: 'Mine', path: '/g' }], note: null },
         { id: 'cmangos-1.12.1', label: 'x', version: '1.12.1', core: 'cmangos', in_kit: true, clients: [], note: 'Add your own client of that version on the Clients page first.' },
       ], null];
-      case 'hostpack_info': return { installed: { version: '7' }, available: { version: '7' }, update: false, kit_dir: '/home/me/kit' };
-      case 'docker_info': return { state: 'ready', version: '27.3.1', help: 'Docker is ready.', get_url: 'https://docs.docker.com/desktop/' };
+      case 'hostpack_info': return window.__noKit ? { installed: null, available: { version: '7', size: 412000 }, update: false, kit_dir: '/home/me/kit' }
+        : { installed: { version: '7' }, available: { version: '7' }, update: false, kit_dir: '/home/me/kit' };
+      case 'hostpack_install': window.__noKit = false; return [{ version: '7' }, '/home/me/kit'];
+      case 'set_host_kit': return null;
+      case 'docker_info': return window.__noKit ? { state: 'missing', version: null, help: 'Docker is not installed.', get_url: 'https://docs.docker.com/desktop/' } : { state: 'ready', version: '27.3.1', help: 'Docker is ready.', get_url: 'https://docs.docker.com/desktop/' };
       case 'host_listing': return { tags: [], region: null, language: null, max_players: null, direct: false };
       case 'p2p_flags': return { effective: { p2p_hosting: false, limits: {} }, known: [], local: { overrides: {} }, site: {} };
       case 'open_link': return null;
@@ -249,4 +252,25 @@ test('the console in the Light theme reads the light tokens', async () => {
   const tile = await page.evaluate(() => getComputedStyle(document.querySelector('.hc-tile b')).color);
   assert.equal(tile, 'rgb(20, 24, 32)', 'dark text on light');
   assert.deepEqual(errors, []);
+});
+
+test('no Host pack yet: two big numbered steps come first, and Get the Host pack installs and uses it', async () => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await page.addInitScript(() => { window.__noKit = true; });
+  await page.addInitScript(FAKE, false);
+  await page.goto(INDEX);
+  await page.click('.nav[data-page="host"]');
+  await page.waitForSelector('.hc-ready:not([hidden]) .hc-step');
+  const steps = await page.$$eval('.hc-step', (l) => l.map((x) => [x.querySelector('b').textContent, x.classList.contains('done')]));
+  assert.deepEqual(steps, [['Get the Host pack', false], ['Get Docker', false]]);
+  assert.equal(await page.textContent('#hc-get-pack'), 'Get the Host pack');
+  const order = await page.evaluate(() => { const r = document.querySelector('.hc-ready'), g = document.querySelector('.hc-rulesets');
+    return !!(r.compareDocumentPosition(g) & Node.DOCUMENT_POSITION_FOLLOWING); });
+  assert.ok(order, 'the steps come before the rulesets');
+  if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
+  await page.click('#hc-get-pack');
+  await page.waitForFunction(() => window.__calls.some(([c]) => c === 'set_host_kit'));
+  assert.ok((await calls(page, 'hostpack_install')).length === 1);
+  assert.deepEqual((await calls(page, 'set_host_kit'))[0], { path: '/home/me/kit' });
+  await page.close();
 });
