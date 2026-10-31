@@ -1,6 +1,4111 @@
 {
  "format": 1,
  "note": "tools/hub-index/scout.py's memory: star history, first seen, last verdict; Reddit posts seen. Safe to delete (velocity starts over).",
- "repos": {},
+ "last_run": "2026-10-31",
+ "repos": {
+  "https://github.com/0xbs/premade-groups-filter": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     84
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "ships game-format files: Textures/SettingsClassBar.blp, Textures/SettingsLeaderCrown.blp, Textures/SettingsMissingRoles.blp"
+  },
+  "https://github.com/acolit-sys/questieretailminimapnav": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/adrestie/mod-profession-xp": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/adrianobotti/jrawrcharacterexporter": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/adriftiano/critters-addon-wow-3.3.5a": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/agent-wow/mod-char-widget": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/agent-wow/mod-chat-widget": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/agent-wow/mod-map-widget": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/agent-wow/mod-unit-widget": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/agentbrapurges/fortnite-private-lobby-server": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     12
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "built to sell things (shop, VIP, donations or payments)"
+  },
+  "https://github.com/ahmedrn/arenalfg": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/aiueo00091/server-soft-launcher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/akotz89/wow-playerbots-strategic-director": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/albert-rc/stats-trimmer": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/aldeide/fury-forever-sim": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/aldori15/mod-questie-bridge": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     5
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/alexjonssinabon/wowcool-launcher-linux": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/alterational/azerothcore-ownedcore": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/alukarho/voiceover-launcher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/apodez-dev/wowlk-3.3.5-launcher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/arusiasotto/wow-forever-a840": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/arusiasotto/wow-forever-droiddeck": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     3
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/ashmerra/wehavephones": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     35
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "ships binaries or archives (we only link source): app/src/main/assets/winhandler/openurl.exe, app/src/main/assets/winhandler/winhandler-lite.exe, app/src/wehav…"
+  },
+  "https://github.com/aspollon/mod-playerbots-auctions": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/aspollon/mod-playerbots-immersion": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/astrangedaytoday15-dev/azerothcore-335-field-notes": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/barronzeta/re-roller": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/bboyjohnn/wow-vanilla-adminpanel": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/bboymain/xpbarisland": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/bdot89/dmorphocto": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "a bot, cheat or exploit for other people's realms"
+  },
+  "https://github.com/bellahealfr/bellahealfr": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/bellahealfr/strata": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/bellahealfr/vuhplus": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/bellahealfr/zenith": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/bemental77/wow_forever_android_apk": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/benmills/magicmap": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     3
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/blamacfly/homecraft-vanilla": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/bodify/betterblizzplates": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     44
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "ships game-format files: media/ABILITY_SAP.blp, media/ability_warrior_shatteringthrow.blp, media/blizzTex/UIFrameIconMask.BLP"
+  },
+  "https://github.com/brachanc/dbceditor": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "lure",
+   "reason": "a look-alike of https://github.com/WowDevTools/WDBXEditor (same or near-same name, another owner)"
+  },
+  "https://github.com/buildthehomelab/wow-addon-dbm": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-ci": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-beast-collection": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-bot-lfg-accept": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-bot-quiet-rolls": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-cache-version": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-combat-watchdog": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-dungeon-brd": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-forever-journal": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     5
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-forever-periodic-crit": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-forever-torch": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-forever-world-buffs": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-gathering-tools": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-legacy": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-lfg-progression": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-lost-legendaries": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-raid-clear": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-raid-finder": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-raid-lockout": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-retail-collection": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-retail-pets": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-retail-professions": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-retail-warlock-pets": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/buildthehomelab/wow-mod-vendor-item-preload": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/canon-tech/canon-launcher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/caoxkitty/wowcraft-forever-cost-tracker": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/celguar/spp-classics-cmangos": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     476
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "ships binaries or archives (we only link source): Addons/Achiever-1.12.zip, Addons/Achiever-2.4.3.zip, Addons/EngBags-1.12.zip"
+  },
+  "https://github.com/checkov23/foreverdungeonroutes": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/christianjacobsen/azerothcore-helm": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/christop700/azerothcore-wotlk-docker-solo-lab": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/cjwhiskers/triggerbar": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/clawdroppin/azerothcore-servermanager": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/cmangos/playerbots": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     141
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/codenolimits/dreamnova-ugc-studio": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/codxbre/wow-mobile-bannerhub": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/cosmiccuddle/n-addon-collection": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/csfh/wow.oma": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/cyberdid/azeroth-worldweaver": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/dadec666/tomtom-3.3.5a-modern": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/damienselarez-creator/mod-wow-compagnon": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/darckrovert/mod-anticheat": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "lure",
+   "reason": "a look-alike of https://github.com/azerothcore/mod-anticheat (same or near-same name, another owner)"
+  },
+  "https://github.com/darckrovert/mod-llm-chatter": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "lure",
+   "reason": "a look-alike of https://github.com/Hokken/mod-llm-chatter (same or near-same name, another owner)"
+  },
+  "https://github.com/darckrovert/mod-playerbots": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "lure",
+   "reason": "a look-alike of https://github.com/mod-playerbots/mod-playerbots (same or near-same name, another owner)"
+  },
+  "https://github.com/darckrovert/projectjaina_abbreviatedstatus": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/darckrovert/projectjaina_admintools": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/darckrovert/projectjaina_carbonite": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/darckrovert/projectjaina_dbm": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/darckrovert/projectjaina_dragonflightui": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "made for the current game, not a classic client"
+  },
+  "https://github.com/darckrovert/projectjaina_gearscore": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/darckrovert/projectjaina_gmgenie": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/darckrovert/projectjaina_graphics": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/darckrovert/projectjaina_intiobjgps": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/darckrovert/projectjaina_lorehud": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/darckrovert/projectjaina_multibot": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/darckrovert/projectjaina_polyglot": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/darckrovert/projectjaina_pridetrace": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/darckrovert/projectjaina_radio": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/darckrovert/projectjaina_store": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "built to sell things (shop, VIP, donations or payments)"
+  },
+  "https://github.com/darckrovert/projectjaina_talented": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/darckrovert/projectjaina_tbcbalance": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/darckrovert/projectjaina_voice": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/darckrovert/projectjaina_wardrobe": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/darksoe/dbcraft": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/ddingning/woworoot": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/deadlybossmods/dbm-dungeons": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     32
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "made for the current game, not a classic client"
+  },
+  "https://github.com/deadlybossmods/deadlybossmods": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     281
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "ships game-format files: DBM-Core/textures/CryptFiendBurrow.blp, DBM-Core/textures/CryptFiendUnBurrow.blp, DBM-Core/textures/arrows/Arrow.blp"
+  },
+  "https://github.com/deepcapt/ahledger-sync": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/denohearth/denomap": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/digitalminddesign/launcher-dauntless-private-server": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     3
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/dinkleberrrg/mikscrollingbattletext": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/dlss5-one-click/dlss5-one-click": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/dopey99101/wow-3.3.5a-launcher-updates": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/dragnogd/instance-achievement-tracker": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     16
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/dudemcbro/mod-dk": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/dukulwow/bigchatbox": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/dustinhendrickson/mod-classless-wildcard": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     56
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/ebreen/azeroth-survivors-ps5": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/eldodeldo/eldoui": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/electrobutterfly/mod-afk-kicker": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/electrobutterfly/mod-ip-limiter": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/electrobutterfly/mod-playerbots-auctioneer": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/electrobutterfly/trinitycore-afk-kicker": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/electrobutterfly/trinitycore-ip-limiter": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/ericssm/mod-playerbots-city-life": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/errordnk/altbot": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/ever2023/sebzero-downloads": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "a repack, client patch or client download"
+  },
+  "https://github.com/evil-morfar/rclootcouncil2": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     23
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/eviltactician/ac-commit-report": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/faroke/echotomefinder": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/ferrancasbasp/wow_rpg_next": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/filinodz/forevermegasqlpack": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/firzaos-arch/pixel-launch-sawit-wowo": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/fitzforge/polestar": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     172
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "ships game-format files: rust/tests/golden/nav-layers/roads-in/sources/casc/synthetic/1.60.0.99999/9000.blp, rust/tests/golden/nav-layers/roads-in/sources/casc…"
+  },
+  "https://github.com/frontmage/wowbox": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/fun3588/firestorm-tww-multi-account-login": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/funmonkeydev/wowperulandgearexport": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/g7138580/mod-guild-expansion": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     6
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/g7138580/mod-lore-codex": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     6
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/gadaffihub/wow-forever-model-viewer": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/galacticwandereraddon/battlefieldinfo": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     6
+    ]
+   ],
+   "verdict": "watch",
+   "reason": "addon for another client build (Interface 11509)"
+  },
+  "https://github.com/galikai/wow-forever-dressing-room-android": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/garretonzo/mod-hardcore-high-risk": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/garwin00/is-wow-forever-out-yet": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/geedanny1985/coa-playerbots": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "lure",
+   "reason": "a look-alike of https://github.com/mod-playerbots/mod-playerbots (same or near-same name, another owner)"
+  },
+  "https://github.com/geeksterer/savedlockouts": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/geraldlol/witchcraft": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/glitterfartz/wpp-vscode-syntax": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/graeme02015-ctrl/singlebuttonrotation": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/greenya/classicua": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     24
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/gregoryjayuk/vmangos-toolkit": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/grimfalladdonfixes/recount-grimfall": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/gsehun811-cloud/mod-playerbots-llm-commander": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/gsehun811-cloud/mod-raid-manager": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/gswxy/gswxy-realm": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/harakty/forevertools": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/hastecraft/super-tweaks": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     4
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/hearts47/runpace": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/hemantpatle153-ops/wowcity-downloads": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/heyitsbench/mod-worgoblin": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     40
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/highest-v/ray": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/highlylikely2169-lgtm/questcompass": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/hokken/mod-llm-chatter": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     103
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/iamstupidplaceholder/benilla-wasm": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/ildourol/mod-all-flightpaths": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/ildourol/mod-aoe-loot": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "lure",
+   "reason": "a look-alike of https://github.com/azerothcore/mod-aoe-loot (same or near-same name, another owner)"
+  },
+  "https://github.com/ildourol/mod-playerbots-artisans": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/ildourol/mod-playerbots-city-life": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/ildourol/mod-playerbots-pvp-life": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/ildourol/playerbots-life-dashboard": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/ilusixn/coa-item-search": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/imrooniel/azerothcore-wotlk-necromancer-fixed": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/irgis25/capybara-launcher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/italicninja/mod-cortex-chat": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/italicninja/mod-forge": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/jacobjdowning/battlenet-umu": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/jakobzs/voa25-3.3.5": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/jaredgei/wow-forever-android": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     121
+    ]
+   ],
+   "verdict": "watch",
+   "reason": "no sign of a supported client build"
+  },
+  "https://github.com/jedrimos/hotlk-launcher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/jeff-arn/wow-model-viewer": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/jibay442/forever_docker": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     33
+    ]
+   ],
+   "verdict": "watch",
+   "reason": "no sign of a supported client build"
+  },
+  "https://github.com/jordanburch101/smooth-experience-bar": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "made for the current game, not a classic client"
+  },
+  "https://github.com/jrad7/mod-dungeon-clear": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     118
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/jzmlucas/wow-wotlk-playerbots-herald": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/ka6a4ekk/botlauncher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/karrz1/karrz-playerbots-wow-forever": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     4
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/kbtoy/mod-last_name": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/kcham01/raidscribe": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/kesaobscura/fullmanaforever": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/kesaobscura/verticrop": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/ketho-wow/kethodoc": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     28
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/kevinn2709/meca-launcher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/khaoz-dev/khaoz-launcher-releases": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/killm12321idgard/rpocket-team-mod-playerbots-portable": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     32
+    ]
+   ],
+   "verdict": "lure",
+   "reason": "one of 4 new look-alike repos by different owners with exactly 32 stars each"
+  },
+  "https://github.com/kk8o/wuxian-workshop": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     15
+    ]
+   ],
+   "verdict": "watch",
+   "reason": "addon for another client build (Interface 16001)"
+  },
+  "https://github.com/klein187/uo-offline": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     68
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "built to sell things (shop, VIP, donations or payments)"
+  },
+  "https://github.com/krakenduke/rpocket-wow-addon-unbot": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     32
+    ]
+   ],
+   "verdict": "lure",
+   "reason": "one of 4 new look-alike repos by different owners with exactly 32 stars each"
+  },
+  "https://github.com/l333t/mf-route-tool": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/l333t/sp-pull": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/leaf-spring/mod-character-scale": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/leaf-spring/mod-draenei-druid": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/leaf-spring/mod-druid-travel-speed": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/leaf-spring/mod-gnome-priest": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/leaf-spring/mod-human-hunter": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/leaf-spring/mod-nightelf-warlock": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/leaf-spring/mod-tauren-mage": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/leizer-g7/mod-global-progression-authority": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/lemonolade/lemonwow": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "a repack, client patch or client download"
+  },
+  "https://github.com/lightforgeproject/lightforge": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     97
+    ]
+   ],
+   "verdict": "watch",
+   "reason": "no sign of a supported client build"
+  },
+  "https://github.com/lightfrost/3.3.5-interface-files-engb": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/lipsofjolie/simplechatfilter": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/locus313/mod-guild-discord": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/longvo92/blf2mat": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/lordcaster/resocket-wow-lk": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     32
+    ]
+   ],
+   "verdict": "lure",
+   "reason": "one of 3 new look-alike repos by different owners with exactly 32 stars each"
+  },
+  "https://github.com/ltthtrunghau/cap80-client-updates": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/lukewilson1002-debug/azeroth-unbound": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/lyracoreproject/wow_world_messages": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/malektha-pixel/elvui_multibot": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/mama128/mod-epic-bosses": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/mama128/mod-global-scaling": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/manatactical/mod-mana-loot-pet": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/manatactical/mod-mana-speedflying": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/marccram/wowza": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/markgravity/improvedforever": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/masterskyat57941/archeage-resocket-playerbots": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     32
+    ]
+   ],
+   "verdict": "lure",
+   "reason": "one of 3 new look-alike repos by different owners with exactly 32 stars each"
+  },
+  "https://github.com/matou1118/az335-2026ms-battleground": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/matou1118/matou2026ms-battleground": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/mattjcr/azerothcore-single-player-auto-installer": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/mekbits/mod-lfg-expansion": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/mekbits/mod-pandaren": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "a repack, client patch or client download"
+  },
+  "https://github.com/mekbits/mod-summon-friend": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/midnightzora737r/cmangos-rpocket-helm": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     32
+    ]
+   ],
+   "verdict": "lure",
+   "reason": "one of 4 new look-alike repos by different owners with exactly 32 stars each"
+  },
+  "https://github.com/misakimiku2/cbjq-local-server": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/mod-playerbots/mod-playerbots": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1202
+    ]
+   ],
+   "verdict": "index",
+   "reason": "passes the index rules: the daily build will propose it"
+  },
+  "https://github.com/mooreatv/auctiondb": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     24
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/mooreatv/bettervendorprice": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     23
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "made for the current game, not a classic client"
+  },
+  "https://github.com/mooreatv/mama-multiboxing": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     19
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "a bot, cheat or exploit for other people's realms"
+  },
+  "https://github.com/moust4ki/dingguidewowforever": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/mr-cee/swgemu-launcher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "a repack, client patch or client download"
+  },
+  "https://github.com/mraktiv/talkmancer": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/mranonymz/wow-imito": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     30
+    ]
+   ],
+   "verdict": "watch",
+   "reason": "the Android port: release-only APK with no source in the repo (built from wow-mobile and Winlator), downloads a whole game client from a ZIP link and updates m…"
+  },
+  "https://github.com/mrguato/muster": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/mshkolenko/algalon-launcher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/msromike/cues": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/n0rule/knightlaunchercustom": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/n3rdyguy/wow-classic-launcher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/nalhilal/gamenative-wow-classic-era": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "made for the current game, not a classic client"
+  },
+  "https://github.com/neticsoul/dragonui": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     208
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "ships game-format files: DragonUI/Textures/ActionBars/mainmenubar.blp, DragonUI/Textures/ActionBars/mechanical2.blp, DragonUI/Textures/ActionBars/uiactionbar.b…"
+  },
+  "https://github.com/nexartgroup/elvui_bagfilter": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/nexartgroup/professionmenu": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/nexartgroup/transmog": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/nicholasc2099-lab/lu-launcher-releases": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/noisedlabs/noised": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/nolt/mod-polish-translation": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/nom0re/cell-wotlk": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     20
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/nom0re/weakauras-wotlk": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     118
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/nom0re/wow-3.3.5a-addons": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     454
+    ]
+   ],
+   "verdict": "watch",
+   "reason": "a bundle of other people's addons re-uploaded, not a project of its own"
+  },
+  "https://github.com/nom0re/wow-3.3.5a-addons2": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     30
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/oddity-git/wow-pad": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     15
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/oreocide/mod-playerbots": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "lure",
+   "reason": "a look-alike of https://github.com/mod-playerbots/mod-playerbots (same or near-same name, another owner)"
+  },
+  "https://github.com/orionopenwow/openvanilla-art-tools": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/orionopenwow/openvanilla-launcher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     4
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/orionopenwow/openvanilla-server": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     3
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/oriont-ed/arms-pvp-warrior-3.3.5a-my-favorite-addons.": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/ornfelt/wander_nodes_util": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     21
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/ouf-wow/ouf": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     239
+    ]
+   ],
+   "verdict": "watch",
+   "reason": "addon for another client build (Interface 120105)"
+  },
+  "https://github.com/p3lim-wow/inomena": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     22
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/palanimforever/xpforever": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/pallaladin/forever-mobile": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/panleo945-bot/wowme": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/pealz1/nova-ram": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/pentsec/foreverlogin": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     17
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "ships game-format files: Interface/ForeverLogin/buttons/128-redbutton-arrowdown-disabled.blp, Interface/ForeverLogin/buttons/128-redbutton-arrowdown-highlight.…"
+  },
+  "https://github.com/phanty78/mod-hunger-thirst": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/phanty78/mod-overhaul-combat-ai": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/pixelcattt/forever-launcher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/pjerra/mod-playerbots-coa": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/pjsalty/wc3-launcher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/poseyjoseph-cloud/bot-brigade": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/prem7040/https-app.crewai.com-studio-v2-projects-81e7790f-f339-453d-b68c-66b74dbc1faf-editor": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/qoatzelcoat/wow-forever-android-addon-manager": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/questie/questie": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1116
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "ships game-format files: Icons/available.blp, Icons/available_gray.blp, Icons/borders.blp"
+  },
+  "https://github.com/r3dg0l1ad/mod-additional-races": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/r3dg0l1ad/mod-lvl1-heirlooms": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/r3dg0l1ad/mod-quest-teleport": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/ragedunicorn/wow-classic-gearmenu": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     61
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "ships game-format files: assets/logo_ragedunicorn.blp"
+  },
+  "https://github.com/rdlc-arch/camerapitch-3.3.5a": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/rdlc-arch/nodragcam-3.3.5a": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/rdygaming/hated-wow-mcp": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     18
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "made for the current game, not a classic client"
+  },
+  "https://github.com/realmfirst/wow-forever-launch-data": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/realui/realui": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     86
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "ships game-format files: RealUI/Media/CopyPaste.BLP, RealUI/Media/Doodads/PetBar_Center.BLP, RealUI/Media/Doodads/PetBar_Sides.BLP"
+  },
+  "https://github.com/resenpai/quest-voices-ru": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "made for the current game, not a classic client"
+  },
+  "https://github.com/rockanon/dbc7-editor": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/romaindnd89-cmd/prof-bard": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/roseex/alisios-launcher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/rosswillden/wayward-crafting-plan": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/russianranger/esteria_android": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/rusty-key/spoken-wow": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     63
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "ships game-format files: addons/Spoken/Textures/BackgroundGradient.blp, addons/Spoken/Textures/Book.blp, addons/Spoken/Textures/MinimapButton.blp"
+  },
+  "https://github.com/rwden/romangholauncher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/s1aai/firestorm-wine-fix": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/sagiroth/tortoisebots": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     38
+    ]
+   ],
+   "verdict": "index",
+   "reason": "passes the index rules: the daily build will propose it"
+  },
+  "https://github.com/saqra1/mod-arena-healthstones": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/sethnubth/naercounter": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/sethnubth/naerzradar": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/sethnubth/raidpolice": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/sethnubth/sethdetectorfishparry": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/sethnubth/sethleatcore": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/sethnubth/sethraidarbiter": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/seyoung7432-netizen/14daylauncher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/sfx-wow/masque": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     54
+    ]
+   ],
+   "verdict": "watch",
+   "reason": "addon for another client build (Interface 11509)"
+  },
+  "https://github.com/shard/wrath-mcp": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/shoemin/wowdatastudio": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/simianjake/mod-acsdk": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/skylake-unreachable/action-bar-saver-ultimate-wow-3.3.5a-addon": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/skylake-unreachable/bindpad-ultimate-wow-3.3.5a-addon": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/skywardpixel/forever-keymap": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/smealm/viewlight": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/smhgzll/wow-vulkan-probe": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/solfood/mod-guild-bridge": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/srrmke/wow-addons-sandbox": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     6
+    ]
+   ],
+   "verdict": "watch",
+   "reason": "no sign of a supported client build"
+  },
+  "https://github.com/strhercules/customracemodule": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/strhercules/wowlauncher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     3
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/subhamay-bhattacharyya/aws-lab16-alb-private-targets": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/sultonmrp/mod-playerbot-mod3": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/suppdiff/fastflood": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/suprepupre/luaboost": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     56
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/suprepupre/wow-optimize": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     128
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/syntax555/mod-playerbots-portable": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/tadamczak/bootymap": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/tagban/xivlegacy-launcher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/tembugi/forevercountdown": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/theforeverguides/wow-forever-data": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/themousenest/collectionator": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     15
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/themousenest/journalator": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     17
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/thiagosbarreto/mod-necro-home": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/thiagosbarreto/mod-travelers-recall": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     15
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/tieruyt/metin2-playerbots": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     87
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "licence is not open (non-commercial or no-derivatives terms, or a rider on an open licence)"
+  },
+  "https://github.com/tntdruid/azerothcore-two-realms": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/tntdruid/mod-arac-playerbots": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/tntdruid/mod-drawestuff": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/tntdruid/mod-questparty": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/tntdruid/mod_zone_scaling_playerbots": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/toracles/spotiwow-octo": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/trickerer/trinity-bots": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     574
+    ]
+   ],
+   "verdict": "watch",
+   "reason": "no open licence file"
+  },
+  "https://github.com/tsumilo/disasterzone-dev": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/tuanus/candybuckets-3.3.5a": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/tummie-ffxi/cleopatra-launcher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/twintop/twintopinsanitybar": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     19
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/undeadrogue/wow-3.3.5a-addons": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "lure",
+   "reason": "a look-alike of https://github.com/NoM0Re/WoW-3.3.5a-Addons (same or near-same name, another owner)"
+  },
+  "https://github.com/uprightbass360/azerothcore-realmmaster": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     17
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/vgermods/pawn": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     34
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/voxphantom98/mod-personal-loot": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     2
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/weakauras/weakauras2": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     1446
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "ships game-format files: WeakAuras/Media/Textures/Border_DropShadow.blp, WeakAuras/Media/Textures/Statusbar_Clean.blp, WeakAuras/Media/Textures/Statusbar_Strip…"
+  },
+  "https://github.com/wetxius/shestakui": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     25
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/whispermmepub/wow-reader-plus": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/wishmaster117/multibot-chatless": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     65
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "ships game-format files: Icons/addclass_deathknight.blp, Icons/addclass_druid.blp, Icons/addclass_hunter.blp"
+  },
+  "https://github.com/withoutmyth/rpocket-lrdpsychochains-wow-hub": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     32
+    ]
+   ],
+   "verdict": "lure",
+   "reason": "one of 4 new look-alike repos by different owners with exactly 32 stars each"
+  },
+  "https://github.com/wowsilicon/wowsilicon": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     167
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "ships binaries or archives (we only link source): Sources/WoWSiliconSwift/Resources/Patching/d9vk/d3d9.dll, Sources/WoWSiliconSwift/Resources/Patching/dxvk-kos…"
+  },
+  "https://github.com/wyattabuntjer/ayn-thor-wow-launcher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     16
+    ]
+   ],
+   "verdict": "watch",
+   "reason": "no sign of a supported client build"
+  },
+  "https://github.com/xian55/trinitycore-docker": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/xiaoyu20062032-ai/forleijun": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     4
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/xjadeum/echoes-of-the-worldsoul-resocket": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     32
+    ]
+   ],
+   "verdict": "lure",
+   "reason": "one of 3 new look-alike repos by different owners with exactly 32 stars each"
+  },
+  "https://github.com/xorbis/xorwow-launcher": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/xrisdevs/wenilla-wotlk-with-bots": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/xuerian/xloot": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     17
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/ysaaltgh/thornwood-vale": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/yzsp-studio/digital-product-promo-generator": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "built to sell things (shop, VIP, donations or payments)"
+  },
+  "https://github.com/yzsp-studio/pet-keynote-video": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "built to sell things (shop, VIP, donations or payments)"
+  },
+  "https://github.com/z3eg/playerbots_wtf": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/zaicev101/botdirector": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/zensenshi/thor-wow-arm64-proton": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     4
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/zhengpeiru21/mod-individual-progression": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     291
+    ]
+   ],
+   "verdict": "rejected",
+   "reason": "ships binaries or archives (we only link source): optional/dbc.7z, optional/patch-S.7z, optional/patch-V.7z"
+  },
+  "https://github.com/zorkzorkus/mod-loot-boost": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/zsurge/mod-command-audit": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://github.com/zurroh/spiralnavigator": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  },
+  "https://gitlab.com/debbie827402/world-of-warcraft-desktop": {
+   "first_seen": "2026-10-31",
+   "stars": [
+    [
+     "2026-10-31",
+     0
+    ]
+   ],
+   "verdict": "unprobed",
+   "reason": "not probed this run (below the top 40)"
+  }
+ },
  "reddit": {}
 }
