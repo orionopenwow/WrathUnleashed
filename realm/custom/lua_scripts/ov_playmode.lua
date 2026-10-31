@@ -4,8 +4,11 @@
 -- realm mode arrives here one of two ways, and both end in the same start:
 --   * the browser: /wrath?go=mode:<id>. The portal's sign-in records it for the game account over SOAP
 --     (stream/playmodes.py go_intent):   ovplay go <ACCOUNT> <id>     (console / SOAP only)
---     The reply starts "ovplay ok" when it was taken. It is acted on at that account's next login (or at once if a
---     character is online), used once, and forgotten after 30 minutes.
+--     The reply starts "ovplay ok" when it was taken. It is acted on at once if a character is online, else at the
+--     account's first login after it was saved, and only if that is within LOGIN_FRESH (5 minutes) of the click;
+--     used once, and forgotten after TTL (10 minutes). A later login (a reconnect after a disconnect, another
+--     character, a click from long ago) never starts a round by itself: it says "Waiting for you: ... type
+--     .playmode <id>" (smoke 2026-10-30: a character was dropped into Bumper Balls on entering the world).
 --   * the desktop launcher: it writes a small addon into the player's own client (LeylinePlay, see
 --     docs/leyline-modes-play.md) that asks once, after login, on the OVMOD channel: mod "wuplay", "go <id>".
 --     That is the same as typing .playmode <id>: a player asking to play a minigame, which anyone may do.
@@ -34,7 +37,8 @@ end
 
 local MOD = "wuplay"
 local TAG = "|cff66ccff[Play]|r "
-local TTL = 1800             -- seconds an intent waits
+local TTL = 600              -- seconds an intent waits (for .playmode)
+local LOGIN_FRESH = 300      -- seconds after the click within which the first login starts it by itself
 local LOGIN_DELAY = 7000     -- after ov_go.lua (5 s) and ov_workshop.lua (6 s)
 local GAP = 5                -- seconds between one player's starts
 
@@ -47,7 +51,7 @@ local MODES = {
     ["community"] = { title = "Community modes", open = true },
 }
 
-local pending = {}   -- account -> { mode, exp }
+local pending = {}   -- account -> { mode, exp, set (when it was saved), seen (a login has had its turn) }
 local last = {}      -- guid -> os.time() of the last start
 local fresh = {}     -- guid -> true during a character's first login
 
@@ -97,6 +101,7 @@ local function intentOf(account)
             local id, left = q:GetString(0), tonumber(q:GetInt32(1)) or 0
             if validMode(id) and left > 0 then
                 g = { mode = id, exp = now() + math.min(left, TTL) }
+                g.set = g.exp - TTL
                 pending[account] = g
             end
         end
@@ -172,7 +177,9 @@ local function act(player, why)
     local g = intentOf(account)
     if not g then return end
     local m = MODES[g.mode]
-    if why == "login" and fresh[player:GetGUIDLow()] then
+    -- only an ask ("set": online now, or .playmode) starts it at once; a login only when it is the first one
+    -- after the click, soon after it, and not a brand new character's first login
+    if why ~= "set" and (why == "again" or fresh[player:GetGUIDLow()] or now() - (g.set or 0) > LOGIN_FRESH) then
         say(player, "Waiting for you: " .. m.title .. ". Type |cffffff00.playmode " .. g.mode .. "|r when you're ready.")
         return
     end
@@ -222,7 +229,7 @@ local function consoleCommand(command, handler)
         reply("ovplay ok: " .. name .. " cleared")
         return false
     end
-    pending[account] = { mode = id, exp = now() + TTL }
+    pending[account] = { mode = id, exp = now() + TTL, set = now() }
     authExec(string.format("REPLACE INTO ov_playmode_intents (account_id, mode, expires_at) "
         .. "VALUES (%d, '%s', UNIX_TIMESTAMP() + %d)", account, id, TTL))
     local p = onlineByAccount(account)
@@ -257,11 +264,14 @@ end
 local function onFirstLogin(event, player) fresh[player:GetGUIDLow()] = true end
 
 local function onLogin(event, player)
-    if not intentOf(player:GetAccountId()) then
+    local g = intentOf(player:GetAccountId())
+    if not g then
         fresh[player:GetGUIDLow()] = nil
         return
     end
-    later(player, LOGIN_DELAY, "login")
+    -- the first login after the click has its turn; any later one (a reconnect, another character) only reminds
+    later(player, LOGIN_DELAY, g.seen and "again" or "login")
+    g.seen = true
 end
 
 OVMod.On(MOD, "go", function(player, data) if #(data or "") <= 40 then ask(player, data) end end)
@@ -271,5 +281,6 @@ RegisterPlayerEvent(30, onFirstLogin)  -- PLAYER_EVENT_ON_FIRST_LOGIN
 RegisterPlayerEvent(42, onCommand)     -- PLAYER_EVENT_ON_COMMAND
 
 -- for stream/tests/test_ov_playmode.lua
-OV_PLAYMODE_TEST = { MODES = MODES, pending = pending, last = last, act = act, ask = ask, validMode = validMode, TTL = TTL }
+OV_PLAYMODE_TEST = { MODES = MODES, pending = pending, last = last, act = act, ask = ask, validMode = validMode, TTL = TTL,
+    LOGIN_FRESH = LOGIN_FRESH }
 return OV_PLAYMODE_TEST
