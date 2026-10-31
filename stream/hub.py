@@ -1410,26 +1410,60 @@ class Hub:
         except Exception:   # noqa: BLE001
             return False
 
-    def featured_mod(self) -> str:
-        """The wide featured-mod showcase under the numbers: the modpack's screenshot full-bleed under a soft vignette, the
-        words on a panel over it (under it on a phone), a link out (its authors host it; no Install: we neither host nor
-        check it). Hidden with the game data killswitch. HUB_JS eases the picture as it scrolls by (never with reduced
-        motion)."""
+    def featured_slides(self, items: list | None = None) -> list[dict]:
+        """The featured row's slides (owner 2026-10-30: "a sliding preview too of the best latest mods"): the featured
+        modpack first (linked out: its authors host it), then the best and newest mods with a real picture, in the
+        gallery's ranked order. At most six."""
+        f = FEATURED_MOD
+        out = [{"label": f["label"], "title": f["title"], "line": f["line"], "href": f["url"], "button": f["button"], "ext": True,
+                "note": f["note"], "credit": f["credit"],
+                "img": (f"/wrath/art/leyline-shot-{f['key']}.webp", f["w"], f["h"], f["alt"])}]
+        for t in self.gallery_tiles(items):
+            if t["k"] != "mods" or not t.get("img") or len(out) >= 6:
+                continue
+            view = next((h for h, _l, prim in t["acts"] if not prim), t["href"])
+            out.append({"label": t["label"], "title": t["title"], "line": t["line"], "href": view, "button": "See the mod",
+                        "ext": False, "note": "", "credit": t["credit"], "img": t["img"]})
+        return out
+
+    def featured_mod(self, items: list | None = None) -> str:
+        """The wide featured showcase under the numbers, now a slider: each slide a picture full-bleed under a soft
+        vignette with the words on a glass panel over it (under it on a phone). No script: a sideways scroll that snaps
+        slide by slide; HUB_JS adds the dots and arrows, turns the slides every 7 s (not with reduced motion, and never
+        while hovered, focused or off screen) and eases the picture as it scrolls by. The whole row hides with the game
+        data killswitch, like every game picture."""
         if not self.featured_mod_ok():
             return ""
         e = html.escape
-        f = FEATURED_MOD
-        src = f"/wrath/art/leyline-shot-{f['key']}.webp"
-        return ('<section class="hb-coa hb-rv" id="featured-mod" aria-labelledby="hb-coa-h">'
-                f'<div class="hb-coa-pic"><img src="{src}" alt="{e(f["alt"])}" width="{f["w"]}" height="{f["h"]}" loading="lazy" '
-                'decoding="async"></div><div class="hb-coa-in"><div class="hb-coa-t">'
-                f'<p class="hb-coa-k"><span aria-hidden="true"></span>{e(f["label"])}</p><h2 id="hb-coa-h">{e(f["title"])}</h2>'
-                '<!-- TODO(owner): the featured modpack\'s final copy -->'
-                f'<p class="hb-coa-l">{e(f["line"])}</p>'
-                f'<p class="hb-coa-a"><a class="hb-cta sm" href="{e(f["url"])}" rel="{FEATURED_REL}" target="_blank">{e(f["button"])}'
-                '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8M17 14v5H5V7h5"/></svg></a></p>'
-                f'<p class="hb-coa-n">{e(f["note"])}</p></div>'
-                f'<p class="hb-coa-cr">{e(f["credit"])}</p></div></section>')
+        arrow = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8M17 14v5H5V7h5"/></svg>'
+        slides = self.featured_slides(items)
+        out = []
+        for n, sl in enumerate(slides):
+            src, w, h, alt = sl["img"]
+            hid = ' id="hb-coa-h"' if n == 0 else ""
+            link = (f'<a class="hb-cta sm" href="{e(sl["href"])}" rel="{FEATURED_REL}" target="_blank">{e(sl["button"])}{arrow}</a>'
+                    if sl["ext"] else f'<a class="hb-cta sm" href="{e(sl["href"])}">{e(sl["button"])}</a>')
+            # the modpack's screenshot fills the slide; a mod's smaller picture is framed on the right over a soft blur of itself
+            pic = (f'<div class="hb-coa-pic"><img src="{e(src)}" alt="{e(alt)}" width="{int(w)}" height="{int(h)}" loading="lazy" decoding="async"></div>'
+                   if n == 0 else
+                   f'<div class="hb-coa-pic soft" aria-hidden="true"><img src="{e(src)}" alt="" width="{int(w)}" height="{int(h)}" loading="lazy" decoding="async"></div>'
+                   f'<figure class="hb-coa-fr"><img src="{e(src)}" alt="{e(alt)}" width="{int(w)}" height="{int(h)}" loading="lazy" decoding="async"></figure>')
+            out.append(f'<div class="hb-coa-s{"" if n == 0 else " mod"}" role="group" aria-roledescription="slide" aria-label="{n + 1} of {len(slides)}">'
+                       f'{pic}<div class="hb-coa-in"><div class="hb-coa-t">'
+                       f'<p class="hb-coa-k"><span aria-hidden="true"></span>{e(sl["label"])}</p><h2{hid}>{e(neutral(sl["title"]))}</h2>'
+                       + ('<!-- TODO(owner): the featured modpack\'s final copy -->' if n == 0 else "")
+                       + f'<p class="hb-coa-l">{e(neutral(sl["line"]))}</p><p class="hb-coa-a">{link}</p>'
+                       + (f'<p class="hb-coa-n">{e(sl["note"])}</p>' if sl["note"] else "")
+                       + f'</div><p class="hb-coa-cr">{e(sl["credit"])}</p></div></div>')
+        nav = ""
+        if len(slides) > 1:
+            dots = "".join(f'<button type="button" class="hb-coa-dot" aria-label="Slide {n + 1}"></button>' for n in range(len(slides)))
+            nav = ('<div class="hb-coa-nav" hidden><button type="button" class="hb-coa-arr prev" aria-label="Previous">'
+                   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>'
+                   f'<span class="hb-coa-dots">{dots}</span><button type="button" class="hb-coa-arr next" aria-label="Next">'
+                   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button></div>')
+        return ('<section class="hb-coa hb-rv" id="featured-mod" aria-labelledby="hb-coa-h" aria-roledescription="carousel">'
+                f'<div class="hb-coa-track" tabindex="0">{"".join(out)}</div>{nav}</section>')
 
     def counters(self, got, items: list) -> str:
         """Realms, players and mods: the final numbers in the page (no script, reduced motion: just these); HUB_JS counts
@@ -1844,7 +1878,7 @@ class Hub:
             '<p class="hb-sub-h">One launcher for every classic client and every server: your game, your realm, one click.</p>'
             # no buttons under the line (owner 2026-10-30): Download and Play are in the side menu
             '<p class="hb-note">Free and open source, for Windows, macOS and Linux. Nothing to buy.</p></section>'
-            + self.ticker(got) + self.realm_section(got) + self.how_strip() + self.counters(got, items) + self.featured_mod() + self.features(got)
+            + self.ticker(got) + self.realm_section(got) + self.how_strip() + self.counters(got, items) + self.featured_mod(items) + self.features(got)
             + self.posters(got)
             + f'<div class="hb-pair">{self.mod_of_week(items)}{self.herokey_teaser(got)}</div>'
             + self.creator_spotlight(items) + self.news_strip()
@@ -2926,8 +2960,24 @@ background:rgba(16,18,24,.78);color:#fff;cursor:pointer;font:600 20px/1 var(--lk
 .hb-lb-pic img{max-height:62vh}.hb-lb-cap{padding:16px}.hb-lb-x{top:8px;right:8px}}
 /* the featured modpack (Hub.featured_mod): full-bleed picture, soft vignette, the words on a glass panel; eases on scroll */
 body.hb{overflow-x:clip}
-.hb-coa{position:relative;width:calc(100vw - var(--hb-side,0px));margin:34px 0 16px calc(50% - (100vw - var(--hb-side,0px)) / 2);min-height:clamp(440px,50vw,620px);display:flex;align-items:center;
+.hb-coa{position:relative;width:calc(100vw - var(--hb-side,0px));margin:34px 0 16px calc(50% - (100vw - var(--hb-side,0px)) / 2);
 overflow:hidden;isolation:isolate;background:#0b0d12;scroll-margin-top:72px}
+.hb-coa-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain;outline:none}
+.hb-coa-track::-webkit-scrollbar{display:none}
+.hb-coa-s{position:relative;flex:0 0 100%;scroll-snap-align:start;min-height:clamp(440px,50vw,620px);display:flex;align-items:center;overflow:hidden;isolation:isolate}
+.hb-coa-pic.soft img{filter:blur(28px) saturate(1.2) brightness(.55);transform:scale(1.15)!important}
+.hb-coa-fr{position:absolute;right:max(16px,calc((100% - 1040px) / 2 + 16px));top:50%;transform:translateY(-50%);margin:0;width:min(46%,560px);
+border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,.12);box-shadow:0 30px 80px rgba(0,0,0,.55)}
+.hb-coa-fr img{display:block;width:100%;height:auto}
+.hb-coa-nav{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:999px;
+background:rgba(12,14,20,.55);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.08)}
+.hb-coa-nav[hidden]{display:none}
+.hb-coa-dots{display:flex;gap:7px}
+.hb-coa-dot{width:8px;height:8px;padding:0;border:0;border-radius:99px;background:rgba(255,255,255,.35);cursor:pointer;transition:width .25s,background .25s}
+.hb-coa-dot[aria-current="true"]{width:22px;background:#e6bb5f}
+.hb-coa-arr{display:grid;place-items:center;width:30px;height:30px;padding:0;border:0;border-radius:50%;background:rgba(255,255,255,.08);color:#fff;cursor:pointer}
+.hb-coa-arr:hover{background:rgba(255,255,255,.18)}
+.hb-coa-arr svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 .hb-coa-pic{position:absolute;inset:0;z-index:-1;overflow:hidden}
 .hb-coa-pic img{display:block;width:100%;height:100%;object-fit:cover;object-position:62% 42%;
 transform:scale(calc(1.1 - var(--coa,.5) * .06)) translateY(calc((var(--coa,.5) - .5) * -36px))}
@@ -2946,7 +2996,7 @@ backdrop-filter:blur(12px) saturate(1.15);border:1px solid rgba(255,255,255,.09)
 .hb-coa-a svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .hb-coa-n{margin:0;padding-top:12px;border-top:1px solid rgba(255,255,255,.08);color:var(--lk-muted);font-size:12.5px;line-height:1.45}
 .hb-coa-cr{position:absolute;right:16px;bottom:16px;margin:0;font-size:11.5px;color:rgba(255,255,255,.72);text-shadow:0 1px 3px #000}
-@media (max-width:720px){.hb-coa{display:block;min-height:0;margin-top:26px}.hb-coa-pic{position:relative;aspect-ratio:845/577}
+@media (max-width:720px){.hb-coa{margin-top:26px}.hb-coa-s{display:block;min-height:0}.hb-coa-fr{position:relative;right:auto;top:auto;transform:none;width:auto;margin:16px 16px 0}.hb-coa-s.mod .hb-coa-pic{position:absolute}.hb-coa-s.mod .hb-coa-in{margin-top:12px}.hb-coa-nav{bottom:auto;top:10px}.hb-coa-pic{position:relative;aspect-ratio:845/577}
 .hb-coa-pic::after{background:radial-gradient(120% 90% at 50% 40%,transparent 50%,rgba(8,10,15,.6) 100%),linear-gradient(0deg,var(--lk-bg) 0%,transparent 35%)}
 .hb-coa-in{margin-top:-64px;padding:0 16px 8px}.hb-coa-t{max-width:none;padding:20px 18px 16px}.hb-coa-cr{position:static;margin:8px 2px 0;text-align:right;color:var(--lk-muted);text-shadow:none}}
 /* the fantasy panels (server software, the realm list): carved slate, a rune rule, torch gold used sparingly, our crest */
@@ -3142,6 +3192,24 @@ if(th&&feats&&!still){th.classList.add("draw");var pend=0;
   draw();addEventListener("scroll",function(){if(!pend){pend=1;requestAnimationFrame(draw);}},{passive:true});addEventListener("resize",draw);}
 // the featured modpack's picture eases as it scrolls by (a slow zoom and drift); still with reduced motion
 var coa=d.querySelector(".hb-coa");
+// the featured slider: dots, arrows, arrow keys; turns every 7 s while on screen and not hovered or focused (never with
+// reduced motion); without this script it is a sideways scroll that snaps slide by slide
+if(coa){var trk=coa.querySelector(".hb-coa-track"),cnav=coa.querySelector(".hb-coa-nav");
+  var sl=trk?trk.querySelectorAll(".hb-coa-s"):[],cdots=coa.querySelectorAll(".hb-coa-dot"),cur=0,held=false,seen=true,timer=0;
+  if(cnav&&sl.length>1){cnav.hidden=false;
+    var go=function(n,smooth){cur=(n+sl.length)%sl.length;trk.scrollTo({left:cur*trk.clientWidth,behavior:smooth&&!still?"smooth":"auto"});mark();};
+    var mark=function(){cdots.forEach(function(b,i){b.setAttribute("aria-current",i===cur?"true":"false");});};
+    trk.addEventListener("scroll",function(){var n=Math.round(trk.scrollLeft/Math.max(1,trk.clientWidth));if(n!==cur){cur=n;mark();}},{passive:true});
+    cdots.forEach(function(b,i){b.addEventListener("click",function(){go(i,true);});});
+    coa.querySelector(".hb-coa-arr.prev").addEventListener("click",function(){go(cur-1,true);});
+    coa.querySelector(".hb-coa-arr.next").addEventListener("click",function(){go(cur+1,true);});
+    trk.addEventListener("keydown",function(ev){if(ev.key==="ArrowRight"){go(cur+1,true);ev.preventDefault();}else if(ev.key==="ArrowLeft"){go(cur-1,true);ev.preventDefault();}});
+    coa.addEventListener("pointerenter",function(){held=true;});coa.addEventListener("pointerleave",function(){held=false;});
+    coa.addEventListener("focusin",function(){held=true;});coa.addEventListener("focusout",function(){held=false;});
+    if("IntersectionObserver" in window){new IntersectionObserver(function(es){seen=es[0].isIntersecting;},{threshold:.3}).observe(coa);}
+    addEventListener("resize",function(){go(cur,false);});
+    mark();
+    if(!still){timer=setInterval(function(){if(!held&&seen&&!d.hidden)go(cur+1,true);},7000);}}}
 if(coa&&!still){var cpend=0;var par=function(){cpend=0;var r=coa.getBoundingClientRect(),k=(innerHeight-r.top)/(innerHeight+r.height);
     coa.style.setProperty("--coa",Math.max(0,Math.min(1,k)).toFixed(3));};
   par();addEventListener("scroll",function(){if(!cpend){cpend=1;requestAnimationFrame(par);}},{passive:true});addEventListener("resize",par);}

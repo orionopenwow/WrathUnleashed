@@ -814,11 +814,21 @@ check("featured mod: label, title, the screenshot (served, sized, alt), a TODO f
 check("featured mod: the external note and the credit, word for word",
       '<p class="hb-coa-n">External download, made and hosted by its authors; not checked or hosted by Leyline</p>' in coa
       and '<p class="hb-coa-cr">Screenshot: the modpack&#x27;s authors</p>' in coa)
-links = re.findall(r'<a ([^>]*)>(.*?)</a>', coa, re.S)
-check("featured mod: one link out, See the modpack (noopener nofollow ugc, a new tab), no Install, nothing hosted here",
+# a slider since 2026-10-30 ("a sliding preview too of the best latest mods"): the modpack is the first slide
+coa_slides = re.split(r'<div class="hb-coa-s(?: mod)?"', coa)[1:]
+coa1 = coa_slides[0] if coa_slides else ""
+links = re.findall(r'<a ([^>]*)>(.*?)</a>', coa1, re.S)
+check("featured mod: the first slide has one link out, See the modpack (noopener nofollow ugc, a new tab), no Install, nothing hosted here",
       len(links) == 1 and f'href="{html.escape(HB.FEATURED_MOD["url"])}"' in links[0][0] and 'rel="noopener nofollow ugc"' in links[0][0]
       and 'target="_blank"' in links[0][0] and links[0][1].startswith("See the modpack")
-      and not re.search(r"(?i)install|leyline://|download\"", coa.replace("External download", "")) and "/wrath/mods/" not in coa)
+      and not re.search(r"(?i)install|leyline://|download\"", coa1.replace("External download", "")) and "/wrath/mods/" not in coa1)
+more = coa_slides[1:]
+check("featured slider: then up to five of the best mods with a picture, each a link to its own page here (no Install, no link out)",
+      len(coa_slides) <= 6 and all(re.search(r'<a class="hb-cta sm" href="/wrath/[a-z-]+/p/[^"]+">See the mod</a>', x) for x in more)
+      and not any(re.search(r"(?i)leyline://|target=\"_blank\"", x) for x in more))
+check("featured slider: dots and arrows only with the script (hidden until then); a sideways snap scroll without it",
+      ('<div class="hb-coa-nav" hidden>' in coa) == (len(coa_slides) > 1) and "scroll-snap-type:x mandatory" in fp
+      and "timer=setInterval" in HB.HUB_JS and "if(!still){timer=" in HB.HUB_JS)
 check("featured mod: no game name in what shows (the address is only a link)", not BANNED.findall(visible(coa))
       and not BANNED.findall(re.sub(r'href="[^"]*"', "", coa)))
 check("featured mod: a slow zoom and drift on scroll from the page's script, still with reduced motion",
