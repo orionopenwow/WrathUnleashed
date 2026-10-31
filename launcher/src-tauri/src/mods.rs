@@ -2496,6 +2496,7 @@ pub mod tests {
         let v: serde_json::Value = serde_json::from_str(json).unwrap();
         assert_eq!(v["files"], serde_json::json!(["d3d9.dll", "fix.conf"]));
         let key = v["key"].as_str().unwrap().to_string();
+        let modkey = v["mod"].as_str().unwrap().to_string();
         assert_eq!(tree(c.path()), before, "nothing installed before the OK");
 
         let m = install_local(c.path(), Build::V335a, &z, &|k| k == key).unwrap();
@@ -2504,10 +2505,10 @@ pub mod tests {
         assert!(m.warnings.iter().any(|w| w.contains("native code")));
         assert_eq!(fs::read(c.path().join("d3d9.dll")).unwrap(), b"MZ\x90\x00dll");
         // Off and on again, then out.
-        set_enabled(c.path(), &key, false).unwrap();
+        set_enabled(c.path(), &modkey, false).unwrap();
         assert!(!c.path().join("d3d9.dll").exists());
-        set_enabled(c.path(), &key, true).unwrap();
-        uninstall(c.path(), &key).unwrap();
+        set_enabled(c.path(), &modkey, true).unwrap();
+        uninstall(c.path(), &modkey).unwrap();
         assert_eq!(tree(c.path()), before);
 
         // The OK is for these exact native files: the same mod with a changed DLL asks again, the same files don't.
