@@ -1250,6 +1250,237 @@ do
     cmd(hal, "build clear")
 end
 
+-- Any object, models, lock / hide, measure, align, stack, tilt, setrot (2026-10-30, Den editor) -------------------
+do
+    local dora = player({ guid = 70, name = "Dora", x = AREA.x, y = AREA.y - 30 })
+    cmd(gm, "build grant Dora")
+    local X = T.X
+    local B0 = X.MODEL_BASE
+    local function lastAddon(p, name)
+        for i = #p.addon, 1, -1 do
+            local mod, n, data = p.addon[i][2]:match("^([^\t]+)\t([^\t]+)\t%d+/%d+\t(.*)$")
+            if mod == "wubuild" and n == name then return data end
+        end
+    end
+    local function newest(owner)
+        local best
+        for _, p in pairs(T.props) do if p.owner == owner and (not best or p.id > best.id) then best = p end end
+        return best
+    end
+    -- gameobject objects that take a display (Object:SetUInt32Value)
+    local realSpawn = PerformIngameSpawn
+    PerformIngameSpawn = function(...)
+        local go = realSpawn(...)
+        if go then
+            function go:SetUInt32Value(i, v) self.fields = self.fields or {}; self.fields[i] = v end
+        end
+        return go
+    end
+    -- the world database's gameobject_template, a few rows (entry, type, displayId, name, size, Data1, Data2, Data3,
+    -- Data10, Data12, AIName, ScriptName): two safe, the rest not
+    local TPL = {
+        { 500001, 5, 902, "Long Table", 1, 0, 0, 0, 0, 0, "", "" },
+        { 500002, 3, 900, "Treasure Chest Bench", 1, 0, 0, 0, 0, 0, "", "" },     -- chest: loot
+        { 500003, 10, 900, "Glowing Bench", 1, 0, 0, 0, 123, 0, "", "" },          -- goober with a spell
+        { 500004, 5, 900, "Scripted Bench", 1, 0, 0, 0, 0, 0, "", "go_script" },   -- scripted
+        { 500005, 8, 901, "House Focus", 1, 0, 0, 0, 0, 0, "", "" },               -- a WMO
+        { 500006, 7, 900, "Garden Bench", 1, 0, 0, 0, 0, 0, "", "" },
+    }
+    local realWorld = WorldDBQuery
+    local worldLog = {}
+    WorldDBQuery = function(sql)
+        worldLog[#worldLog + 1] = sql
+        if not sql:find("Data10", 1, true) then return realWorld(sql) end
+        local rows = {}
+        local inList = sql:match("entry IN %(([%d,]+)%)")
+        for _, r in ipairs(TPL) do
+            local ok = true
+            if inList then
+                ok = false
+                for e in inList:gmatch("%d+") do if tonumber(e) == r[1] then ok = true end end
+            end
+            for w in sql:gmatch("name LIKE '%%([^%%]+)%%'") do if not r[4]:lower():find(w, 1, true) then ok = false end end
+            if ok then rows[#rows + 1] = r end
+        end
+        local lim, off = sql:match("LIMIT (%d+) OFFSET (%d+)")
+        if lim then
+            local out = {}
+            for i = tonumber(off) + 1, math.min(#rows, tonumber(off) + tonumber(lim)) do out[#out + 1] = rows[i] end
+            rows = out
+        end
+        return result(rows)
+    end
+    -- a GameObjectDisplayInfo.dbc as the host's own data folder holds it (19 fields, 76 bytes a record)
+    local function u32(n) return string.char(n % 256, math.floor(n / 256) % 256, math.floor(n / 65536) % 256, math.floor(n / 16777216) % 256) end
+    local function f32(v)
+        if v == 0 then return u32(0) end
+        local sign = v < 0 and 2147483648 or 0
+        v = math.abs(v)
+        local e = math.floor(math.log(v) / math.log(2))
+        local m = math.floor((v / 2 ^ e - 1) * 8388608 + 0.5)
+        return u32(sign + (e + 127) * 8388608 + m)
+    end
+    local recs = { { 900, "World\\Generic\\Garden\\Bench01.mdx", -1, -0.5, 0, 1, 0.5, 0.5 },
+        { 901, "World\\wmo\\Big\\House.wmo", -10, -10, 0, 10, 10, 8 },
+        { 902, "World\\Generic\\Tavern\\LongTable02.m2", -2, -1, -0.25, 2, 1, 1.0 } }
+    local strs, offs = "\0", {}
+    for i, r in ipairs(recs) do offs[i] = #strs; strs = strs .. r[2] .. "\0" end
+    local body = ""
+    for i, r in ipairs(recs) do
+        body = body .. u32(r[1]) .. u32(offs[i]) .. string.rep(u32(0), 10)
+            .. f32(r[3]) .. f32(r[4]) .. f32(r[5]) .. f32(r[6]) .. f32(r[7]) .. f32(r[8]) .. u32(0)
+    end
+    local dbcPath = os.tmpname()
+    local fh = io.open(dbcPath, "wb"); fh:write("WDBC" .. u32(#recs) .. u32(19) .. u32(76) .. u32(#strs) .. body .. strs); fh:close()
+
+    clock = clock + 5
+    cmd(dora, "build find bench")
+    check("any object: off outside a Den", last(dora):find("only the catalog"))
+    cmd(dora, "build spawn 500006")
+    check("any object off: a template beyond the catalog isn't placeable", last(dora):find("No prop called") and not newest(70))
+
+    env.OV_BUILD_ANY, env.OV_BUILD_MODELS, env.OV_BUILD_DBC = "1", "1", dbcPath
+    X.dbc = nil
+    clock = clock + 1
+    cmd(dora, "build find bench")
+    local f = lastAddon(dora, "found") or ""
+    check("find: the SQL keeps to the safe kinds", worldLog[#worldLog]:find(X.SAFE_SQL, 1, true)
+        and worldLog[#worldLog]:find("name LIKE '%bench%'", 1, true) and worldLog[#worldLog]:find("LIMIT 31 OFFSET 0", 1, true))
+    check("find: the safe bench is found, the chest, spell goober, scripted one are not", f:find("^objects,1,0;")
+        and f:find("500006,t500006,objects,Garden Bench,1", 1, true) and not f:find("50000[234]"))
+    check("find: answered in chat with the keys", last(dora):find("place") and said(dora, "Garden Bench %(|cffffff00t500006"))
+    cmd(dora, "build find bench")
+    check("find: one search a second", last(dora):find("One search a second"))
+    clock = clock + 1
+    cmd(dora, "build find drop table; --")
+    check("find: words are cleaned before SQL (no quotes or semicolons)", not worldLog[#worldLog]:find(";", 1, true)
+        and worldLog[#worldLog]:find("name LIKE '%drop%' AND name LIKE '%table%'", 1, true))
+    clock = clock + 1
+    cmd(dora, "build find 500005")
+    check("find <entry>: a WMO-model template is refused", last(dora):find("No placeable object 500005"))
+
+    clock = clock + 1
+    cmd(dora, "build spawn t500001")
+    local tbl = newest(70)
+    check("spawn t<entry>: any safe template placed", tbl and tbl.entry == 500001 and objects[T.live[tbl.id]].entry == 500001
+        and last(dora):find("Long Table placed"))
+    check("a big model costs more points (from its bounds)", T.costOf(500001) == 1)
+    clock = clock + 1
+    cmd(dora, "build spawn 500002")
+    check("spawn: a chest (loot) is never placeable", last(dora):find("No prop called") and newest(70) == tbl)
+
+    clock = clock + 1
+    cmd(dora, "build models bench")
+    local fm = lastAddon(dora, "found") or ""
+    check("models: read from the server's own dbc file, by file name", X.dbcCount == 3
+        and fm:find(string.format("%d,m900,models,Bench01 %%(model 900%%),1", B0 + 900)))
+    clock = clock + 1
+    cmd(dora, "build models house")
+    check("models: WMO files are left out", last(dora):find("Nothing matches"))
+    clock = clock + 1
+    cmd(dora, "build spawn m900")
+    local bench = newest(70)
+    local bo = bench and objects[T.live[bench.id]]
+    check("spawn m<display>: the carrier template with the model's display, at size 1", bench and bench.entry == B0 + 900
+        and bo and bo.entry == 2687 and bo.fields and bo.fields[8] == 900 and bo.scale == 1)
+    check("a model prop is stored as one entry number (copies, builds and undo carry it)", sqlHas("INSERT INTO mod_builder_props .*, " .. (B0 + 900) .. ", 0,"))
+    check("state names the model", (lastAddon(dora, "state") or ""):find("sel=" .. bench.id .. "," .. (B0 + 900) .. ",Bench01", 1, true))
+    clock = clock + 1
+    cmd(dora, "build spawn m901")
+    check("spawn: a WMO model is refused", last(dora):find("No prop called"))
+    clock = clock + 1
+    cmd(dora, "build dup")
+    local copy = newest(70)
+    check("duplicate keeps the model", copy ~= bench and copy.entry == B0 + 900 and objects[T.live[copy.id]].fields[8] == 900)
+    cmd(dora, "build undo")
+    check("undo the duplicate", not T.props[copy.id])
+    cmd(dora, "build redo")
+    local redone = newest(70)
+    check("redo brings the model back", redone.entry == B0 + 900 and objects[T.live[redone.id]].fields[8] == 900)
+    cmd(dora, "build delete")
+    -- after a grid unload the model comes back with its display
+    objects[T.live[bench.id]] = nil
+    T.sync(dora, true)
+    check("sync: a model prop respawns with its display", objects[T.live[bench.id]] and objects[T.live[bench.id]].fields[8] == 900)
+
+    -- the table (1 yard tall from its base, its bottom 0.25 below) and the bench: measure, align, stack
+    local function pick(p, add) cmd(dora, "build pick " .. T.live[p.id] .. (add and " add" or "")) end
+    cmd(dora, "build move " .. tbl.id .. " " .. at(nil, 4, -30, 0))
+    pick(tbl); pick(bench, true)
+    cmd(dora, "build measure")
+    check("measure: from the first picked to the last", last(dora):find("From Long Table to Bench01 %(model 900%)"))
+    pick(bench)
+    cmd(dora, "build measure")
+    check("measure one: distance from you and its size", last(dora):find("yards from you") and last(dora):find("0%.50 yards tall"))
+    pick(tbl); pick(bench, true)
+    step()
+    cmd(dora, "build stack")
+    check("stack: the bench's bottom on the table's top", math.abs(bench.z - (tbl.z + 1.0)) < 0.01 and last(dora):find("set on top of Long Table"))
+    cmd(dora, "build undo")
+    check("stack is one undo", math.abs(bench.z - AREA.z) < 0.01)
+    pick(bench)
+    step()
+    cmd(dora, "build stackon " .. tbl.id)
+    check("stackon <id>", math.abs(bench.z - (tbl.z + 1.0)) < 0.01)
+    pick(bench); pick(tbl, true)
+    step()
+    cmd(dora, "build align x")
+    check("align x: the bench on the table's x", math.abs(bench.x - tbl.x) < 0.01 and last(dora):find("lined up on Long Table %(x%)"))
+    step()
+    cmd(dora, "build align bottom")
+    check("align bottom: bottoms level (the table's sits 0.25 below its base)", math.abs(bench.z - (tbl.z - 0.25)) < 0.01)
+    step()
+    cmd(dora, "build setrot 90 10 0")
+    check("setrot: the group faces 90 (tilt dropped without the module)", math.abs(math.deg(bench.o) - 90) < 0.1
+        and math.abs(math.deg(tbl.o) - 90) < 0.1 and last(dora):find("tilting needs a realm update"))
+    cmd(dora, "build tilt pitch 15")
+    check("tilt pitch: needs the module", last(dora):find("needs mod%-sandbox%-core"))
+    step()
+    cmd(dora, "build tilt yaw 15")
+    check("tilt yaw: each prop turns about itself", math.abs(math.deg(bench.o) - 105) < 0.1 and math.abs(math.deg(tbl.o) - 105) < 0.1)
+    cmd(dora, "build tilt roll 999")
+    check("tilt: bad numbers refused", last(dora):find("Usage"))
+
+    -- lock and hide
+    pick(tbl)
+    cmd(dora, "build lock")
+    check("lock: stored", T.X.locked[tbl.id] and sqlHas("^REPLACE INTO mod_builder_prop_flags %(id, locked, hidden%) VALUES %(" .. tbl.id .. ", 1, 0%)"))
+    step()
+    local x0 = tbl.x
+    cmd(dora, "build move x 1")
+    check("lock: no move", tbl.x == x0 and last(dora):find("is locked"))
+    cmd(dora, "build move " .. tbl.id .. " " .. at(nil, 6, -30, 0))
+    check("lock: no exact move either", tbl.x == x0 and last(dora):find("is locked"))
+    cmd(dora, "build delete")
+    check("lock: no delete", T.props[tbl.id] and last(dora):find("is locked"))
+    cmd(dora, "build clear")
+    check("lock: clear leaves it", T.props[tbl.id])
+    cmd(dora, "build undo")
+    check("clear's undo brings the unlocked bench back", T.props[bench.id] and T.live[bench.id])
+    pick(tbl)
+    cmd(dora, "build unlock")
+    check("unlock", not T.X.locked[tbl.id] and sqlHas("^DELETE FROM mod_builder_prop_flags WHERE id = " .. tbl.id))
+    step()
+    cmd(dora, "build move x 1")
+    check("unlocked: moves again", math.abs(tbl.x - (x0 + 1)) < 0.01)
+    cmd(dora, "build hide")
+    check("hide: out of the world, kept", T.props[tbl.id] and not T.live[tbl.id] and T.X.hidden[tbl.id])
+    T.sync(dora, true)
+    check("hide: sync doesn't bring it back", not T.live[tbl.id])
+    cmd(dora, "build show all")
+    check("show all: back in the world", T.live[tbl.id] and objects[T.live[tbl.id]] and not T.X.hidden[tbl.id] and last(dora):find("shown again"))
+    -- leave nothing behind for the later sections
+    pick(tbl); pick(bench, true)
+    cmd(dora, "build delete")
+    check("tidy: Dora's props gone", newest(70) == nil)
+
+    env.OV_BUILD_ANY, env.OV_BUILD_MODELS, env.OV_BUILD_DBC = nil, nil, nil
+    X.dbc = nil
+    os.remove(dbcPath)
+    WorldDBQuery, PerformIngameSpawn = realWorld, realSpawn
+    online[70] = nil
+end
+
 -- switch off ------------------------------------------------------------------------------------------------
 env.OV_BUILD = "0"
 clock = clock + 1
@@ -1290,6 +1521,17 @@ end
 env.OV_BUILD_DALARAN = nil
 dofile(file)
 check("OV_BUILD_DALARAN unset: Goldshire only again", #OV_BUILD_TEST.BUILD_AREAS == 1)
+
+-- A Den's wider size limits (OV_BUILD_SCALE_MIN / _MAX, read at load, kept within 0.1 to 5)
+env.OV_BUILD_SCALE_MIN, env.OV_BUILD_SCALE_MAX = "0.1", "5"
+dofile(file)
+cmd(gm, "build setscale")
+check("OV_BUILD_SCALE_MIN/MAX: sizes 0.1 to 5", last(gm):find("0%.1 to 5%.0"))
+env.OV_BUILD_SCALE_MIN, env.OV_BUILD_SCALE_MAX = "0.001", "50"
+dofile(file)
+cmd(gm, "build setscale")
+check("size limits never beyond 0.1 to 5 (the module's)", last(gm):find("0%.1 to 5%.0"))
+env.OV_BUILD_SCALE_MIN, env.OV_BUILD_SCALE_MAX = nil, nil
 
 realPrint(string.format("\n%d/%d passed", pass, pass + fail))
 os.exit(fail == 0 and 0 or 1)

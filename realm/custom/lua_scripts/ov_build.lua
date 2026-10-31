@@ -84,6 +84,11 @@
 --   OV_BUILD_PLOTS_EACH   plots one character may claim                   default 1
 --   OV_BUILD_PLOTS_ONLY   1 = outside GMs, build only on plots            default 0
 --   OV_BUILD_CORE         0 = never use mod-sandbox-core                    default 1
+--   OV_BUILD_ANY          1 = any safe gameobject template may be placed  default 1 in a Den, else 0
+--   OV_BUILD_MODELS       1 = any model from the server's GameObjectDisplayInfo   default 1 in a Den, else 0
+--   OV_BUILD_MODEL_CARRIER the template a model prop is spawned as         default 2687 (Bottle)
+--   OV_BUILD_DBC          GameObjectDisplayInfo.dbc's path   default $AC_DATA_DIR/dbc/GameObjectDisplayInfo.dbc
+--   OV_BUILD_SCALE_MIN / _MAX   the size limits (within 0.1 to 5)         default 0.5 / 2.5
 -- Rate: one spawn a second, one load every 5 s, five moves or turns a second.
 -- The in-game Builder window (WrathUnleashedUI/Builder.lua, /builder) talks to this over the OVMOD channel
 -- (ov_modapi.lua), mod "wubuild":
@@ -97,6 +102,8 @@
 --                                not spawned>;
 --                                core=<1 when mod-sandbox-core moves props in place, else 0>
 --                      prefabs   id,name,code,count;...           your prefabs
+--                      found     <objects|models>,<page>,<more 0|1>;id,key,category,name,points;...
+--                                                                  a .build find / .build models answer
 -- mod-ale events: 3 ON_LOGIN, 4 ON_LOGOUT, 27 ON_UPDATE_ZONE, 28 ON_MAP_CHANGE, 42 ON_COMMAND.
 
 local TAG = "|cff66ccff[Builder]|r "
@@ -124,11 +131,11 @@ end
 -- game_tele 424 'GMIsland' (16226.2, 16257.0, 13.2): every 3.3.5a client has the island, the world database has no
 -- creature within 600 yards of it but its Spirit Healer, and the nearest other spawn on map 1 is more than 5000
 -- yards away, so nothing wanders in. OV_DEN_X / _Y / _Z move it (to verify in game: the spot is the tele point).
--- half: the room's half width inside its walls (OV_DEN_SIZE, 8-20); r: the Den's edge, the room plus its yard.
+-- half: the room's half width inside its walls (OV_DEN_SIZE, 8-32); r: the Den's edge, the room plus its yard.
 local DEN
 if os.getenv("OV_DEN") == "1" then
     local function at(name, default) return tonumber(os.getenv(name) or "") or default end
-    local half = math.max(8, math.min(20, math.floor(at("OV_DEN_SIZE", 12))))
+    local half = math.max(8, math.min(32, math.floor(at("OV_DEN_SIZE", 12))))
     DEN = { name = "Your Den", map = 1, x = at("OV_DEN_X", 16226.2), y = at("OV_DEN_Y", 16257.0), z = at("OV_DEN_Z", 13.2),
         half = half, r = half + 14 }
     for i = #BUILD_AREAS, 1, -1 do BUILD_AREAS[i] = nil end   -- a Den is the realm: no other build area
@@ -572,7 +579,10 @@ local K = {
     PLOT_MEMBERS = 20,
     OPLOG_KEEP = 3000,       -- ops kept in memory for rollback
 }
-local SCALE_MIN, SCALE_MAX = 0.5, 2.5
+-- Size limits: 0.5 to 2.5 by default; a Den widens them (OV_BUILD_SCALE_MIN / _MAX, kept within 0.1 to 5, the
+-- limits mod-sandbox-core accepts). Read once at load (a profile switch recreates the server).
+local SCALE_MIN = math.max(0.1, math.min(1, tonumber(os.getenv("OV_BUILD_SCALE_MIN") or "") or 0.5))
+local SCALE_MAX = math.min(5, math.max(1, tonumber(os.getenv("OV_BUILD_SCALE_MAX") or "") or 2.5))
 
 ------------------------------------------------------------------------------------------------
 -- env and helpers
@@ -755,13 +765,13 @@ local function verify()
     if not WorldDBQuery then index(); return end
     local ids = {}
     for _, c in ipairs(CATALOG) do ids[#ids + 1] = tostring(c.id) end
-    local ok, q = pcall(WorldDBQuery, "SELECT entry FROM gameobject_template WHERE entry IN (" .. table.concat(ids, ",") .. ")")
+    local ok, q = pcall(WorldDBQuery, "SELECT entry, displayId FROM gameobject_template WHERE entry IN (" .. table.concat(ids, ",") .. ")")
     if ok and q then
         local have = {}
-        repeat have[q:GetUInt32(0)] = true until not q:NextRow()
+        repeat have[q:GetUInt32(0)] = tonumber(q:GetUInt32(1)) or true until not q:NextRow()
         local kept = {}
         for _, c in ipairs(CATALOG) do
-            if have[c.id] then kept[#kept + 1] = c else print("[ov_build] catalog entry " .. c.id .. " not in this world database; dropped") end
+            if have[c.id] then kept[#kept + 1] = c; if have[c.id] ~= true then c.display = have[c.id] end else print("[ov_build] catalog entry " .. c.id .. " not in this world database; dropped") end
         end
         CATALOG = kept
     end
@@ -814,6 +824,11 @@ local curOp            -- the op the running command records into
 --   X.storage  [guid] = { [entry] = count } put away (.build store), taken out by placing one
 --   X.groupOf  [prop id] = group id (.build group)
 local X = { redo = {}, storage = {}, groupOf = {}, nextGroup = 0, dirty = {} }
+-- Models (any GameObjectDisplayInfo display, read from the server's own data on the host's PC): a prop's entry is
+-- MODEL_BASE + the display id, so every copy, build, prefab, layout and undo carries it like any other entry;
+-- spawn() puts down the carrier template and gives it that display (the 2026-10-30 "any object" section, below).
+X.MODEL_BASE = 2000000000
+X.locked, X.hidden = {}, {}   -- [prop id] = true: locked (no edits) / hidden (not in the world, kept)
 X.SYSTEM = 0   -- the owner of the props a Den's room is made of (ov_den.lua): no character has guid 0
 function X.denInside()  return num("OV_DEN_INSIDE_POINTS", 1000, 0, 100000) end
 function X.denOutside() return num("OV_DEN_OUTSIDE_POINTS", 300, 0, 100000) end
@@ -1243,6 +1258,15 @@ local function despawn(p, player, forget)
 end
 
 local function spawn(p)
+    if X.hidden[p.id] then return false end
+    local entry, disp = p.entry, nil
+    if entry >= X.MODEL_BASE then
+        entry, disp = X.carrier(), entry - X.MODEL_BASE
+        if not entry or not X.modelItem(disp) then return false end
+    end
+    local function show(go)   -- a model prop: the carrier gets the display (GAMEOBJECT_DISPLAYID, field 8) and size 1
+        if disp and go then try(go, "SetUInt32Value", 8, disp); if not p.s then try(go, "SetScale", 1) end end
+    end
     local S = core(actor)
     if S then
         local qx, qy, qz, qw = quatOf(p.o, p.pt or 0, p.rl or 0)
@@ -1257,21 +1281,23 @@ local function spawn(p)
                 local g = coreCall(S, "Move", found, p.x, p.y, p.z, qx, qy, qz, qw, actor)
                 if g then live[p.id] = g end
             end
-            if go then return true end
+            if go then show(go); return true end
             live[p.id], coreLive[p.id] = nil, nil
         end
-        local g = coreCall(S, "Spawn", p.id, p.entry, p.map, p.x, p.y, p.z, qx, qy, qz, qw, p.s or 0, actor)
+        local g = coreCall(S, "Spawn", p.id, entry, p.map, p.x, p.y, p.z, qx, qy, qz, qw, p.s or (disp and 1 or 0), actor)
         if g then
             live[p.id], coreLive[p.id] = g, true
+            show(liveObject(p, actor))
             return true
         end
     end
     coreLive[p.id] = nil
     if not PerformIngameSpawn then return false end
-    local ok, go = pcall(PerformIngameSpawn, 2, p.entry, p.map, 0, p.x, p.y, p.z, p.o, false, 0, 1)
+    local ok, go = pcall(PerformIngameSpawn, 2, entry, p.map, 0, p.x, p.y, p.z, p.o, false, 0, 1)
     if not ok or not go then return false end
     live[p.id] = try(go, "GetGUID")
     if p.s and p.s ~= 1 then try(go, "SetScale", p.s) end
+    show(go)
     return true
 end
 
@@ -1345,6 +1371,7 @@ local function removeProp(p, player)
     rec(p.id, copyProp(p), nil)
     despawn(p, player, true)
     props[p.id] = nil
+    if X.locked[p.id] or X.hidden[p.id] then X.setFlags(p.id, nil, nil) end
     if X.groupOf[p.id] then
         X.groupOf[p.id] = nil
         exec(string.format("DELETE FROM mod_builder_groups WHERE prop = %d", p.id))
@@ -1459,6 +1486,7 @@ local function editList(player, forDelete)
     local list = selList(guid)
     if #list == 0 then say(player, NOTHING); return nil end
     for _, p in ipairs(list) do
+        if X.locked[p.id] then say(player, X.lockedText(p)); return nil end
         local ok, why = canEdit(player, p)
         if not ok and not (forDelete and p.owner == guid) then say(player, why); return nil end
         if p.map ~= player:GetMapId() or dist2(p.x, p.y, player:GetX(), player:GetY()) > K.SYNC_RANGE then
@@ -1548,7 +1576,8 @@ local function sendState(player)
     local p = (#list > 0) and primary(guid, list) or nil
     local sel, pos, rot = "-", "-", "-"
     if p then
-        sel = p.id .. "," .. p.entry .. "," .. ((byId[p.entry] and byId[p.entry].name) or ("#" .. p.entry)):gsub("[,;=]", "")
+        local c = byId[p.entry] or X.known(p.entry)
+        sel = p.id .. "," .. p.entry .. "," .. ((c and c.name) or ("#" .. p.entry)):gsub("[,;=]", "")
         pos = string.format("%.2f,%.2f,%.2f,%.0f,%.2f", p.x, p.y, p.z, math.deg(p.o) % 360, p.s or 1)
         rot = string.format("%.1f,%.1f,%.1f", math.deg(p.o) % 360, math.deg(p.pt or 0), math.deg(p.rl or 0))
     end
@@ -1589,7 +1618,7 @@ end
 ------------------------------------------------------------------------------------------------
 -- commands
 ------------------------------------------------------------------------------------------------
-local function propName(p) return (byId[p.entry] and byId[p.entry].name) or ("prop " .. p.entry) end
+local function propName(p) local c = byId[p.entry] or X.known(p.entry); return (c and c.name) or ("prop " .. p.entry) end
 
 -- Plot and prefab changes (they write to the database): five a second.
 local writes = {}
@@ -1613,6 +1642,7 @@ end
 
 local function spawnCommand(player, word, at)
     local c, count = findProp(word)
+    if not c and (count or 0) <= 1 then c = X.findAny(word) end
     if not c then
         if count and count > 1 then return say(player, "More than one prop matches '" .. word .. "'; use its id (|cffffff00.build catalog " .. word .. "|r).") end
         return say(player, "No prop called '" .. tostring(word or "") .. "' (|cffffff00.build catalog|r lists them).")
@@ -1767,8 +1797,8 @@ local function clearCommand(player)
     if not key then return say(player, why) end
     local guid = player:GetGUIDLow()
     local gone = {}
-    for _, p in pairs(props) do if p.owner == guid and p.area == key then gone[#gone + 1] = p end end
-    if #gone == 0 then return say(player, "You have no props in this area.") end
+    for _, p in pairs(props) do if p.owner == guid and p.area == key and not X.locked[p.id] then gone[#gone + 1] = p end end
+    if #gone == 0 then return say(player, "You have no props in this area (locked ones stay).") end
     local saved = {}
     for _, p in ipairs(gone) do saved[#saved + 1] = copyProp(p); removeProp(p, player) end
     pushUndo(guid, { kind = "restore", list = saved })
@@ -1887,7 +1917,7 @@ local function placeMany(player, rel, origin, label)
     local placeable, skipped = {}, 0
     local c, s = math.cos(origin.o or 0), math.sin(origin.o or 0)
     for _, e in ipairs(rel) do
-        if byId[e.entry] then
+        if X.known(e.entry) then
             local x, y, z = origin.x + e.dx * c - e.dy * s, origin.y + e.dx * s + e.dy * c, origin.z + e.dz
             if insideArea(key, map, x, y, z) and canBuildAt(player, map, x, y, z) then
                 placeable[#placeable + 1] = { e = e, x = x, y = y, z = z }
@@ -2253,6 +2283,7 @@ do
         if not p then
             say(player, "No prop " .. tostring(word or "") .. " (|cffffff00.build near|r lists yours)."); return nil
         end
+        if X.locked[p.id] then say(player, X.lockedText(p)); return nil end
         local ok, why = canEdit(player, p)
         if not ok then say(player, why); return nil end
         if p.map ~= player:GetMapId() or dist2(p.x, p.y, player:GetX(), player:GetY()) > K.SYNC_RANGE then
@@ -2506,7 +2537,7 @@ local function parsePrefab(data)
         if math.abs(x) > K.PREFAB_SPAN or math.abs(y) > K.PREFAB_SPAN or math.abs(z) > K.PREFAB_SPAN then
             return nil, "A prop in that prefab is too far from its centre."
         end
-        if byId[id] then
+        if X.known(id) then
             rel[#rel + 1] = { entry = id, dx = x, dy = y, dz = z, o = normO(o), s = clampScale(s) ~= 1 and clampScale(s) or nil }
         else
             skipped = skipped + 1
@@ -3033,7 +3064,7 @@ function X.CMD.storage(player)
     if #list == 0 then return say(player, "Your storage is empty. |cffffff00.build store|r puts the selection away.") end
     local names = {}
     for i = 1, math.min(#list, 30) do
-        local c = byId[list[i].e]
+        local c = X.known(list[i].e)
         names[#names + 1] = (c and c.name or ("prop " .. list[i].e)) .. " x" .. list[i].n
     end
     say(player, "In your storage: " .. table.concat(names, ", ") .. (#list > 30 and ", ..." or "") .. ".")
@@ -3201,6 +3232,493 @@ function X.CMD.layout(player, words)
 end
 X.CMD.layouts = function(player) return X.CMD.layout(player, { "layout", "list" }) end
 
+------------------------------------------------------------------------------------------------
+-- Any object (2026-10-30, "place any game object, to the level of the world editors"). On by default in a Den
+-- (OV_BUILD_ANY, OV_BUILD_MODELS); off elsewhere, where only the catalog above is placeable.
+--   .build find <words> [page]    every gameobject template of this realm's world database whose name matches,
+--                                 30 a page, of the safe kinds only (below); ".build find 12345" one entry
+--   .build models <words> [page]  every model in the server's own GameObjectDisplayInfo (read from the host's
+--                                 data folder on their PC; nothing of it is in this repo), by its file name
+--   .build spawn <entry> | m<display>   places one ("m4523" is model 4523); the spawn menu and window do this
+-- Safe kinds (checked in SQL and again here): no AIName, no ScriptName, a display, and type 0 door, 5 generic
+-- (not server-only), 7 chair (no event), 8 spell focus (no linked trap, not server-only), 9 text, 10 goober
+-- (no quest, event, spell or linked trap). No chests (loot), traps, transports, spell casters, aura generators,
+-- flags, capture points, destructible buildings or anything scripted. Models whose file is a WMO are left out
+-- (the client draws world objects of those kinds only for transports and map objects).
+-- A model prop is the carrier template (OV_BUILD_MODEL_CARRIER, the catalog's Bottle) given that display through
+-- GAMEOBJECT_DISPLAYID (Object:SetUInt32Value(8, display)) every time it spawns, at size 1 unless sized. Its
+-- collision on the server follows the carrier's model (the client draws and collides with the new one).
+--   .build lock | unlock          the selection can't be moved, turned, sized or deleted until unlocked
+--   .build hide | show [all]      takes the selection out of the world, kept (show all: every hidden prop near)
+--   .build measure                one prop: its distance from you and its size; more: from the first picked to
+--                                 the last (dx, dy, dz and the straight line)
+--   .build align x|y|z|top|bottom the selection lined up on the last-picked prop's x, y or z (top / bottom: its
+--                                 top or bottom face, from the model's bounds)
+--   .build stack | stackon <id> | stackon obj <object id>   the selection set down on top of the first-picked prop
+--                                 (stack), prop <id>, or the prop edit mode clicked (its object's GUID counter),
+--                                 from the models' bounds in GameObjectDisplayInfo
+--   .build tilt yaw|pitch|roll <deg>   turns each selected prop about its own axis (pitch and roll need the module)
+--   .build setrot <yaw> [pitch roll]   the whole selection to one exact rotation, each where it stands
+------------------------------------------------------------------------------------------------
+function X.anyOn() return flag("OV_BUILD_ANY", DEN ~= nil) end
+function X.modelsWanted() return flag("OV_BUILD_MODELS", DEN ~= nil) end
+function X.carrier()
+    local e = num("OV_BUILD_MODEL_CARRIER", 2687, 1, 10000000)
+    return X.known(e, true) and e or nil
+end
+X.SAFE_TYPES = { [0] = "door", [5] = "object", [7] = "seat", [8] = "focus", [9] = "text", [10] = "object" }
+X.bad, X.lastFind = {}, {}
+X.FIND_PAGE = 30
+X.TEMPLATE_COLS = "entry, type, displayId, name, size, Data1, Data2, Data3, Data10, Data12, AIName, ScriptName"
+X.SAFE_SQL = "AIName = '' AND ScriptName = '' AND displayId > 0 AND type IN (0, 5, 7, 8, 9, 10)"
+
+-- A row of gameobject_template (X.TEMPLATE_COLS order) as a placeable item, or nil when it isn't a safe kind.
+function X.safeRow(q)
+    local entry, t, disp = tonumber(q:GetUInt32(0)), tonumber(q:GetUInt32(1)), tonumber(q:GetUInt32(2))
+    local d1, d2, d3, d10, d12 = tonumber(q:GetUInt32(5)) or 0, tonumber(q:GetUInt32(6)) or 0, tonumber(q:GetUInt32(7)) or 0,
+        tonumber(q:GetUInt32(8)) or 0, tonumber(q:GetUInt32(9)) or 0
+    if not entry or not t or not disp or disp <= 0 then return nil end
+    if q:GetString(10) ~= "" or q:GetString(11) ~= "" then return nil end
+    local ok = (t == 0) or (t == 9) or (t == 5 and d2 == 0) or (t == 7 and d3 == 0) or (t == 8 and d2 == 0 and d3 == 0)
+        or (t == 10 and d1 == 0 and d2 == 0 and d10 == 0 and d12 == 0)
+    if not ok then return nil end
+    local m = X.display(disp)
+    if m and m.wmo then return nil end
+    local name = (q:GetString(3) or ""):gsub("[%c,;|=]", ""):sub(1, 40)
+    if name == "" then name = "Object " .. entry end
+    return { id = entry, key = "t" .. entry, cat = "objects", name = name, cost = X.costFor(disp, 1), display = disp,
+        kind = X.SAFE_TYPES[t], any = true }
+end
+
+-- Build points for a display: 1, more for a big model (its longest side, from the bounds, 8 yards a point, up to 6).
+function X.costFor(disp, base)
+    local m = X.display(disp)
+    if not m or not m.size then return base or 1 end
+    return math.max(base or 1, math.min(6, 1 + math.floor(m.size / 8)))
+end
+
+-- Looks entries up in the world database and keeps the safe ones in byId (so costs, names and checks find them).
+function X.lookup(entries)
+    if not WorldDBQuery or not X.anyOn() then return end
+    local want = {}
+    for _, e in ipairs(entries) do
+        e = tonumber(e)
+        if e and e > 0 and e < X.MODEL_BASE and not byId[e] and not X.bad[e] and #want < 200 then want[#want + 1] = string.format("%d", e) end
+    end
+    if #want == 0 then return end
+    local ok, q = pcall(WorldDBQuery, "SELECT " .. X.TEMPLATE_COLS .. " FROM gameobject_template WHERE entry IN ("
+        .. table.concat(want, ",") .. ") AND " .. X.SAFE_SQL)
+    if ok and q then
+        repeat
+            local c = X.safeRow(q)
+            if c then byId[c.id] = c end
+        until not q:NextRow()
+    end
+    for _, e in ipairs(want) do if not byId[tonumber(e)] then X.bad[tonumber(e)] = true end end
+end
+
+-- The placeable item behind an entry (catalog, any template, or a model), or nil. carrier: the model carrier,
+-- which may be any safe template even where "any object" is off.
+function X.known(entry, carrier)
+    entry = tonumber(entry)
+    if not entry then return nil end
+    if byId[entry] then return byId[entry] end
+    if entry >= X.MODEL_BASE then return X.modelItem(entry - X.MODEL_BASE) end
+    if not (X.anyOn() or carrier) or X.bad[entry] then return nil end
+    if carrier and not X.anyOn() then
+        -- the carrier must be a catalog entry where "any object" is off
+        return nil
+    end
+    X.lookup({ entry })
+    return byId[entry]
+end
+
+-- ".build spawn" words beyond the catalog: an entry number, t<entry> or m<display>.
+function X.findAny(word)
+    word = tostring(word or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+    local m = word:match("^m(%d+)$")
+    if m then return X.modelItem(tonumber(m)) end
+    local t = word:match("^t?(%d+)$")
+    if t then return X.known(tonumber(t)) end
+    return nil
+end
+
+-- GameObjectDisplayInfo.dbc from the server's own data folder (dbc extracted from the host's game on their PC):
+-- [display id] = { name = file name, path = lower-case path, wmo = true for a WMO, minz, maxz, size }.
+local function f32(s, pos)
+    local b1, b2, b3, b4 = s:byte(pos, pos + 3)
+    if not b4 then return nil end
+    local sign = b4 >= 128 and -1 or 1
+    local e = (b4 % 128) * 2 + math.floor(b3 / 128)
+    local m = ((b3 % 128) * 256 + b2) * 256 + b1
+    if e == 255 then return nil end
+    if e == 0 then return sign * m * 2 ^ -149 end
+    return sign * (1 + m / 8388608) * 2 ^ (e - 127)
+end
+
+function X.readDisplays(path)
+    local f = io and io.open and io.open(path, "rb")
+    if not f then return nil end
+    local s = f:read("*a") or ""
+    f:close()
+    if #s < 20 or s:sub(1, 4) ~= "WDBC" then return nil end
+    local function u32(pos) local a, b, c, d = s:byte(pos, pos + 3); return a + b * 256 + c * 65536 + d * 16777216 end
+    local n, fields, size, strSize = u32(5), u32(9), u32(13), u32(17)
+    if fields < 2 or size ~= fields * 4 or n > 200000 or 21 + n * size + strSize - 1 > #s then return nil end
+    local strBase = 21 + n * size
+    local out, count = {}, 0
+    for i = 0, n - 1 do
+        local r = 21 + i * size
+        local id, off = u32(r), u32(r + 4)
+        if off < strSize then
+            local a = strBase + off
+            local z = s:find("\0", a, true) or (strBase + strSize)
+            local path = s:sub(a, z - 1):gsub("\\", "/")
+            if path ~= "" then
+                local low = path:lower()
+                local m = { name = (path:match("([^/]+)$") or path):gsub("%.[%w]+$", ""), path = low, wmo = low:find("%.wmo$") ~= nil }
+                if fields >= 18 then   -- GeoBoxMin x y z, GeoBoxMax x y z (fields 12-17)
+                    local x1, y1, z1, x2, y2, z2 = f32(s, r + 48), f32(s, r + 52), f32(s, r + 56), f32(s, r + 60), f32(s, r + 64), f32(s, r + 68)
+                    if x1 and y1 and z1 and x2 and y2 and z2 and x2 >= x1 and y2 >= y1 and z2 >= z1 and z2 - z1 < 2000 then
+                        m.minz, m.maxz, m.w, m.d = z1, z2, x2 - x1, y2 - y1
+                        m.size = math.max(x2 - x1, y2 - y1, z2 - z1)
+                    end
+                end
+                out[id] = m
+                count = count + 1
+            end
+        end
+    end
+    return out, count
+end
+
+-- The displays, read once (false when the file isn't there: models are off, and bounds unknown).
+function X.displays()
+    if X.dbc == nil then
+        local path = os.getenv("OV_BUILD_DBC") or ((os.getenv("AC_DATA_DIR") or "/azerothcore/env/dist/data") .. "/dbc/GameObjectDisplayInfo.dbc")
+        local ok, t, n = pcall(X.readDisplays, path)
+        X.dbc = (ok and t) or false
+        X.dbcCount = (ok and n) or 0
+        if X.dbc then
+            X.dbcIds = {}
+            for id in pairs(X.dbc) do X.dbcIds[#X.dbcIds + 1] = id end
+            table.sort(X.dbcIds)
+        end
+    end
+    return X.dbc or nil
+end
+function X.display(d) local t = X.displays(); return t and t[tonumber(d) or -1] end
+
+function X.modelItem(d)
+    d = tonumber(d)
+    if not d or d <= 0 or d >= 1000000 or not X.modelsWanted() then return nil end
+    local id = X.MODEL_BASE + d
+    if byId[id] then return byId[id] end
+    local m = X.display(d)
+    if not m or m.wmo then return nil end
+    local c = { id = id, key = "m" .. d, cat = "models", name = (m.name:gsub("[%c,;|=]", "")):sub(1, 32) .. " (model " .. d .. ")",
+        cost = X.costFor(d, 1), display = d, model = true }
+    byId[id] = c
+    return c
+end
+
+-- The bounds of a prop's model, in yards at its size: bottom and top relative to its position, or nil.
+function X.bounds(p)
+    local c = X.known(p.entry)
+    local m = c and c.display and X.display(c.display)
+    if not m or not m.minz then return nil end
+    local s = p.s or 1
+    return m.minz * s, m.maxz * s, (m.size or 0) * s
+end
+
+-- Search words: letters, digits and -, two or more letters each, at most four.
+function X.words(list, from)
+    local out = {}
+    for i = from, #list do
+        local w = list[i]:lower():gsub("[^%w%-]", ""):sub(1, 24)
+        if #w >= 2 and #out < 4 and not (i == #list and i > from and tonumber(w)) then out[#out + 1] = w end
+    end
+    local page = tonumber(list[#list] or "")
+    if #list > from and page then page = math.max(1, math.min(500, math.floor(page))) else page = 1 end
+    return out, page
+end
+
+function X.sendFound(player, kind, page, more, items)
+    if not OVMod then return end
+    local out = { string.format("%s,%d,%d", kind, page, more and 1 or 0) }
+    for _, c in ipairs(items) do
+        out[#out + 1] = string.format("%d,%s,%s,%s,%d", c.id, c.key, c.cat, (c.name:gsub("[,;]", "")), c.cost or 1)
+    end
+    pcall(OVMod.Send, player, MOD, "found", table.concat(out, ";"))
+end
+
+function X.sayFound(player, what, page, more, items)
+    if #items == 0 then return say(player, "Nothing matches " .. what .. ".") end
+    local names = {}
+    for i = 1, math.min(#items, 10) do names[#names + 1] = items[i].name .. " (|cffffff00" .. items[i].key .. "|r)" end
+    say(player, string.format("%s, page %d: %s%s", what, page, table.concat(names, ", "), #items > 10 and ", ..." or ""))
+    say(player, "|cffffff00.build spawn <key>|r places one" .. (more and string.format("; page %d has more.", page + 1) or "."))
+end
+
+X.CMD.find = function(player, words)
+    if not X.anyOn() then return say(player, "On this realm only the catalog's props can be placed (|cffffff00.build catalog|r).") end
+    local guid, now = player:GetGUIDLow(), os.time()
+    if X.lastFind[guid] == now then return say(player, "One search a second.") end
+    X.lastFind[guid] = now
+    local ws, page = X.words(words, 2)
+    local one = tonumber((words[2] or ""):match("^t?(%d+)$") or "")
+    if one and #words <= 2 then
+        local c = X.known(one)
+        X.sendFound(player, "objects", 1, false, { c })
+        if not c then return say(player, "No placeable object " .. one .. " on this realm.") end
+        return X.sayFound(player, "Objects", 1, false, { c })
+    end
+    if #ws == 0 then return say(player, "Usage: |cffffff00.build find <words> [page]|r  (e.g. .build find bench)") end
+    if not WorldDBQuery then return say(player, "The world database can't be searched here.") end
+    local like = {}
+    for _, w in ipairs(ws) do like[#like + 1] = "name LIKE '%" .. w .. "%'" end
+    local sql = string.format("SELECT %s FROM gameobject_template WHERE %s AND %s ORDER BY name, entry LIMIT %d OFFSET %d",
+        X.TEMPLATE_COLS, table.concat(like, " AND "), X.SAFE_SQL, X.FIND_PAGE + 1, (page - 1) * X.FIND_PAGE)
+    local ok, q = pcall(WorldDBQuery, sql)
+    local items, more = {}, false
+    if ok and q then
+        local n = 0
+        repeat
+            n = n + 1
+            if n > X.FIND_PAGE then more = true; break end
+            local c = X.safeRow(q)
+            if c then byId[c.id] = byId[c.id] or c; items[#items + 1] = byId[c.id] end
+        until not q:NextRow()
+    end
+    X.sendFound(player, "objects", page, more, items)
+    X.sayFound(player, "Objects matching '" .. table.concat(ws, " ") .. "'", page, more, items)
+end
+X.CMD.search = X.CMD.find
+
+X.CMD.models = function(player, words)
+    if not X.modelsWanted() then return say(player, "Models are off on this realm.") end
+    if not X.displays() then
+        return say(player, "The realm can't read its own GameObjectDisplayInfo (the dbc folder from your game), so models are off.")
+    end
+    local guid, now = player:GetGUIDLow(), os.time()
+    if X.lastFind[guid] == now then return say(player, "One search a second.") end
+    X.lastFind[guid] = now
+    local ws, page = X.words(words, 2)
+    if #ws == 0 then return say(player, string.format("Usage: |cffffff00.build models <words> [page]|r (%d models on this realm)", X.dbcCount or 0)) end
+    local items, skip, more = {}, (page - 1) * X.FIND_PAGE, false
+    for _, id in ipairs(X.dbcIds) do
+        local m = X.dbc[id]
+        if not m.wmo then
+            local hit = true
+            for _, w in ipairs(ws) do if not m.path:find(w, 1, true) then hit = false; break end end
+            if hit then
+                if skip > 0 then skip = skip - 1
+                elseif #items >= X.FIND_PAGE then more = true; break
+                else local c = X.modelItem(id); if c then items[#items + 1] = c end end
+            end
+        end
+    end
+    X.sendFound(player, "models", page, more, items)
+    X.sayFound(player, "Models matching '" .. table.concat(ws, " ") .. "'", page, more, items)
+end
+
+-- lock and hide (mod_builder_prop_flags; a Den's builders share them, like the props)
+exec("CREATE TABLE IF NOT EXISTS mod_builder_prop_flags ("
+    .. "id INT UNSIGNED NOT NULL PRIMARY KEY, locked TINYINT UNSIGNED NOT NULL DEFAULT 0, hidden TINYINT UNSIGNED NOT NULL DEFAULT 0)")
+do
+    local q = query("SELECT id, locked, hidden FROM mod_builder_prop_flags")
+    if q then
+        repeat
+            local id = q:GetUInt32(0)
+            if props[id] then
+                if q:GetUInt32(1) == 1 then X.locked[id] = true end
+                if q:GetUInt32(2) == 1 then X.hidden[id] = true end
+            end
+        until not q:NextRow()
+    end
+    -- the props on file whose entries are beyond the catalog (any object, models): known before anyone asks
+    local extra = {}
+    for _, p in pairs(props) do if not byId[p.entry] and p.entry < X.MODEL_BASE then extra[#extra + 1] = p.entry end end
+    if #extra > 0 then X.lookup(extra) end
+end
+
+function X.lockedText(p) return propName(p) .. " is locked (|cffffff00.build unlock|r)." end
+
+function X.setFlags(id, lock, hide)
+    X.locked[id], X.hidden[id] = lock or nil, hide or nil
+    if lock or hide then
+        exec(string.format("REPLACE INTO mod_builder_prop_flags (id, locked, hidden) VALUES (%d, %d, %d)", id, lock and 1 or 0, hide and 1 or 0))
+    else
+        exec(string.format("DELETE FROM mod_builder_prop_flags WHERE id = %d", id))
+    end
+end
+
+-- The selection for lock / unlock / hide / show: like editList, but a locked prop may be unlocked.
+function X.flagList(player)
+    local list = selList(player:GetGUIDLow())
+    if #list == 0 then say(player, NOTHING); return nil end
+    for _, p in ipairs(list) do
+        local ok, why = canEdit(player, p)
+        if not ok then say(player, why); return nil end
+    end
+    return list
+end
+
+local function flagCommand(lockIt, hideIt, done)
+    return function(player)
+        local list = X.flagList(player)
+        if not list then return end
+        for _, p in ipairs(list) do
+            local lock, hide = X.locked[p.id], X.hidden[p.id]
+            if lockIt ~= nil then lock = lockIt end
+            if hideIt ~= nil then hide = hideIt end
+            X.setFlags(p.id, lock, hide)
+            if hideIt == true then despawn(p, player)
+            elseif hideIt == false and not liveObject(p, player) then spawn(p) end
+        end
+        say(player, string.format("%s %s.", #list == 1 and propName(list[1]) or plural(#list, "prop"), done))
+    end
+end
+X.CMD.lock = flagCommand(true, nil, "locked: it can't be moved or deleted until |cffffff00.build unlock|r")
+X.CMD.unlock = flagCommand(false, nil, "unlocked")
+X.CMD.hide = flagCommand(nil, true, "hidden (still yours; |cffffff00.build show all|r brings hidden props back)")
+X.CMD.show = function(player, words)
+    if (words[2] or ""):lower() ~= "all" then return flagCommand(nil, false, "shown")(player) end
+    local n = 0
+    local prevActor = actor
+    actor = player
+    for id in pairs(X.hidden) do
+        local p = props[id]
+        if p and p.map == player:GetMapId() and dist2(p.x, p.y, player:GetX(), player:GetY()) <= K.SYNC_RANGE and canEdit(player, p) then
+            X.setFlags(id, X.locked[id], nil)
+            spawn(p)
+            n = n + 1
+        end
+    end
+    actor = prevActor
+    say(player, n == 0 and "Nothing hidden near you." or (plural(n, "prop") .. " shown again."))
+end
+
+X.CMD.measure = function(player)
+    local guid = player:GetGUIDLow()
+    local list = selList(guid)
+    if #list == 0 then return say(player, NOTHING) end
+    local function size(p)
+        local lo, hi, big = X.bounds(p)
+        return lo and string.format(", %.2f yards tall, %.2f across at most", hi - lo, big) or ""
+    end
+    if #list == 1 then
+        local p = list[1]
+        local dx, dy, dz = p.x - player:GetX(), p.y - player:GetY(), p.z - player:GetZ()
+        return say(player, string.format("%s: %.2f yards from you (x %+.2f, y %+.2f, z %+.2f)%s.", propName(p),
+            math.sqrt(dx * dx + dy * dy + dz * dz), dx, dy, dz, size(p)))
+    end
+    local a, b = list[1], primary(guid, list)
+    if a == b then a = list[#list - 1] or list[1] end
+    local dx, dy, dz = b.x - a.x, b.y - a.y, b.z - a.z
+    say(player, string.format("From %s to %s: %.2f yards (x %+.2f, y %+.2f, z %+.2f; on the ground %.2f).", propName(a), propName(b),
+        math.sqrt(dx * dx + dy * dy + dz * dz), dx, dy, dz, math.sqrt(dx * dx + dy * dy)))
+end
+
+X.CMD.align = function(player, words)
+    local axis = (words[2] or ""):lower()
+    if not (axis == "x" or axis == "y" or axis == "z" or axis == "top" or axis == "bottom") then
+        return say(player, "Usage: |cffffff00.build align x|y|z|top|bottom|r: the selection lined up on the last-picked prop.")
+    end
+    local list = editList(player)
+    if not list then return end
+    if #list < 2 then return say(player, "Select two or more props: the last one picked is the one the rest line up on.") end
+    local ref = primary(player:GetGUIDLow(), list)
+    local refLo, refHi = X.bounds(ref)
+    if (axis == "top" or axis == "bottom") and not refLo then return say(player, "Its size isn't known on this realm; use z.") end
+    local fn = function(p)
+        if p == ref then return { x = p.x, y = p.y, z = p.z } end
+        if axis == "x" then return { x = ref.x, y = p.y, z = p.z } end
+        if axis == "y" then return { x = p.x, y = ref.y, z = p.z } end
+        if axis == "z" then return { x = p.x, y = p.y, z = ref.z } end
+        local lo, hi = X.bounds(p)
+        lo, hi = lo or 0, hi or 0
+        if axis == "top" then return { x = p.x, y = p.y, z = ref.z + refHi - hi } end
+        return { x = p.x, y = p.y, z = ref.z + refLo - lo }
+    end
+    if not rateMove(player:GetGUIDLow()) then return say(player, "Slow down a little.") end
+    if moveGroup(player, list, fn) then say(player, string.format("%s lined up on %s (%s).", plural(#list - 1, "prop"), propName(ref), axis)) end
+end
+
+-- Sets list down on top of target: the lowest bottom of the list on the target's top, the shape kept.
+function X.stackOnto(player, list, target)
+    local top = select(2, X.bounds(target))
+    if not top then return say(player, "That prop's size isn't known on this realm (no GameObjectDisplayInfo), so it can't be stacked on.") end
+    top = target.z + top
+    local low = math.huge
+    for _, p in ipairs(list) do
+        if p == target then return say(player, "A prop can't go on top of itself.") end
+        local lo = X.bounds(p) or 0
+        if p.z + lo < low then low = p.z + lo end
+    end
+    local dz = top - low
+    if not rateMove(player:GetGUIDLow()) then return say(player, "Slow down a little.") end
+    if moveGroup(player, list, function(p) return { x = p.x, y = p.y, z = p.z + dz } end) then
+        say(player, string.format("%s set on top of %s (%+.2f yards).", #list == 1 and propName(list[1]) or plural(#list, "prop"), propName(target), dz))
+    end
+end
+
+X.CMD.stack = function(player)
+    local list = editList(player)
+    if not list then return end
+    if #list < 2 then return say(player, "Select the prop to stack on first, then the ones that go on top (Shift-click), or |cffffff00.build stackon <id>|r.") end
+    local rest = {}
+    for i = 2, #list do rest[#rest + 1] = list[i] end
+    X.stackOnto(player, rest, list[1])
+end
+
+X.CMD.stackon = function(player, words)
+    local t = props[tonumber(words[2] or "") or 0]
+    if (words[2] or ""):lower() == "obj" then t = propByObject(tonumber(words[3] or "") or -1) end   -- edit mode's click
+    if not t or t.map ~= player:GetMapId() or dist2(t.x, t.y, player:GetX(), player:GetY()) > K.SYNC_RANGE then
+        return say(player, "Usage: |cffffff00.build stackon <id>|r (a prop near you; its id from |cffffff00.build near|r)")
+    end
+    local list = editList(player)
+    if not list then return end
+    X.stackOnto(player, list, t)
+end
+
+X.CMD.tilt = function(player, words)
+    local axis, deg = (words[2] or ""):lower(), tonumber(words[3] or "")
+    if not (axis == "yaw" or axis == "pitch" or axis == "roll") or not deg or not finite(deg) or math.abs(deg) > 180 then
+        return say(player, "Usage: |cffffff00.build tilt yaw|pitch|roll <degrees>|r (up to 180 a step)")
+    end
+    if axis ~= "yaw" and not core(player) then return say(player, "Tilting needs mod-sandbox-core on this realm's image; turning (yaw) works.") end
+    local list = editList(player)
+    if not list then return end
+    if not rateMove(player:GetGUIDLow()) then return say(player, "Slow down a little.") end
+    local r = math.rad(deg)
+    local ok = moveGroup(player, list, function(p)
+        if axis == "yaw" then return { x = p.x, y = p.y, z = p.z, o = p.o + r } end
+        if axis == "pitch" then return { x = p.x, y = p.y, z = p.z, pt = (p.pt or 0) + r } end
+        return { x = p.x, y = p.y, z = p.z, rl = (p.rl or 0) + r }
+    end)
+    if ok then say(player, string.format("%s: %s %+.1f degrees.", #list == 1 and propName(list[1]) or plural(#list, "prop"), axis, deg)) end
+end
+
+X.CMD.setrot = function(player, words)
+    local yaw, pitch, roll = tonumber(words[2] or ""), tonumber(words[3] or "0"), tonumber(words[4] or "0")
+    if not (yaw and pitch and roll and finite(yaw) and finite(pitch) and finite(roll)) or math.abs(pitch) > 180 or math.abs(roll) > 180 then
+        return say(player, "Usage: |cffffff00.build setrot <yaw> [pitch roll]|r in degrees (pitch and roll -180 to 180)")
+    end
+    local tilt = core(player) and true or false
+    local list = editList(player)
+    if not list then return end
+    if not rateMove(player:GetGUIDLow()) then return say(player, "Slow down a little.") end
+    local ok = moveGroup(player, list, function(p)
+        return { x = p.x, y = p.y, z = p.z, o = normO(math.rad(yaw)), pt = tilt and math.rad(pitch) or nil, rl = tilt and math.rad(roll) or nil }
+    end)
+    if ok then
+        say(player, string.format("%s facing %.1f degrees%s.", #list == 1 and propName(list[1]) or plural(#list, "prop"), yaw % 360,
+            (not tilt and (pitch ~= 0 or roll ~= 0)) and " (tilting needs a realm update; turned only)" or ""))
+    end
+end
+
 local function showHelp(player)
     local cap = budgetOf(player)
     say(player, "Builder: place props in build areas and share builds as codes. /builder opens the window.")
@@ -3213,6 +3731,11 @@ local function showHelp(player)
     say(player, "  |cffffff00.build plot claim|r  |cffffff00.build plot add <name>|r  |cffffff00.build plot|r: your own plot to build on with friends.")
     say(player, "  |cffffff00.build redo|r  |cffffff00.build store|r / |cffffff00storage|r  |cffffff00.build group|r / |cffffff00ungroup|r  "
         .. "|cffffff00.build floor|r  |cffffff00.build layout save|load|list <name>|r")
+    if X.anyOn() then
+        say(player, "  Any object: |cffffff00.build find <words>|r  |cffffff00.build models <words>|r  then |cffffff00.build spawn <key>|r")
+    end
+    say(player, "  |cffffff00.build lock|r / |cffffff00unlock|r  |cffffff00.build hide|r / |cffffff00show [all]|r  |cffffff00.build measure|r  "
+        .. "|cffffff00.build align x|y|z|top|bottom|r  |cffffff00.build stack|r  |cffffff00.build tilt yaw|pitch|roll <deg>|r  |cffffff00.build setrot <yaw> [pitch roll]|r")
     say(player, string.format("  Limits: %d props per player, %d per area, one spawn a second.", perPlayer(), perArea()))
     say(player, string.format("  You: %d props and %d build points (%s).", cap.props, cap.points, cap.tier))
     if isGM(player) then
@@ -3518,6 +4041,15 @@ function OVBuild.Builders()
     for _, r in pairs(roles) do out[#out + 1] = r.name end
     table.sort(out)
     return out
+end
+
+-- OVBuild.ModelBox(entry) -> width (x), depth (y), bottom, top of its model at size 1 (GameObjectDisplayInfo's
+-- bounds), or nil when the server's dbc isn't readable: ov_den.lua sizes the room's blocks to fit seamlessly.
+function OVBuild.ModelBox(entry)
+    local c = X.known(entry)
+    local m = c and c.display and X.display(c.display)
+    if not m or not m.minz or not m.w then return nil end
+    return m.w, m.d, m.minz, m.maxz
 end
 
 -- OVBuild.DenUsage() -> inside used, inside cap, yard used, yard cap

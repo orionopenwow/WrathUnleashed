@@ -27,16 +27,21 @@ local W = WrathUnleashedUI
 local PREFIX, MOD = "OVMOD", "wubuild"
 local WIN_W, WIN_H, ROW_H, ROWS = 520, 650, 20, 9
 local ANSWER_WAIT = 6
-local STEPS = { 0.25, 1, 3 }
+local STEPS = { 0.01, 0.1, 0.25, 1, 3, 10 }    -- the move step, in yards (Step cycles through them)
+local ANGLE_STEPS = { 1, 5, 15, 45, 90 }        -- the properties panel's turn and tilt step, in degrees
+local SIZE_STEP = 0.1
 local TURN = 15
+-- "objects" and "models" aren't catalog categories: the realm searches them (.build find / .build models; a Den
+-- places any safe object and any model of the host's own game files), and their lists are the realm's answers.
 local CATS = { "all", "seating", "tables", "barrels", "crates", "lights", "banners", "tents", "fires", "fences", "nature", "decor",
-    "structure" }
+    "structure", "objects", "models" }
+local SEARCHED = { objects = "find", models = "models" }
 local MENU_COLS, MENU_ROWS = 3, 12
 local RECENT_MAX = 12
 
 local win, menu, panel
-local B = { catalog = {}, shown = {}, offset = 0, cat = 1, step = 2, search = "", state = {}, parts = {}, prefabs = {},
-    menuTab = "all", menuSearch = "", menuOffset = 0, menuItems = {}, storage = {} }
+local B = { catalog = {}, shown = {}, offset = 0, cat = 1, step = 4, search = "", state = {}, parts = {}, prefabs = {},
+    menuTab = "all", menuSearch = "", menuOffset = 0, menuItems = {}, storage = {}, found = {}, angle = 3 }
 
 local function label(parent, text, font, ...)
     local fs = parent:CreateFontString(nil, "OVERLAY", font or "GameFontHighlight")
@@ -83,6 +88,7 @@ local function store()
     c.builder = type(c.builder) == "table" and c.builder or {}
     c.builder.favs = type(c.builder.favs) == "table" and c.builder.favs or {}
     c.builder.recent = type(c.builder.recent) == "table" and c.builder.recent or {}
+    c.builder.items = type(c.builder.items) == "table" and c.builder.items or {}   -- found objects and models, by id
     return c.builder
 end
 
@@ -104,6 +110,32 @@ function B.RequestCatalog()
     B.askedAt, B.waiting = now(), true
     setStatus("Asking the realm for the props...")
     return send("catalog", "")
+end
+
+-- Asks the realm to search every object ("objects") or every model ("models") for q (page n).
+function B.Find(kind, q, page)
+    local verb = SEARCHED[kind]
+    q = tostring(q or ""):gsub("[^%w%s%-]", ""):gsub("^%s+", ""):gsub("%s+$", ""):sub(1, 40)
+    if not verb then return false end
+    if #q < 2 then setStatus("Type two or more letters, then Enter."); return false end
+    B.asked = B.asked or {}
+    B.asked[kind] = q
+    setStatus("Searching...")
+    return B.Command(verb .. " " .. q .. ((page and page > 1) and (" " .. page) or ""))
+end
+
+-- Down at the end of a searched list asks for the next page.
+function B.MoreFound(kind)
+    local f = B.found[kind]
+    if f and f.more and f.q then return B.Find(kind, f.q, f.page + 1) end
+    return false
+end
+
+-- A found object or model, kept so Recent and Favourites still show it next time (ids only reach the realm).
+local function remember(c)
+    if c and (c.cat == "objects" or c.cat == "models") then
+        store().items[c.id] = { key = c.key, cat = c.cat, name = c.name, cost = c.cost }
+    end
 end
 
 local function parseCatalog(data)
@@ -244,6 +276,23 @@ local function dispatch(name, data)
         end
         B.prefabs = list
         B.MenuRefresh()
+    elseif name == "found" then
+        -- a .build find / .build models answer: <kind>,<page>,<more>;id,key,category,name,points;...
+        local kind, page, more = data:match("^(%a+),(%d+),([01])")
+        if SEARCHED[kind or ""] then
+            local list = parseCatalog(data)
+            if tonumber(page) > 1 and B.found[kind] and B.found[kind].page == tonumber(page) - 1 then
+                local all = B.found[kind].list
+                for _, c in ipairs(list) do all[#all + 1] = c end
+                list = all
+            end
+            B.found[kind] = { list = list, page = tonumber(page), more = more == "1", q = B.asked and B.asked[kind] }
+            for _, c in ipairs(list) do B.known = B.known or {}; B.known[c.id] = c end
+            B.Filter()
+            B.MenuRefresh()
+            setStatus(#list == 0 and "Nothing matches." or string.format("%d found%s. Double-click one to place it.", #list,
+                more == "1" and " (Down for more)" or ""))
+        end
     elseif name == "storage" then
         -- what you have put away: [entry] = count (placing one from the Storage tab takes it out)
         local st = {}
@@ -278,6 +327,12 @@ end
 function B.Filter()
     local want, q = CATS[B.cat], B.search:lower()
     B.shown = {}
+    if SEARCHED[want] then
+        for _, c in ipairs((B.found[want] or {}).list or {}) do B.shown[#B.shown + 1] = c end
+        B.offset = 0
+        B.Refresh()
+        return
+    end
     for _, c in ipairs(B.catalog) do
         if (want == "all" or c.cat == want) and (q == "" or c.name:lower():find(q, 1, true) or c.key:find(q, 1, true)) then
             B.shown[#B.shown + 1] = c
@@ -308,7 +363,13 @@ function B.Refresh()
         end
     end
     win.catBtn:SetText("Category: " .. CATS[B.cat])
-    win.count:SetText(n > ROWS and string.format("%d-%d of %d", B.offset + 1, math.min(n, B.offset + ROWS), n) or "")
+    local f = SEARCHED[CATS[B.cat]] and B.found[CATS[B.cat]]
+    if SEARCHED[CATS[B.cat]] and n == 0 then
+        win.count:SetText("Type a word in Search, then Enter: the realm searches every " .. (CATS[B.cat] == "models" and "model." or "object."))
+    else
+        win.count:SetText((n > ROWS and string.format("%d-%d of %d", B.offset + 1, math.min(n, B.offset + ROWS), n) or "")
+            .. ((f and f.more) and "  (more: Down)" or ""))
+    end
     win.spawn:SetText(B.pick and ("Spawn " .. B.pick.name) or "Spawn")
     if B.pick then win.spawn:Enable() else win.spawn:Disable() end
 end
@@ -325,6 +386,7 @@ function B.Spawn()
     local why = B.Blocked(B.pick)
     if why then setStatus(why); return false end
     addRecent(B.pick.id)
+    remember(B.pick)
     -- In edit mode the next click on the ground places it (EditMode.lua); otherwise at your feet.
     if editing() then
         W.EditMode.StartPlacing(B.pick)
@@ -446,7 +508,8 @@ end
 
 local MENU_TABS = { "favourites", "recent", "prefabs", "storage", "all" }
 for i = 2, #CATS do MENU_TABS[#MENU_TABS + 1] = CATS[i] end
-local TAB_TEXT = { favourites = "Favourites", recent = "Recent", prefabs = "Prefabs", storage = "Storage", all = "All props" }
+local TAB_TEXT = { favourites = "Favourites", recent = "Recent", prefabs = "Prefabs", storage = "Storage", all = "All props",
+    objects = "Every object", models = "Models" }
 local function tabText(t) return TAB_TEXT[t] or (t:sub(1, 1):upper() .. t:sub(2)) end
 
 local function byIdMap()
@@ -464,9 +527,18 @@ function B.MenuList()
         for _, f in ipairs(B.prefabs) do if match(f) then out[#out + 1] = f end end
         return out
     end
+    if SEARCHED[tab] then return (B.found[tab] or {}).list or {} end
     local ids = byIdMap()
+    for id, it in pairs(store().items) do   -- found objects and models, for Recent, Favourites and Storage
+        if not ids[id] and type(it) == "table" and it.name then
+            ids[id] = { id = id, key = it.key, cat = it.cat, name = it.name, cost = it.cost or 1 }
+        end
+    end
     if tab == "storage" then
         for _, c in ipairs(B.catalog) do if (B.storage[c.id] or 0) > 0 and match(c) then out[#out + 1] = c end end
+        for id, c in pairs(ids) do
+            if (B.storage[id] or 0) > 0 and (c.cat == "objects" or c.cat == "models") and match(c) then out[#out + 1] = c end
+        end
         return out
     end
     if tab == "recent" then
@@ -478,6 +550,9 @@ function B.MenuList()
         local inTab = tab == "all" or c.cat == tab or (tab == "favourites" and favs[c.id])
         if inTab and match(c) then out[#out + 1] = c end
     end
+    if tab == "favourites" then
+        for id, c in pairs(ids) do if favs[id] and (c.cat == "objects" or c.cat == "models") and match(c) then out[#out + 1] = c end end
+    end
     return out
 end
 
@@ -485,6 +560,7 @@ function B.ToggleFavourite(c)
     if not c or c.kind == "prefab" then return end
     local favs = store().favs
     favs[c.id] = (not favs[c.id]) or nil
+    remember(c)
     setStatus(favs[c.id] and (c.name .. " is a favourite.") or (c.name .. " is no longer a favourite."))
     B.MenuRefresh()
 end
@@ -535,6 +611,8 @@ function B.MenuRefresh()
         elseif B.menuTab == "recent" then empty = "Props you spawn show up here."
         elseif B.menuTab == "prefabs" then empty = "No prefabs yet: select props, then Save in the Builder's Prefab row."
         elseif B.menuTab == "storage" then empty = "Nothing put away: select props, then Put away (edit mode's tool bar)."
+        elseif SEARCHED[B.menuTab] then empty = "Type a word in Search, then Enter: the realm searches every "
+            .. (B.menuTab == "models" and "model" or "object") .. " it has."
         else empty = "Nothing matches." end
     end
     menu.empty:SetText(empty)
@@ -563,7 +641,12 @@ local function buildMenu()
     close:SetPoint("TOPRIGHT", -6, -6)
     menu.search = editBox(menu, 180, 30, "TOPLEFT", 200, -16)
     menu.search:SetScript("OnTextChanged", function(self)
-        B.menuSearch = (self:GetText() or ""):sub(1, 30); B.menuOffset = 0; B.MenuRefresh()
+        B.menuSearch = (self:GetText() or ""):sub(1, 30); B.menuOffset = 0
+        if not SEARCHED[B.menuTab] then B.MenuRefresh() end
+    end)
+    menu.search:SetScript("OnEnterPressed", function(self)
+        self:ClearFocus()
+        if SEARCHED[B.menuTab] then B.Find(B.menuTab, B.menuSearch) end
     end)
     label(menu, "Search", "GameFontNormal", "TOPLEFT", 150, -20)
     menu.tabs = {}
@@ -602,7 +685,11 @@ local function buildMenu()
     menu.status = label(menu, B.status or "", "GameFontHighlightSmall", "BOTTOMLEFT", 20, 22)
     menu.status:SetWidth(380)
     button(menu, "Up", 50, function() B.menuOffset = math.max(0, B.menuOffset - MENU_COLS * MENU_ROWS); B.MenuRefresh() end, "BOTTOMRIGHT", -76, 16)
-    button(menu, "Down", 50, function() B.menuOffset = B.menuOffset + MENU_COLS * MENU_ROWS; B.MenuRefresh() end, "BOTTOMRIGHT", -20, 16)
+    button(menu, "Down", 50, function()
+        local per = MENU_COLS * MENU_ROWS
+        if B.menuOffset + per >= #B.menuItems and B.MoreFound(B.menuTab) then return end
+        B.menuOffset = B.menuOffset + per; B.MenuRefresh()
+    end, "BOTTOMRIGHT", -20, 16)
     tinsert(UISpecialFrames, "WrathUnleashedSpawnMenu")
     menu:SetScript("OnShow", function()
         if #B.catalog == 0 then B.RequestCatalog() end
@@ -683,9 +770,37 @@ function B.ApplyProps()
     return sent > 0
 end
 
+-- Nudges from the properties panel: x / y / z by the move step, turn / pitch / roll by the angle step (each prop
+-- about itself for pitch and roll; turn turns a group around its middle), size by 0.1.
+function B.Nudge(field, sign)
+    local p = B.state.p
+    if not p then setStatus("Select a prop first."); return false end
+    if field == "x" or field == "y" or field == "z" then
+        return B.Command(string.format("move %s %s", field, tostring(sign * STEPS[B.step])))
+    end
+    local a = sign * ANGLE_STEPS[B.angle]
+    if field == "turn" then return B.Command("turn " .. a) end
+    if field == "pitch" or field == "roll" then
+        if not B.state.core then setStatus("Tilt needs a realm update; turning works.") return false end
+        return B.Command("tilt " .. field .. " " .. a)
+    end
+    if field == "scale" then
+        local v = math.floor(((p.scale or 1) + sign * SIZE_STEP) * 100 + 0.5) / 100
+        return B.Command(string.format("setscale %.2f", v))
+    end
+    return false
+end
+
+-- Stack: in edit mode, the next click on a prop is what the selection goes on top of; outside it, the first
+-- prop picked is the one the rest go on.
+function B.Stack()
+    if editing() and W.EditMode.StartStack then W.EditMode.StartStack(); return true end
+    return B.Command("stack")
+end
+
 local function buildPanel()
     panel = CreateFrame("Frame", "WrathUnleashedPropsFrame", UIParent)
-    panel:SetWidth(250); panel:SetHeight(310)
+    panel:SetWidth(340); panel:SetHeight(440)
     panel:SetPoint("LEFT", UIParent, "LEFT", 24, 0)
     panel:SetFrameStrata("DIALOG")
     panel:EnableMouse(true)
@@ -699,22 +814,49 @@ local function buildPanel()
     panel:SetBackdropColor(0.06, 0.07, 0.09, 0.92)
     label(panel, "Properties", "GameFontNormal", "TOPLEFT", 14, -12)
     panel.title2 = label(panel, "", "GameFontHighlightSmall", "TOPLEFT", 14, -30)
-    panel.title2:SetWidth(220)
+    panel.title2:SetWidth(300)
     local close = (W.Style and W.Style.Close(panel) or CreateFrame("Button", nil, panel, "UIPanelCloseButton"))
     close:SetPoint("TOPRIGHT", -2, -2)
-    panel.box = {}
+    panel.box, panel.minus, panel.plus = {}, {}, {}
     for i, f in ipairs(FIELDS) do
-        label(panel, f[2], "GameFontNormal", "TOPLEFT", 16, -54 - (i - 1) * 26)
-        local e = editBox(panel, 120, 12, "TOPLEFT", 80, -50 - (i - 1) * 26)
+        local y = -54 - (i - 1) * 26
+        label(panel, f[2], "GameFontNormal", "TOPLEFT", 16, y)
+        local e = editBox(panel, 110, 12, "TOPLEFT", 70, y + 4)
         e:SetScript("OnEditFocusGained", function() B.propsEditing = true end)
         e:SetScript("OnEnterPressed", function(self) self:ClearFocus(); B.ApplyProps() end)
         panel.box[f[1]] = e
+        panel.minus[f[1]] = button(panel, "-", 28, function() B.Nudge(f[1], -1) end, "TOPLEFT", 188, y + 4)
+        panel.plus[f[1]] = button(panel, "+", 28, function() B.Nudge(f[1], 1) end, "TOPLEFT", 218, y + 4)
+    end
+    local y = -54 - #FIELDS * 26
+    panel.step = button(panel, "Step " .. STEPS[B.step] .. " yd", 100, function(self)
+        B.step = B.step % #STEPS + 1; self:SetText("Step " .. STEPS[B.step] .. " yd")
+        if win and win.stepBtn then win.stepBtn:SetText("Step " .. STEPS[B.step] .. " yd") end
+    end, "TOPLEFT", 14, y)
+    panel.angle = button(panel, "Angle " .. ANGLE_STEPS[B.angle] .. " deg", 100, function(self)
+        B.angle = B.angle % #ANGLE_STEPS + 1; self:SetText("Angle " .. ANGLE_STEPS[B.angle] .. " deg")
+    end, "TOPLEFT", 118, y)
+    panel.tools = {}
+    local rows = {
+        { { "Lock", "lock" }, { "Unlock", "unlock" }, { "Hide", "hide" }, { "Show all", "show all" } },
+        { { "Measure", "measure" }, { "Align X", "align x" }, { "Align Y", "align y" }, { "Align Z", "align z" } },
+        { { "Stack on", B.Stack }, { "Bottoms", "align bottom" }, { "Undo", "undo" }, { "Redo", "redo" } },
+    }
+    for r, row in ipairs(rows) do
+        for c, t in ipairs(row) do
+            local act = t[2]
+            panel.tools[t[1]] = button(panel, t[1], 76, function()
+                if type(act) == "function" then act() else B.Command(act) end
+            end, "TOPLEFT", 14 + (c - 1) * 79, y - 28 * r)
+        end
     end
     panel.apply = button(panel, "Apply", 80, function() B.ApplyProps() end, "BOTTOMLEFT", 14, 30)
     button(panel, "Reset", 80, function() B.propsEditing = nil; B.PropsFill() end, "BOTTOMLEFT", 100, 30)
     panel.status = label(panel, "", "GameFontHighlightSmall", "BOTTOMLEFT", 14, 12)
-    panel.status:SetWidth(222)
-    label(panel, "", "GameFontHighlightSmall", "TOPLEFT", 14, -232):SetText("Angles in degrees. Pitch and roll tilt the prop.")
+    panel.status:SetWidth(310)
+    label(panel, "", "GameFontHighlightSmall", "TOPLEFT", 14, y - 120):SetText(
+        "Type exact numbers and Enter, or nudge with - and +. Angles in degrees; pitch and roll tilt the prop. "
+        .. "Align and Stack: pick the reference first (Align: the last one picked; Stack: the first).")
     panel:SetScript("OnShow", function() B.propsEditing = nil; B.PropsFill() end)
     panel:Hide()
 end
@@ -781,7 +923,14 @@ local function build()
     -- search and category
     label(win, "Search", "GameFontNormal", "TOPLEFT", 20, -48)
     local search = editBox(win, 170, nil, "TOPLEFT", 82, -44)
-    search:SetScript("OnTextChanged", function(self) B.search = (self:GetText() or ""):sub(1, 30); B.Filter() end)
+    search:SetScript("OnTextChanged", function(self)
+        B.search = (self:GetText() or ""):sub(1, 30)
+        if not SEARCHED[CATS[B.cat]] then B.Filter() end
+    end)
+    search:SetScript("OnEnterPressed", function(self)
+        self:ClearFocus()
+        if SEARCHED[CATS[B.cat]] then B.Find(CATS[B.cat], B.search) end
+    end)
     win.search = search
     win.catBtn = button(win, "Category: all", 150, function()
         B.cat = B.cat % #CATS + 1; B.Filter()
@@ -800,7 +949,10 @@ local function build()
     win.count = label(win, "", "GameFontHighlightSmall", "TOPLEFT", 20, y - 8)
     win.menuBtn = button(win, "Spawn menu", 100, function() B.ToggleMenu() end, "TOPRIGHT", -132, y - 4)
     button(win, "Up", 50, function() B.offset = math.max(0, B.offset - ROWS); B.Refresh() end, "TOPRIGHT", -76, y - 4)
-    button(win, "Down", 50, function() B.offset = B.offset + ROWS; B.Refresh() end, "TOPRIGHT", -20, y - 4)
+    win.down = button(win, "Down", 50, function()
+        if B.offset + ROWS >= #B.shown and B.MoreFound(CATS[B.cat]) then return end
+        B.offset = B.offset + ROWS; B.Refresh()
+    end, "TOPRIGHT", -20, y - 4)
 
     -- spawn and the selection
     win.spawn = button(win, "Spawn", 220, function() B.Spawn() end, "TOPLEFT", 20, y - 32)

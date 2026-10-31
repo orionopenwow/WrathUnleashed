@@ -277,6 +277,60 @@ check("replace is the owner's", last(bea):find("Only the owner"))
 cmd(own, "den layouts")
 check(".den layouts", last(own):find("home"))
 
+-- ---------------------------------------------------------------- the addon hint, any object in a Den
+do
+    local desk = player({ guid = 8, name = "Desk", map = 1, x = DEN.x, y = DEN.y, z = GROUND })
+    local web = player({ guid = 9, name = "Web", map = 1, x = DEN.x + 1, y = DEN.y, z = GROUND })
+    fire(3, desk); fire(3, web)
+    OVMod.Dispatch(web, "wuden", "info", "")      -- the addon asks for the Den's info when it loads
+    tick()
+    check("addon hint: not before a while", not said(desk, "Leyline UI addon"))
+    clock = clock + D.ADDON_WAIT
+    tick()
+    check("addon hint: a player whose game has no addon hears where to get it", said(desk, "Leyline UI addon")
+        and said(desk, "launcher") and said(desk, ".build help"))
+    check("addon hint: not for a player with the addon", not said(web, "Leyline UI addon"))
+    local n = #desk.msgs
+    clock = clock + 60; tick()
+    check("addon hint: once", #desk.msgs == n)
+    check("a Den places any object and any model by default", T.X.anyOn() and T.X.modelsWanted())
+    online[8], online[9] = nil, nil
+end
+
+-- ---------------------------------------------------------------- a seamless floor from the models' bounds
+do
+    local function u32(n) return string.char(n % 256, math.floor(n / 256) % 256, math.floor(n / 65536) % 256, math.floor(n / 16777216) % 256) end
+    local function f32(v)
+        if v == 0 then return u32(0) end
+        local sign = v < 0 and 2147483648 or 0
+        v = math.abs(v)
+        local e = math.floor(math.log(v) / math.log(2))
+        return u32(sign + (e + 127) * 8388608 + math.floor((v / 2 ^ e - 1) * 8388608 + 0.5))
+    end
+    -- display 777: a block 2 x 2 yards, 1 tall from its base
+    local name = "World\\Generic\\Block.m2\0"
+    local rec = u32(777) .. u32(1) .. string.rep(u32(0), 10) .. f32(-1) .. f32(-1) .. f32(0) .. f32(1) .. f32(1) .. f32(1) .. u32(0)
+    local path = os.tmpname()
+    local fh = io.open(path, "wb"); fh:write("WDBC" .. u32(1) .. u32(19) .. u32(76) .. u32(1 + #name) .. rec .. "\0" .. name); fh:close()
+    env.OV_BUILD_DBC = path
+    T.X.dbc = nil
+    local floorItem = T.X.known(D.THEMES.white.floor)
+    local before = floorItem.display
+    floorItem.display = 777
+    local plan = D.plan(D.THEMES.white, GROUND)
+    local fl, wl = plan[1], nil
+    for _, e in ipairs(plan) do if math.abs(e.y - (DEN.y + DEN.half)) < 0.01 then wl = e; break end end
+    check("with the models' bounds: floor blocks sized to one tile (2 yards -> size 2 for 4-yard tiles)", fl.s == 2)
+    check("with the models' bounds: the floor's top is level with the ground", math.abs(fl.z + 2 * 1 - GROUND) < 0.001)
+    check("with the models' bounds: walls stand on the floor", wl and wl.s == 2 and math.abs(wl.z - GROUND) < 0.001)
+    floorItem.display = before
+    env.OV_BUILD_DBC = nil
+    T.X.dbc = nil
+    os.remove(path)
+    check("without them: blocks at their own size on the ground", D.plan(D.THEMES.white, GROUND)[1].s == nil
+        and D.plan(D.THEMES.white, GROUND)[1].z == GROUND)
+end
+
 -- ---------------------------------------------------------------- brand words, tables
 local BANNED = { "world of warcraft", "warcraft", "lich king", "blizzard", "openvanilla", "open vanilla", "openwow" }
 check("no game-brand names in anything players saw", (function()

@@ -53,7 +53,27 @@ function E.Set(want)
     if SetCVar then pcall(SetCVar, CVAR, want and "1" or "0") end
 end
 
-function E.Toggle() E.Set(not on()) end
+-- On a player's own game (no browser client: no edit-mode camera, no LeylineEdit), F7 and /edit open the Builder
+-- window and the properties panel instead: every tool is there, at your character's position and by exact numbers.
+function E.Desktop()
+    if LeylineEdit or not GetCVar then return false end
+    local ok, v = pcall(GetCVar, CVAR)
+    return ok and v == nil
+end
+
+function E.Toggle()
+    if E.Desktop() then
+        local B = W.Builder
+        if W.ToggleBuilder then W.ToggleBuilder() end
+        if B and B.ShowProps then B.ShowProps(true) end
+        if DEFAULT_CHAT_FRAME then
+            DEFAULT_CHAT_FRAME:AddMessage("|cff66ccff[Builder]|r The free building camera is in the Leyline browser client. Here the Builder "
+                .. "window and the Properties panel do everything: exact numbers, nudges, Every object and Models.")
+        end
+        return
+    end
+    E.Set(not on())
+end
 function E.IsOn() return on() and true or false end
 
 local function builder() return W.Builder end
@@ -61,7 +81,8 @@ local function cmd(text) local B = builder(); if B and B.Command then return B.C
 
 -- From the client's hotkeys (V, Delete, Ctrl+Z) and the tool bar.
 local ALLOWED = { dup = true, delete = true, undo = true, near = true, copy = true, selall = true, selclear = true,
-    redo = true, store = true, group = true, ungroup = true, floor = true }
+    redo = true, store = true, group = true, ungroup = true, floor = true, lock = true, unlock = true, hide = true,
+    measure = true, stack = true }
 function E.Cmd(name)
     if not ALLOWED[name] then return end
     cmd(name)
@@ -89,6 +110,7 @@ end
 function E.StartPasting() pend("paste", nil, "Click the ground where the copy goes.") end
 function E.StartPrefab(name) if name then pend("prefab", name, "Click the ground where '" .. name .. "' goes.") end end
 function E.StartBox() pend("box", nil, "Box select: click one corner on the ground, then the other.") end
+function E.StartStack() pend("stack", nil, "Stack: click the prop the selection goes on top of.") end
 function E.Cancel() pend(nil) end
 
 local function shiftDown(flag)
@@ -114,6 +136,13 @@ end
 -- grid when Snap is on) and the clicked object's id; either may be nil.
 function E.Clicked(x, y, z, objectId, shift)
     local p = E.pending
+    if p and p.kind == "stack" then
+        if not objectId then E.Note("Click a prop: the selection goes on top of it."); return end
+        pend(nil)
+        cmd("stackon obj " .. math.floor(objectId))
+        E.Note("Stacked. Ctrl+Z takes it back.")
+        return
+    end
     if p and x then
         if p.kind == "prop" then
             pend(nil)
@@ -516,6 +545,8 @@ local function buildDen()
         lx = lx + 74
     end
     bar(den, "Budget", 70, function() E.DenCmd("budget") end, "TOPLEFT", lx + 20, -196)
+    bar(den, "Back to the room", 130, function() E.DenCmd("home") end, "BOTTOMLEFT", 12, 10)
+    bar(den, "Builder", 80, function() if W.ToggleBuilder then W.ToggleBuilder() end end, "BOTTOMLEFT", 146, 10)
     bar(den, "Close", 70, function() den:Hide() end, "BOTTOMRIGHT", -12, 10)
     if UISpecialFrames then tinsert(UISpecialFrames, "LeylineDenPanel") end
     _G.LeylineDenPanel = den
@@ -589,6 +620,17 @@ SlashCmdList["LEYLINEDEN"] = function() E.ToggleDen() end
 
 local denListener = CreateFrame("Frame")
 denListener:RegisterEvent("CHAT_MSG_ADDON")
-denListener:SetScript("OnEvent", function(_, _, prefix, msg, channel, sender) E.OnDenMessage(prefix, msg, channel, sender) end)
+denListener:RegisterEvent("PLAYER_ENTERING_WORLD")
+-- On entering the world the addon asks for the Den's info: a Den hears the addon is here (ov_den.lua tells a
+-- game without it where to get it), and the panel knows your role. Elsewhere nobody answers.
+function E.Hello()
+    if E.helloSent or not SendAddonMessage or not UnitName then return end
+    E.helloSent = true
+    pcall(SendAddonMessage, "OVMOD", DEN_MOD .. "\tinfo\t1/1\t", "WHISPER", UnitName("player"))
+end
+denListener:SetScript("OnEvent", function(_, event, prefix, msg, channel, sender)
+    if event == "PLAYER_ENTERING_WORLD" then return E.Hello() end
+    E.OnDenMessage(prefix, msg, channel, sender)
+end)
 
 W.EditMode = E
