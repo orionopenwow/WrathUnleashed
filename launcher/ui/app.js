@@ -320,12 +320,10 @@ try { mode = localStorage.getItem("leyline.mode") === "browser" ? "browser" : "o
 function setMode(m) {
   if (m === "solo") { say("play-status", "Solo play on this PC arrives in a later Leyline release.", "warn"); return; }
   mode = m;
-  document.querySelectorAll(".mode").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.mode === m)));
   try { localStorage.setItem("leyline.mode", m); } catch (_) { /* fine */ }
   renderPlayBar();
   document.dispatchEvent(new CustomEvent("leyline:mode", { detail: { mode: m } }));
 }
-document.querySelectorAll(".mode").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
 
 function currentClient() {
   return state.settings.clients.find((x) => x.id === $("play-client").value);
@@ -433,6 +431,7 @@ function renderClientMenu() {
 function menuRows() { return [...$("pb-menu").querySelectorAll(".pb-opt")]; }
 function openClientMenu() {
   if (menuOpen) return;
+  if (typeof closeRealmMenu === "function") closeRealmMenu(false);
   renderClientMenu();
   menuOpen = true;
   $("pb-menu").hidden = false;
@@ -468,7 +467,7 @@ $("pb-menu").addEventListener("keydown", (e) => {
   rows[j].focus();
 });
 document.addEventListener("pointerdown", (e) => {
-  if (menuOpen && !e.target.closest(".pb-pick")) closeClientMenu(false);
+  if (menuOpen && !e.target.closest(".pb-left .pb-pick")) closeClientMenu(false);
 });
 
 // The Find your game files guide (page-findfiles), with the family asked for when a greyed row opened it.
@@ -488,12 +487,114 @@ $("ff-pick").addEventListener("click", async () => {
   try { addClient(await invoke("pick_folder")); } catch (e) { say("cl-status", String(e), "bad"); }
 });
 $("ff-browser").addEventListener("click", () => { setMode("browser"); show("play"); });
-$("pb-realm-btn").addEventListener("click", () => show("realms"));
+
+// ------------------------------------------------------------------ the play bar's realm picker: a drop-up list
+// (owner 2026-10-30: the ONLINE / SOLO / BROWSER switch gave way to it.) Your realms first (the official one and the
+// one you picked before), then the live realms on the network by players, then Play in your browser and Solo (coming
+// soon), and at the bottom + Make a realm and Find more realms…. Picking a realm selects it the way the side bar's
+// Your realms does; browser play is a row. The same keys as the client list.
+let rmenuOpen = false;
+const realmRowsOf = (m) => [...m.querySelectorAll(".pb-opt")];
+function pickRealm(r) {
+  $("play-realm").value = r.official ? "official" : "custom";
+  if (!r.official) $("play-custom").value = r.address || "";
+  if (mode === "browser") setMode("online");
+  realmChanged();
+  saveSelection();
+}
+function renderRealmMenu() {
+  const menu = $("pb-rmenu");
+  const rows = [];
+  const row = (cls, label, opts) => {
+    const li = el("li", "pb-opt " + cls);
+    li.setAttribute("role", "option");
+    li.tabIndex = -1;
+    li.id = "pb-ropt-" + rows.length;
+    if (opts.icon) li.append(opts.icon);
+    li.append(el("span", "pb-opt-name", label));
+    if (opts.ver) li.append(el("span", "rl-ver sm", opts.ver));
+    if (opts.sub) li.append(el("span", "pb-opt-sub" + (opts.subCls ? " " + opts.subCls : ""), opts.sub));
+    li.setAttribute("aria-selected", String(!!opts.selected));
+    if (opts.disabled) li.setAttribute("aria-disabled", "true");
+    if (opts.title) li.title = opts.title;
+    li.addEventListener("click", () => { if (opts.disabled) return; closeRealmMenu(true); opts.run(); });
+    rows.push(li);
+    return li;
+  };
+  const head = (text) => { const h = el("li", "pb-head", text); h.setAttribute("role", "presentation"); return h; };
+  const sep = () => { const d = el("li", "pb-sep"); d.setAttribute("role", "presentation"); return d; };
+  const online = mode !== "browser";
+  const here = chosenRealm();
+  const players = (r) => (!r ? "" : r.state !== "live" ? "Offline" : r.players == null ? "Online" : `${r.players} playing`);
+  const realmRow = (r) => row("pb-realm-opt" + (r.state === "live" ? "" : " off"), r.name, {
+    icon: realmIcon(r.name, r.official, "sm"), ver: r.official ? "3.3.5a" : realmVersion(r), sub: players(r), subCls: r.state === "live" ? "live" : "",
+    selected: online && (r.official ? isOfficial() : !isOfficial() && r.address === here), title: r.tagline || r.name, run: () => pickRealm(r) });
+  const off = (realmsCache || []).find((x) => x.official) || { official: true, name: officialName(), state: "live", players: null };
+  const mine = [realmRow(off)];
+  const saved = !isOfficial() ? here : (state.settings.selected_realm && state.settings.selected_realm !== state.official_realm ? state.settings.selected_realm : "");
+  const savedRealm = saved ? realmAt(saved) : null;
+  if (saved && savedRealm) mine.push(realmRow(savedRealm));
+  else if (saved) mine.push(row("pb-realm-opt", saved, { icon: realmIcon(saved, false, "sm"), selected: online && !isOfficial(), sub: "Your address", run: () => pickRealm({ official: false, address: saved }) }));
+  const live = (realmsCache || []).filter((r) => !r.official && r.state === "live" && r.address && r.address !== saved && !hiddenBuild(r.build))
+    .sort((x, y) => (y.players || 0) - (x.players || 0)).slice(0, 6).map(realmRow);
+  const other = [
+    row("pb-browser", "Play in your browser", { sub: "Nothing to install", selected: !online, run: () => setMode("browser") }),
+    row("pb-solo", "Solo", { sub: "Coming soon", disabled: true, title: "Solo play on this PC arrives in a later Leyline release", run: () => {} }),
+  ];
+  const acts = [
+    row("pb-act", "+ Make a realm", { run: () => show("host") }),
+    row("pb-act", "Find more realms…", { run: () => show("realms") }),
+  ];
+  const parts = [[head("Your realms"), ...mine]];
+  if (live.length) parts.push([head("On the network"), ...live]);
+  parts.push(other, acts);
+  menu.replaceChildren(...parts.flatMap((g, i) => (i ? [sep(), ...g] : g)));
+}
+function openRealmMenu() {
+  if (rmenuOpen) return;
+  closeClientMenu(false);
+  renderRealmMenu();
+  rmenuOpen = true;
+  $("pb-rmenu").hidden = false;
+  $("pb-realm-btn").setAttribute("aria-expanded", "true");
+  const rows = realmRowsOf($("pb-rmenu"));
+  const at = rows.find((r) => r.getAttribute("aria-selected") === "true") || rows[0];
+  if (at) at.focus();
+}
+function closeRealmMenu(refocus) {
+  if (!rmenuOpen) return;
+  rmenuOpen = false;
+  $("pb-rmenu").hidden = true;
+  $("pb-realm-btn").setAttribute("aria-expanded", "false");
+  if (refocus) $("pb-realm-btn").focus();
+}
+$("pb-realm-btn").addEventListener("click", () => (rmenuOpen ? closeRealmMenu(true) : openRealmMenu()));
+$("pb-realm-btn").addEventListener("keydown", (e) => {
+  if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); openRealmMenu(); }
+});
+$("pb-rmenu").addEventListener("keydown", (e) => {
+  const rows = realmRowsOf($("pb-rmenu"));
+  const i = rows.indexOf(document.activeElement);
+  let j = null;
+  if (e.key === "ArrowDown") j = Math.min(rows.length - 1, i + 1);
+  else if (e.key === "ArrowUp") j = Math.max(0, i - 1);
+  else if (e.key === "Home") j = 0;
+  else if (e.key === "End") j = rows.length - 1;
+  else if (e.key === "Escape") { e.preventDefault(); closeRealmMenu(true); return; }
+  else if (e.key === "Tab") { closeRealmMenu(false); return; }
+  else if ((e.key === "Enter" || e.key === " ") && i >= 0) { e.preventDefault(); rows[i].click(); return; }
+  if (j === null) return;
+  e.preventDefault();
+  rows[j].focus();
+});
+document.addEventListener("pointerdown", (e) => {
+  if (rmenuOpen && !e.target.closest(".pb-mid .pb-pick")) closeRealmMenu(false);
+});
 
 function renderPlayBar() {
   if (!state) return;
   const c = currentClient();
-  const bar = $("play-headline").parentElement;
+  const bar = $("play-headline").parentElement;   // the status line under the realm's name
   let head = "READY TO PLAY", detail = "", warn = false;
   if (mode === "browser" && officialGamedata === false) {
     head = "BROWSER PLAY · NEEDS YOUR GAME FOLDER"; warn = true;
@@ -517,7 +618,8 @@ function renderPlayBar() {
   $("play-headline").textContent = head;
   bar.classList.toggle("warn", warn);
   $("pb-detail").textContent = detail;
-  $("pb-realm").textContent = mode === "browser" ? "Plays in your browser" : realmLabel();
+  $("pb-realm").textContent = mode === "browser" ? "In your browser" : realmLabel();
+  $("pb-realm-btn").title = mode === "browser" ? "Plays in your browser: choose a realm instead" : `${realmLabel()}: choose another realm`;
   // the realm's icon and client version beside its name (none in the browser)
   const official = isOfficial();
   const rv = mode === "browser" ? null : official ? "3.3.5a" : realmVersion(realmAt(chosenRealm()));
@@ -525,6 +627,7 @@ function renderPlayBar() {
   $("pb-realm-ver").textContent = rv || "";
   $("pb-realm-ic").hidden = mode === "browser";
   if (mode !== "browser") fillRealmIcon($("pb-realm-ic"), realmLabel(), official);
+  if (rmenuOpen) renderRealmMenu();
   renderClientMenu();
   $("play-caption").textContent = mode === "browser" ? "IN YOUR BROWSER" : (c ? `ONLINE  ·  ${c.name.toUpperCase()}` : "ONLINE");
 }

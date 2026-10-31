@@ -510,57 +510,49 @@ html[data-base="light"] .pb-menu { box-shadow: 0 -10px 30px rgba(16, 24, 40, 0.1
 .pb-opt.pb-missing { color: var(--t-muted); }
 .pb-opt.pb-missing .pb-opt-name, .pb-opt.pb-missing .rl-ver { opacity: 0.6; }
 .pb-sep { height: 1px; margin: 6px 0; background: var(--t-border); }
-/* middle: the realm (to Realms) and one status line */
-.pb-mid {
-  display: grid; gap: 4px; min-width: 0; align-self: center; padding: 8px 14px 9px;
-  border-radius: 12px; background: var(--t-surface); border: var(--t-border-w) solid transparent;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-.pb-realm {
-  justify-self: start; max-width: 100%; display: flex; align-items: center; gap: 8px; padding: 2px 6px 2px 2px; margin-left: -2px; cursor: pointer;
-  border: 0; border-radius: 8px; background: none; color: var(--t-text); font: 700 17px var(--t-font);
-}
-.pb-realm:hover { background: var(--t-raised); }
-.pb-realm:focus-visible { outline: 2px solid var(--t-accent); }
-.pb-realm .rl-ic { width: 28px; height: 28px; border-radius: 8px; font-size: 13px; }
+/* middle: the realm picker, like the client one (a full-width selector over a drop-up list): icon, name, version and
+   the one status line under it */
+.pb-mid { position: relative; display: grid; gap: 4px; min-width: 0; }
+.pb-client.pb-realm { height: 50px; gap: 11px; padding: 0 12px 0 10px; }
+.pb-realm .rl-ic { width: 32px; height: 32px; border-radius: 9px; font-size: 14px; }
 .pb-realm .rl-ic[hidden] { display: none; }
-.client-realm { color: var(--t-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pb-go { width: 14px; height: 14px; flex: none; fill: none; stroke: var(--t-muted); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.pb-realm-txt { display: grid; gap: 1px; min-width: 0; flex: 1; }
+.pb-realm-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.client-realm { color: var(--t-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 15.5px/1.25 var(--t-font); }
 .pb-status {
-  display: flex; align-items: center; gap: 10px; height: 22px; padding: 0 4px; min-width: 0; white-space: nowrap; overflow: hidden;
-  border: 0; background: none;
-  font: 700 12px var(--t-font); letter-spacing: 0.1em; color: var(--t-ok);
+  display: flex; align-items: center; gap: 8px; min-width: 0; white-space: nowrap; overflow: hidden;
+  font: 700 10.5px/1.3 var(--t-font); letter-spacing: 0.1em; color: var(--t-ok);
 }
-.pb-status .dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--t-ok); box-shadow: 0 0 8px color-mix(in srgb, var(--t-ok) 60%, transparent); }
+.pb-status .dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--t-ok); box-shadow: 0 0 8px color-mix(in srgb, var(--t-ok) 60%, transparent); }
 .pb-status.warn { color: var(--t-warn); }
 .pb-status.warn .dot { background: var(--t-warn); box-shadow: 0 0 8px color-mix(in srgb, var(--t-warn) 60%, transparent); }
-#pb-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 500; font-size: 13px; letter-spacing: 0; color: var(--t-text-2); }
+#pb-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 500; font-size: 12px; letter-spacing: 0; color: var(--t-text-2); }
 #pb-detail:empty { display: none; }
-.pb-status .status { margin: 0 0 0 auto; font-weight: 500; letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; }
-/* right: the play mode, small, then PLAY */
-.pb-right { display: flex; align-items: center; gap: 14px; }
-.modes { display: flex; gap: 3px; padding: 4px; border-radius: 12px; background: var(--t-surface); border: var(--t-border-w) solid transparent; }
-.mode {
-  height: 40px; padding: 0 16px; cursor: pointer;
-  border: 0; border-radius: 9px; background: none;
-  color: var(--t-text-2); font: 700 12px var(--t-font); letter-spacing: 0.1em;
-}
-.mode:hover { color: var(--t-text); background: var(--t-raised); }
-.mode[aria-checked="true"] { background: var(--t-accent); color: var(--t-on-accent); box-shadow: 0 2px 10px color-mix(in srgb, var(--t-accent) 40%, transparent); }
-.mode[aria-disabled="true"] { color: var(--t-muted); opacity: 0.7; cursor: not-allowed; }
-.mode[aria-disabled="true"]:hover { background: none; }
+.pb-status .status { margin: 0 0 0 auto; font-size: 12px; font-weight: 500; letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; }
+.pb-realm[aria-expanded="false"] .pb-caret { transform: rotate(180deg); }
+.pb-rmenu { width: 100%; min-width: 340px; }
+.pb-head { padding: 8px 16px 4px; font: 700 10.5px var(--t-font); letter-spacing: 0.12em; text-transform: uppercase; color: var(--t-muted); }
+.pb-rmenu .pb-opt { min-height: 42px; font-size: 14px; }
+.pb-rmenu .pb-opt .rl-ic { flex: none; }
+.pb-rmenu .pb-opt-sub.live { color: var(--t-ok); }
+.pb-rmenu .pb-opt.off { color: var(--t-muted); }
+.pb-rmenu .pb-opt.off .rl-ic { opacity: 0.6; }
+.pb-opt[aria-disabled="true"] { cursor: default; color: var(--t-muted); }
+.pb-opt[aria-disabled="true"]:hover { background: none; }
+/* right: PLAY, big */
+.pb-right { display: flex; align-items: center; }
 .play {
-  width: 230px; height: 62px; border: 0; cursor: pointer; border-radius: 14px;
+  width: 300px; height: 64px; border: 0; cursor: pointer; border-radius: 14px;
   background: linear-gradient(135deg, var(--t-accent), color-mix(in srgb, var(--t-accent) 70%, var(--t-accent-2)));
   box-shadow: 0 8px 26px color-mix(in srgb, var(--t-accent) 40%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.25);
   transition: filter 0.15s, transform 0.15s;
 }
-.play::after { content: "PLAY"; font: 800 23px/1 var(--t-font); letter-spacing: 0.2em; color: var(--t-on-accent); }
+.play::after { content: "PLAY"; font: 800 25px/1 var(--t-font); letter-spacing: 0.22em; color: var(--t-on-accent); }
 .play:hover { filter: brightness(1.08); }
 .play:active { transform: translateY(1px); }
 .play:disabled { opacity: 0.5; filter: none; cursor: default; }
 .caption { display: none; }
-@media (max-width: 1150px) { .playbar { grid-template-columns: 240px minmax(0, 1fr) auto; gap: 14px; } .play { width: 170px; } .mode { padding: 0 11px; } }
+@media (max-width: 1150px) { .playbar { grid-template-columns: 240px minmax(0, 1fr) auto; gap: 14px; } .play { width: 220px; } }
 @media (prefers-reduced-motion: reduce) { .pb-caret { transition: none; } }
 
 /* ---------------------------------------------------------------- Find your game files */

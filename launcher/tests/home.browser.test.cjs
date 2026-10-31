@@ -162,7 +162,7 @@ test('dots, arrows and the Left / Right keys move the gallery; the buttons do wh
   await page.evaluate(() => window.LeylineNav.show('play'));
   await page.evaluate(() => window.LeylineHome.show(2));
   await page.click('.hero-slide[data-key="browser"] .hs-go');
-  assert.equal(await page.getAttribute('.mode[data-mode="browser"]', 'aria-checked'), 'true', 'the play bar switches to BROWSER');
+  assert.equal(await page.textContent('#pb-realm'), 'In your browser', 'the play bar switches to browser play');
   assert.equal(await page.evaluate(() => localStorage.getItem('leyline.mode')), 'browser');
   assert.match(await page.textContent('.hero-slide[data-key="browser"] .hs-go'), /on/);
   await page.evaluate(() => window.LeylineHome.show(0));

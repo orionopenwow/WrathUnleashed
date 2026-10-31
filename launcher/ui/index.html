@@ -456,8 +456,8 @@
   </div>
 </dialog>
 
-<!-- The play bar, on every page: the client picker (a drop-up list, app.js renderClientMenu), the realm and one status
-     line, the play mode and PLAY. #play-client stays the model the rest of app.js reads; the list sets it. -->
+<!-- The play bar, on every page: the client picker (a drop-up list, app.js renderClientMenu), the realm picker with one
+     status line (a drop-up list, app.js renderRealmMenu: realms, browser play, Make a realm) and PLAY. #play-client stays the model the rest of app.js reads; the list sets it. -->
 <form id="play-form" class="playbar">
   <div class="pb-left">
     <span class="pb-label" id="pb-client-label">GAME CLIENT</span>
@@ -471,15 +471,20 @@
     <select id="play-client" class="sr" tabindex="-1" aria-hidden="true"></select>
   </div>
   <div class="pb-mid">
-    <button type="button" class="pb-realm" id="pb-realm-btn" title="Choose a realm"><span class="rl-ic sm crystal" id="pb-realm-ic" aria-hidden="true"></span><span class="client-realm" id="pb-realm">Official realm</span><span class="rl-ver sm" id="pb-realm-ver" hidden></span><svg class="pb-go" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
-    <div class="pb-status bar"><span class="dot" aria-hidden="true"></span><span id="play-headline">READY TO PLAY</span><span id="pb-detail"></span><span id="play-status" class="status" role="status"></span></div>
+    <span class="pb-label" id="pb-realm-label">REALM</span>
+    <div class="pb-pick">
+      <button type="button" class="pb-client pb-realm" id="pb-realm-btn" aria-haspopup="listbox" aria-expanded="false" aria-controls="pb-rmenu" aria-labelledby="pb-realm-label pb-realm-btn">
+        <span class="rl-ic sm crystal" id="pb-realm-ic" aria-hidden="true"></span>
+        <span class="pb-realm-txt">
+          <span class="pb-realm-top"><span class="client-realm" id="pb-realm">Official realm</span><span class="rl-ver sm" id="pb-realm-ver" hidden></span></span>
+          <span class="pb-status bar"><span class="dot" aria-hidden="true"></span><span id="play-headline">READY TO PLAY</span><span id="pb-detail"></span><span id="play-status" class="status" role="status"></span></span>
+        </span>
+        <svg class="pb-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
+      </button>
+      <ul class="pb-menu pb-rmenu" id="pb-rmenu" role="listbox" aria-label="Realms" hidden></ul>
+    </div>
   </div>
   <div class="pb-right">
-    <div class="modes" role="radiogroup" aria-label="Play mode">
-      <button type="button" class="mode" role="radio" data-mode="online">ONLINE</button>
-      <button type="button" class="mode" role="radio" data-mode="solo" aria-disabled="true" title="Solo play on this PC arrives in a later Leyline release">SOLO</button>
-      <button type="button" class="mode" role="radio" data-mode="browser">BROWSER</button>
-    </div>
     <button type="submit" class="play" id="play-go"><span class="sr">Play</span></button>
     <span class="caption" id="play-caption">ONLINE</span>
   </div>
