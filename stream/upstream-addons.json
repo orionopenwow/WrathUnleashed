@@ -1,5 +1,1986 @@
 {
  "format": 1,
  "about": "Approved upstream addons (tools/addon-curate/curate.py publish); merged into /wrath/mods/all.json by stream/upstream_addons.py.",
- "projects": []
+ "projects": [
+  {
+   "id": "up:adibags",
+   "source": "upstream",
+   "name": "AdiBags",
+   "display_name": "AdiBags",
+   "description": "One bag window that sorts items into sections by type.",
+   "category": "addons",
+   "tags": [
+    "bags"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "Sattva-108",
+   "author_url": "https://github.com/Sattva-108",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/Sattva-108/AdiBags-WoTLK-3.3.5",
+   "version": "3.3.5",
+   "addons": [
+    "AdiBags"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:41Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "AdiBags",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/Sattva-108/AdiBags-WoTLK-3.3.5/archive/d8b49ed56ddf81825ab2a4bc22c08fb7a0d59eed.zip",
+    "rev": "d8b49ed56ddf81825ab2a4bc22c08fb7a0d59eed",
+    "sha256": null,
+    "size": 1104067,
+    "file_count": 126,
+    "strip_prefix": "AdiBags-WoTLK-3.3.5-d8b49ed56ddf81825ab2a4bc22c08fb7a0d59eed/",
+    "folders": {
+     "": "AdiBags"
+    },
+    "files_digest": "64d70dcfc95a5308a2c4cd2e4f8efa39bf5c3087582e50564125b698c7564274"
+   },
+   "credits": "AdiBags by Sattva-108 · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/Sattva-108/AdiBags-WoTLK-3.3.5",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:41Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 1104067,
+   "file_count": 126
+  },
+  {
+   "id": "up:blt",
+   "source": "upstream",
+   "name": "BLT",
+   "display_name": "BLT",
+   "description": "Tracks raid cooldowns and shows who has what ready.",
+   "category": "addons",
+   "tags": [
+    "raid-tools"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "freix1",
+   "author_url": "https://github.com/freix1",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/freix1/BLT_WotLK",
+   "version": "1.4",
+   "addons": [
+    "BLT"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:41Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "BLT",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/freix1/BLT_WotLK/archive/e37d79212d2524fde9dd0633abd001355c79fc32.zip",
+    "rev": "e37d79212d2524fde9dd0633abd001355c79fc32",
+    "sha256": null,
+    "size": 682582,
+    "file_count": 78,
+    "strip_prefix": "BLT_WotLK-e37d79212d2524fde9dd0633abd001355c79fc32/",
+    "folders": {
+     "BLT": "BLT"
+    },
+    "files_digest": "55c3bb2fd7de7695b53693f75ebfdbce628631ad681a92bcf358ff31e6de95d1"
+   },
+   "credits": "BLT by freix1 · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/freix1/BLT_WotLK",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:41Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 682582,
+   "file_count": 78
+  },
+  {
+   "id": "up:bnettoast",
+   "source": "upstream",
+   "name": "BNetToast",
+   "display_name": "BNetToast",
+   "description": "Small pop-ups when friends come online or go offline.",
+   "category": "addons",
+   "tags": [
+    "social"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "crumdidlyumshis",
+   "author_url": "https://github.com/crumdidlyumshis",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/crumdidlyumshis/BNetToast",
+   "version": "1.0",
+   "addons": [
+    "BNetToast"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:41Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "BNetToast",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/crumdidlyumshis/BNetToast/archive/c6ed85e1c949eb9126d159bdffc7019d38974d0a.zip",
+    "rev": "c6ed85e1c949eb9126d159bdffc7019d38974d0a",
+    "sha256": null,
+    "size": 2786,
+    "file_count": 2,
+    "strip_prefix": "BNetToast-c6ed85e1c949eb9126d159bdffc7019d38974d0a/",
+    "folders": {
+     "": "BNetToast"
+    },
+    "files_digest": "aeda931114493be5d7853ae6ea514694bafa37ae40d08b75a00570ccf62f631b"
+   },
+   "credits": "BNetToast by crumdidlyumshis · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/crumdidlyumshis/BNetToast",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:41Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 2786,
+   "file_count": 2
+  },
+  {
+   "id": "up:carbonite",
+   "source": "upstream",
+   "name": "Carbonite",
+   "display_name": "Carbonite",
+   "description": "A full map and quest guide: a big zoomable map, quest tracking, gathering nodes and more.",
+   "category": "addons",
+   "tags": [
+    "maps",
+    "quests"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "anzz1",
+   "author_url": "https://github.com/anzz1",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/anzz1/Carbonite-3.3.5",
+   "version": "3.34c9",
+   "addons": [
+    "Carbonite",
+    "CarboniteItems",
+    "CarboniteNodes",
+    "CarboniteTransfer"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:41Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "Carbonite",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/anzz1/Carbonite-3.3.5/archive/ca4254e623d987a5f7c6d57f9efd86a6eaf0a4b2.zip",
+    "rev": "ca4254e623d987a5f7c6d57f9efd86a6eaf0a4b2",
+    "sha256": null,
+    "size": 4682376,
+    "file_count": 70,
+    "strip_prefix": "Carbonite-3.3.5-ca4254e623d987a5f7c6d57f9efd86a6eaf0a4b2/",
+    "folders": {
+     "Carbonite": "Carbonite",
+     "CarboniteItems": "CarboniteItems",
+     "CarboniteNodes": "CarboniteNodes",
+     "CarboniteTransfer": "CarboniteTransfer"
+    },
+    "files_digest": "c54930829b385403557e0da68b1278c1fd7bc36b88f0780e43625ce608c2719c"
+   },
+   "credits": "Carbonite by anzz1 · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/anzz1/Carbonite-3.3.5",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:41Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 4682376,
+   "file_count": 70
+  },
+  {
+   "id": "up:dalaran-ah",
+   "source": "upstream",
+   "name": "DalaranAH",
+   "display_name": "DalaranAH",
+   "description": "A small button that targets the engineering auctioneer in Dalaran for quick access.",
+   "category": "addons",
+   "tags": [
+    "auction",
+    "quality-of-life"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "NoM0Re",
+   "author_url": "https://github.com/NoM0Re",
+   "licence": "MIT",
+   "licence_source": "LICENSE",
+   "repo": "https://github.com/NoM0Re/DalaranAH",
+   "version": "1.3.1",
+   "addons": [
+    "DalaranAH"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": true,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:41Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "DalaranAH",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/NoM0Re/DalaranAH/archive/94539e6bc24056ca0ce7a5f3b224dc1089251bc5.zip",
+    "rev": "94539e6bc24056ca0ce7a5f3b224dc1089251bc5",
+    "sha256": null,
+    "size": 393070,
+    "file_count": 55,
+    "strip_prefix": "DalaranAH-94539e6bc24056ca0ce7a5f3b224dc1089251bc5/",
+    "folders": {
+     "DalaranAH": "DalaranAH"
+    },
+    "files_digest": "a117dbe8f6b1ff57605e50f25bf6abe4351c5e32389d578663d009dec9487ba4"
+   },
+   "credits": "DalaranAH by NoM0Re · MIT · Installs from the author's GitHub",
+   "page": "https://github.com/NoM0Re/DalaranAH",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:41Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 393070,
+   "file_count": 55
+  },
+  {
+   "id": "up:dominos",
+   "source": "upstream",
+   "name": "Dominos",
+   "display_name": "Dominos",
+   "description": "Movable, resizable action bars that take over from the default bars, with optional buff and minimap modules.",
+   "category": "addons",
+   "tags": [
+    "action-bars"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "bkader",
+   "author_url": "https://github.com/bkader",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/bkader/Dominos",
+   "version": "1.18.7",
+   "addons": [
+    "Dominos",
+    "Dominos_Config"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "author-art",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:42Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "Dominos",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/bkader/Dominos/archive/1a7a1a477941019c9320676341c6de65efd3e0e2.zip",
+    "rev": "1a7a1a477941019c9320676341c6de65efd3e0e2",
+    "sha256": null,
+    "size": 1193627,
+    "file_count": 78,
+    "strip_prefix": "Dominos-1a7a1a477941019c9320676341c6de65efd3e0e2/",
+    "folders": {
+     "Dominos": "Dominos",
+     "Dominos_Config": "Dominos_Config"
+    },
+    "files_digest": "98e18f77138e605601702e5ea71d825c807d16a1edb000f3427649d197c8235f"
+   },
+   "credits": "Dominos by bkader · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/bkader/Dominos",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:42Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 1193627,
+   "file_count": 78
+  },
+  {
+   "id": "up:emblem-of-gold",
+   "source": "upstream",
+   "name": "Emblem of Gold",
+   "display_name": "Emblem of Gold",
+   "description": "Your emblem counts in the vendor window, next to your gold.",
+   "category": "addons",
+   "tags": [
+    "quality-of-life"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "Stradios",
+   "author_url": "https://github.com/Stradios",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/Stradios/Emblem-of-Gold",
+   "version": "2.0",
+   "addons": [
+    "EmblemOfGold"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:42Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "EmblemOfGold",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/Stradios/Emblem-of-Gold/archive/6a078ecb7963383695d649cb9868e55ad120436c.zip",
+    "rev": "6a078ecb7963383695d649cb9868e55ad120436c",
+    "sha256": null,
+    "size": 10765,
+    "file_count": 2,
+    "strip_prefix": "Emblem-of-Gold-6a078ecb7963383695d649cb9868e55ad120436c/",
+    "folders": {
+     "": "EmblemOfGold"
+    },
+    "files_digest": "88efeb18fdf520586ed707343473f9d0fc086130924c4cb1ca00ec910ceaef97"
+   },
+   "credits": "Emblem of Gold by Stradios · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/Stradios/Emblem-of-Gold",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:42Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 10765,
+   "file_count": 2
+  },
+  {
+   "id": "up:gathermate",
+   "source": "upstream",
+   "name": "GatherMate with node data",
+   "display_name": "GatherMate with node data",
+   "description": "Gathering nodes on your map and minimap, with data taken from the AzerothCore world database.",
+   "category": "addons",
+   "tags": [
+    "professions",
+    "maps"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "stevemcqueenz",
+   "author_url": "https://github.com/stevemcqueenz",
+   "licence": "GPL-2.0",
+   "licence_source": "LICENSE",
+   "repo": "https://github.com/stevemcqueenz/gathermate-and-database-3.3.5a",
+   "version": "v1.23",
+   "addons": [
+    "GatherMate",
+    "GatherMate_Data"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": true,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:42Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "GatherMate",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/stevemcqueenz/gathermate-and-database-3.3.5a/archive/55da0b01bbf93bae03bec46e075ab0cc0ff822e1.zip",
+    "rev": "55da0b01bbf93bae03bec46e075ab0cc0ff822e1",
+    "sha256": null,
+    "size": 2279099,
+    "file_count": 193,
+    "strip_prefix": "gathermate-and-database-3.3.5a-55da0b01bbf93bae03bec46e075ab0cc0ff822e1/",
+    "folders": {
+     "GatherMate": "GatherMate",
+     "GatherMate_Data": "GatherMate_Data"
+    },
+    "files_digest": "503fe8a0f26f0e23328872e2a3d8e7a9105ca22eb304ee927e13dce8b93adc22"
+   },
+   "credits": "GatherMate with node data by stevemcqueenz · GPL-2.0 · Installs from the author's GitHub",
+   "page": "https://github.com/stevemcqueenz/gathermate-and-database-3.3.5a",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:42Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 2279099,
+   "file_count": 193
+  },
+  {
+   "id": "up:gearscorelite",
+   "source": "upstream",
+   "name": "GearScoreLite Reborn",
+   "display_name": "GearScoreLite Reborn",
+   "description": "A gear score on tooltips and the inspect frame, so you can judge a player's gear at a glance.",
+   "category": "addons",
+   "tags": [
+    "gear",
+    "tooltips"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "Arcitec",
+   "author_url": "https://github.com/Arcitec",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/Arcitec/GearScoreLite_Reborn",
+   "version": "3x05",
+   "addons": [
+    "GearScoreLite"
+   ],
+   "requires": [],
+   "conflicts": [
+    "up:gearscorelite-revised"
+   ],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:42Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "GearScoreLite",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/Arcitec/GearScoreLite_Reborn/archive/a396cdc93894bca2cab351627c97996253f86236.zip",
+    "rev": "a396cdc93894bca2cab351627c97996253f86236",
+    "sha256": null,
+    "size": 36005,
+    "file_count": 3,
+    "strip_prefix": "GearScoreLite_Reborn-a396cdc93894bca2cab351627c97996253f86236/",
+    "folders": {
+     "GearScoreLite": "GearScoreLite"
+    },
+    "files_digest": "00cc935746ebaed378d24922958139f9efd9f462e4555a2675101cb312fc2920"
+   },
+   "credits": "GearScoreLite Reborn by Arcitec · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/Arcitec/GearScoreLite_Reborn",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:42Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 36005,
+   "file_count": 3
+  },
+  {
+   "id": "up:halion-helper",
+   "source": "upstream",
+   "name": "Halion Helper",
+   "display_name": "Halion Helper",
+   "description": "Shows the shared health of both Halion phases and calls out when to switch realms.",
+   "category": "addons",
+   "tags": [
+    "boss-mods"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "bkader",
+   "author_url": "https://github.com/bkader",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/bkader/HalionHelper-WoTLK",
+   "version": "1.0",
+   "addons": [
+    "HalionHelper"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:42Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "HalionHelper",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/bkader/HalionHelper-WoTLK/archive/fab3d0f7b496a6cbed352d796876efbd6f826305.zip",
+    "rev": "fab3d0f7b496a6cbed352d796876efbd6f826305",
+    "sha256": null,
+    "size": 58898,
+    "file_count": 9,
+    "strip_prefix": "HalionHelper-WoTLK-fab3d0f7b496a6cbed352d796876efbd6f826305/",
+    "folders": {
+     "HalionHelper": "HalionHelper"
+    },
+    "files_digest": "460b74b3980c55138a8cf2940f7c74002ccd2fb4b338a7377397f03f00ba0142"
+   },
+   "credits": "Halion Helper by bkader · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/bkader/HalionHelper-WoTLK",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:42Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 58898,
+   "file_count": 9
+  },
+  {
+   "id": "up:idtip",
+   "source": "upstream",
+   "name": "idTip",
+   "display_name": "idTip",
+   "description": "Adds spell, item, quest and achievement IDs to tooltips.",
+   "category": "addons",
+   "tags": [
+    "tooltips"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "Skrylas",
+   "author_url": "https://github.com/Skrylas",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/Skrylas/idTip-WotLK",
+   "version": "2.00",
+   "addons": [
+    "IdTip"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:42Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "IdTip",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/Skrylas/idTip-WotLK/archive/a0d95208c54138670e8b3917504ae71441d08a05.zip",
+    "rev": "a0d95208c54138670e8b3917504ae71441d08a05",
+    "sha256": null,
+    "size": 7067,
+    "file_count": 2,
+    "strip_prefix": "idTip-WotLK-a0d95208c54138670e8b3917504ae71441d08a05/",
+    "folders": {
+     "IdTip": "IdTip"
+    },
+    "files_digest": "1983394f4b16507ce6bdec6b052bdfed0040938144ae219744cf18f48c0b1c21"
+   },
+   "credits": "idTip by Skrylas · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/Skrylas/idTip-WotLK",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:42Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 7067,
+   "file_count": 2
+  },
+  {
+   "id": "up:krt",
+   "source": "upstream",
+   "name": "Kader's Raid Tools",
+   "display_name": "Kader's Raid Tools",
+   "description": "Raid leading made easier: loot rolls and history, warnings, LFM spam and raid checks.",
+   "category": "addons",
+   "tags": [
+    "raid-tools"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "bkader",
+   "author_url": "https://github.com/bkader",
+   "licence": "MIT",
+   "licence_source": "LICENSE.md",
+   "repo": "https://github.com/bkader/KRT",
+   "version": "0.6.0",
+   "addons": [
+    "!KRT"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": true,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:42Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "!KRT",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/bkader/KRT/archive/a9d7df381c9bd665ba206633a473c5cbd8a6c05a.zip",
+    "rev": "a9d7df381c9bd665ba206633a473c5cbd8a6c05a",
+    "sha256": null,
+    "size": 327588,
+    "file_count": 15,
+    "strip_prefix": "KRT-a9d7df381c9bd665ba206633a473c5cbd8a6c05a/",
+    "folders": {
+     "!KRT": "!KRT"
+    },
+    "files_digest": "9488acc1f929cd45557db1277db611a97c84d9dbeb386e0213e8542933758a7c"
+   },
+   "credits": "Kader's Raid Tools by bkader · MIT · Installs from the author's GitHub",
+   "page": "https://github.com/bkader/KRT",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:42Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 327588,
+   "file_count": 15
+  },
+  {
+   "id": "up:kru",
+   "source": "upstream",
+   "name": "Kader's Raid Utilities",
+   "display_name": "Kader's Raid Utilities",
+   "description": "Small raid helpers taken out of KPack as their own addon.",
+   "category": "addons",
+   "tags": [
+    "raid-tools"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "bkader",
+   "author_url": "https://github.com/bkader",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/bkader/KRU-WoTLK",
+   "version": "1.0.0",
+   "addons": [
+    "KRU"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:42Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "KRU",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/bkader/KRU-WoTLK/archive/2282c3c4be9acebc4d76a554abf49685af42b555.zip",
+    "rev": "2282c3c4be9acebc4d76a554abf49685af42b555",
+    "sha256": null,
+    "size": 616590,
+    "file_count": 70,
+    "strip_prefix": "KRU-WoTLK-2282c3c4be9acebc4d76a554abf49685af42b555/",
+    "folders": {
+     "KRU": "KRU"
+    },
+    "files_digest": "e5818103a849baebf8b40e13af7ec5251b55d01f1e7b9dee8a2120c52d4a531f"
+   },
+   "credits": "Kader's Raid Utilities by bkader · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/bkader/KRU-WoTLK",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:42Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 616590,
+   "file_count": 70
+  },
+  {
+   "id": "up:nameplate-sct",
+   "source": "upstream",
+   "name": "NameplateSCT",
+   "display_name": "NameplateSCT",
+   "description": "Damage numbers that rise from the nameplate of what you hit.",
+   "category": "addons",
+   "tags": [
+    "combat-text",
+    "nameplates"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "bkader",
+   "author_url": "https://github.com/bkader",
+   "licence": "MIT",
+   "licence_source": "LICENSE",
+   "repo": "https://github.com/bkader/NameplateSCT_WoTLK",
+   "version": "1.8",
+   "addons": [
+    "NameplateSCT"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": true,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:42Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "NameplateSCT",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/bkader/NameplateSCT_WoTLK/archive/69d19195aae8a13f159a334482a040bf60f437a9.zip",
+    "rev": "69d19195aae8a13f159a334482a040bf60f437a9",
+    "sha256": null,
+    "size": 506000,
+    "file_count": 61,
+    "strip_prefix": "NameplateSCT_WoTLK-69d19195aae8a13f159a334482a040bf60f437a9/",
+    "folders": {
+     "NameplateSCT": "NameplateSCT"
+    },
+    "files_digest": "bdff62e24c7c512ea5af92b9edf77fd478e3beaef32a7eff8563c951a120365d"
+   },
+   "credits": "NameplateSCT by bkader · MIT · Installs from the author's GitHub",
+   "page": "https://github.com/bkader/NameplateSCT_WoTLK",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:42Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 506000,
+   "file_count": 61
+  },
+  {
+   "id": "up:nugkeyfeedback",
+   "source": "upstream",
+   "name": "NugKeyFeedback",
+   "display_name": "NugKeyFeedback",
+   "description": "Shows the spell you just pressed beside your character, so you see every key press land.",
+   "category": "addons",
+   "tags": [
+    "action-bars"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "s0h2x",
+   "author_url": "https://github.com/s0h2x",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/s0h2x/NugKeyFeedback",
+   "version": "5fe70f6",
+   "addons": [
+    "NugKeyFeedback"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "author-art",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:43Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "NugKeyFeedback",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/s0h2x/NugKeyFeedback/archive/5fe70f699dc9d6683d901abe9ad18f662e21109e.zip",
+    "rev": "5fe70f699dc9d6683d901abe9ad18f662e21109e",
+    "sha256": null,
+    "size": 393937,
+    "file_count": 42,
+    "strip_prefix": "NugKeyFeedback-5fe70f699dc9d6683d901abe9ad18f662e21109e/",
+    "folders": {
+     "NugKeyFeedback": "NugKeyFeedback"
+    },
+    "files_digest": "592cc51d5d49560b54154fdabf33ccf5033632f2042b53c547f205680dd6ba9e"
+   },
+   "credits": "NugKeyFeedback by s0h2x · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/s0h2x/NugKeyFeedback",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:43Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 393937,
+   "file_count": 42
+  },
+  {
+   "id": "up:pallypower",
+   "source": "upstream",
+   "name": "PallyPower",
+   "display_name": "PallyPower",
+   "description": "Plan and check paladin blessings, auras and seals for the whole raid.",
+   "category": "addons",
+   "tags": [
+    "class",
+    "raid-tools"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "NoM0Re",
+   "author_url": "https://github.com/NoM0Re",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/NoM0Re/PallyPower-Improved-3.3.5",
+   "version": "v3.2.21",
+   "addons": [
+    "PallyPower"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:43Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "PallyPower",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/NoM0Re/PallyPower-Improved-3.3.5/archive/8a87a53bb16ff680e5a2bff0977385235e7553a2.zip",
+    "rev": "8a87a53bb16ff680e5a2bff0977385235e7553a2",
+    "sha256": null,
+    "size": 1125760,
+    "file_count": 59,
+    "strip_prefix": "PallyPower-Improved-3.3.5-8a87a53bb16ff680e5a2bff0977385235e7553a2/",
+    "folders": {
+     "PallyPower": "PallyPower"
+    },
+    "files_digest": "f09a0346ad5ba71a72ecd6a8a254dac42575072f1e0fd1fc5edbc964d2e03fa4"
+   },
+   "credits": "PallyPower by NoM0Re · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/NoM0Re/PallyPower-Improved-3.3.5",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:43Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 1125760,
+   "file_count": 59
+  },
+  {
+   "id": "up:pfquest",
+   "source": "upstream",
+   "name": "pfQuest",
+   "display_name": "pfQuest",
+   "description": "Quest objectives, givers and items on your map, searchable from a database browser.",
+   "category": "addons",
+   "tags": [
+    "quests",
+    "maps"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "shagu",
+   "author_url": "https://github.com/shagu",
+   "licence": "MIT",
+   "licence_source": "LICENSE",
+   "repo": "https://github.com/shagu/pfQuest",
+   "version": "7.0.1",
+   "addons": [
+    "pfQuest-wotlk"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": true,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:43Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "pfQuest-wotlk",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/shagu/pfQuest/archive/104f35678ca39ab1fb78b655f815cc7016f5e0c8.zip",
+    "rev": "104f35678ca39ab1fb78b655f815cc7016f5e0c8",
+    "sha256": null,
+    "size": 104485715,
+    "file_count": 296,
+    "strip_prefix": "pfQuest-104f35678ca39ab1fb78b655f815cc7016f5e0c8/",
+    "folders": {
+     "": "pfQuest-wotlk"
+    },
+    "files_digest": "13f9d2ae162487728d4634459c033b71b0d323eb956ced9a7c69424f92f47b94"
+   },
+   "credits": "pfQuest by shagu · MIT · Installs from the author's GitHub",
+   "page": "https://github.com/shagu/pfQuest",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:43Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 104485715,
+   "file_count": 296
+  },
+  {
+   "id": "up:platebuffs",
+   "source": "upstream",
+   "name": "PlateBuffs",
+   "display_name": "PlateBuffs",
+   "description": "Shows buffs and debuffs above nameplates. An updated edition of the backport.",
+   "category": "addons",
+   "tags": [
+    "nameplates",
+    "auras"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "KhalGH",
+   "author_url": "https://github.com/KhalGH",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/KhalGH/PlateBuffs-WoTLK",
+   "version": "1.19.5 (r238)",
+   "addons": [
+    "PlateBuffs"
+   ],
+   "requires": [],
+   "conflicts": [
+    "up:platebuffs-classic"
+   ],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "author-art",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:43Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "PlateBuffs",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/KhalGH/PlateBuffs-WoTLK/archive/6584ceb51a1e906be373ac1be61178658a968e50.zip",
+    "rev": "6584ceb51a1e906be373ac1be61178658a968e50",
+    "sha256": null,
+    "size": 9364019,
+    "file_count": 84,
+    "strip_prefix": "PlateBuffs-WoTLK-6584ceb51a1e906be373ac1be61178658a968e50/",
+    "folders": {
+     "PlateBuffs": "PlateBuffs"
+    },
+    "files_digest": "786a982a0411fac223bc989f20eaabd43e3cfccf20fbfe8107050e883cb29593"
+   },
+   "credits": "PlateBuffs by KhalGH · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/KhalGH/PlateBuffs-WoTLK",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:43Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 9364019,
+   "file_count": 84
+  },
+  {
+   "id": "up:pretty-minimap",
+   "source": "upstream",
+   "name": "Pretty Minimap",
+   "display_name": "Pretty Minimap",
+   "description": "A light, modern-looking minimap.",
+   "category": "addons",
+   "tags": [
+    "minimap"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "s0h2x",
+   "author_url": "https://github.com/s0h2x",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/s0h2x/pretty_minimap",
+   "version": "1.0",
+   "addons": [
+    "pretty_minimap"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "author-art",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:43Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "pretty_minimap",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/s0h2x/pretty_minimap/archive/fed230049292ec5c19fe27495b4c76832761d301.zip",
+    "rev": "fed230049292ec5c19fe27495b4c76832761d301",
+    "sha256": null,
+    "size": 2214053,
+    "file_count": 22,
+    "strip_prefix": "pretty_minimap-fed230049292ec5c19fe27495b4c76832761d301/",
+    "folders": {
+     "": "pretty_minimap"
+    },
+    "files_digest": "da535f2e11f21039c3bb0617dcffd86cdf4e00d0a70756f0cdf9de4aed397c70"
+   },
+   "credits": "Pretty Minimap by s0h2x · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/s0h2x/pretty_minimap",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:43Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 2214053,
+   "file_count": 22
+  },
+  {
+   "id": "up:questie",
+   "source": "upstream",
+   "name": "Questie",
+   "display_name": "Questie",
+   "description": "Shows quest givers, objectives and turn-ins on your map and minimap, with data matched to AzerothCore.",
+   "category": "addons",
+   "tags": [
+    "quests",
+    "maps"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "Aldori15",
+   "author_url": "https://github.com/Aldori15",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/Aldori15/Questie",
+   "version": "10.0.3-335",
+   "addons": [
+    "Questie-335"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "author-art",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:43Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "Questie-335",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/Aldori15/Questie/archive/8a2b87a3b80eb4fd221df1d255af425818a2e814.zip",
+    "rev": "8a2b87a3b80eb4fd221df1d255af425818a2e814",
+    "sha256": null,
+    "size": 126921314,
+    "file_count": 551,
+    "strip_prefix": "Questie-8a2b87a3b80eb4fd221df1d255af425818a2e814/",
+    "folders": {
+     "": "Questie-335"
+    },
+    "files_digest": "55c84dcbf297cca3b9146dfe3a0dae0c7b7aebcb57efed763830da555e31087c"
+   },
+   "credits": "Questie by Aldori15 · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/Aldori15/Questie",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:43Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 126921314,
+   "file_count": 551
+  },
+  {
+   "id": "up:raidbrowser",
+   "source": "upstream",
+   "name": "Raid Browser",
+   "display_name": "Raid Browser",
+   "description": "A working raid finder in the social window: it reads raid group messages from chat and lists them.",
+   "category": "addons",
+   "tags": [
+    "social"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "Ostoic",
+   "author_url": "https://github.com/Ostoic",
+   "licence": "MIT",
+   "licence_source": "LICENSE",
+   "repo": "https://github.com/Ostoic/RaidBrowser",
+   "version": "v1.3.0",
+   "addons": [
+    "RaidBrowser"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": true,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:43Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "RaidBrowser",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/Ostoic/RaidBrowser/archive/2b6066ef92a6a683b7d79ac8e9fc09885199ec96.zip",
+    "rev": "2b6066ef92a6a683b7d79ac8e9fc09885199ec96",
+    "sha256": null,
+    "size": 223925,
+    "file_count": 26,
+    "strip_prefix": "RaidBrowser-2b6066ef92a6a683b7d79ac8e9fc09885199ec96/",
+    "folders": {
+     "RaidBrowser": "RaidBrowser"
+    },
+    "files_digest": "51c7723b5805c559847094136c9c5306fe4590e60f22424512907286304eb91a"
+   },
+   "credits": "Raid Browser by Ostoic · MIT · Installs from the author's GitHub",
+   "page": "https://github.com/Ostoic/RaidBrowser",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:43Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 223925,
+   "file_count": 26
+  },
+  {
+   "id": "up:ratingbuster",
+   "source": "upstream",
+   "name": "RatingBuster",
+   "display_name": "RatingBuster",
+   "description": "Converts ratings on item tooltips into real percentages and shows stat changes against what you wear.",
+   "category": "addons",
+   "tags": [
+    "gear",
+    "tooltips"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "Einherjarn",
+   "author_url": "https://github.com/Einherjarn",
+   "licence": "GPL-2.0",
+   "licence_source": "toc",
+   "repo": "https://github.com/Einherjarn/RatingBuster-3.3.5",
+   "version": "0d05ed1",
+   "addons": [
+    "RatingBuster"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "author-art",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:43Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "RatingBuster",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/Einherjarn/RatingBuster-3.3.5/archive/0d05ed12a968673527a93f54e64633f0970c4aac.zip",
+    "rev": "0d05ed12a968673527a93f54e64633f0970c4aac",
+    "sha256": null,
+    "size": 1629839,
+    "file_count": 76,
+    "strip_prefix": "RatingBuster-3.3.5-0d05ed12a968673527a93f54e64633f0970c4aac/",
+    "folders": {
+     "": "RatingBuster"
+    },
+    "files_digest": "4e39b09cafff8690a9f636b0951e03ef2c7122a8560b034a0570203d0fbeb9ab"
+   },
+   "credits": "RatingBuster by Einherjarn · GPL-2.0 · Installs from the author's GitHub",
+   "page": "https://github.com/Einherjarn/RatingBuster-3.3.5",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:43Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 1629839,
+   "file_count": 76
+  },
+  {
+   "id": "up:ruf",
+   "source": "upstream",
+   "name": "RUF Unit Frames",
+   "display_name": "RUF Unit Frames",
+   "description": "Light, configurable unit frames for you, your target, focus, party and pets.",
+   "category": "addons",
+   "tags": [
+    "unit-frames"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "bkader",
+   "author_url": "https://github.com/bkader",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/bkader/RUF-WoTLK",
+   "version": "r255-Release",
+   "addons": [
+    "RUF"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:43Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "RUF",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/bkader/RUF-WoTLK/archive/9ffc395f356e82943546c5cc281308e41d7db83f.zip",
+    "rev": "9ffc395f356e82943546c5cc281308e41d7db83f",
+    "sha256": null,
+    "size": 2608279,
+    "file_count": 179,
+    "strip_prefix": "RUF-WoTLK-9ffc395f356e82943546c5cc281308e41d7db83f/",
+    "folders": {
+     "RUF": "RUF"
+    },
+    "files_digest": "c300220fd8b1d4471e4fb1b629c0511d980149aaac6054076268005ded9d84b0"
+   },
+   "credits": "RUF Unit Frames by bkader · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/bkader/RUF-WoTLK",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:43Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 2608279,
+   "file_count": 179
+  },
+  {
+   "id": "up:sharedmedia",
+   "source": "upstream",
+   "name": "SharedMedia",
+   "display_name": "SharedMedia",
+   "description": "Extra fonts, bars and sounds for any addon that reads LibSharedMedia.",
+   "category": "addons",
+   "tags": [
+    "libraries"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "bkader",
+   "author_url": "https://github.com/bkader",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/bkader/SharedMedia",
+   "version": "3.1.1-200",
+   "addons": [
+    "SharedMedia"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "author-art",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:43Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "SharedMedia",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/bkader/SharedMedia/archive/a690a74b5a377266d02aee2a014aeaae34ec1d93.zip",
+    "rev": "a690a74b5a377266d02aee2a014aeaae34ec1d93",
+    "sha256": null,
+    "size": 36012654,
+    "file_count": 290,
+    "strip_prefix": "SharedMedia-a690a74b5a377266d02aee2a014aeaae34ec1d93/",
+    "folders": {
+     "SharedMedia": "SharedMedia"
+    },
+    "files_digest": "77ddcb850882be02e028390223e0f6e73909c0e200117b218b7260756129602e"
+   },
+   "credits": "SharedMedia by bkader · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/bkader/SharedMedia",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:43Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 36012654,
+   "file_count": 290
+  },
+  {
+   "id": "up:skada",
+   "source": "upstream",
+   "name": "Skada",
+   "display_name": "Skada",
+   "description": "A light damage and healing meter with fight segments and windows you arrange yourself.",
+   "category": "addons",
+   "tags": [
+    "meters"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "bkader",
+   "author_url": "https://github.com/bkader",
+   "licence": "MIT",
+   "licence_source": "LICENSE.md",
+   "repo": "https://github.com/bkader/Skada-WoTLK",
+   "version": "1.8.87",
+   "addons": [
+    "Skada",
+    "SkadaImprovement",
+    "SkadaStorage"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "author-art",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:44Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "Skada",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/bkader/Skada-WoTLK/archive/5653a241a7a97a5988280d916ff3a9e31ec55948.zip",
+    "rev": "5653a241a7a97a5988280d916ff3a9e31ec55948",
+    "sha256": null,
+    "size": 3326841,
+    "file_count": 177,
+    "strip_prefix": "Skada-WoTLK-5653a241a7a97a5988280d916ff3a9e31ec55948/",
+    "folders": {
+     "Skada": "Skada",
+     "SkadaImprovement": "SkadaImprovement",
+     "SkadaStorage": "SkadaStorage"
+    },
+    "files_digest": "8899ecfefbe8fcfc3d355654bbe0f7ebb0c098ea8eb9cdbd4b3fa67b8a74067b"
+   },
+   "credits": "Skada by bkader · MIT · Installs from the author's GitHub",
+   "page": "https://github.com/bkader/Skada-WoTLK",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:44Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 3326841,
+   "file_count": 177
+  },
+  {
+   "id": "up:stfu-chat-filter",
+   "source": "upstream",
+   "name": "STFU Chat Filter",
+   "display_name": "STFU Chat Filter",
+   "description": "Hides opposite-faction chat spam in neutral cities, and shows it again outside them.",
+   "category": "addons",
+   "tags": [
+    "chat"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "Arcitec",
+   "author_url": "https://github.com/Arcitec",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/Arcitec/STFU_Chat_Filter",
+   "version": "1.0",
+   "addons": [
+    "STFU_Chat_Filter"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:44Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "STFU_Chat_Filter",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/Arcitec/STFU_Chat_Filter/archive/df3fb1e70789e746eb8e495f13ddf862351c8cb2.zip",
+    "rev": "df3fb1e70789e746eb8e495f13ddf862351c8cb2",
+    "sha256": null,
+    "size": 3007,
+    "file_count": 2,
+    "strip_prefix": "STFU_Chat_Filter-df3fb1e70789e746eb8e495f13ddf862351c8cb2/",
+    "folders": {
+     "STFU_Chat_Filter": "STFU_Chat_Filter"
+    },
+    "files_digest": "4f5924691f8009908ad5ec65db4aeb78cc80d86e351f0b62986d35264cf5ca06"
+   },
+   "credits": "STFU Chat Filter by Arcitec · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/Arcitec/STFU_Chat_Filter",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:44Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 3007,
+   "file_count": 2
+  },
+  {
+   "id": "up:talented",
+   "source": "upstream",
+   "name": "Talented",
+   "display_name": "Talented",
+   "description": "Plan and save talent builds, then learn them in one click; glyphs and spec tabs included.",
+   "category": "addons",
+   "tags": [
+    "class"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "bkader",
+   "author_url": "https://github.com/bkader",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/bkader/Talented_WoTLK",
+   "version": "v2.4.8",
+   "addons": [
+    "Talented"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:44Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "Talented",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/bkader/Talented_WoTLK/archive/648a0ead7d664f3b220088738bc1c7e6041be090.zip",
+    "rev": "648a0ead7d664f3b220088738bc1c7e6041be090",
+    "sha256": null,
+    "size": 662552,
+    "file_count": 65,
+    "strip_prefix": "Talented_WoTLK-648a0ead7d664f3b220088738bc1c7e6041be090/",
+    "folders": {
+     "Talented": "Talented"
+    },
+    "files_digest": "b0ad2d123e077f8018107d9c242bdc514b3a5544bc790f38a737dcd4fa4e50b6"
+   },
+   "credits": "Talented by bkader · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/bkader/Talented_WoTLK",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:44Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 662552,
+   "file_count": 65
+  },
+  {
+   "id": "up:tellmewhen",
+   "source": "upstream",
+   "name": "TellMeWhen",
+   "display_name": "TellMeWhen",
+   "description": "Icons that light up when a spell is ready, a buff is missing or an internal cooldown ends.",
+   "category": "addons",
+   "tags": [
+    "cooldowns",
+    "auras"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "bkader",
+   "author_url": "https://github.com/bkader",
+   "licence": "",
+   "licence_source": "",
+   "repo": "https://github.com/bkader/TellMeWhen_3.3.5",
+   "version": "f02014b",
+   "addons": [
+    "TellMeWhen"
+   ],
+   "requires": [],
+   "conflicts": [],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "none",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:44Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "TellMeWhen",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/bkader/TellMeWhen_3.3.5/archive/f02014b9b325bc25ea434c3da88783c8dd3d800c.zip",
+    "rev": "f02014b9b325bc25ea434c3da88783c8dd3d800c",
+    "sha256": null,
+    "size": 363927,
+    "file_count": 47,
+    "strip_prefix": "TellMeWhen_3.3.5-f02014b9b325bc25ea434c3da88783c8dd3d800c/",
+    "folders": {
+     "TellMeWhen": "TellMeWhen"
+    },
+    "files_digest": "41abd570376d29996397cf7a5c6d0065f59eee887c487cf646609635ad5ec5de"
+   },
+   "credits": "TellMeWhen by bkader · licence not stated · Installs from the author's GitHub",
+   "page": "https://github.com/bkader/TellMeWhen_3.3.5",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:44Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 363927,
+   "file_count": 47
+  },
+  {
+   "id": "up:weakauras-bunny67",
+   "source": "upstream",
+   "name": "WeakAuras (Bunny67 edition)",
+   "display_name": "WeakAuras (Bunny67 edition)",
+   "description": "An earlier backport of WeakAuras: custom alerts for buffs, debuffs and cooldowns.",
+   "category": "addons",
+   "tags": [
+    "auras"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "author": "Bunny67",
+   "author_url": "https://github.com/Bunny67",
+   "licence": "GPL-2.0",
+   "licence_source": "LICENSE",
+   "repo": "https://github.com/Bunny67/WeakAuras-WotLK",
+   "version": "4.0.0",
+   "addons": [
+    "WeakAuras",
+    "WeakAurasArchive",
+    "WeakAurasModelPaths",
+    "WeakAurasOptions"
+   ],
+   "requires": [],
+   "conflicts": [
+    "up:weakauras"
+   ],
+   "replaces_ui": false,
+   "native": false,
+   "blp": "author-art",
+   "mirror_allowed": false,
+   "review": {
+    "by": "Claude",
+    "at": "2026-10-31T07:43:44Z",
+    "notes": "First pass: every file checked, no flags, installs from the author; not yet tried in game"
+   },
+   "compat": {
+    "realm": "Wrath Unleashed",
+    "status": "untested",
+    "checked_at": ""
+   },
+   "folder_name": "WeakAuras",
+   "install": {
+    "from": "commit-archive",
+    "url": "https://github.com/Bunny67/WeakAuras-WotLK/archive/58c99532640eea021c0b07478469a9e7e612a54e.zip",
+    "rev": "58c99532640eea021c0b07478469a9e7e612a54e",
+    "sha256": null,
+    "size": 21310624,
+    "file_count": 661,
+    "strip_prefix": "WeakAuras-WotLK-58c99532640eea021c0b07478469a9e7e612a54e/",
+    "folders": {
+     "WeakAuras": "WeakAuras",
+     "WeakAurasArchive": "WeakAurasArchive",
+     "WeakAurasModelPaths": "WeakAurasModelPaths",
+     "WeakAurasOptions": "WeakAurasOptions"
+    },
+    "files_digest": "e4437ac9c6322ec75fbd1062f3e91954c138123b31ac48a556dfa321b015818c"
+   },
+   "credits": "WeakAuras (Bunny67 edition) by Bunny67 · GPL-2.0 · Installs from the author's GitHub",
+   "page": "https://github.com/Bunny67/WeakAuras-WotLK",
+   "stars": null,
+   "last_push": "",
+   "submitted_by": "",
+   "submitted_at": "",
+   "last_checked": "2026-10-31T07:43:44Z",
+   "kind": "ui",
+   "permissions": null,
+   "on_wrath": null,
+   "download": null,
+   "sha256": null,
+   "size": 21310624,
+   "file_count": 661
+  }
+ ]
 }
