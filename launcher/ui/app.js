@@ -1544,7 +1544,8 @@ async function loadRealms(quiet) {
   if (!quiet) say("rl-status", "Loading the realm list…");
   try {
     const l = await invoke("realms_list");
-    realmsCache = l.realms.map((r) => (r.official ? Object.assign({}, r, { name: HANGOUT.name, kind: HANGOUT.kind }) : r));
+    // the core's official record (slug "official", realms.rs official()) is the Hangout; community records never are
+    realmsCache = l.realms.map((r) => (r.official && r.slug === "official" ? Object.assign({}, r, { name: HANGOUT.name, kind: HANGOUT.kind }) : r));
     realmNames = l.realms.map((r) => r.name);
     const when = l.saved_at ? new Date(l.saved_at * 1000).toLocaleString() : "an earlier visit";
     const n = l.realms.length - 1;
