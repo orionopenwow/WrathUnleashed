@@ -147,7 +147,8 @@ site_report() {  # read-only: how players reach the 1.12 site and its browser ga
     note "$SITE: address settings (names and values of *_ADDR/_HOST/_PORT/_URL/_WS/REALM* only; nothing secret):"
     docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$SITE" 2>/dev/null \
       | grep -E '^[A-Z0-9_]*(ADDR|HOST|PORT|URL|WS|REALM|MANGOS|SOAP|STREAM|DATA)[A-Z0-9_]*=' \
-      | grep -viE 'PASS|SECRET|TOKEN|KEY|SALT|COOKIE|DSN|PWD' | sed 's/^/    /' | head -40
+      | grep -viE 'PASS|SECRET|TOKEN|KEY|SALT|COOKIE|DSN|PWD' \
+      | sed -E 's#(://)[^/@[:space:]]*@#\1***@#g' | sed 's/^/    /' | head -40   # never print the user:password in a URL
   fi
   for u in ${VR_SITE_URLS:-https://play.openvanilla.app/ https://play.openvanilla.app/play https://play.openvanilla.app/game https://play.openvanilla.app/data/ https://play.openvanilla.app/ws/3724}; do
     note "$u -> $(curl -s -o /dev/null -m 10 -w '%{http_code} %{redirect_url}' "$u" 2>/dev/null || echo 'no answer')"
