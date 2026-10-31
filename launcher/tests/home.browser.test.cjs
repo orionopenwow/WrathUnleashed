@@ -97,7 +97,7 @@ test('the gallery: every slide with its data, a title, one line and one button; 
   assert.deepEqual(await keys(page), ['mode', 'news', 'browser', 'host', 'mod']);
   for (const s of await page.$$('#hero-slides .hero-slide')) {
     assert.equal(await s.$$eval('.hs-title', (x) => x.length), 1);
-    assert.equal(await s.$$eval('button', (x) => x.length), 1, 'one button per slide');
+    assert.equal(await s.$$eval('.hs-body button', (x) => x.length), 1, 'one button per slide (the realm rows on the side are links to Realms)');
   }
   const mode = page.locator('.hero-slide[data-key="mode"]');
   assert.equal(await mode.locator('img.hs-art').getAttribute('src'), 'art/modes/azeroth-survivors.webp');

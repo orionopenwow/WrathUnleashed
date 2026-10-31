@@ -151,3 +151,52 @@ html[data-base="light"] .hm-ic { color: hsl(var(--h, 220) 60% 36%); }
 .hm-host-acts .link-s { margin-left: 4px; }
 @media (max-width: 900px) { .hm-sec.hm-host { flex-wrap: wrap; } .hm-host-acts { justify-content: flex-start; } }
 @media (prefers-reduced-motion: reduce) { .hm-card { transition: none; } .hm-card:hover, .hm-card:focus-visible { transform: none; } }
+
+/* a slide's right side: the realms on the network (browser slide), the four setup steps (host slide) */
+.hero-slide.has-side .hs-body { max-width: min(440px, 48%); }
+.hs-side {
+  position: absolute; right: 26px; top: 26px; bottom: 84px; width: min(360px, 44%); display: flex; flex-direction: column; gap: 6px;
+  padding: 14px; border-radius: 14px; overflow: hidden;
+  background: color-mix(in srgb, var(--t-chrome) 72%, transparent); border: var(--t-border-w) solid var(--t-border);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .04);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+}
+html[data-base="light"] .hs-side { box-shadow: 0 14px 30px rgba(16, 24, 40, .12); }
+.hs-side-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 2px 6px;
+  font: 700 11px var(--t-font); letter-spacing: .12em; text-transform: uppercase; color: var(--t-muted); }
+.hs-side-n { letter-spacing: .04em; text-transform: none; font-weight: 600; color: var(--t-text-2); }
+.hs-rl { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 4px 8px; border: 0; border-radius: 9px; background: none;
+  color: var(--t-text); cursor: pointer; text-align: left; font: 600 13.5px var(--t-font); }
+.hs-rl:hover, .hs-rl:focus-visible { background: var(--t-raised); outline: none; }
+.hs-rl .rl-ic { width: 28px; height: 28px; flex: none; border-radius: 8px; font-size: 12px; }
+.hs-rl-n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hs-rl-m { display: flex; align-items: center; gap: 8px; flex: none; }
+.hs-rl-p { min-width: 26px; text-align: right; font-size: 12px; color: var(--t-muted); }
+.hs-rl.live .hs-rl-p { color: var(--t-ok); }
+.hs-rl.live .hs-rl-p::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: var(--t-ok); vertical-align: 1px; }
+.hs-st { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; flex: 1; justify-content: center; gap: 14px; position: relative; }
+.hs-st li:not(:last-child)::after { content: ""; position: absolute; left: 17px; top: 50%; height: calc(100% + 14px); width: 2px; border-radius: 2px;
+  background: linear-gradient(180deg, var(--t-accent), color-mix(in srgb, var(--t-gold) 80%, var(--t-accent))); opacity: .6; }
+.hs-st li { position: relative; display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 4px; border-radius: 10px; background: color-mix(in srgb, var(--t-raised) 55%, transparent); }
+.hs-st-n { position: relative; z-index: 1; display: grid; place-items: center; width: 28px; height: 28px; margin-left: 4px; flex: none; border-radius: 50%;
+  font: 800 13px var(--t-font); color: var(--t-on-accent); background: var(--t-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--t-chrome) 85%, transparent), 0 4px 12px color-mix(in srgb, var(--t-accent) 40%, transparent); }
+.hs-st li:last-child .hs-st-n { background: var(--t-gold); color: #1a1408; }
+.hs-st-t { display: grid; min-width: 0; line-height: 1.25; }
+.hs-st-t b { font: 700 14px var(--t-font); color: var(--t-text); }
+.hs-st-t i { font-style: normal; font-size: 12px; color: var(--t-muted); }
+@media (max-width: 1150px) { .hs-side { width: 46%; right: 18px; } .hero-slide.has-side .hs-body { max-width: 46%; } .hs-st-t i { white-space: normal; } }
+/* the steps card sizes to its four steps, centred beside the words */
+.hs-side.hs-steps { bottom: auto; top: 50%; transform: translateY(-56%); padding: 16px 16px 18px; }
+.hs-steps .hs-st { gap: 16px; }
+.hs-steps .hs-st li:not(:last-child)::after { height: calc(100% + 16px); left: 19px; }
+.hs-steps .hs-st-n { width: 32px; height: 32px; font-size: 14px; }
+.hs-steps .hs-st-t b { font-size: 15px; }
+.hs-steps .hs-st-t i { font-size: 12.5px; }
+
+/* key art with its own lettering: whole, at the top, never cropped; a blurred copy of it fills the slide behind */
+.hero-slide .hs-art-bg { position: absolute; inset: -30px; z-index: -3; width: calc(100% + 60px); height: calc(100% + 60px); object-fit: cover;
+  filter: blur(26px) saturate(1.15) brightness(.5); }
+.hero-slide.has-art .hs-art { inset: 18px 18px auto; width: calc(100% - 36px); height: calc(100% - 210px); object-fit: contain; object-position: center;
+  transform: none; filter: drop-shadow(0 18px 30px rgba(0, 0, 0, .5)); }
+.hero-slide.on.has-art .hs-art { transform: scale(1.02); }
