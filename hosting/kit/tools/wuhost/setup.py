@@ -23,6 +23,11 @@
                                                     (base64 JSON). Used once, then deleted. The realm key
                                                     is made here, on this PC (seed v2); an older v1 seed
                                                     carried a key made by the website.
+  python -m wuhost.setup link --name "Frost Haven" --auth-service 127.0.0.1:3724 --world-service 127.0.0.1:8085
+         [--build 5875|8606|12340] [--core vmangos] [--type pvp] [--tags ...] [--tagline ...] [--status-url URL]
+                                                    a server you ALREADY run (any core) on the Leyline realm list:
+                                                    only the agent runs (leyline link); it never touches that
+                                                    server's realm list, accounts or GM rights. The key is made here.
   python -m wuhost.setup official --name "Dalaran Hangout" --relay-url ws://... --listing-url http://...
          --auth-service ov-ac-authserver:3724 --world-service ov-ac-worldserver:8085 [--status-url URL]
                                                     the operator's OWN realm as a Beacon (hosting/hangout):
@@ -52,10 +57,12 @@ GM_RE = re.compile(r"^[A-Za-z0-9]{3,16}$")
 PROFILES = {"main": "Leyline main: normal Wrath from level 1, or a one-time boost to 80",
             "brawl": "Brawl: everyone starts at 80 in Dalaran with everything unlocked",
             "progression": "Progression: blizzlike 1x, Vanilla then TBC then Wrath per character",
-            "dalaran": "Dalaran hangout: light on your PC, no bots, boost to 80 straight to Dalaran"}
+            "dalaran": "Dalaran hangout: light on your PC, no bots, boost to 80 straight to Dalaran",
+            "vanillaplus": "Vanilla+: the original world only (level 60 cap), 1.5x XP, made to stay up for good"}
 # Per-profile settings for .env (docker-compose.host.yml): a Dalaran hangout runs on a small PC.
 PROFILE_ENV = {"dalaran": {"WU_DB_BUFFER": "256M", "WU_PLAYER_LIMIT": "40"}}
-PROFILE_BOTS = {"dalaran": 0}
+PROFILE_BOTS = {"dalaran": 0, "vanillaplus": 0}   # the bot count a new realm starts with
+NO_BOTS = ("dalaran",)                             # rulesets that never run bots (and the other cores: none yet)
 # The text the realm list and the join page show; the host edits these two files (then: Realm tools > rules).
 EDITABLE = ("tagline", "summary", "type", "discord", "tags", "region", "language", "max_players", "direct")
 # The realm list's filters (hosting/relay/wurelay/listing.py checks them again). Tags a profile starts with; the
@@ -64,7 +71,7 @@ TAGS = ("blizzlike", "boosted", "custom", "pvp", "rp", "hangout", "bots")
 REGIONS = ("na-east", "na-west", "sa", "eu", "africa", "me", "asia", "oce")
 LANG_RE = re.compile(r"^[a-z]{2,3}(-[A-Z]{2})?$")
 PROFILE_TAGS = {"main": ["boosted"], "brawl": ["boosted", "pvp", "custom"], "progression": ["blizzlike"],
-                "dalaran": ["hangout", "boosted"]}
+                "dalaran": ["hangout", "boosted"], "vanillaplus": ["blizzlike", "custom"]}
 PROFILE_MAX = {"dalaran": 40}
 CORE, BUILD = "azerothcore", 12340   # what the host kit runs
 DEFAULT_RULES = {"dalaran": [
@@ -73,7 +80,8 @@ DEFAULT_RULES = {"dalaran": [
     "No cheats, bots or exploits. Report bugs with .bug",
     "The host's word is final: the host is the GM here.",
 ]}
-DEFAULT_TAGLINE = {"dalaran": "A Dalaran hangout: boost to 80, duel, queue, meet."}
+DEFAULT_TAGLINE = {"dalaran": "A Dalaran hangout: boost to 80, duel, queue, meet.",
+                   "vanillaplus": "Vanilla+: the original world to level 60, always on."}
 # Host any client: the profiles on other cores (cores.py; their files in profiles/<id>/, steps in
 # profiles/host-profile.sh). (core, client build, the login and world services in their compose file)
 PROFILE_CORE = {k: (p["core"], p["build"], cores.LOGON, cores.WORLD) for k, p in cores.PROFILES.items()}
@@ -191,7 +199,7 @@ def check_options(o, profile):
             out[k] = o[k]
         elif k == "start" and profile == "main" and o[k] in ("level1", "boost"):
             out[k] = o[k]
-        elif k == "bots" and num(k, 0, 200) is not None and (o[k] == 0 or (ac and PROFILE_BOTS.get(profile, 40) != 0)):
+        elif k == "bots" and num(k, 0, 200) is not None and (o[k] == 0 or (ac and profile not in NO_BOTS)):
             out[k] = o[k]
         elif k == "signup" and o[k] in ("open", "invite", "off"):
             out[k] = o[k]
@@ -269,7 +277,7 @@ def write_host_dat(cfg):
     """realm-files/lua_scripts/host-realm.dat: this realm's facts for its GM's "Your realm" in game (ov_hostctl.lua):
     no secrets (a private realm's invite carries its secret, so only a public realm's join page is in it)."""
     d = os.path.join(KIT, "realm-files", "lua_scripts")
-    if not os.path.isdir(d) or cfg.get("official"):
+    if not os.path.isdir(d) or cfg.get("official") or cfg.get("linked"):
         return
     e = cfg.get("realm_env") or {}
     rates = "/".join(str(e.get(k) or "-") for k in ("xp", "loot", "rep"))
@@ -370,6 +378,9 @@ def beacon_record(cfg):
     rec.setdefault("summary", "")
     rec.setdefault("rules", [])
     rec.setdefault("discord", None)
+    if cfg.get("linked"):   # a server the host already runs: its own core and client, no ruleset of ours
+        rec.update(name=cfg["name"], type=rec.get("type", "PvE"), ruleset="custom", warden=None)
+        return linked_fields(rec)
     rec.update(name=cfg["name"], type=rec.get("type", "PvE"), ruleset=cfg["profile"],
                warden=cfg["warden"])
     return listing_fields(rec, cfg)
@@ -392,6 +403,22 @@ def listing_fields(rec, cfg):
     rec["direct"] = rec.get("direct") is True
     core, build = PROFILE_CORE.get(cfg.get("profile"), (CORE, BUILD))[:2]
     rec.update(core=core, build=build)
+    return rec
+
+
+def linked_fields(rec):
+    """listing_fields for a linked server: the same checks, but the core and client build are the host's."""
+    tags = rec.get("tags") if isinstance(rec.get("tags"), list) else []
+    tags = {t.strip().lower() for t in tags if isinstance(t, str)}
+    rec["tags"] = [t for t in TAGS if t in tags]
+    rec["region"] = rec.get("region") if rec.get("region") in REGIONS else None
+    lang = rec.get("language")
+    rec["language"] = lang if isinstance(lang, str) and LANG_RE.match(lang) else None
+    mp = rec.get("max_players")
+    rec["max_players"] = mp if isinstance(mp, int) and not isinstance(mp, bool) and 1 <= mp <= 10000 else None
+    rec["direct"] = False
+    rec["core"] = rec.get("core") if rec.get("core") in LINK_CORES else "other"
+    rec["build"] = rec.get("build") if rec.get("build") in link_builds() else BUILD
     return rec
 
 
@@ -438,6 +465,8 @@ def cmd_init(a):
     cfg = load() or {}
     if cfg.get("official"):
         sys.exit("This folder runs the operator's own realm (setup.py official), not a host kit.")
+    if cfg.get("linked"):
+        sys.exit(LINKED)
     seed = read_seed(a.seed) if getattr(a, "seed", None) else None
     if seed:
         if seed["v"] == 1 and cfg.get("realm_id") and cfg["realm_id"] != seed["realm_id"]:
@@ -608,6 +637,92 @@ def cmd_official(a):
     cfg["record"] = listing_fields(cfg["record"], cfg)
     save(cfg)
     print(json.dumps({"realm_id": rid, "name": cfg["name"]}))
+
+
+# ------------------------------------------------------------------------------------------- link
+# A server the host ALREADY runs (any core, on this PC, a VPS or their LAN) on the Leyline realm list. Only the agent
+# runs (`leyline link`, "Link my server.bat"): one outbound tunnel to the relay, the signed heartbeat, and the
+# relay's players passed to the server's own login server. Hands off like the operator's own realm: never its
+# realm list, accounts or GM rights (no database login at all).
+LINKED = ("This kit folder links a server you already run (leyline link). Use a fresh copy of the host kit to "
+          "host a new realm, or: leyline link remove")
+LINK_CORES = ("azerothcore", "trinitycore", "cmangos", "vmangos", "mangos", "other")
+LINK_TYPES = {"normal": "PvE", "pvp": "PvP", "rp": "RP", "rppvp": "RP-PvP"}
+HP_RE = re.compile(r"^(?:[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?|\[[0-9A-Fa-f:]{2,45}\]):\d{1,5}$")
+HTTP_URL_RE = re.compile(r"^https?://[A-Za-z0-9.:\-\[\]]+(/[A-Za-z0-9/._~%?=&-]*)?$")
+DISCORD_RE = re.compile(r"^https://(discord\.gg|discord\.com/invite)/[A-Za-z0-9-]{2,32}$")
+
+
+def link_builds():
+    """The client builds a linked server may say it runs: the ones Leyline offers now (cores.MAX_OFFERED_BUILD)."""
+    return tuple(b for b in sorted(cores.BUILDS) if b <= cores.MAX_OFFERED_BUILD or cores.all_clients())
+
+
+def host_port(v, what):
+    if not isinstance(v, str) or not HP_RE.match(v.strip()) or not 0 < int(v.strip().rsplit(":", 1)[1]) < 65536:
+        sys.exit(f"{what}: a host and port, like 127.0.0.1:3724 or my-server.example:3724")
+    return v.strip()
+
+
+def cmd_link(a):
+    """Put a server the host already runs on the Leyline realm list. Safe to run again: the key and realm id stay;
+    the text and addresses follow the arguments (an argument not passed keeps its earlier value)."""
+    cfg = load() or {}
+    if cfg and not cfg.get("linked"):
+        sys.exit("This kit folder already hosts a realm (state/host.json). Use a fresh copy of the host kit to link "
+                 "a server you already run.")
+    old = cfg.get("record") or {}
+    name = (a.name if a.name is not None else cfg.get("name") or "").strip()
+    if not NAME_RE.match(name) or BRAND_RE.search(name):
+        sys.exit("Realm name: 1-32 letters, digits, spaces, _ ' or -, no game or publisher brand names")
+    auth = host_port(a.auth_service or cfg.get("auth_service") or "", "Login server address")
+    world = host_port(a.world_service or cfg.get("world_service") or "", "World server address")
+    build = a.build if a.build is not None else old.get("build", BUILD)
+    if build not in link_builds():
+        sys.exit("Client: " + ", ".join(f"{b} ({cores.BUILDS[b]})" for b in link_builds()))
+    core = a.core or old.get("core") or ("azerothcore" if build == BUILD else "other")
+    if core not in LINK_CORES:
+        sys.exit("Core: " + ", ".join(LINK_CORES))
+    rtype = LINK_TYPES[a.type] if a.type else old.get("type", "PvE")
+    status_url = a.status_url if a.status_url is not None else cfg.get("status_url")
+    if status_url and not HTTP_URL_RE.match(status_url):
+        sys.exit("--status-url: a plain http(s) URL (players and bots as JSON), or leave it out")
+    discord = a.discord if a.discord is not None else old.get("discord")
+    if discord and not DISCORD_RE.match(discord):
+        sys.exit("--discord: an invite link like https://discord.gg/abc123")
+    rules = old.get("rules") or []
+    if a.rules_file:
+        with open(a.rules_file, encoding="utf-8-sig") as f:
+            rules = [" ".join(ln.split())[:120] for ln in f if ln.strip() and not ln.lstrip().startswith("#")][:10]
+    tagline = " ".join((a.tagline if a.tagline is not None else old.get("tagline", "")).split())[:80]
+    summary = " ".join((a.summary if a.summary is not None else old.get("summary", "")).split())[:400]
+    if BRAND_RE.search(" ".join([name, tagline, summary] + rules)):
+        sys.exit("Leave game and publisher brand names out of the realm list text.")
+    os.makedirs(STATE, exist_ok=True)
+    secret = keys.load_or_create(path("realm.key"))
+    rid = keys.realm_id(keys.public_key(secret))
+    relay = a.relay or cfg.get("relay", domains.RELAY)
+    cfg.update(realm_id=rid, linked=True, name=name, profile="linked", visibility="public", signup="off",
+               relay=relay, relay_url=a.relay_url or cfg.get("relay_url") or f"wss://{relay}/agent",
+               listing_url=a.listing_url or cfg.get("listing_url") or f"https://{relay}/api/listing/heartbeat",
+               join_base=(cfg.get("join_base") or (domains.JOIN if relay == domains.RELAY else f"https://{relay}")).rstrip("/"),
+               site=(cfg.get("site") or domains.SITE).rstrip("/"),
+               auth_service=auth, world_service=world, realmlist="keep", status_url=status_url or None,
+               warden=None, bots=0)
+    for k in ("invite_secret", "host_secret", "gm", "gm_name", "db_password", "official"):
+        cfg.pop(k, None)   # nothing to invite to, no GM account to make, no database login
+    rec = dict(old, name=name, tagline=tagline, summary=summary, type=rtype, ruleset="custom", rules=rules,
+               discord=discord or None, warden=None, core=core, build=build)
+    if a.tags is not None:
+        rec["tags"] = csv_tags(a.tags)
+    listing_args(argparse.Namespace(region=a.region, language=a.language), {"record": rec})
+    cfg["record"] = linked_fields(rec)
+    save(cfg)
+    write_beacon(cfg)
+    if not os.path.exists(path("rules.txt")) or a.rules_file:
+        with open(path("rules.txt"), "w", encoding="utf-8") as f:
+            f.write(RULES_HELP + "".join(r + "\n" for r in rules))
+    print(json.dumps({"realm_id": rid, "name": name, "page": f"https://play.{domains.DOMAIN}/wrath/r/{rid}"}))
 
 
 BRAND_RE = re.compile(r"(?i)world\s*of\s*warcraft|\bwow\b|warcraft|lich\s*king|blizzard")
@@ -886,6 +1001,25 @@ def main(argv=None):
     p.add_argument("--rules-file")
     p.add_argument("--discord")
     p.set_defaults(fn=cmd_official)
+    p = sub.add_parser("link", help="a server you already run, on the Leyline realm list (only the agent runs)")
+    p.add_argument("--name")
+    p.add_argument("--auth-service", help="host:port of your login server (from the agent's point of view)")
+    p.add_argument("--world-service", help="host:port of your world server")
+    p.add_argument("--build", type=int, help="the client your server runs: 5875, 8606 or 12340")
+    p.add_argument("--core", choices=LINK_CORES)
+    p.add_argument("--type", choices=sorted(LINK_TYPES))
+    p.add_argument("--tags", help="comma list: " + ",".join(TAGS))
+    p.add_argument("--region")
+    p.add_argument("--language")
+    p.add_argument("--tagline")
+    p.add_argument("--summary")
+    p.add_argument("--rules-file")
+    p.add_argument("--discord")
+    p.add_argument("--status-url", help="players and bots as JSON (format openvanilla-status-1); optional")
+    p.add_argument("--relay")
+    p.add_argument("--relay-url")
+    p.add_argument("--listing-url")
+    p.set_defaults(fn=cmd_link)
     sub.add_parser("realmlist").set_defaults(fn=cmd_realmlist)
     sub.add_parser("show").set_defaults(fn=cmd_show)
     sub.add_parser("get").set_defaults(fn=cmd_get)

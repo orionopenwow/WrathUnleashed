@@ -148,7 +148,8 @@ check("form renders", st == 200 and "<form method=\"post\" action=\"/wrath/host\
 for f in ('name="name"', 'name="preset"', 'name="rules"', 'name="visibility"', 'name="gm"', 'name="tagline"', 'name="csrf"'):
     check(f"form field {f}", f in page)
 check("dalaran is the default preset", 'value="dalaran" checked' in page)
-check("all kit presets offered", all(f'value="{k}"' in page for k in ("dalaran", "main", "brawl", "progression")))
+check("all kit presets offered", all(f'value="{k}"' in page for k in ("dalaran", "main", "brawl", "progression", "vanillaplus")))
+check("the form links the always-on guide", 'href="/wrath/docs/always-on"' in page)
 check("public by default", 'value="public" checked' in page)
 check("start server button", ">Start server</button>" in page)
 check("signed-in name shown", "Signed in as Alice" in page)
@@ -336,6 +337,9 @@ for _rid, rcp in hf.RECIPES.items():
     clean, errs = hf.validate(fm)
     check(f"recipe {_rid}: fills preset, options, tagline and rules, and passes validate", not dropped and v.get("preset") == rcp[2]
           and v.get("rules") == list(rcp[5]) and not errs, (dropped, errs))
+check("recipe vanillaplus: Vanilla+, open to everyone, always on", hf.RECIPES["vanillaplus"][2] == "vanillaplus"
+      and hf.prefill("recipe=vanillaplus")[0].get("signup") == "open")
+check("vanillaplus may run bots (none by default)", hf.options({"bots": "10"}, "vanillaplus") == ({"bots": 10}, {}))
 check("recipe: the query still wins over the recipe", hf.prefill("recipe=duels&bots=5")[0].get("bots") == "5")
 check("recipe: an unknown recipe is just left out", hf.prefill("recipe=nope")[0] == {})
 check("prefill: rates and bots are AzerothCore's", hf.prefill("preset=cmangos-1.12.1&xp=3&bots=5")[1] == ["bots", "xp"])

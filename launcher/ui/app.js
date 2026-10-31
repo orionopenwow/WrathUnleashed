@@ -897,7 +897,7 @@ async function handleDeepLink() {
 // "Your realm" tab (leyline://host?manage=<what>): the Host page with what to do for that control. Nothing starts.
 const HOST_WORDS = {
   core: { azerothcore: "AzerothCore", cmangos: "CMaNGOS" },
-  preset: { dalaran: "Dalaran hangout", main: "Classic levelling", brawl: "Brawl", progression: "Progression",
+  preset: { dalaran: "Dalaran hangout", main: "Classic levelling", brawl: "Brawl", progression: "Progression", vanillaplus: "Vanilla+",
     "cmangos-1.12.1": "CMaNGOS Classic", "cmangos-2.4.3": "CMaNGOS TBC" },
   type: { normal: "Normal", pvp: "PvP", rp: "RP", rppvp: "RP-PvP" },
   start: { level1: "Level 1 only", boost: "Level 1, or the boost to 80" },
@@ -974,9 +974,10 @@ async function showLinkedRealm(id) {
 $("cat-q").addEventListener("input", renderCatalog);
 $("cat-fit").addEventListener("change", renderCatalog);
 
-// The three tiles on Home: the picked client's installed mods (updates first), or Workshop picks when it has none.
+// The three mod tiles (owner 2026-10-30: taken off Home; kept for a page that brings the box back).
 function renderModTiles() {
   const box = $("mod-tiles");
+  if (!box) return;
   box.replaceChildren();
   const mine = installed.slice().sort((x, y) => (y.update ? 1 : 0) - (x.update ? 1 : 0)).slice(0, 3);
   const picks = catalog.projects.filter((p) => p.source === "packaged").concat(catalog.projects.filter((p) => p.source !== "packaged"));

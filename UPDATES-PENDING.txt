@@ -357,3 +357,7 @@
 1122b ship Save to GitHub: the ready-made realms
 1123a signin Site flags: magnet links listed (off)
 1123b ship Save to GitHub: the launcher's new menu, panels, backdrop and realm cards; hidden magnet links (GitHub then rebuilds Leyline.exe)
+1124a relay Realm list knows the Vanilla+ ruleset
+1124b signin Always-on realm guide, Vanilla+ ready-made realm on the Host page
+1124c hostkit Host kit: leyline link, Link my server.bat, Vanilla+, --always-on
+1124d ship Save to GitHub: always-on realms and the launcher Home cleanup (GitHub then rebuilds Leyline.exe)

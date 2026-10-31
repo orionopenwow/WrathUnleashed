@@ -28,6 +28,7 @@
   <button type="button" class="chip" id="tb-account" title="Your account lives on the website: sign in with Google or your Hero Key">
     <span class="chip-crest"><b>L</b></span>
     <span class="chip-txt"><span>Your account</span><i>Hero Key · on the web</i></span>
+    <span class="chip-go" aria-hidden="true">MANAGE</span>
   </button>
   <div class="winbtns">
     <button type="button" id="win-min" aria-label="Minimise"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
@@ -82,28 +83,12 @@
           <span class="rl-bar srv-bar" id="srv-bar" aria-hidden="true" hidden><i></i></span>
         </section>
 
-        <section class="card" aria-label="Account">
-          <div class="card-head"><span>ACCOUNT</span><button type="button" class="btn small" data-link="account">MANAGE</button></div>
-          <div class="acct">
-            <span class="crest"><b>L</b></span>
-            <div><b>Your account</b><i>Google or Hero Key · on the web</i></div>
-          </div>
-        </section>
-
         <section class="card" aria-label="Game client">
           <div class="card-head"><span>GAME CLIENT</span></div>
           <div id="play-empty" class="empty" hidden>Add your game client first. Leyline uses the client already on your PC; it never downloads game files.</div>
           <div class="client-now" id="client-now"></div>
           <button type="button" class="btn wide" id="client-change" data-page-go="clients">CHANGE GAME FOLDER</button>
         </section>
-      </div>
-
-      <div class="strip">
-        <div class="mod-tiles" id="mod-tiles"></div>
-        <div class="community-btns">
-          <button type="button" class="btn" data-link="discord">JOIN THE DISCORD</button>
-          <button type="button" class="btn" data-link="support" hidden>SUPPORT THE REALM</button>
-        </div>
       </div>
     </div>
   </section>

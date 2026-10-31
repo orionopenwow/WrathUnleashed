@@ -121,6 +121,41 @@ public realm is claimed for its account. Pending realms live in `/srv/wrath/host
 "Hosting guide" link is the public `/wrath/docs/hosting`. Tests: `stream/tests/test_hostflow.py`, and the whole Windows path against the real
 relay: `hosting/tests/test_host_windows_e2e.py`.
 
+## 4c. Always-on realms and linking a server you already run
+
+The player-facing guide is `docs/leyline/always-on.md` (served at `/wrath/docs/always-on`, linked from the host page
+and the hosting guide). Two paths, both through the relay (no open ports, listed within a minute):
+
+**A new always-on realm.** `bash leyline host --ruleset vanillaplus --public --always-on` (also `--name`, `--gm`,
+`--private`). `vanillaplus` is a kit ruleset (`realm/profiles/vanillaplus.env`, copied into `realm-files/profiles/` by
+`make-kit.sh` / `Make host kit.bat`): AzerothCore with mod-individual-progression held at its Vanilla stage
+(`IndividualProgression.ProgressionLimit = 7`, the module's own documented value for "Vanilla content" at the pinned
+commit), `MaxPlayerLevel = 60`, 1.5x XP, no bots by default (bots allowed: `leyline options --bots N`). It plays on the
+3.3.5a client, so browser and launcher players can join. `--always-on`: every realm container is already
+`restart: unless-stopped`; on Linux it runs `systemctl enable docker` (as root, or `sudo -n`; otherwise it prints the
+command), checks the restart policy of every `wu-host-*` / `wu-link-*` container, and says how to check after a
+reboot. On macOS / Windows it points at Docker Desktop's "start when you sign in". The website's host page has the
+same as a ready-made realm ("Vanilla+ (always on)", `stream/hostflow.py` RECIPES). The true 1.12.1 realm stays the
+`cmangos-1.12.1` profile (players need their own 1.12.1 client).
+
+**A server the host already runs** (any core). `bash leyline link` (Mac/Linux) or `Link my server.bat` (Windows):
+four questions (name, login server `host:port`, world server `host:port`, client vanilla/tbc/wrath = 5875/8606/12340),
+then `setup.py link` writes `state/host.json` (`"linked": true`, public, signup off, `realmlist: keep`, the host's
+own core and build in the record, no invite/host secrets, no GM account, no database login) and only the agent runs:
+container `wu-link-agent` from the tools image, `--restart unless-stopped --read-only --cap-drop ALL
+--security-opt no-new-privileges --memory 96m`, state/ mounted. Linux: `--network host` (so `127.0.0.1` is the
+machine); macOS/Windows: `127.0.0.1`/`localhost` become `host.docker.internal`. The agent treats a linked realm like
+the operator's own (`Agent.official()`): it never touches the realm list, accounts or GM rights. Players reach the
+server's login server through the relay and then the world address the server already hands out (it must be
+reachable by players). Every relay player comes from the agent's address, so the host turns off the login server's
+wrong-password IP ban (`WrongPass.MaxCount = 0`); the relay limits per player IP. `leyline link status | stop |
+remove` (remove keeps `state/realm.key`, so linking again keeps the realm id). Env answers: `LEYLINE_LINK_NAME`,
+`_AUTH`, `_WORLD`, `_CLIENT`, `_TAGLINE`, `_CORE`, `_TAGS`, `_STATUS_URL`. Claiming uses the usual `leyline claim
+TOKEN` once the site's "Claim a realm" page exists. Tests: `hosting/tests/test_link.py`.
+
+The relay's listing knows the `vanillaplus` ruleset from this change on (`wurelay/listing.py` RULESETS); a relay not
+yet redeployed lists such realms as "custom".
+
 ## 4. Hosting (what players do)
 
 Windows: unzip the kit, double-click `Host a Wrath realm.bat`. macOS/Linux: `bash host-wrath-realm.sh`.

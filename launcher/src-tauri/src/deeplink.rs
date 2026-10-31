@@ -133,7 +133,7 @@ pub fn host_query(q: &str) -> Option<String> {
     let core = get("core")?;
     let preset = get("preset")?;
     let presets: &[&str] = match core {
-        "azerothcore" => &["dalaran", "main", "brawl", "progression"],
+        "azerothcore" => &["dalaran", "main", "brawl", "progression", "vanillaplus"],
         "cmangos" => &["cmangos-1.12.1", "cmangos-2.4.3"],
         _ => return None,
     };

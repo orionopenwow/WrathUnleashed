@@ -741,7 +741,7 @@ export function hopUi(env = window.__wenilla_env || {}, hop = window.__wuHop) {
 // the host signs in there and presses Start server. The poll also sets WUUI_PAGE = true, which tells the addon it
 // runs in the browser game (the desktop client has no page; it shows a leyline:// link instead).
 export const HOST_TAKE = 'WUUI_PAGE = true; local h = WUUI_LEYLINE_HOST; WUUI_LEYLINE_HOST = nil; return h';
-const HOST_PRESETS = { azerothcore: ['dalaran', 'main', 'brawl', 'progression'], cmangos: ['cmangos-1.12.1', 'cmangos-2.4.3'] };
+const HOST_PRESETS = { azerothcore: ['dalaran', 'main', 'brawl', 'progression', 'vanillaplus'], cmangos: ['cmangos-1.12.1', 'cmangos-2.4.3'] };
 const HOST_REGIONS = ['na-east', 'na-west', 'sa', 'eu', 'africa', 'me', 'asia', 'oce'];
 const HOST_TAGS = ['blizzlike', 'boosted', 'custom', 'pvp', 'rp', 'hangout'];
 const HOST_BANNED = /world\s*of\s*warcraft|\bwow\b|warcraft|lich\s*king|blizzard/i;

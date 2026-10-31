@@ -1294,7 +1294,7 @@ LISTING_BYTES = 2_000_000
 REALM_ID_RE = re.compile(r"^[a-z2-7]{16}$")
 RULESET_LABELS = {"main": "Level 1 or boost to 80", "brawl": "Brawl: everyone 80",
                   "progression": "Progression", "casual": "Casual", "dalaran": "Dalaran hangout",
-                  "custom": "Custom rules"}
+                  "vanillaplus": "Vanilla+", "custom": "Custom rules"}
 _listing: dict = {"at": -1e9, "ok": False, "realms": [], "fetched": False, "when": 0.0}   # when: wall clock of the last good fetch
 _listing_lock = threading.Lock()
 _listing_busy = threading.Lock()
