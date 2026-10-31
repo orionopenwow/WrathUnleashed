@@ -99,3 +99,23 @@
 .ac-out > div:first-child { flex: 1 1 260px; }
 .ac-out .ac-acts { margin: 0; }
 .ac-out .link-s { flex-basis: 100%; text-align: left; justify-self: start; width: max-content; }
+
+/* owner 2026-10-30 23:29: "make this more apparent / bigger, its own thing": the profile is a card of its own in the
+   title bar, with a bigger picture and name, set apart from the window buttons. */
+.titlebar .tb-me { margin: 0 18px 0 8px; }
+.titlebar .tb-me .hf-me {
+  gap: 11px; padding: 5px 14px 5px 5px; min-height: 50px; border-radius: 14px;
+  background: color-mix(in srgb, var(--t-text) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--t-text) 12%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 6%, transparent), 0 4px 14px rgba(0, 0, 0, 0.25);
+  transition: background 0.15s, border-color 0.15s;
+}
+.titlebar .tb-me .hf-me:hover { background: color-mix(in srgb, var(--t-accent) 12%, transparent); border-color: color-mix(in srgb, var(--t-accent) 45%, transparent); }
+.titlebar .tb-me .sx-av.hf-me-av { width: 40px; height: 40px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--t-accent) 55%, transparent); }
+.titlebar .tb-me .sx-av.hf-me-av b { font-size: 16px; }
+.titlebar .tb-me .hf-me > div { gap: 2px; }
+.titlebar .tb-me .hf-me-name { font-size: 15.5px; font-weight: 700; }
+.titlebar .tb-me .hf-me-st { font-size: 12px; color: var(--t-text-2); }
+.titlebar .tb-me .hf-me .btn { height: 38px; padding: 0 20px; font-size: 13px; border-radius: 10px; }
+.titlebar .tb-me .hf-me:has(.hf-signin) { padding: 0; background: none; border: 0; box-shadow: none; }
+.titlebar .tb-me .hf-me-menu { top: calc(100% + 8px); min-width: 200px; }

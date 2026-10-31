@@ -423,3 +423,11 @@
 1155e addons Republish the Leyline addons with the new Builder
 1155f ship Save to GitHub: the Den work
 1156a ship Save to GitHub: launcher build fix (the addons test skips when the addons' sources are not in the public repo) (GitHub then rebuilds Leyline.exe)
+1157a brand-check Read-only: the brand is on before the rename
+1157b signin Site: the official realm is now Wrath Unleashed
+1157c scripts Realm: Wrath Unleashed in game texts (live reload; a 5-minute warning if a restart is needed)
+1157d foreverui Addon: Wrath Unleashed
+1157e brand-leyline Realm list name: Wrath Unleashed (no restart; players stay in)
+1157f hangout Leyline listing: Wrath Unleashed (relay hop-ins reconnect)
+1157g addons Republish the addons with the new name
+1157h ship Save to GitHub: the rename, profile card, logo spacing, featured art (GitHub then rebuilds Leyline.exe)

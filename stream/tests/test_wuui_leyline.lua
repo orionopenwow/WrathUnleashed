@@ -335,12 +335,12 @@ check("a malformed M line is ignored", (function()
 L.filter = {}
 
 -- this realm's own relay listing is the same realm: one row (by the realm's S line, or by name from an older realm)
-list({ "B:3:0", "R:this:1:4:0:main:Dalaran Hangout", "M:this:-:0:-:12340:-:-:-:",
-    "R:kkkkkkkkkkkkkkkk:1:4:0:dalaran:Dalaran Hangout", "M:kkkkkkkkkkkkkkkk:N:40:-:12340:-:-:-:hangout",
+list({ "B:3:0", "R:this:1:4:0:main:Wrath Unleashed", "M:this:-:0:-:12340:-:-:-:",
+    "R:kkkkkkkkkkkkkkkk:1:4:0:dalaran:Wrath Unleashed", "M:kkkkkkkkkkkkkkkk:N:40:-:12340:-:-:-:hangout",
     "R:cccccccccccccccc:1:9:0:main:Plain", "M:cccccccccccccccc:-:30:88:12340:na-east:en:-:pvp", "E:3" })
 ids = {}
 for _, r in ipairs(L.realms) do ids[#ids + 1] = r.id end
-check("by name: Dalaran Hangout (you are here) once, its listing not a second row",
+check("by name: Wrath Unleashed (you are here) once, its listing not a second row",
     table.concat(ids, " ") == "this cccccccccccccccc" and L.realms[1].relayId == "kkkkkkkkkkkkkkkk")
 rows = shown()
 check("this row: You're here in the browser game (a page)", (function()
@@ -354,15 +354,15 @@ check("this row: Join through the relay in the desktop client (listed, live, no 
     shown()[1].join:GetText() == "Join through the relay")
 shown()[1].copyBtn:Fire("OnClick")
 check("desktop: Copy link gives the relay link", win.copy:GetText() == "https://play.openvanilla.app/r/kkkkkkkkkkkkkkkk")
-list({ "B:3:0", "R:this:1:4:0:main:Dalaran Hangout", "M:this:-:0:-:12340:-:-:-:",
-    "R:kkkkkkkkkkkkkkkk:0:0:0:dalaran:Dalaran Hangout", "M:kkkkkkkkkkkkkkkk:N:40:-:12340:-:-:-:hangout", "E:3" })
+list({ "B:3:0", "R:this:1:4:0:main:Wrath Unleashed", "M:this:-:0:-:12340:-:-:-:",
+    "R:kkkkkkkkkkkkkkkk:0:0:0:dalaran:Wrath Unleashed", "M:kkkkkkkkkkkkkkkk:N:40:-:12340:-:-:-:hangout", "E:3" })
 check("listing offline: no Join through the relay", #L.realms == 1 and shown()[1].join:GetText() == "You're here")
-list({ "B:3:0", "R:this:1:4:0:main:Dalaran Hangout", "M:this:-:0:-:12340:-:-:-:", "S:mmmmmmmmmmmmmmmm:1",
-    "R:kkkkkkkkkkkkkkkk:1:4:0:dalaran:Dalaran Hangout", "M:kkkkkkkkkkkkkkkk:N:40:-:12340:-:-:-:hangout", "E:3" })
+list({ "B:3:0", "R:this:1:4:0:main:Wrath Unleashed", "M:this:-:0:-:12340:-:-:-:", "S:mmmmmmmmmmmmmmmm:1",
+    "R:kkkkkkkkkkkkkkkk:1:4:0:dalaran:Wrath Unleashed", "M:kkkkkkkkkkkkkkkk:N:40:-:12340:-:-:-:hangout", "E:3" })
 check("the realm's S line wins: only that id is this realm (a same-name realm elsewhere stays)",
     #L.realms == 2 and L.realms[1].relayId == "mmmmmmmmmmmmmmmm" and L.realms[2].id == "kkkkkkkkkkkkkkkk")
 check("names match without case, spaces or punctuation", L.SameName("Dalaran  hangout!", "dalaran hangout")
-    and not L.SameName("Dalaran", "Dalaran Hangout") and not L.SameName("", ""))
+    and not L.SameName("Dalaran", "Wrath Unleashed") and not L.SameName("", ""))
 
 -- nothing the window shows names the game or its maker
 local bad

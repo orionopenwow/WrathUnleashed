@@ -3,8 +3,8 @@
 -- (WrathUnleashedUI, every file in .toc order, fake 3.3.5a API) talk over OVMOD:
 --   off (no flag file, no OV_LEYLINE_BRAND): nothing is sent, the addon's ask goes unanswered, chat lines keep the
 --     [WrathUnleashed] tag, the Leyline window says "Back to Wrath";
---   on (the flag file brand.sh writes): a login pushes "wubrand"/"brand" (leyline, Dalaran Hangout), the ask is
---     answered, chat says [Leyline], the Leyline window's home realm is "Dalaran Hangout" (ov_leyline.lua's row for
+--   on (the flag file brand.sh writes): a login pushes "wubrand"/"brand" (leyline, Wrath Unleashed), the ask is
+--     answered, chat says [Leyline], the Leyline window's home realm is "Wrath Unleashed" (ov_leyline.lua's row for
 --     this realm too), and nothing the window shows names an old brand.
 local dir = arg[1] or "stream/fui-web/Interface/AddOns/WrathUnleashedUI"
 local scripts = arg[2] or "realm/custom/lua_scripts"
@@ -13,10 +13,12 @@ local pass, fail = 0, 0
 local function check(name, ok)
     if ok then pass = pass + 1; print("PASS " .. name) else fail = fail + 1; print("FAIL " .. name) end
 end
-local OLD = { "WrathUnleashed", "Wrath Unleashed", "Open Vanilla", "OpenVanilla", "Back to Wrath" }
+-- "Wrath Unleashed" (with the space) is the main realm's own name now (owner 2026-10-30 23:32), not an old one
+local OLD = { "WrathUnleashed", "Open Vanilla", "OpenVanilla", "Back to Wrath" }
 local function hasOld(s)
     if type(s) ~= "string" then return false end
     s = s:gsub("WrathUnleashedUI", "")
+    s = s:gsub("Wrath Unleashed", "")
     for _, w in ipairs(OLD) do if s:find(w, 1, true) then return w end end
     return false
 end
@@ -175,7 +177,7 @@ do local f = assert(io.open(flagFile, "wb")); f:write("on\n"); f:close() end
 check("the flag is looked at no more than every 30 s", OVMod.BrandOn() == false)
 serverClock = serverClock + 31
 b = OVMod.Brand()
-check("on: Leyline and Dalaran Hangout", b.on == true and b.name == "Leyline" and b.realm == "Dalaran Hangout" and b.home == "Dalaran Hangout")
+check("on: Leyline and Wrath Unleashed", b.on == true and b.name == "Leyline" and b.realm == "Wrath Unleashed" and b.home == "Wrath Unleashed")
 env.OV_LEYLINE_REALM_NAME = "Frost|cffff0000 Hall"
 check("on: OV_LEYLINE_REALM_NAME, cleaned", OVMod.Brand().realm == "Frostcffff0000 Hall")
 env.OV_LEYLINE_REALM_NAME = nil
@@ -184,12 +186,12 @@ check("OV_LEYLINE_BRAND=0 wins over the flag", OVMod.Brand().on == false)
 env.OV_LEYLINE_BRAND = nil
 
 local before = #received
-realmName = "Dalaran Hangout"   -- brand.sh renames the realm list entry
+realmName = "Wrath Unleashed"   -- brand.sh renames the realm list entry
 login()
 check("on: a login tells the addon (OVMOD wubrand brand)", #received == before + 1 and received[#received][1] == "OVMOD"
-    and received[#received][2] == "wubrand\tbrand\t1/1\tleyline\tDalaran Hangout")
-check("on: the addon has it", W.Brand.on == true and W.Brand.name == "Leyline" and W.Brand.home == "Dalaran Hangout"
-    and W.Brand.back == "Back to Dalaran Hangout")
+    and received[#received][2] == "wubrand\tbrand\t1/1\tleyline\tWrath Unleashed")
+check("on: the addon has it", W.Brand.on == true and W.Brand.name == "Leyline" and W.Brand.home == "Wrath Unleashed"
+    and W.Brand.back == "Back to Wrath Unleashed")
 before = #received
 SendAddonMessage("OVMOD", "wubrand\task\t1/1\t", "WHISPER", "Tester")
 check("on: the addon's ask is answered", #received == before + 1)
@@ -198,16 +200,16 @@ W.Say("later")
 local lastChat; for _, m in ipairs(chat) do if m:find("later", 1, true) then lastChat = m end end
 check("on: chat says [Leyline]", lastChat and lastChat:find("[Leyline]", 1, true) ~= nil and not hasOld(lastChat))
 local win = W.Leyline.Window()
-check("on: the open window's home button is relabelled", win.back.text == "Back to Dalaran Hangout")
+check("on: the open window's home button is relabelled", win.back.text == "Back to Wrath Unleashed")
 -- the realm list: this realm's row comes from ov_leyline.lua, named by the brand
 win:Hide(); SlashCmdList.WULEYLINE("")
 serverClock = serverClock + 60
 W.Leyline.Request(true)
 local row
 for _, r in ipairs(win.rows or {}) do if r:IsShown() and r.realm and r.realm.id == "this" then row = r end end
-check("on: this realm's row is Dalaran Hangout", row and row.name:GetText():find("^Dalaran Hangout"))
+check("on: this realm's row is Wrath Unleashed", row and row.name:GetText():find("^Wrath Unleashed"))
 win.back:Fire("OnClick")
-check("on: Back on the home realm says so", win.info:GetText() == "You're on Dalaran Hangout now.")
+check("on: Back on the home realm says so", win.info:GetText() == "You're on Wrath Unleashed now.")
 local bad = {}
 for _, f in ipairs(created) do
     if f.IsVisible and f:IsVisible() and f.parent and (f.parent == win or (f.parent.parent == win)) then

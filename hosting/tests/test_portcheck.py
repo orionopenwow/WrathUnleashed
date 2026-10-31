@@ -19,7 +19,7 @@ LISTING = {"realms": [
     {"state": "live", "community": {"realmId": "aaaaaaaaaaaaaaaa"}},
     {"state": "offline", "community": {"realmId": "bbbbbbbbbbbbbbbb"}},
 ]}
-INFO = {"aaaaaaaaaaaaaaaa": {"online": True, "name": "Dalaran Hangout", "auth_port": 40010, "world_port": 40011}}
+INFO = {"aaaaaaaaaaaaaaaa": {"online": True, "name": "Wrath Unleashed", "auth_port": 40010, "world_port": 40011}}
 
 
 def fetch(url):
@@ -45,7 +45,7 @@ class PortCheck(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(seen, [40010, 40011, 40000, 40999])          # the live realm's pair, then the range ends
         self.assertIn("game ports 40000-40999: reachable", out)
-        self.assertIn("Dalaran Hangout auth", out)
+        self.assertIn("Wrath Unleashed auth", out)
 
     def test_refused_alone_means_open(self):
         rc, out, _ = self.run_main(lambda port: "refused")

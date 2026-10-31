@@ -1,5 +1,5 @@
-// The launcher's Home page (ui/home.js, ui/home.css) in Chromium with a fake Tauri core: the hero gallery (Join the Dalaran
-// Hangout first, with Play now and Join the Discord, the lineup, what's on and the latest forum threads; then the featured
+// The launcher's Home page (ui/home.js, ui/home.css) in Chromium with a fake Tauri core: the hero gallery (Join Wrath
+// Unleashed first, with Play now and Join the Discord, the lineup, what's on and the latest forum threads; then the featured
 // mode with its key art, what's new, browser play with the realms, hosting, your Den, a Workshop mod with its screenshots;
 // a slide without its data left out; live counts; network strings shown as text, never HTML), its dots,
 // arrows and Left / Right keys, moving on by itself and not under prefers-reduced-motion, and the rows below the fold
@@ -28,8 +28,8 @@ const FAKE = ({ empty, browser, ms, modes, noClients, forumDown, forumWait }) =>
   const base = { official: false, kind: 'PvE', state: 'live', version: '3.3.5a', core: 'azerothcore', build: '3.3.5a', tags: [],
     players: 0, bots: 0, max_players: null, address: null };
   const R = (o) => Object.assign({}, base, o);
-  const realms = empty ? [R({ slug: 'official', name: 'Dalaran Hangout', official: true, state: 'offline', address: 'play.openvanilla.app' })] : [
-    R({ slug: 'official', name: 'Dalaran Hangout', official: true, players: 5, address: 'play.openvanilla.app' }),
+  const realms = empty ? [R({ slug: 'official', name: 'Wrath Unleashed', official: true, state: 'offline', address: 'play.openvanilla.app' })] : [
+    R({ slug: 'official', name: 'Wrath Unleashed', official: true, players: 5, address: 'play.openvanilla.app' }),
     R({ slug: 'c-a', realm_id: 'a', name: 'Busy Den', players: 30, max_players: 60, is_new: true, kind: 'Fun', address: 'relay.openvanilla.app:40002' }),
     R({ slug: 'c-b', realm_id: 'b', name: 'Old Keep', build: '1.12.1', version: '1.12.1', players: 3, address: 'relay.openvanilla.app:40003' }),
     R({ slug: 'c-c', realm_id: 'c', name: 'Hidden Cata', build: '4.3.4', version: '4.3.4', players: 9 }),
@@ -126,10 +126,10 @@ test('the gallery: every slide with its data, a title, one line and one button; 
     assert.equal(await s.$$eval('.hs-body button', (x) => x.length), want, 'one button per slide, two on the launch slide (the realm rows on the side are links to Realms)');
   }
   const hang = page.locator('.hero-slide[data-key="hangout"]');
-  assert.equal(await hang.locator('.hs-title').textContent(), 'Join the Dalaran Hangout');
+  assert.equal(await hang.locator('.hs-title').textContent(), 'Join Wrath Unleashed');
   assert.deepEqual(await hang.locator('.hs-body button').allTextContents(), ['Play now', 'Join the Discord']);
   assert.match(await hang.locator('.hs-line').textContent(), /\/golf and \/modes/);
-  assert.deepEqual(await hang.locator('.hs-lineup .hs-rl-n b').allTextContents(), ['Dalaran Hangout'], 'the official lineup: the Hangout (no Vanilla Remastered record here)');
+  assert.deepEqual(await hang.locator('.hs-lineup .hs-rl-n b').allTextContents(), ['Wrath Unleashed'], 'the official lineup: the Hangout (no Vanilla Remastered record here)');
   const mode = page.locator('.hero-slide[data-key="mode"]');
   assert.equal(await mode.locator('img.hs-art').getAttribute('src'), 'art/modes/azeroth-survivors.webp');
   assert.equal(await mode.locator('.hs-title').textContent(), 'Azeroth Survivors');
@@ -210,7 +210,7 @@ test('dots, arrows and the Left / Right keys move the gallery; the buttons do wh
   await ctx.close();
 });
 
-test('the launch slide: Play now selects the Dalaran Hangout and plays; Join the Discord opens the named link', async () => {
+test('the launch slide: Play now selects Wrath Unleashed and plays; Join the Discord opens the named link', async () => {
   const { page, ctx, errors } = await open({ ms: 600000 });
   await page.waitForFunction(() => window.LeylineHome.slides()[0] === 'hangout');
   await page.evaluate(() => window.LeylineHome.show(0));
@@ -221,7 +221,7 @@ test('the launch slide: Play now selects the Dalaran Hangout and plays; Join the
   await page.waitForFunction(() => window.__calls.some(([c]) => c === 'play'));
   assert.equal(await page.inputValue('#play-realm'), 'official');
   assert.deepEqual(await page.evaluate(() => window.__calls.find(([c]) => c === 'play')[1]), { client: 'c335a-1', realm: 'play.openvanilla.app' }, 'the 3.3.5a client on the Hangout');
-  assert.equal(await page.textContent('#pb-realm'), 'Dalaran Hangout');
+  assert.equal(await page.textContent('#pb-realm'), 'Wrath Unleashed');
   assert.deepEqual(errors, []);
   await ctx.close();
 });
@@ -280,7 +280,7 @@ test('the rows below the fold: realms, mods, modes, news and hosting, each landi
   assert.ok(await page.isVisible('#home-cue'), 'More below');
 
   const names = (id) => page.$$eval(`#${id}-row .hm-name`, (n) => n.map((x) => x.textContent));
-  assert.deepEqual(await names('hm-realms'), ['Dalaran Hangout', 'Busy Den', 'Old Keep', 'Quiet Glade'], 'live realms, no hidden builds, four at most');
+  assert.deepEqual(await names('hm-realms'), ['Wrath Unleashed', 'Busy Den', 'Old Keep', 'Quiet Glade'], 'live realms, no hidden builds, four at most');
   assert.deepEqual(await page.$$eval('#hm-realms-row .hm-card', (c) => c.map((x) => [x.querySelector('.rl-ver').textContent, x.querySelector('.hm-line').textContent])),
     [['3.3.5a', '5 playing'], ['3.3.5a', '30 playing'], ['1.12.1', '3 playing'], ['3.3.5a', 'Online']]);
   assert.deepEqual(await names('hm-mods'), ['Better Bars', 'Map Plus', 'One Bag', 'Fifth Mod'], 'packaged first, four at most');
@@ -338,7 +338,7 @@ test('the launch slide is full: live counts, the lineup, three modes with pictur
   await page.waitForFunction(() => document.querySelector('.hero-slide[data-key="hangout"] .hs-mt'));
   const hang = page.locator('.hero-slide[data-key="hangout"]');
   // live realms with an offered build: the Hangout 5, Busy Den 30, Old Keep 3, Quiet Glade (no count), Fifth Live 1
-  assert.deepEqual(await hang.locator('.hs-chip').allTextContents(), ['5 in the Hangout now', '39 playing on 5 realms']);
+  assert.deepEqual(await hang.locator('.hs-chip').allTextContents(), ['5 on Wrath Unleashed now', '39 playing on 5 realms']);
   assert.deepEqual(await hang.locator('.hs-mt').evaluateAll((b) => b.map((x) => [x.dataset.mode, x.querySelector('i').textContent, x.querySelector('.hs-mt-pic b').textContent])),
     [['minigolf', '/golf', 'M'], ['bumper-balls', '/modes', 'B'], ['coin-dash', '/modes', 'C']], 'live modes on the realm, each with its colour and initial (no screenshots listed)');
   // forum strings are text: the title's tag is shown, not made; three at most
@@ -390,7 +390,7 @@ test('the realms beside browser play: kind, New, version, players and a bar of h
   const rows = await page.locator('.hero-slide[data-key="browser"] .hs-rich .hs-rl').evaluateAll((b) => b.map((x) => ({
     name: x.querySelector('.hs-rl-n b').textContent, sub: x.querySelector('.hs-rl-n i').textContent,
     ver: (x.querySelector('.rl-ver') || {}).textContent, p: x.querySelector('.hs-rl-p').textContent, bar: x.querySelector('.hs-rl-bar i').style.width })));
-  assert.deepEqual(rows[0], { name: 'Dalaran Hangout', sub: 'Run by Leyline', ver: '3.3.5a', p: '5', bar: '6%' });
+  assert.deepEqual(rows[0], { name: 'Wrath Unleashed', sub: 'Run by Leyline', ver: '3.3.5a', p: '5', bar: '6%' });
   assert.deepEqual(rows[1], { name: 'Busy Den', sub: 'FunNew', ver: '3.3.5a', p: '30', bar: '50%' }, 'its limit is 60');
   assert.ok(!rows.some((r) => r.name === 'Hidden Cata'), 'a build not offered is left out');
   assert.deepEqual(rows[rows.length - 1], { name: 'Asleep <b>zz</b>', sub: 'Offline for now', ver: '3.3.5a', p: '–', bar: '0%' });

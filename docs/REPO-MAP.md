@@ -3,7 +3,7 @@
 What every top-level folder is for, as of 2026-10-30. On the owner's PC the workspace is `Desktop\Leyline` (this
 repo, on GitHub as `orionopenwow/leyline-workspace`, formerly `WrathUnleashed`). The owner's direction that day: Leyline is the mod launcher
 and the P2P realm network where anyone can host a realm in one click, from the browser or the desktop. Our own
-realm is only the temporary **Dalaran Hangout** (3.3.5a), and it gets our client additions as we go. All tools
+realm is only the temporary **Wrath Unleashed** (3.3.5a), and it gets our client additions as we go. All tools
 we made are kept; the ones that are not part of the core today are in `labs/`.
 
 - **Core**: part of Leyline today.
@@ -18,9 +18,9 @@ we made are kept; the ones that are not part of the core today are in `labs/`.
 | `launcher/` | The Leyline desktop launcher (Tauri 2): game clients, mods, realms, hosting, themes, self-update. `launcher/README.md` | Core | yes |
 | `hosting/` | The P2P/relay network and one-click hosting (see below) | Core | partly |
 | `stream/` | The website, portal and hub on our server, and the browser game page layer (see below) | Core | a few files |
-| `client/` | Our browser client for the Dalaran Hangout: `get-source.sh`, the CI build, `patches/` (the web port, the newest change, smooth frames; older series in `patches/history/`), `dev/` (rebuild and boot-check helpers) | Core | no |
+| `client/` | Our browser client for Wrath Unleashed: `get-source.sh`, the CI build, `patches/` (the web port, the newest change, smooth frames; older series in `patches/history/`), `dev/` (rebuild and boot-check helpers) | Core | no |
 | `play/` | Local play: `Play locally (one click).bat` (local realm and browser client on this PC: Docker, your own game folder; was `Play WotLK (one click).bat` at the top), `Install Forever UI.bat` (Forever UI into your own game folder), `Play 3.3.5a in browser.bat` and the test-build launchers (smooth frames, nameplates, Azeroth Survivors, newest test build) | Core (test bats: experimental, in place) | no |
-| `realm/` | The Dalaran Hangout realm: AzerothCore 3.3.5a in Docker, custom modules and Lua scripts (`custom/`), profiles, SQL, the brand and sampler switches, server passes | Core | two scripts |
+| `realm/` | The Wrath Unleashed realm: AzerothCore 3.3.5a in Docker, custom modules and Lua scripts (`custom/`), profiles, SQL, the brand and sampler switches, server passes | Core | two scripts |
 | `mods/` | The mod package format (`SPEC.md`), the checker `wu-mod.py`, the template, the catalog and categories | Core | `SPEC.md` |
 | `addons/` | Our client addons for the Hangout (OVArmory, OVQoL, MiniGM) and the GM addon fetcher | Core | no |
 | `docs/` | Feature docs (hub, hosting, P2P, social, themes, modes, workshop, admin console...); `docs/leyline/` is the player and host guide served at `/wrath/docs`; `docs/history/` old launch notes | Core | `docs/leyline/` |
@@ -56,7 +56,7 @@ the one-time setup files to `setup/`; `Play WotLK (one click).bat` (now `Play lo
 | `kit/` | The host kit: the `leyline` command, `Host a Leyline realm.bat`, compose files, host agent and self-check (`tools/wuhost`), shared network code (`tools/wunet`), profiles for other clients (1.12.1, 2.4.3; 4.3.4 hidden) | yes |
 | `relay/` | The relay: tunnels for hosts, join page, realm listing (Beacons), per-IP limits; `Deploy relay.bat` (Autopilot `relay`) | yes |
 | `discord/` | The Discord bridge | yes |
-| `hangout/` | The Dalaran Hangout as a Beacon on Leyline (Autopilot `hangout`, `hangout-off`) | no |
+| `hangout/` | Wrath Unleashed as a Beacon on Leyline (Autopilot `hangout`, `hangout-off`) | no |
 | `vanilla-remastered/` | The old 1.12 realm as the official Beacon "Vanilla Remastered" (Autopilot `vr-beacon`, `vr-beacon-off`; the realm itself: `ov112-on` in `tools/ov112-off/`). `docs/VANILLA-REMASTERED.md` | no |
 | `pack/` | `make-hostpack.py`: the host kit as a versioned download for the launcher's Host page | no |
 | `mesh-sim/` | The mesh simulator (realm list and relays without us), used by `tests/test_mesh.py`. Experimental, in place | no |

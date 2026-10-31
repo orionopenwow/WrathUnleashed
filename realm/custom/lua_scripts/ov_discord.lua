@@ -15,7 +15,7 @@
 -- The console commands answer only from the console / SOAP (player is nil), never from a player.
 -- Names and texts cross SOAP hex-encoded, so no quoting, spaces or markup can change the command.
 --
---   Login welcome           (launch, 2026-10-30) one short line a few seconds after each login on the Dalaran Hangout:
+--   Login welcome           (launch, 2026-10-30) one short line a few seconds after each login on the official realm:
 --                           the Discord invite, /golf and /modes. Not on a host kit's realm (host-realm.dat beside the
 --                           scripts, ov_hostctl.lua), never for bots; OV_WELCOME=0 turns it off. Independent of OV_DISCORD.
 --
@@ -238,7 +238,8 @@ local WELCOME_ON = (os.getenv("OV_WELCOME") or "1") ~= "0"
 local WELCOME_MS = 9000     -- after the other login lines (ov_go 5 s, ov_workshop 6 s, ov_playmode 7 s)
 local INVITE = "discord.gg/hVeUxYwbkr"   -- wrath_portal.DISCORD_URL; the in-game chat cannot open links, so the short form
 -- TODO(owner): the welcome line, his words
-local WELCOME = "|cff7289da[Dalaran Hangout]|r Welcome! Join the Discord: |cffffff00" .. INVITE
+local OFFICIAL_NAME = "Wrath Unleashed"   -- the official realm (ov_modapi.lua OVMod.OFFICIAL_NAME; this file may load first)
+local WELCOME = "|cff7289da[" .. OFFICIAL_NAME .. "]|r Welcome! Join the Discord: |cffffff00" .. INVITE
     .. "|r. Try |cffffff00/golf|r for minigolf and |cffffff00/modes|r for game modes."   -- ASCII only: the game font
 
 local function hostKit()
@@ -246,7 +247,7 @@ local function hostKit()
     if f then f:close(); return true end
     return false
 end
-local IS_HOST_KIT = hostKit()   -- a player-hosted realm from the host kit: not the Hangout
+local IS_HOST_KIT = hostKit()   -- a player-hosted realm from the host kit: not the official realm
 
 local function onLoginWelcome(event, player)
     if not WELCOME_ON or IS_HOST_KIT or not player then return end

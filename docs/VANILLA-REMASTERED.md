@@ -10,7 +10,7 @@ Nothing here runs by itself: each step is an Autopilot step that Claude queues a
 ## What it is
 
 The old Open Vanilla 1.12 realm (CMaNGOS Classic, Classic+ "pace", client build 5875), on the same server box as the
-Dalaran Hangout, under a new name. Its own database (`wenilla-realm-mariadb-1`), its own logins (the old 1.12
+Wrath Unleashed, under a new name. Its own database (`wenilla-realm-mariadb-1`), its own logins (the old 1.12
 accounts), its own characters. Players reach it only through the Leyline relay, the way they reach the Hangout.
 
 Why it can't simply be switched back on: when the Wrath realm was deployed (`server/deploy.sh`) it took the box's game

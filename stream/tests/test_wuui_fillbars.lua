@@ -193,7 +193,7 @@ check("hello: bars on, keys set, 8 cleared", toggled == 1 and binds["SHIFT-1"] =
 check("hello: the level 80 asks about its bars", asked == 1)
 cvars, toggled = {}, 0
 hello()
-fire("CHAT_MSG_ADDON", "OVMOD", "wubrand\tbrand\t1/1\tleyline\tDalaran Hangout", "WHISPER", "Me")
+fire("CHAT_MSG_ADDON", "OVMOD", "wubrand\tbrand\t1/1\tleyline\tWrath Unleashed", "WHISPER", "Me")
 check("hello again: nothing applied twice", next(cvars) == nil and toggled == 0 and asked == 1)
 fire("QUEST_DETAIL")
 check("hello: instant quests on", accepted == 1)

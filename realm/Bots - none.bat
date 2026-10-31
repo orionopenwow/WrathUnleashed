@@ -1,7 +1,7 @@
 @echo off
 setlocal
-title Leyline - bots: no roaming bots on the Dalaran Hangout
-rem Autopilot step. Sets no roaming bots on the Dalaran Hangout: realm\bots.sh 0 on the server (backup first, a 5-minute warning in game,
+title Leyline - bots: no roaming bots on Wrath Unleashed
+rem Autopilot step. Sets no roaming bots on Wrath Unleashed: realm\bots.sh 0 on the server (backup first, a 5-minute warning in game,
 rem then the world server is recreated and checked; rolled back by itself if it doesn't come back). One SSH login.
 rem   "Bots - none.bat" now     without the 5-minute warning
 cd /d "%~dp0"

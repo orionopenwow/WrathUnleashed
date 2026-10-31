@@ -2,7 +2,7 @@
 setlocal
 title Leyline brand switch (check / on / off)
 rem The Leyline brand switch (realm\brand.sh): everything players and visitors read says Leyline, and the main
-rem realm is "Dalaran Hangout".
+rem realm is "Wrath Unleashed".
 rem   "Leyline brand.bat" check     read only: what "on" (or "off", when it is on) would change
 rem   "Leyline brand.bat" on        flips it on: realm scripts (no reload, no restart), the realm list name, the
 rem                                 sign-in pages (wu-portal recreated), the streamed addon names, the hangout's

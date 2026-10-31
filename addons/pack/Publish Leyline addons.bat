@@ -7,7 +7,7 @@ rem checks it (addon files only, no game data, secrets or brand words in the add
 rem anything is flagged), and puts the zip and addonpack.json on the public release
 rem https://github.com/orionopenwow/Leyline/releases/tag/leyline-addons with your own gh sign-in.
 rem The Leyline launcher reads addonpack.json from there and installs or updates the addons in players' 3.3.5a
-rem game folders (Clients, Mods > Our addons, and PLAY on the Dalaran Hangout). Never Forever UI, never game data.
+rem game folders (Clients, Mods > Our addons, and PLAY on Wrath Unleashed). Never Forever UI, never game data.
 rem No questions, safe to run again (a new version each run). Never changes this folder.
 cd /d "%~dp0"
 set "PY="

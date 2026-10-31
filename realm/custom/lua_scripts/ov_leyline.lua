@@ -40,7 +40,7 @@ local PREFIX = "WULY"
 local WHISPER = 7
 local FILE = os.getenv("OV_LEYLINE_FILE") or "/azerothcore/lua_scripts/leyline-realms.dat"
 local REALM_NAME = os.getenv("OV_REALM_NAME") or "WrathUnleashed"
--- This realm's name in the list: "Dalaran Hangout" while the Leyline brand is on (ov_modapi.lua OVMod.Brand,
+-- This realm's name in the list: "Wrath Unleashed" (OVMod.OFFICIAL_NAME) while the Leyline brand is on (ov_modapi.lua OVMod.Brand,
 -- realm/brand.sh; a host without ov_modapi.lua uses OV_LEYLINE_BRAND / OV_LEYLINE_REALM_NAME), else REALM_NAME.
 local function realmName()
     local m = rawget(_G, "OVMod")
@@ -50,7 +50,7 @@ local function realmName()
     end
     if os.getenv("OV_LEYLINE_BRAND") == "1" then
         local n = os.getenv("OV_LEYLINE_REALM_NAME")
-        return (n and n ~= "") and n or "Dalaran Hangout"
+        return (n and n ~= "") and n or "Wrath Unleashed"   -- ov_modapi.lua OVMod.OFFICIAL_NAME
     end
     return REALM_NAME
 end

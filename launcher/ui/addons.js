@@ -1,6 +1,6 @@
 // The Leyline addons (src-tauri/src/addons.rs): our own in-game addons in a player's 3.3.5a game folder. Install /
 // Update / Remove per client on Game Clients and in Mods › Installed ("Our addons"), the setup step when a 3.3.5a
-// client is added, the offer when PLAY goes to the Dalaran Hangout without them (with "Don't ask again"), update on
+// client is added, the offer when PLAY goes to the official realm without them (with "Don't ask again"), update on
 // start (Settings, on by default). app.js calls in through window.LeylineAddons with a few lines; everything else is
 // here. The core never takes a URL from here: it fetches the listing itself and checks every file.
 "use strict";
@@ -15,14 +15,16 @@
   const invoke = window.__TAURI__ && window.__TAURI__.core ? window.__TAURI__.core.invoke : async () => { throw "This is a preview page: open it in the Leyline app."; };
   const REPLACE = "ADDONS_REPLACE:";
 
+  // the official realm's name: app.js HANGOUT (loaded first), the one place the launcher's UI keeps it
+  const OFFICIAL = (window.LeylineApp && window.LeylineApp.HANGOUT && window.LeylineApp.HANGOUT.name) || "the official realm";
   // TODO(owner): the Leyline addons copy (Clients, Mods, the PLAY offer, Settings)
   const COPY = {
     title: "Leyline addons",
-    pitch: "Recommended for the Dalaran Hangout: game modes, golf, Edit mode, your Den.",
+    pitch: `Recommended for ${OFFICIAL}: game modes, golf, Edit mode, your Den.`,
     safe: "They go in their own folders in your game's AddOns. Your other addons stay as they are, and Uninstall takes out exactly what Leyline put in.",
     setupTitle: "One more step: the Leyline addons",
     playTitle: "Add the Leyline addons?",
-    playBody: "The Dalaran Hangout is better with them: game modes, golf, Edit mode, your Den. It takes a few seconds.",
+    playBody: `${OFFICIAL[0].toUpperCase() + OFFICIAL.slice(1)} is better with them: game modes, golf, Edit mode, your Den. It takes a few seconds.`,
   };
 
   let ov = null;            // addons_status: { pack, from_cache, error, prefs, clients: [...] }
@@ -307,9 +309,10 @@
       box.id = "ad-settings";
       box.innerHTML = '<h3>Leyline addons</h3>' +
         '<label class="check"><input type="checkbox" id="ad-set-auto"> Update the Leyline addons when Leyline starts (in every game folder that has them)</label>' +
-        '<label class="check"><input type="checkbox" id="ad-set-ask"> Offer them when I press PLAY on the Dalaran Hangout without them</label>' +
+        '<label class="check"><input type="checkbox" id="ad-set-ask"> Offer them when I press PLAY on <span id="ad-set-ask-realm"></span> without them</label>' +
         '<p class="status" id="ad-set-status" role="status"></p>';
       anchor.after(box);
+      $("ad-set-ask-realm").textContent = OFFICIAL;
       const save = async (args, okText) => {
         try { ov.prefs = await invoke("addons_set_prefs", args); $("ad-set-status").textContent = okText; $("ad-set-status").className = "status ok"; }
         catch (e) { $("ad-set-status").textContent = String(e); $("ad-set-status").className = "status bad"; }

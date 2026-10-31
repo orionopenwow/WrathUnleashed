@@ -117,12 +117,12 @@ STEPS = {
     "ship":    ("Ship to GitHub.bat", "Save everything to GitHub", True),
     "check":   ("realm/Server check.bat", "Server check (read-only)", False),
     "gm":      ("gmconsole/Install GM Console.bat", "GM console update (game keeps running)", False),
-    "bots-off": ("realm/Bots - none.bat", "No roaming bots on the Dalaran Hangout (5-min warning, then a restart)", False),
-    "bots-on": ("realm/Bots - back on.bat", "Undo: the roaming bots back on the Dalaran Hangout (5-min warning, then a restart)", False),
+    "bots-off": ("realm/Bots - none.bat", "No roaming bots on Wrath Unleashed (5-min warning, then a restart)", False),
+    "bots-on": ("realm/Bots - back on.bat", "Undo: the roaming bots back on Wrath Unleashed (5-min warning, then a restart)", False),
     "lean":    ("realm/Lean server.bat", "Lean server: fewer bots, idle areas unload (5-min restart)", False),
     "relay": ("hosting/relay/Deploy relay.bat", "Beacons relay (relay.openvanilla.app)", False),
-    "hangout": ("hosting/hangout/Deploy Dalaran hangout.bat", "Dalaran Hangout on Leyline (the realm as a Beacon)", False),
-    "hangout-off": ("hosting/hangout/Take Dalaran hangout off Leyline.bat", "Take the Dalaran Hangout off Leyline", False),
+    "hangout": ("hosting/hangout/Deploy Dalaran hangout.bat", "Wrath Unleashed on Leyline (the realm as a Beacon)", False),
+    "hangout-off": ("hosting/hangout/Take Dalaran hangout off Leyline.bat", "Take Wrath Unleashed off Leyline", False),
     "leyline": ("tools/leyline-repo/Update Leyline repo.bat", "Leyline repo: copy and push (github.com/orionopenwow/Leyline)", False),
     "mods":  ("mods/Put mods on Wrath.bat", "Mods catalog: realm (live reload), streamed addons and /wrath/mods", False),
     "hostkit": ("hosting/kit/Publish host kit.bat", "Host kit download (checked zip on the public Leyline release)", False),
@@ -136,7 +136,7 @@ STEPS = {
     # The Leyline brand switch (realm/brand.sh; owner 2026-10-30: "wait for the site to change on my command"). Only
     # when the owner says so. No restart, nobody kicked; brand-off is the rollback.
     "brand-check": ("realm/Leyline brand - check.bat", "Leyline brand: what would change (read-only)", False),
-    "brand-leyline": ("realm/Leyline brand - on.bat", "Leyline brand ON: site, game and realm list say Leyline / Dalaran Hangout", False),
+    "brand-leyline": ("realm/Leyline brand - on.bat", "Leyline brand ON: site, game and realm list say Leyline / Wrath Unleashed", False),
     "brand-off": ("realm/Leyline brand - off.bat", "Leyline brand off: every name back as it was", False),
     # The hub's preview thumbnails (tools/hub-index, docs/HUB-INDEX.md): top 30 and new entries, then ship + signin.
     "thumbs": ("tools/hub-index/Refresh hub thumbnails.bat", "Hub thumbnails: preview images for the top 30 and new catalog entries (then ship)", False),

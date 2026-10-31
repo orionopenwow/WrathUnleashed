@@ -1,7 +1,7 @@
 # labs/: tools and experiments kept for later
 
 Leyline's core today is the launcher, the P2P/relay network with one-click hosting, the website and hub, the
-browser game layer with our client patches, the Dalaran Hangout realm, mods, and the Autopilot/ops tools
+browser game layer with our client patches, the Wrath Unleashed realm, mods, and the Autopilot/ops tools
 (see `docs/REPO-MAP.md`). Everything here is **not** part of that core right now, but the owner wants to keep
 it for later upgrade and refinement (2026-10-30). Nothing here is run by Autopilot (`tools/control/control.py`),
 `UPDATE.bat`, CI or the Leyline export.

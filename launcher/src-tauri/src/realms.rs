@@ -12,7 +12,7 @@
 //! The network (2026-10-29): community realms are the front of Leyline. The list comes from the website's network
 //! listing (`NETWORK_URL`: the relay's records with the staff overrides, hidden realms left out, featured and
 //! verified marked) and, when that does not answer, from the relay itself. `order` puts it the same way as every
-//! other surface: featured live realms, the official realm (the "Leyline Sample Hangout", temporary), the other live
+//! other surface: featured live realms, the official realm (`SAMPLE_NAME`, "Wrath Unleashed"), the other live
 //! realms by the listing's fair score (players, uptime, new; bots worth little; never money or votes), then offline.
 
 use crate::clients::{Build, ClientProfile};
@@ -27,7 +27,9 @@ pub const URL: &str = "https://relay.openvanilla.app/api/listing/realms.json";
 pub const NETWORK_URL: &str = "https://play.openvanilla.app/wrath/realms.json";
 /// Where a player reports a realm (signed in on the website).
 pub const REPORT_BASE: &str = "https://play.openvanilla.app/wrath/realms/report?realm=";
-pub const SAMPLE_NAME: &str = "Leyline Sample Hangout";
+/// The official realm's name (owner 2026-10-30 23:32: "Wrath Unleashed" for now; the UI's own copy is ui/app.js
+/// HANGOUT). The network listing's `sample` block can name it otherwise (`apply_sample`).
+pub const SAMPLE_NAME: &str = "Wrath Unleashed";
 /// The rules tags a listing may carry, in order.
 pub const TAGS: &[&str] = &["blizzlike", "boosted", "custom", "pvp", "rp", "hangout", "bots"];
 pub const REGIONS: &[&str] = &["na-east", "na-west", "sa", "eu", "africa", "me", "asia", "oce"];
@@ -85,7 +87,7 @@ pub struct Realm {
     pub group: String,
     /// The website's report page for this realm.
     pub report_url: Option<String>,
-    /// The official realm is the temporary Leyline Sample Hangout (the network listing's `sample` block says).
+    /// The official realm is temporary for now (the network listing's `sample` block says).
     pub temporary: bool,
 }
 
@@ -156,7 +158,7 @@ pub struct RealmList {
     pub error: Option<String>,
 }
 
-/// The official realm: for now the Leyline Sample Hangout, ours, temporary (owner, 2026-10-29). Community realms
+/// The official realm: `SAMPLE_NAME`, ours, temporary (owner, 2026-10-29). Community realms
 /// are the network; this one is pinned below the featured ones.
 pub fn official() -> Realm {
     Realm {
@@ -406,7 +408,7 @@ pub fn fetch_network(urls: &[&str], app_dir: &Path) -> RealmList {
     }
 }
 
-/// The network listing's `sample` block names the official realm: the Leyline Sample Hangout (temporary) while it
+/// The network listing's `sample` block names the official realm: the Sample Hangout's name (temporary) while it
 /// runs, the realm's own name before that.
 pub fn apply_sample(official: &mut Realm, doc: &Value) {
     let Some(sm) = doc.get("sample").filter(|_| doc.get("kind").and_then(Value::as_str) == Some("network")) else { return };

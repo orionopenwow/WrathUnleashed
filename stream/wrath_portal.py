@@ -95,7 +95,7 @@ Settings (environment, /srv/wrath/portal.env):
   PUBLIC_HOST            default play.openvanilla.app
   REALM_NAME             default WrathUnleashed (ignored while LEYLINE_BRAND=1)
   LEYLINE_BRAND          1 = the Leyline names everywhere people read them: the site is "Leyline", the main realm
-                         "Dalaran Hangout" (LEYLINE_REALM_NAME overrides). Default 0: exactly as before.
+                         "Wrath Unleashed" (LEYLINE_REALM_NAME overrides). Default 0: exactly as before.
                          realm/brand.sh on|off flips it with the realm's name and the in-game wording.
   PACKAGE_URL            optional link to the player package (shown on the page when set)
   BRIDGE_USERS           console logins the realm service may use (default WRSOAP,ADMINISTRATOR)
@@ -113,7 +113,7 @@ Settings (environment, /srv/wrath/portal.env):
                          https://relay.openvanilla.app/api/listing/realms.json
   WU_JOIN_BASE           where a community realm's Join link goes (default https://relay.openvanilla.app,
                          which serves /join/<realm id> itself)
-  WU_HANGOUT_REALM       the relay realm id of the Dalaran Hangout: this realm itself, reached as a Leyline
+  WU_HANGOUT_REALM       the relay realm id of the official realm's Beacon: this realm itself, reached as a Leyline
                          Beacon through the relay (hosting/hangout/hangout-up.sh). Unset: the id in
                          /app/hangout-realm.id (WU_HANGOUT_FILE; the hangout step writes it), else none.
                          It is listed first; a hop to it keeps the player's own Wrath login (the same realm,
@@ -273,11 +273,13 @@ AC_SOAP_URL = os.environ.get("AC_SOAP_URL", "http://ov-ac-worldserver:7878/")
 PORTAL_URL = os.environ.get("PORTAL_URL", "http://ovlive-realm:8090").rstrip("/")
 PUBLIC_HOST = os.environ.get("PUBLIC_HOST", "play.openvanilla.app")
 # The Leyline brand switch (owner 2026-10-30): LEYLINE_BRAND=1 in portal.env (realm/brand.sh on|off sets it) shows
-# every player- and visitor-facing name as Leyline and the main realm as "Dalaran Hangout". Unset or 0 (the default):
+# every player- and visitor-facing name as Leyline and the main realm as "Wrath Unleashed" (OFFICIAL_REALM_NAME; owner
+# 2026-10-30 23:32, "for now"; LEYLINE_REALM_NAME in portal.env overrides it). Unset or 0 (the default):
 # every page reads exactly as before. Only names people read change: no route, cookie, file or id does.
 BRAND = os.environ.get("LEYLINE_BRAND", "0").strip() == "1"
+OFFICIAL_REALM_NAME = "Wrath Unleashed"
 if BRAND:
-    REALM_NAME = os.environ.get("LEYLINE_REALM_NAME", "").strip() or "Dalaran Hangout"
+    REALM_NAME = os.environ.get("LEYLINE_REALM_NAME", "").strip() or OFFICIAL_REALM_NAME
     SITE_NAME = "Leyline"
 else:
     REALM_NAME = os.environ.get("REALM_NAME", "WrathUnleashed")
@@ -290,8 +292,10 @@ BACK_LABEL = f"Back to {REALM_NAME}" if BRAND else "Back to Wrath"
 _BRAND_SKIP = (r'<script\b.*?</script>|<style\b.*?</style>'
                r'|\b(?:href|src|action|id|class|name|for|data-[\w-]+)="[^"]*"|https?://[^\s"\'<>]+')
 _BRAND_OLD = r'(?<![\w/.-])(?:Wrath ?Unleashed|Open ?Vanilla)(?!\w|\.\w)'
-_BRAND_HTML = re.compile(f"({_BRAND_SKIP})|({_BRAND_OLD})", re.S)
-_BRAND_JSON = re.compile(f"(https?://[^\\s\"'<>]+)|({_BRAND_OLD})")
+# ...except the main realm's own name, which may look like an old one ("Wrath Unleashed"): kept as it is.
+_BRAND_KEEP = re.escape(REALM_NAME)
+_BRAND_HTML = re.compile(f"({_BRAND_SKIP}|{_BRAND_KEEP})|({_BRAND_OLD})", re.S)
+_BRAND_JSON = re.compile(f"(https?://[^\\s\"'<>]+|{_BRAND_KEEP})|({_BRAND_OLD})")
 
 
 def brand_body(body: bytes, ctype: str) -> bytes:
@@ -768,7 +772,7 @@ def hop_env(sess: dict) -> dict:
            "hop_join": f"{JOIN_BASE}/join/{rid}?hop=1", "host": urllib.parse.urlsplit(RELAY_WS).hostname or "",
            "home": f"https://{PUBLIC_HOST}"}
     if sess["hop"].get("home") and rid == hangout_id():
-        # The Dalaran Hangout is this realm through the relay: the player's own Wrath login, as on a plain visit
+        # The official realm's Beacon (hangout-realm.id) is this realm through the relay: the player's own Wrath login, as on a plain visit
         # (the same account; the relay and the Beacon agent only carry SRP, never the password).
         env.update(user=sess["user"], hop_home="1")
         env["pass"] = sess["pass"]
@@ -831,7 +835,7 @@ def herokey_issue_api(acct: str, realm, via: str) -> tuple[int, dict]:
     if not isinstance(realm, str) or not REALM_ID_RE.match(realm):
         return 400, {"error": "That is not a realm id."}
     if realm == hangout_id():
-        return 400, {"error": "The Dalaran Hangout uses your own game login."}
+        return 400, {"error": f"{REALM_NAME} uses your own game login."}
     if not any(r["id"] == realm and r["live"] for r in community_realms()[0]):
         return 404, {"error": "That realm isn't online right now."}
     t = herokey_issue(acct, realm, herokey_mod.LOGIN_TTL_LAUNCHER if via == "launcher" else herokey_mod.LOGIN_TTL_WEB)
@@ -1322,7 +1326,7 @@ _hangout = {"at": -1e9, "id": None}
 
 
 def hangout_id() -> str | None:
-    """The Dalaran Hangout's relay realm id (this realm as a Leyline Beacon), or None. Re-read once a minute."""
+    """The official realm's relay realm id (this realm as a Leyline Beacon), or None. Re-read once a minute."""
     if HANGOUT_REALM:
         return HANGOUT_REALM if REALM_ID_RE.match(HANGOUT_REALM) else None
     now = time.monotonic()
@@ -1426,7 +1430,7 @@ def fetch_listing() -> list[dict]:
     home = hangout_id()
     for r in out:
         r["hangout"] = r["id"] == home
-    # the Dalaran Hangout first, then live realms by the listing's fair score (stream/network.py order() makes the
+    # the official realm first, then live realms by the listing's fair score (stream/network.py order() makes the
     # display order: featured, the sample hangout, the rest)
     out.sort(key=lambda r: (not r["hangout"], not r["live"], -(r.get("score") or 0), -(r["players"] or 0),
                             r["name"].lower()))
@@ -2128,7 +2132,7 @@ def remember_go(user: str, query: dict) -> None:
     v = (query.get("go") or [""])[0][:40]
     got = links.check_go(v) if v else None
     if got and got[0] == "r" and got[1] == hangout_id():
-        got = ("h", "dalaran")   # a hop into the Dalaran Hangout (this realm through the relay) lands in Dalaran
+        got = ("h", "dalaran")   # a hop into the official realm's Beacon (this realm through the relay) lands in Dalaran
     if got and got[0] == "w":   # a Workshop item (stream/creations.py, "ovws go", ov_workshop.lua)
         if creations is not None and gate_limit.hit("go:" + user.upper(), 20):
             creations.go_intent(ac_soap, user, got[1], log)

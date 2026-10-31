@@ -33,7 +33,7 @@ class Relay(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
 
     def do_GET(self):
-        hang = rec(HANG, "Dalaran Hangout", True)
+        hang = rec(HANG, "Wrath Unleashed", True)
         hang["community"]["lastHeartbeat"]["players"] = 1
         body = json.dumps({"realms": [rec(LIVE, "Frost Haven", True), rec(OFF, "Quiet Corner", False), hang]}).encode()
         self.send_response(200); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
@@ -135,7 +135,7 @@ for go, why in ((f"r:{OFF}", "offline realm"), ("r:" + "a" * 16, "unknown realm"
 _, land, env, _ = session_env("/wrath/play?mini=mini")
 check("back to Wrath: no hop, the Wrath login", land == "/" and "hop" not in env and env.get("user") == "WR000123")
 
-# --- the Dalaran Hangout: this realm through the relay. The player's own Wrath login (no join page, no second
+# --- the Wrath Unleashed: this realm through the relay. The player's own Wrath login (no join page, no second
 # account), the relay bridge for the sockets, and the arrival in Dalaran (the go intent on the realm).
 def gos():
     return [c for c in SOAP_CMDS if c.startswith("ovgo ")]
@@ -214,7 +214,7 @@ _, _, env2, _ = session_env(f"/wrath/play?mini=mini&go=r:{LIVE}")
 check("herokey on: the same pseudonym next time, a new one-time password", env2["user"] == env["user"] and env2["pass"] != env["pass"]
       and env2["hop_sso"]["assertion"]["nonce"] != a["nonce"])
 gate, land, env3, _ = session_env(f"/wrath/play?mini=mini&go=r:{HANG}")
-check("herokey on: the Dalaran Hangout still uses the Wrath login", "hop_sso" not in env3 and env3.get("user") == "WR000123")
+check("herokey on: the Wrath Unleashed still uses the Wrath login", "hop_sso" not in env3 and env3.get("user") == "WR000123")
 _, _, env4, _ = session_env("/wrath/play?mini=mini")
 check("herokey on: a plain Wrath session is unchanged", "hop_sso" not in env4 and env4.get("user") == "WR000123")
 st, doc = wp.herokey_issue_api("WR000123", LIVE, "launcher")

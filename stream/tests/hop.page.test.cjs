@@ -186,8 +186,8 @@ test('wrath-page.js watchHops: the global is the authority, the echo is the cue'
   assert.match(h.error, /timed out/);
 });
 
-test('the Dalaran Hangout: the Wrath login stays (same realm, same account), never a stored one', () => {
-  const env = Object.assign(hopEnv(), { hop_name: 'Dalaran Hangout', hop_home: '1', user: 'WR000123', pass: 'Pa55word1234abcd' });
+test('the Wrath Unleashed: the Wrath login stays (same realm, same account), never a stored one', () => {
+  const env = Object.assign(hopEnv(), { hop_name: 'Wrath Unleashed', hop_home: '1', user: 'WR000123', pass: 'Pa55word1234abcd' });
   const store = storage({ ['wu.leyline.login.' + RID]: JSON.stringify({ user: 'other1', pass: 'hunter22' }) });
   const { win, opened } = page(env, { store });
   assert.equal(win.__wuHop.state.home, true);

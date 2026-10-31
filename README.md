@@ -4,7 +4,7 @@ This is the private home of **Leyline**: a mod launcher and a peer-to-peer realm
 realm in one click, from the browser or the desktop launcher, and it is listed for everyone. Players find realms
 and mods in one place and play in the browser or with their own client.
 
-Our own realm is only the temporary **Dalaran Hangout** (3.3.5a, AzerothCore). It is the sample realm, and it
+Our own realm is only the temporary **Wrath Unleashed** (3.3.5a, AzerothCore). It is the sample realm, and it
 gets our client additions first. The public repo, github.com/orionopenwow/Leyline, is copied from here by
 `tools/leyline-repo/export.py` (launcher, host kit, relay and their docs only). No game data is in either repo.
 
@@ -28,7 +28,7 @@ deploys); local play is in `play\`.
 | P2P/relay network and one-click hosting: host kit, relay, Discord bridge, mesh, the Hangout as a Beacon | `hosting/` |
 | Website, portal and hub: sign-in, hub and Workshop, `/wrath/host`, realm list, social, docs | `stream/*.py`, `stream/www-files/` |
 | Browser game layer and our client patches for the Hangout | `stream/www-files/`, `stream/fui-web/`, `client/`, `play/` |
-| The Dalaran Hangout realm (AzerothCore 3.3.5a, custom modules and Lua) | `realm/` |
+| The Wrath Unleashed realm (AzerothCore 3.3.5a, custom modules and Lua) | `realm/` |
 | Mods and addons | `mods/`, `addons/` |
 | Autopilot, deploys and ops tools | root `.bat` files, `setup/`, `tools/`, `server/`, `gmconsole/` |
 | Paused tools and plans, kept for later | `labs/` |

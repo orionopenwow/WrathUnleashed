@@ -1,7 +1,7 @@
 // The Leyline addons (ui/addons.js over src-tauri/src/addons.rs) in Chromium with a fake Tauri core: the row on a 3.3.5a
 // client card (none on other builds) with Install / Update / Remove and its status, "you already have some of these"
 // (asks, then installs with replace), a download that does not check out (says so, nothing installed), Mods › Our
-// addons, the setup step when a 3.3.5a client is added, the PLAY offer on the Dalaran Hangout (Install and play, Play
+// addons, the setup step when a 3.3.5a client is added, the PLAY offer on Wrath Unleashed (Install and play, Play
 // without, Don't ask again; never on another realm, never twice after Don't ask again), Settings (update on start,
 // the offer), and update on start.
 //
@@ -43,7 +43,7 @@ const FAKE = (o) => {
       }
       case 'check_client': return { complete: true, missing: [], exe_version: '3.3.5.12340' };
       case 'play': return 'Started My Wrath on ' + args.realm + '.';
-      case 'realms_list': return { realms: [{ slug: 'official', name: 'Dalaran Hangout', official: true, state: 'live', build: '3.3.5a', version: '3.3.5a',
+      case 'realms_list': return { realms: [{ slug: 'official', name: 'Wrath Unleashed', official: true, state: 'live', build: '3.3.5a', version: '3.3.5a',
         core: 'azerothcore', tags: [], players: 5, bots: 0, address: 'play.openvanilla.app' }], network: { realms: 0, players: 5, bots: 0 }, from_cache: false, saved_at: 1, error: null };
       case 'realm_status': return { state: 'online', ping_ms: 10, players: 5 };
       case 'mods_catalog': return { categories: [], projects: [], from_cache: false, saved_at: 1, error: null };
@@ -112,7 +112,7 @@ test('Clients: the row on a 3.3.5a card only, Install, then Update and Remove', 
   assert.equal(await page.locator('#cl-list .ad-slot').count(), 1, 'only the 3.3.5a client has the row');
   const row = slot(page, 'c335a-1');
   assert.match(await row.textContent(), /Leyline addons/);
-  assert.match(await row.textContent(), /Recommended for the Dalaran Hangout: game modes, golf, Edit mode, your Den\./);
+  assert.match(await row.textContent(), /Recommended for Wrath Unleashed: game modes, golf, Edit mode, your Den\./);
   assert.match(await row.locator('.ad-state').textContent(), /^Not installed$/);
   await row.getByRole('button', { name: 'INSTALL' }).click();
   await page.waitForFunction(() => /Installed the Leyline addons/.test(document.querySelector('#cl-list .ad-slot').textContent));
@@ -184,7 +184,7 @@ test('the setup step: adding a 3.3.5a client offers the addons', async () => {
   await page.click('#cl-add');
   await page.waitForSelector('#ad-dlg[open]');
   assert.equal(await page.textContent('#ad-dlg-title'), 'One more step: the Leyline addons');
-  assert.match(await page.textContent('#ad-dlg-body'), /Install the Leyline addons in New Wrath\? Recommended for the Dalaran Hangout/);
+  assert.match(await page.textContent('#ad-dlg-body'), /Install the Leyline addons in New Wrath\? Recommended for Wrath Unleashed/);
   assert.equal(await page.textContent('#ad-dlg-yes'), 'INSTALL');
   await page.click('#ad-dlg-yes');
   await page.waitForFunction(() => window.__calls.some(([c, a]) => c === 'addons_install' && a.client === 'c335a-2'));
@@ -192,7 +192,7 @@ test('the setup step: adding a 3.3.5a client offers the addons', async () => {
   await ctx.close();
 });
 
-test('PLAY on the Dalaran Hangout: Install and play installs first, then the game starts', async () => {
+test('PLAY on Wrath Unleashed: Install and play installs first, then the game starts', async () => {
   const { page, ctx, errors } = await open({ page: 'play' });
   await page.click('#play-go');
   await page.waitForSelector('#ad-dlg[open]');

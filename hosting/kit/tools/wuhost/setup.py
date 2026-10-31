@@ -31,7 +31,7 @@
                                                     a server you ALREADY run (any core) on the Leyline realm list:
                                                     only the agent runs (leyline link); it never touches that
                                                     server's realm list, accounts or GM rights. The key is made here.
-  python -m wuhost.setup official --name "Dalaran Hangout" --relay-url ws://... --listing-url http://...
+  python -m wuhost.setup official --name "Wrath Unleashed" --relay-url ws://... --listing-url http://...
          --auth-service ov-ac-authserver:3724 --world-service ov-ac-worldserver:8085 [--status-url URL]
                                                     the operator's OWN realm as a Beacon (hosting/hangout):
                                                     public, no signup, its realm list, accounts and GM

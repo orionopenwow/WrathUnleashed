@@ -12,7 +12,7 @@
 #     "#sampler-was: KEY=value". OV_PROFILE stays main, so serverpass.sh (the realm and scripts steps) works.
 #   2 acore_auth.realmlist: the name shown in the game's realm list becomes "Leyline Sample Hangout" (the old
 #     name is kept in sampler-state/realm-name.txt; the login server reads it again within 20 s). With the Leyline
-#     brand on (realm/brand.sh, LEYLINE_BRAND=1 in portal.env) it is "Dalaran Hangout", on and off.
+#     brand on (realm/brand.sh, LEYLINE_BRAND=1 in portal.env) it is "Wrath Unleashed", on and off.
 #   3 portal.env: WU_SAMPLER=1 (the play page, /wrath/realms and /wrath/leyline say "Leyline Sample Hangout,
 #     temporary"), wu-portal recreated.
 #   (The browser slice is separate: "Make sampler slice.bat" builds and serves slices/sampler.json; until then the
@@ -26,10 +26,10 @@ WU="${WU_DIR:-/srv/wrath}"
 cd "$WU"
 MODE="${1:-}"; OVERLAY="${2:-}"
 NAME="Leyline Sample Hangout"
-# The Leyline brand switch (realm/brand.sh): while it is on, the main realm is "Dalaran Hangout" in the realm list,
+# The Leyline brand switch (realm/brand.sh): while it is on, the main realm is "Wrath Unleashed" in the realm list,
 # Sample Hangout or not, so "on" keeps that name and "off" goes back to it.
 BRAND=0; grep -qx 'LEYLINE_BRAND=1' portal.env 2>/dev/null && BRAND=1
-[ "$BRAND" = 1 ] && NAME="${LEYLINE_REALM_NAME:-Dalaran Hangout}"
+[ "$BRAND" = 1 ] && NAME="${LEYLINE_REALM_NAME:-Wrath Unleashed}"
 BEGIN="# >>> Leyline Sample Hangout (realm/sampler.sh; 'sampler off' removes this block and restores the #sampler-was: lines)"
 END="# <<< Leyline Sample Hangout"
 WAS="#sampler-was: "

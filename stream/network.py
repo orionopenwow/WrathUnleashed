@@ -62,7 +62,7 @@ MAX_OFFERED_BUILD = 12340
 
 # Vanilla Remastered: the second official realm (hosting/vanilla-remastered/vr-beacon-up.sh writes its relay realm id
 # to /srv/wrath/portal/vr-realm.id, mounted at /app). Read like the Hangout's id file; until it exists the realm lists
-# like any community realm. Pinned right after the Dalaran Hangout, marked official, optional.
+# like any community realm. Pinned right after the official realm, marked official, optional.
 VR_REALM = os.environ.get("WU_VR_REALM", "").strip()
 VR_FILE = os.environ.get("WU_VR_FILE", "/app/vr-realm.id")
 VR_LINE = "An optional second realm, hosted by Leyline for now."
