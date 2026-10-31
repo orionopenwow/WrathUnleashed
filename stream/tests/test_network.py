@@ -158,7 +158,7 @@ check("network line: live community realms + the sample", "5 realms · 36 player
       re.findall(r'net-line">([^<]*)', page))
 check("featured and verified badges", ">Featured</span>" in page[i_feat:i_sample] and "Verified host" in page[i_feat:i_sample]
       and "Verified host" in page[i_busy:i_plain] and "Featured" not in page[i_busy:i_plain])
-check("build, core, tags, region, language", "1.12.1 · AzerothCore" in page[i_feat:i_sample] and ">Blizzlike<" in page[i_feat:i_sample]
+check("build, core, tags, region, language", ">1.12.1</span><span class=\"tag\">AzerothCore</span>" in page[i_feat:i_sample] and "1.12.1 · " not in page and ">Blizzlike<" in page[i_feat:i_sample]
       and ">Europe<" in page[i_feat:i_sample] and ">English<" in page[i_busy:i_plain])
 check("estimated region marked, new badge, player limit", "Europe (estimated)" in page[i_plain:i_old]
       and ">New</span>" in page[i_plain:i_old] and "0 playing of 50" in page[i_plain:i_old])
@@ -302,6 +302,36 @@ check("hub realms page: no match says so", "No realms match these filters" in no
 st, _, beacon = req("GET", "/wrath/leyline-preview/beacon")
 check("hub Host a Beacon: the launcher's Host page and the website", 'href="/wrath/leyline">Get the launcher' in beacon
       and 'href="/wrath/host"' in beacon)
+
+# ---------------------------------------------------------------- Warden (Browser players off) is carried for the hub
+check("warden carried from the relay record (Play in browser only without it)",
+      net.extra({"profile": {"warden": True}})["warden"] is True and net.extra({"profile": {"warden": "yes"}})["warden"] is None
+      and net.extra({})["warden"] is None)
+
+# ---------------------------------------------------------------- Vanilla Remastered: the second official realm (vr-realm.id)
+VRID = "vrvrvrvrvrvrvrvr"
+_rs = [{"id": "busybusybusybusy", "name": "Busy", "live": True, "players": 30, "score": 90.0, "build": 12340},
+       {"id": VRID, "name": "Vanilla Remastered", "live": False, "players": 0, "score": 1.0, "build": 5875, "core": "cmangos"},
+       {"id": "hanghanghanghang", "name": "Dalaran Hangout", "live": True, "hangout": True, "players": 2, "build": 12340}]
+net.VR_REALM = ""
+net.VR_FILE = os.path.join(tempfile.mkdtemp(), "vr-realm.id")
+net._vr["at"] = -1e9
+check("vr: without the id file it lists like any realm (offline last)", [r["id"] for r in net.order(_rs)][-1] == VRID
+      and not any(r.get("official") for r in net.order(_rs)))
+with open(net.VR_FILE, "w") as f:
+    f.write(VRID + "\n")
+net._vr["at"] = -1e9
+_o = net.order(_rs)
+check("vr: pinned right after the Hangout, official, even offline", [r["id"] for r in _o][:2] == ["hanghanghanghang", VRID]
+      and _o[1]["official"] and _o[1]["group"] == "official")
+_rec = net.record_of(_o[1])
+check("vr: official, pinned, optional in the launcher's record", _rec["community"]["official"] and _rec["community"]["pinned"]
+      and _rec["community"]["optional"] and "Hosted by Leyline for now".lower() in _rec["community"]["note"].lower())
+_c = net.card(_o[1], "https://relay.example", {})
+check("vr: card says official and hosted by Leyline for now; the version only in its chip",
+      ">Official<" in _c and "hosted by Leyline for now" in _c and '<span class="tag">CMaNGOS</span>' in _c
+      and '<span class="tag ver"' in _c and "1.12.1 · " not in _c, _c[:400])
+net._vr.update(at=1e18, id=None)
 
 # ---------------------------------------------------------------- shipping: the signin step
 STREAM = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

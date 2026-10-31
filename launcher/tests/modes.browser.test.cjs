@@ -78,6 +78,8 @@ test('Modes page: no menu item, Realms › MODES opens it, cards, credit, Coming
   assert.match(surv, /Coming soon/); assert.match(surv, /By Aethus · Open rebuild by OutThisLife · MIT or Apache-2.0/);
   assert.match(surv, /No server/); assert.match(surv, /1 player/); assert.match(surv, /Community made/);
   assert.equal(await card(page, 'azeroth-survivors').locator('.md-play').count(), 0, 'no PLAY while coming');
+  assert.equal(await card(page, 'azeroth-survivors').locator('.md-soon[disabled]').textContent(), 'COMING SOON', 'a disabled COMING SOON where PLAY would be');
+  assert.equal(await card(page, 'minigolf').locator('.md-soon').count(), 0, 'no COMING SOON on a live mode');
   const hordes = await card(page, 'hordes-of-azeroth').textContent();
   assert.match(hordes, /By jonhaldors · GPL-3.0 \(client\), GPL-2.0 \(server\)/); assert.match(hordes, /Its own realm type/);
   assert.match(hordes, /Any number of players/);

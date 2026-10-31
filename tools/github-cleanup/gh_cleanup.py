@@ -6,7 +6,8 @@
 
 The owner's choices (2026-10-30): on orionopenwow/Leyline-Launcher keep the newest release and delete every other
 release with its tag (installed launchers update from the newest one, and the site's Download points there);
-delete the container packages listed in PLAN.json ("Delete all 4"). PLAN.json, written by Claude after the dry
+delete the container packages listed in PLAN.json ("Delete all 4"), except the 1.12 images, which are never deleted
+(PROTECTED_PACKAGE_WORDS; owner 2026-10-30 20:38). PLAN.json, written by Claude after the dry
 run, names the release that is kept, the tags that go and the packages that go: --go refuses when GitHub shows
 anything else (a new release since, a different newest one), so nothing unexpected is ever deleted. gh must be
 signed in as orionopenwow (never Chumpton). Deleting packages needs the delete:packages scope; when gh lacks it
@@ -22,6 +23,16 @@ import subprocess
 import sys
 
 OWNER = "orionopenwow"
+# Never deleted, whatever PLAN.json says (owner 2026-10-30 20:38: "do NOT run the GitHub package cleanup on the 1.12
+# images"): the 1.12 realm's images (openvanilla-realm, openvanilla-mangos, their old openwow-* names and anything else
+# of the 1.12 stack) run Vanilla Remastered (docs/VANILLA-REMASTERED.md) and are what a community host takes it over
+# from. Matched on the package name, case-insensitive.
+PROTECTED_PACKAGE_WORDS = ("openvanilla", "openwow", "wenilla", "mangos", "realmd", "vanilla", "classic", "112")
+
+
+def protected_package(name: str) -> bool:
+    n = (name or "").lower()
+    return n.startswith("leyline") or any(w in n for w in PROTECTED_PACKAGE_WORDS)
 REPO = f"{OWNER}/Leyline-Launcher"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -116,6 +127,9 @@ def main(argv=None, gh: GitHub | None = None, out=print, plan_file: str | None =
         try:
             kind, pkgs = gh.packages()
             out(f"[3/4] container packages of {OWNER}: {', '.join(pkgs) or '(none)'}")
+            kept = [p for p in pkgs if protected_package(p)]
+            if kept:
+                out(f"      always kept (the 1.12 images, Leyline's own): {', '.join(kept)}")
         except Stop as e:
             kind, pkgs = "", None
             out(f"[3/4] {e}")
@@ -127,8 +141,12 @@ def main(argv=None, gh: GitHub | None = None, out=print, plan_file: str | None =
         want_tags = sorted(plan.get("delete_release_tags", []))
         if plan.get("keep_release") != now["keep_release"] or not {t for _, t, _ in now["releases"]} <= set(want_tags):
             raise Stop("GitHub's releases changed since the plan was written: nothing done (run the dry run again)")
-        want_pkgs = [p for p in plan.get("delete_packages", []) if not p.lower().startswith("leyline")]
+        asked = list(plan.get("delete_packages", []))
+        want_pkgs = [p for p in asked if not protected_package(p)]
         out("[4/4] deleting")
+        for p in asked:
+            if protected_package(p):
+                out(f"      package {p}: KEPT (protected: the 1.12 images stay, owner 2026-10-30 20:38)")
         bad = 0
         for rid, tag, _ in now["releases"]:
             rc, msg = gh.delete_release(rid)

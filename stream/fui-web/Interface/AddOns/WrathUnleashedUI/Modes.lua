@@ -27,7 +27,7 @@ for _, k in ipairs(API.KEYS) do KEYS_OK[k] = 1 end
 local M = { modes = {}, parts = {}, state = "idle", players = {}, score = {}, notes = {}, texts = {}, textOrder = {} }
 W.Modes = M
 
-local win, hud, keyFrame
+local win, hud
 
 local function now() return (GetTime and GetTime()) or 0 end
 local function me() return UnitName and UnitName("player") or "You" end
@@ -619,26 +619,14 @@ local function setHud(show)
         button(card, "Leave", 64, function() M.Leave() end, "BOTTOMRIGHT", -6, 6)
         hud.keys = label(hud, "", "GameFontHighlightSmall", "BOTTOM", 0, 126)
         hud.keys:SetJustifyH("CENTER")
-        hud.back = button(hud, "Back to the game", 140, function() if keyFrame then keyFrame:Show() end end, "BOTTOM", 0, 150)
+        hud.back = button(hud, "Back to the game", 140, function() M.Capture(true) end, "BOTTOM", 0, 150)
         hud:SetScript("OnUpdate", function(_, elapsed)
             if hud.noteAt and now() - hud.noteAt > 7 then hud.note:SetText(""); M.notes = {}; hud.noteAt = nil end
-            if keyFrame and keyFrame:IsShown() then hud.back:Hide() else hud.back:Show() end
+            if M.capturing or not next(M.keySet or {}) then hud.back:Hide() else hud.back:Show() end
             M.Update(elapsed or 0.016)
         end)
-
-        -- The mode's keys go to the mode, not to walking, while this frame is shown. Esc lets go.
-        keyFrame = CreateFrame("Frame", "LeylineModesKeys", UIParent)
-        keyFrame:SetAllPoints(UIParent)
-        keyFrame:EnableKeyboard(true)
-        keyFrame:EnableMouse(false)
-        keyFrame:SetScript("OnKeyDown", function(_, key)
-            if key == "ESCAPE" then keyFrame:Hide(); M.ReleaseAll() return end
-            M.LocalKey(key, true)
-        end)
-        keyFrame:SetScript("OnKeyUp", function(_, key) M.LocalKey(key, false) end)
-        keyFrame:Hide()
     end
-    if show then hud:Show() else hud:Hide(); keyFrame:Hide() end
+    if show then hud:Show() else hud:Hide(); M.Capture(false) end
 end
 
 M.held = {}
@@ -657,6 +645,42 @@ end
 
 function M.ReleaseAll()
     for key in pairs(M.held) do M.LocalKey(key, false) end
+    M.held = {}
+end
+
+-- ---------------------------------------------------------------- the mode's keys
+-- While a mode plays, every mode key (API.KEYS, so the ones this mode doesn't use don't walk you either) and Esc
+-- are override bindings to hidden buttons; Esc lets go, "Back to the game" takes them again. Not a keyboard
+-- frame: the browser client gives a keyboard frame OnKeyDown but never OnKeyUp, so a key you let go of stayed
+-- held (live smoke 2026-10-30). A click binding gets one click when the key goes down and one when it comes up
+-- (key repeat adds none). A client that says which (OnClick's down, with AnyDown and AnyUp) is believed once it
+-- has said "down" once; until then the clicks alternate down, up.
+M.capturing, M.clickDownSeen = false, false
+local keyOwner, keyButtons = nil, {}
+
+local function keyButton(key)
+    local name = "LeylineModesKey" .. key
+    if keyButtons[key] then return name end
+    local b = CreateFrame("Button", name, UIParent)
+    b:EnableMouse(false)
+    b:RegisterForClicks("AnyDown", "AnyUp")
+    b:SetScript("OnClick", function(_, _, down)
+        if key == "ESCAPE" then M.Capture(false) return end
+        if down == true then M.clickDownSeen = true end
+        if M.clickDownSeen then M.LocalKey(key, down == true) else M.LocalKey(key, not M.held[key]) end
+    end)
+    keyButtons[key] = b
+    return name
+end
+
+function M.Capture(on)
+    if not keyOwner then keyOwner = CreateFrame("Frame", "LeylineModesKeys", UIParent) end
+    if ClearOverrideBindings then ClearOverrideBindings(keyOwner) end
+    M.ReleaseAll()
+    M.capturing = on and SetOverrideBindingClick ~= nil or false
+    if not M.capturing then return end
+    for _, k in ipairs(API.KEYS) do SetOverrideBindingClick(keyOwner, true, k, keyButton(k)) end
+    SetOverrideBindingClick(keyOwner, true, "ESCAPE", keyButton("ESCAPE"))
 end
 
 local function begin(title, keys, origin)
@@ -668,7 +692,7 @@ local function begin(title, keys, origin)
     hud.keys:SetText(#keys > 0 and ("|cffffd100" .. table.concat(keys, " ") .. "|r  play   |cffffd100Esc|r  look around") or "")
     draw("clear")
     draw("origin " .. origin)
-    if #keys > 0 then keyFrame:Show() end
+    M.Capture(#keys > 0)
     refreshScore()
     refreshTexts()
 end
@@ -818,7 +842,7 @@ local function dispatch(name, data)
             M.keySet = {}
             for _, k in ipairs(keys) do M.keySet[k] = true end
             if hud then hud.keys:SetText("|cffffd100" .. table.concat(keys, " ") .. "|r  play   |cffffd100Esc|r  look around") end
-            if #keys > 0 and keyFrame then keyFrame:Show() end
+            M.Capture(#keys > 0)
         end
     elseif name == "st" then
         if not M.host then applyState(data) end
@@ -1075,15 +1099,18 @@ function OnTick(dt)
         local d = math.sqrt(r.x * r.x + r.z * r.z)
         if d > R - 0.6 then r.x, r.z = r.x / d * (R - 0.6), r.z / d * (R - 0.6) end
         Ent.Move(r.id, r.x, 0.6, r.z)
+        local got = 0
         for id, c in pairs(coins) do
             local dx, dz = c.x - r.x, c.z - r.z
             if dx * dx + dz * dz < 1.0 then
                 Ent.Remove(id)
                 coins[id] = nil
                 Score.Add(p, c.value)
-                spawnCoin()
+                got = got + 1
             end
         end
+        -- new coins after the walk: adding to a table while pairs() walks it is an error
+        for i = 1, got do spawnCoin() end
     end
     if tick % 4 == 0 then
         for id, c in pairs(coins) do c.spin = (c.spin + 30) % 360; Ent.Move(id, c.x, 0.8, c.z, c.spin) end

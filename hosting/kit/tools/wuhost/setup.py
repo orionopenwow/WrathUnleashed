@@ -11,6 +11,9 @@
   python -m wuhost.setup visibility public|private
   python -m wuhost.setup claim TOKEN                the token the website gave your Hero Key account
   python -m wuhost.setup signup invite|open|off     who may make accounts from the join page
+  python -m wuhost.setup browser on|off             browser players: on turns the core's Warden anti-cheat off so
+                                                    the Leyline browser client (no Warden module) can join; off
+                                                    turns Warden on (stock clients only). AzerothCore rulesets.
   python -m wuhost.setup options [--type pvp --xp 5 --loot 2 --rep 3 --start level1|boost]
                                                     the realm's own settings: type, rates, start (state/realm.env,
                                                     read by the world server at its next start) and its
@@ -58,11 +61,14 @@ PROFILES = {"main": "Leyline main: normal Wrath from level 1, or a one-time boos
             "brawl": "Brawl: everyone starts at 80 in Dalaran with everything unlocked",
             "progression": "Progression: blizzlike 1x, Vanilla then TBC then Wrath per character",
             "dalaran": "Dalaran hangout: light on your PC, no bots, boost to 80 straight to Dalaran",
-            "vanillaplus": "Vanilla+: the original world only (level 60 cap), 1.5x XP, made to stay up for good"}
+            "vanillaplus": "Vanilla+: the original world only (level 60 cap), 1.5x XP, made to stay up for good",
+            "den": "My Den: your own room to build in, private, for you and the friends you invite"}
 # Per-profile settings for .env (docker-compose.host.yml): a Dalaran hangout runs on a small PC.
-PROFILE_ENV = {"dalaran": {"WU_DB_BUFFER": "256M", "WU_PLAYER_LIMIT": "40"}}
-PROFILE_BOTS = {"dalaran": 0, "vanillaplus": 0}   # the bot count a new realm starts with
-NO_BOTS = ("dalaran",)                             # rulesets that never run bots (and the other cores: none yet)
+# A Den (realm/profiles/den.env, docs/DEN.md) is one room on the host's PC: the smallest of all.
+PROFILE_ENV = {"dalaran": {"WU_DB_BUFFER": "256M", "WU_PLAYER_LIMIT": "40"},
+               "den": {"WU_DB_BUFFER": "256M", "WU_PLAYER_LIMIT": "10"}}
+PROFILE_BOTS = {"dalaran": 0, "vanillaplus": 0, "den": 0}   # the bot count a new realm starts with
+NO_BOTS = ("dalaran", "den")                       # rulesets that never run bots (and the other cores: none yet)
 # The text the realm list and the join page show; the host edits these two files (then: Realm tools > rules).
 EDITABLE = ("tagline", "summary", "type", "discord", "tags", "region", "language", "max_players", "direct")
 # The realm list's filters (hosting/relay/wurelay/listing.py checks them again). Tags a profile starts with; the
@@ -71,17 +77,21 @@ TAGS = ("blizzlike", "boosted", "custom", "pvp", "rp", "hangout", "bots")
 REGIONS = ("na-east", "na-west", "sa", "eu", "africa", "me", "asia", "oce")
 LANG_RE = re.compile(r"^[a-z]{2,3}(-[A-Z]{2})?$")
 PROFILE_TAGS = {"main": ["boosted"], "brawl": ["boosted", "pvp", "custom"], "progression": ["blizzlike"],
-                "dalaran": ["hangout", "boosted"], "vanillaplus": ["blizzlike", "custom"]}
-PROFILE_MAX = {"dalaran": 40}
+                "dalaran": ["hangout", "boosted"], "vanillaplus": ["blizzlike", "custom"], "den": ["custom"]}
+PROFILE_MAX = {"dalaran": 40, "den": 10}
 CORE, BUILD = "azerothcore", 12340   # what the host kit runs
 DEFAULT_RULES = {"dalaran": [
     "Be kind: no harassment, hate speech or spam.",
     "Duel anyone who agrees; no griefing in Dalaran.",
     "No cheats, bots or exploits. Report bugs with .bug",
     "The host's word is final: the host is the GM here.",
+], "den": [
+    "This is the host's Den: look around, and build only if the host made you a builder.",
+    "Be kind: no harassment, hate speech or spam.",
 ]}
 DEFAULT_TAGLINE = {"dalaran": "A Dalaran hangout: boost to 80, duel, queue, meet.",
-                   "vanillaplus": "Vanilla+: the original world to level 60, always on."}
+                   "vanillaplus": "Vanilla+: the original world to level 60, always on.",
+                   "den": "A Den: a room to build in, for friends with the invite link."}
 # Host any client: the profiles on other cores (cores.py; their files in profiles/<id>/, steps in
 # profiles/host-profile.sh). (core, client build, the login and world services in their compose file)
 PROFILE_CORE = {k: (p["core"], p["build"], cores.LOGON, cores.WORLD) for k, p in cores.PROFILES.items()}
@@ -213,9 +223,16 @@ def check_options(o, profile):
             out[k] = [t for t in TAGS if t in o[k]]
         elif k == "max" and num(k, 0, 10000) is not None:
             out[k] = o[k]
+        elif k == "browser" and o[k] in ("on", "off") and (ac or o[k] == "off"):
+            out[k] = o[k]
+        elif k not in OPTION_NAMES and isinstance(k, str) and re.fullmatch(r"[a-z_]{1,16}", k):
+            continue   # a setting a newer website knows and this kit does not yet: left out, not "damaged"
         else:
             return None
     return out
+
+
+OPTION_NAMES = ("type", "xp", "loot", "rep", "start", "bots", "signup", "herokey", "region", "lang", "tags", "max", "browser")
 
 
 def apply_options(o, a, cfg):
@@ -227,6 +244,8 @@ def apply_options(o, a, cfg):
         a.bots = o["bots"]
     if a.signup is None and "signup" in o and not cfg.get("signup"):
         a.signup = o["signup"]
+    if getattr(a, "browser", None) is None and "browser" in o and "browser" not in cfg:
+        a.browser = o["browser"]
     if "herokey" in o and "herokey" not in cfg:
         cfg["herokey"] = o["herokey"] == "on"
     rec = cfg.setdefault("record", {})
@@ -235,6 +254,8 @@ def apply_options(o, a, cfg):
     for k, rk in (("tags", "tags"), ("region", "region"), ("lang", "language"), ("max", "max_players")):
         if k in o:
             rec[rk] = o[k] if k != "max" else (o[k] or None)
+    if "max" in o:
+        cfg["player_limit"] = o["max"] or None   # the server's own cap too (write_env: WU_PLAYER_LIMIT)
     env = cfg.setdefault("realm_env", {})
     for k in ("type", "xp", "loot", "rep", "start"):
         if k in o:
@@ -342,6 +363,31 @@ def write_links(cfg):
         f.write(invite_link(cfg) + "\n")
     if cfg.get("host_secret"):
         write_private("host-link.txt", host_link(cfg) + "\n")
+    write_den_invite(cfg)
+
+
+def write_den_invite(cfg):
+    """A Den's in-game "Invite a friend" (ov_den.lua, shown to the realm's GM only): its invite link, next to the
+    scripts as data only. Only for the den profile, whose owner asked for the link in game; other rulesets keep the
+    private link out of the realm's files (write_host_dat), and leaving the den profile removes the file."""
+    d = os.path.join(KIT, "realm-files", "lua_scripts")
+    if not os.path.isdir(d) or cfg.get("official") or cfg.get("linked"):
+        return
+    f = os.path.join(d, "den-invite.dat")
+    if cfg.get("profile") != "den":
+        try:
+            os.remove(f)
+        except OSError:
+            pass
+        return
+    tmp = f + ".tmp"
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="ascii", newline="\n") as out:
+            out.write("return { invite = " + lua_str(invite_link(cfg)) + " }\n")
+        os.replace(tmp, f)
+    except OSError:
+        pass
 
 
 def read_rules():
@@ -379,10 +425,10 @@ def beacon_record(cfg):
     rec.setdefault("rules", [])
     rec.setdefault("discord", None)
     if cfg.get("linked"):   # a server the host already runs: its own core and client, no ruleset of ours
-        rec.update(name=cfg["name"], type=rec.get("type", "PvE"), ruleset="custom", warden=None)
+        rec.update(name=cfg["name"], type=rec.get("type", "PvE"), ruleset="custom", warden=None, signup="off")
         return linked_fields(rec)
     rec.update(name=cfg["name"], type=rec.get("type", "PvE"), ruleset=cfg["profile"],
-               warden=cfg["warden"])
+               warden=cfg["warden"], signup=cfg.get("signup") or "invite")
     return listing_fields(rec, cfg)
 
 
@@ -454,11 +500,27 @@ def write_env(cfg, image, tag, tools_image):
                 del keep[k]
     keep.update(PROFILE_ENV.get(cfg["profile"], {}))
     keep.update(env)
+    player_limit_env(keep, cfg)
     fd = os.open(os.path.join(KIT, ".env"), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
         f.write("# Written by Host a Wrath realm. Keep it private: it holds the database password.\n")
         for k in sorted(keep):
             f.write(f"{k}={keep[k]}\n")
+
+
+def player_limit_env(env, cfg):
+    """WU_PLAYER_LIMIT (the world server's PlayerLimit: docker-compose.host.yml AC_PLAYER_LIMIT, the CMaNGOS and
+    TrinityCore profiles' run-server.sh) from the host's max players. Without one: the ruleset's own (PROFILE_ENV),
+    else the compose file's default; a value the host typed into .env by hand is kept."""
+    lim = cfg.get("player_limit")
+    ours = cfg.get("player_limit_env")
+    if isinstance(lim, int) and not isinstance(lim, bool) and 1 <= lim <= 10000:
+        env["WU_PLAYER_LIMIT"] = cfg["player_limit_env"] = str(lim)
+        return
+    if ours and env.get("WU_PLAYER_LIMIT") == ours:
+        env.pop("WU_PLAYER_LIMIT")
+        env.update({k: v for k, v in PROFILE_ENV.get(cfg.get("profile"), {}).items() if k == "WU_PLAYER_LIMIT"})
+    cfg.pop("player_limit_env", None)
 
 
 def cmd_init(a):
@@ -498,9 +560,7 @@ def cmd_init(a):
         listing_url=a.listing_url or f"https://{relay}/api/listing/heartbeat",
         auth_service=PROFILE_CORE.get(profile, (0, 0, "ac-authserver:3724"))[2],
         world_service=PROFILE_CORE.get(profile, (0, 0, 0, "ac-worldserver:8085"))[3],
-        # Warden: stock clients on a public realm get the core's anti-cheat; a friends' realm leaves
-        # it off so the Leyline browser/desktop client (no Warden module) can join too.
-        warden=(vis == "public") if a.warden is None else a.warden == "on",
+        warden=warden_for(a, cfg, profile, vis),
         bots=(a.bots if a.bots is not None
               else cfg["bots"] if cfg.get("profile") == profile and "bots" in cfg
               else PROFILE_BOTS.get(profile, 40)),
@@ -539,6 +599,7 @@ def cmd_init(a):
     save(cfg)
     write_beacon(cfg)
     write_env(cfg, a.image, a.tag, a.tools_image)
+    save(cfg)   # write_env notes the player cap it wrote
     write_realm_env(cfg)
     write_links(cfg)
     write_host_dat(cfg)
@@ -548,6 +609,29 @@ def cmd_init(a):
         except OSError:
             pass
     print(json.dumps({"realm_id": rid, "first_run": first, "invite": invite_link(cfg)}))
+
+
+def browser_ok(profile):
+    """The Leyline browser client is a 3.3.5a client without a Warden module: it can join the AzerothCore rulesets
+    once Warden is off. The other cores run other clients (cores.PROFILES), so the switch does not apply there."""
+    return profile not in cores.PROFILES
+
+
+def warden_for(a, cfg, profile, vis):
+    """Warden (the core's client anti-cheat) from the "Browser players" switch (cfg["browser"]). An explicit --warden
+    or --browser wins and is kept; else an earlier choice; else, on the AzerothCore rulesets, browser players ON
+    (Warden off) for every new realm, public or private: the operator's own public Hangout runs that way, the core's
+    server-side checks (movement, spells, loot, trades) all stay on, and the browser client cannot join otherwise.
+    A host who wants stock clients only turns it off (leyline browser off). Other cores: Warden on when public."""
+    if a.warden is not None:
+        cfg["browser"] = a.warden == "off"
+    elif getattr(a, "browser", None) is not None:
+        cfg["browser"] = a.browser == "on"
+    if not browser_ok(profile):
+        cfg.pop("browser", None)
+        return (vis == "public") if a.warden is None else a.warden == "on"
+    cfg.setdefault("browser", True)
+    return not cfg["browser"]
 
 
 def listing_args(a, cfg):
@@ -565,8 +649,9 @@ def listing_args(a, cfg):
         ch["language"] = None if a.language == "none" else a.language
     if getattr(a, "max_players", None) is not None:
         if not 0 <= a.max_players <= 10000:
-            sys.exit("Max players: 1-10000 (0 = not shown)")
+            sys.exit("Max players: 1-10000 (0 = no limit)")
         ch["max_players"] = a.max_players or None
+        cfg["player_limit"] = a.max_players or None   # the server's own cap too (write_env: WU_PLAYER_LIMIT)
     if getattr(a, "direct", None) is not None:
         ch["direct"] = a.direct == "on"
     if not ch:
@@ -584,15 +669,56 @@ def listing_args(a, cfg):
 
 
 def cmd_listing(a):
-    """Change the realm list details (tags, region, language, max players, direct); sent with the next heartbeat."""
+    """Change the realm list details (tags, region, language, max players, direct); sent with the next heartbeat.
+    Max players is the world server's cap too (.env WU_PLAYER_LIMIT, from its next start)."""
     _edit(lambda c: listing_args(a, c))
+    if getattr(a, "max_players", None) is not None:
+        sync_env(lambda env, c: player_limit_env(env, c))
+        sys.stderr.write("Saved. The realm list shows it within a minute; the server's cap applies at the realm's next "
+                         "start (leyline stop, then leyline host).\n")
+
+
+def sync_env(fn):
+    """Change the kit's .env (0600, the rest kept) with fn(env, cfg); host.json saved after (fn may note things)."""
+    p = os.path.join(KIT, ".env")
+    try:
+        with open(p, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return
+    head = [ln for ln in lines if ln.startswith("#") or "=" not in ln]
+    env = dict(ln.split("=", 1) for ln in lines if "=" in ln and not ln.startswith("#"))
+    cfg = load() or {}
+    fn(env, cfg)
+    save(cfg)
+    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+        f.write("".join(ln + "\n" for ln in head) + "".join(f"{k}={env[k]}\n" for k in sorted(env)))
+
+
+def cmd_browser(a):
+    """The "Browser players" switch: on = Warden off (the browser client and stock clients join), off = Warden on
+    (stock clients only). The world server reads WU_WARDEN at its next start; the realm list shows it at once."""
+    cfg = load()
+    if not cfg:
+        sys.exit("Run Host a Wrath realm first.")
+    if cfg.get("linked") or cfg.get("official"):
+        sys.exit("A linked server keeps its own anti-cheat settings: change Warden in your server's own config.")
+    if not browser_ok(cfg.get("profile")):
+        sys.exit("Browser players need an AzerothCore ruleset: the browser client is a 3.3.5a client.")
+    _edit(lambda c: c.update(browser=a.state == "on", warden=a.state == "off"))
+    set_env_value("WU_WARDEN", "0" if a.state == "on" else "1")
+    sys.stderr.write(("Browser players on: Warden is off, so the Leyline browser client can join. "
+                      if a.state == "on" else "Browser players off: Warden is on, stock clients only. ")
+                     + "Restart your realm (leyline stop, then leyline host) for the server to pick it up.\n")
 
 
 def add_listing_args(p):
     p.add_argument("--tags", help="comma list: " + ",".join(TAGS))
     p.add_argument("--region", help="where the realm runs: " + ", ".join(REGIONS) + " or none")
     p.add_argument("--language", help="the realm's language: en, de, pt-BR, ... or none")
-    p.add_argument("--max-players", type=int, help="the player limit shown on the list (0 = not shown)")
+    p.add_argument("--max-players", type=int, help="the player limit: the world server's cap (AzerothCore, CMaNGOS, "
+                   "TrinityCore) and the realm list's (0 = the ruleset's own, not shown)")
     p.add_argument("--direct", choices=["on", "off"], help="allow direct connections (off by default; the network "
                    "only lists it when its operator turns direct connections on)")
 
@@ -632,7 +758,7 @@ def cmd_official(a):
         cfg.pop(k, None)   # nothing to invite to, no GM account to make, no database of its own
     cfg["record"] = {"name": cfg["name"], "tagline": " ".join((a.tagline or "").split())[:80],
                      "summary": " ".join((a.summary or "").split())[:400], "type": "PvE", "ruleset": "dalaran",
-                     "rules": rules, "discord": a.discord or None, "warden": None,
+                     "rules": rules, "discord": a.discord or None, "warden": None, "signup": "off",
                      "tags": ["hangout", "boosted"], "max_players": None, "direct": False}
     cfg["record"] = listing_fields(cfg["record"], cfg)
     save(cfg)
@@ -712,7 +838,7 @@ def cmd_link(a):
     for k in ("invite_secret", "host_secret", "gm", "gm_name", "db_password", "official"):
         cfg.pop(k, None)   # nothing to invite to, no GM account to make, no database login
     rec = dict(old, name=name, tagline=tagline, summary=summary, type=rtype, ruleset="custom", rules=rules,
-               discord=discord or None, warden=None, core=core, build=build)
+               discord=discord or None, warden=None, core=core, build=build, signup="off")
     if a.tags is not None:
         rec["tags"] = csv_tags(a.tags)
     listing_args(argparse.Namespace(region=a.region, language=a.language), {"record": rec})
@@ -973,6 +1099,7 @@ def main(argv=None):
     p.add_argument("--relay-url", help="override wss://<relay>/agent (tests, self-hosted relays)")
     p.add_argument("--listing-url", help="override https://<relay>/api/listing/heartbeat")
     p.add_argument("--warden", choices=["on", "off"])
+    p.add_argument("--browser", choices=["on", "off"], help="browser players (Warden off); on by default on AzerothCore")
     p.add_argument("--join-base", help="where join pages live (default https://<relay>)")
     p.add_argument("--gm-name", help="the operator's own account name that gets GM rights (they make it)")
     p.add_argument("--tagline", help="one line for the realm list")
@@ -1037,6 +1164,9 @@ def main(argv=None):
     p = sub.add_parser("signup")
     p.add_argument("mode", choices=["invite", "open", "off"])
     p.set_defaults(fn=cmd_signup)
+    p = sub.add_parser("browser", help="browser players: on = Warden off so the browser client can join (AzerothCore)")
+    p.add_argument("state", choices=["on", "off"])
+    p.set_defaults(fn=cmd_browser)
     p = sub.add_parser("herokey", help="Hero Key sign-in: players from the Leyline website, no join page (off by default)")
     p.add_argument("state", choices=["on", "off"])
     p.set_defaults(fn=cmd_herokey)

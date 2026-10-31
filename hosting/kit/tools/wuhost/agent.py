@@ -672,8 +672,9 @@ class Agent:
                 except Exception as e:
                     self.save_state(listing_status=None, listing_reply=str(e)[:200])
                     log.info("heartbeat failed: %s", e)
-            # not connected yet: look again soon, so a new realm is listed seconds after it connects, not a minute
-            await asyncio.sleep(every if beat_now else min(every, 2))
+            # not connected yet: look again soon (a cheap check), so a new realm is listed within a second of its
+            # tunnel coming up, not a minute later (launch smoke S6, 2026-10-30: 2.0 s with a 2 s poll, 0.3 s now)
+            await asyncio.sleep(every if beat_now else min(every, 0.25))
 
 
 def main(argv=None):

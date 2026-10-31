@@ -15,6 +15,8 @@
 #   bash host-wrath-realm.sh options [--type pvp] [--xp 5 --loot 2 --rep 3] [--start level1|boost]
 #                                                    the realm's own settings (state/realm.env; restart to apply)
 #   bash host-wrath-realm.sh herokey on|off   Hero Key sign-in from the Leyline website (off by default)
+#   bash host-wrath-realm.sh browser on|off   browser players: on = Warden off so the browser client can join (default)
+#   bash host-wrath-realm.sh max-players N    the most players at once: the server's cap and the realm list's (0 = default)
 #   bash host-wrath-realm.sh rules         after editing state/rules.txt or state/beacon.json (realm list text)
 #   bash host-wrath-realm.sh logs [service]
 #
@@ -254,6 +256,7 @@ cmd_up() {
   [ -n "${WU_GM_NAME:-}" ] && extra+=(--gm-name "$WU_GM_NAME")
   [ -n "${WU_TAGLINE:-}" ] && extra+=(--tagline "$WU_TAGLINE")
   [ -n "${WU_SIGNUP:-}" ] && extra+=(--signup "$WU_SIGNUP")
+  [ -n "${WU_BROWSER:-}" ] && extra+=(--browser "$WU_BROWSER")               # browser players (Warden off): on | off
   [ -n "${WU_RELAY_URL:-}" ] && extra+=(--relay-url "$WU_RELAY_URL")         # a self-hosted or test relay
   [ -n "${WU_LISTING_URL:-}" ] && extra+=(--listing-url "$WU_LISTING_URL")
   [ -n "${WU_JOIN_BASE:-}" ] && extra+=(--join-base "$WU_JOIN_BASE")
@@ -326,7 +329,9 @@ case "${1:-up}" in
   stop) need_docker; run "${COMPOSE[@]}" stop; say "Stopped. Characters and accounts are kept; start again any time." ;;
   friend) shift; cmd_friend "$@" ;;
   new-invite) need_tools; tools new-invite ;;
-  public|private) need_tools; tools visibility "$1"; say "Restart for the anti-cheat setting: bash host-wrath-realm.sh" ;;
+  public|private) need_tools; tools visibility "$1" ;;
+  browser) need_tools; [ "${2:-}" = on ] || [ "${2:-}" = off ] || die "Usage: bash host-wrath-realm.sh browser on|off"; tools browser "$2" ;;
+  max-players) need_tools; [[ "${2:-}" =~ ^[0-9]{1,5}$ ]] || die "Usage: bash host-wrath-realm.sh max-players N   (0 = the ruleset's own)"; tools listing --max-players "$2" ;;
   signup) need_tools; [ $# -ge 2 ] || die "Usage: bash host-wrath-realm.sh signup invite|open|off"; tools signup "$2" ;;
   herokey) need_tools; [ "${2:-}" = on ] || [ "${2:-}" = off ] || die "Usage: bash host-wrath-realm.sh herokey on|off"; tools herokey "$2" ;;
   options) need_tools; shift; tools options "$@" ;;

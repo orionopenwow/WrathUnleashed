@@ -67,7 +67,7 @@ const names = (page) => page.$$eval('#rl-list .realm-card .name', (n) => n.map((
 
 test('Realms page: the official realm first, the slim line, one tag, players, Report, Host your own', async () => {
   const { page, errors } = await open(false);
-  assert.deepEqual(await names(page), ['Leyline Sample Hangout', 'Picked', 'Busy Den', 'Asleep'], 'the official realm first, then the network order');
+  assert.deepEqual(await names(page), ['Dalaran Hangout', 'Picked', 'Busy Den', 'Asleep'], 'the official realm first (one name: the Dalaran Hangout), then the network order');
   assert.equal(await page.textContent('#rl-net'), '3 realms · 33 playing');
   assert.equal(await page.getAttribute('#rl-net', 'title'), '40 bots too');
   const cards = page.locator('#rl-list .realm-card');
@@ -132,22 +132,22 @@ test('Realms page: the FILTERS popover, its count, Clear filters; the … menu',
   const opts = await page.$$eval('#rl-f-tag option', (o) => o.map((x) => x.value));
   assert.deepEqual(opts, ['', 'bots', 'pvp', 'rp']);
   await page.selectOption('#rl-f-tag', 'pvp');
-  assert.deepEqual(await names(page), ['Leyline Sample Hangout', 'Picked'], 'tag filter; the sample stays');
+  assert.deepEqual(await names(page), ['Dalaran Hangout', 'Picked'], 'tag filter; the sample stays');
   assert.equal(await page.textContent('#rl-fcount'), '1');
   assert.equal(await page.getAttribute('#rl-filters-btn', 'aria-label'), 'Filters, 1 on');
   await page.selectOption('#rl-f-tag', '');
   await page.selectOption('#rl-f-region', 'na-east');
-  assert.deepEqual(await names(page), ['Leyline Sample Hangout', 'Busy Den'], 'an estimated region counts');
+  assert.deepEqual(await names(page), ['Dalaran Hangout', 'Busy Den'], 'an estimated region counts');
   await page.check('#rl-f-now');
   assert.equal(await page.textContent('#rl-fcount'), '2');
   await page.selectOption('#rl-f-region', '');
-  assert.deepEqual(await names(page), ['Leyline Sample Hangout', 'Picked', 'Busy Den'], 'has players now');
+  assert.deepEqual(await names(page), ['Dalaran Hangout', 'Picked', 'Busy Den'], 'has players now');
   await page.uncheck('#rl-f-now');
   await page.selectOption('#rl-f-build', '1.12.1');
-  assert.deepEqual(await names(page), ['Leyline Sample Hangout', 'Picked']);
+  assert.deepEqual(await names(page), ['Dalaran Hangout', 'Picked']);
   await page.selectOption('#rl-f-build', '');
   await page.check('#rl-mine');
-  assert.deepEqual(await names(page), ['Leyline Sample Hangout', 'Busy Den', 'Asleep'], 'Only realms my clients can play still works');
+  assert.deepEqual(await names(page), ['Dalaran Hangout', 'Busy Den', 'Asleep'], 'Only realms my clients can play still works');
   await page.selectOption('#rl-f-build', '1.12.1');
   assert.equal(await page.textContent('#rl-fcount'), '2');
   assert.match(await page.textContent('#rl-list .rl-empty'), /No realms match these filters/);

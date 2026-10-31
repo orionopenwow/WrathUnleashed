@@ -1,4 +1,5 @@
-// The launcher's Home page (ui/home.js, ui/home.css) in Chromium with a fake Tauri core: the hero gallery (the featured
+// The launcher's Home page (ui/home.js, ui/home.css) in Chromium with a fake Tauri core: the hero gallery (Join the Dalaran
+// Hangout first, with Play now and Join the Discord; then the featured
 // mode with its key art, what's new, browser play, hosting, a Workshop mod; a slide without its data left out), its dots,
 // arrows and Left / Right keys, moving on by itself and not under prefers-reduced-motion, and the rows below the fold
 // (Popular realms, Mods to try, Game modes, News, Host your own) shown with their data, hidden when empty, each click
@@ -16,7 +17,7 @@ const INDEX = 'file://' + path.join(__dirname, '..', 'ui', 'index.html');
 const PICTURE = path.join(__dirname, '..', 'ui', 'art', 'leyline-bg.webp');   // the site's backdrop, stood in
 const MODES = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'stream', 'playmodes.json'), 'utf8')).modes;
 
-const FAKE = ({ empty, browser, ms, modes }) => {
+const FAKE = ({ empty, browser, ms, modes, noClients }) => {
   const calls = (window.__calls = []);
   try {
     localStorage.removeItem('leyline.page');
@@ -44,7 +45,7 @@ const FAKE = ({ empty, browser, ms, modes }) => {
   window.__TAURI__ = { core: { invoke: async (cmd, args) => {
     calls.push([cmd, args]);
     switch (cmd) {
-      case 'get_state': return { version: 'test', settings: { clients: [{ id: 'c335a-1', name: 'My Wrath', path: '/x', build: '3.3.5a', realmlist: '' }],
+      case 'get_state': return { version: 'test', settings: { clients: noClients ? [] : [{ id: 'c335a-1', name: 'My Wrath', path: '/x', build: '3.3.5a', realmlist: '' }],
         selected_client: 'c335a-1', selected_realm: 'play.openvanilla.app', wine: { enabled: false, command: 'wine', prefix: '' } },
         official_realm: 'play.openvanilla.app', browser_url: 'https://play.openvanilla.app/wrath', windows: true, data_dir: '/tmp' };
       case 'realms_list': return { realms, network: { realms: 5, players: 48, bots: 0 }, from_cache: false, saved_at: 1, error: null };
@@ -62,6 +63,9 @@ const FAKE = ({ empty, browser, ms, modes }) => {
       case 'p2p_flags': return { effective: { p2p_hosting: false, limits: {} }, known: [], local: { overrides: {} }, site: {} };
       case 'social_status': return false;
       case 'open_link': return null;
+      case 'play': return 'Started.';
+      case 'open_browser_play': return null;
+      case 'select': return null;
       default: throw 'unknown ' + cmd;
     }
   } } };
@@ -94,11 +98,17 @@ const where = (page) => page.evaluate(() => ({ page: document.querySelector('.pa
 test('the gallery: every slide with its data, a title, one line and one button; art for the featured mode', async () => {
   const { page, ctx, errors } = await open({ ms: 600000 });
   await page.waitForFunction(() => window.LeylineHome.slides().includes('mod'));
-  assert.deepEqual(await keys(page), ['mode', 'news', 'browser', 'host', 'mod']);
+  assert.deepEqual(await keys(page), ['hangout', 'mode', 'news', 'browser', 'host', 'mod']);
   for (const s of await page.$$('#hero-slides .hero-slide')) {
     assert.equal(await s.$$eval('.hs-title', (x) => x.length), 1);
-    assert.equal(await s.$$eval('.hs-body button', (x) => x.length), 1, 'one button per slide (the realm rows on the side are links to Realms)');
+    const want = (await s.getAttribute('data-key')) === 'hangout' ? 2 : 1;
+    assert.equal(await s.$$eval('.hs-body button', (x) => x.length), want, 'one button per slide, two on the launch slide (the realm rows on the side are links to Realms)');
   }
+  const hang = page.locator('.hero-slide[data-key="hangout"]');
+  assert.equal(await hang.locator('.hs-title').textContent(), 'Join the Dalaran Hangout');
+  assert.deepEqual(await hang.locator('.hs-body button').allTextContents(), ['Play now', 'Join the Discord']);
+  assert.match(await hang.locator('.hs-line').textContent(), /\/golf and \/modes/);
+  assert.deepEqual(await hang.locator('.hs-lineup .hs-rl-n b').allTextContents(), ['Dalaran Hangout'], 'the official lineup: the Hangout (no Vanilla Remastered record here)');
   const mode = page.locator('.hero-slide[data-key="mode"]');
   assert.equal(await mode.locator('img.hs-art').getAttribute('src'), 'art/modes/azeroth-survivors.webp');
   assert.equal(await mode.locator('.hs-title').textContent(), 'Azeroth Survivors');
@@ -106,9 +116,9 @@ test('the gallery: every slide with its data, a title, one line and one button; 
   assert.equal(await page.textContent('.hero-slide[data-key="news"] .hs-title'), 'EVERY CLIENT, EVERY SERVER', 'the newest entry');
   assert.equal(await page.textContent('.hero-slide[data-key="mod"] .hs-title'), 'Better Bars', 'the first packaged project');
   assert.equal(await page.textContent('.hero-slide[data-key="mod"] .hs-line'), 'Better Bars makes things better.', 'one short line');
-  assert.equal(await page.locator('#hero-dots .hero-dot').count(), 5);
-  assert.deepEqual(await current(page), { on: ['mode'], dot: 0, i: 0 });
-  assert.equal(await page.locator('.hero-slide[inert]').count(), 4, 'the hidden slides take no focus');
+  assert.equal(await page.locator('#hero-dots .hero-dot').count(), 6);
+  assert.deepEqual(await current(page), { on: ['hangout'], dot: 0, i: 0 });
+  assert.equal(await page.locator('.hero-slide[inert]').count(), 5, 'the hidden slides take no focus');
   const text = await page.evaluate(() => document.body.innerText);
   assert.doesNotMatch(text, /world of warcraft|\bwow\b|warcraft|lich king|blizzard/i);
   assert.deepEqual(errors, []);
@@ -119,56 +129,84 @@ test('slides without their data are left out (no catalog, no art, browser play a
   const { page, ctx, errors } = await open({ empty: true, browser: true, noArt: true, ms: 600000 });
   await page.waitForFunction(() => window.__calls.some(([c]) => c === 'mods_catalog'));
   await page.waitForFunction(() => !window.LeylineHome.slides().includes('mode'));
-  assert.deepEqual(await keys(page), ['news', 'host']);
-  assert.equal(await page.locator('#hero-slides .hero-slide img').count(), 0);
+  assert.deepEqual(await keys(page), ['hangout', 'news', 'host']);
+  assert.equal(await page.locator('#hero-slides .hero-slide img.hs-art').count(), 0, 'no key art (the lineup crystal icon is not art)');
   assert.deepEqual(errors, []);
   await ctx.close();
 });
 
 test('dots, arrows and the Left / Right keys move the gallery; the buttons do what they say', async () => {
   const { page, ctx, errors } = await open({ ms: 600000 });
-  await page.waitForFunction(() => window.LeylineHome.slides().length === 5);
-  await page.click('#hero-dots .hero-dot[data-i="3"]');
-  assert.deepEqual(await current(page), { on: ['host'], dot: 3, i: 3 });
+  await page.waitForFunction(() => window.LeylineHome.slides().length === 6);
+  await page.click('#hero-dots .hero-dot[data-i="4"]');
+  assert.deepEqual(await current(page), { on: ['host'], dot: 4, i: 4 });
   await page.click('#hero-next');
-  assert.equal((await current(page)).i, 4);
+  assert.equal((await current(page)).i, 5);
   await page.click('#hero-next');
   assert.equal((await current(page)).i, 0, 'wraps round');
   await page.click('#hero-prev');
-  assert.equal((await current(page)).i, 4);
+  assert.equal((await current(page)).i, 5);
   await page.focus('#hero-dots .hero-dot[aria-current="true"]');
   await page.keyboard.press('ArrowRight');
   assert.equal((await current(page)).i, 0);
   assert.equal(await page.evaluate(() => document.activeElement.dataset.i), '0', 'the focus follows the dot');
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('ArrowLeft');
-  assert.deepEqual(await current(page), { on: ['host'], dot: 3, i: 3 });
+  assert.deepEqual(await current(page), { on: ['host'], dot: 4, i: 4 });
   // a slide's button, then the keys: the gallery keeps the keyboard
   await page.focus('.hero-slide.on .hs-go');
   await page.keyboard.press('ArrowRight');
-  assert.equal((await current(page)).i, 4);
+  assert.equal((await current(page)).i, 5);
   assert.ok(await page.evaluate(() => document.getElementById('hero').contains(document.activeElement)));
 
   await page.click('.hero-slide[data-key="mod"] .hs-go');
   assert.deepEqual(await where(page), { page: 'page-mods', panes: ['pane-discover'] });
   await page.evaluate(() => window.LeylineNav.show('play'));
-  await page.evaluate(() => window.LeylineHome.show(1));
+  await page.evaluate(() => window.LeylineHome.show(2));
   await page.click('.hero-slide[data-key="news"] .hs-go');
   assert.equal((await where(page)).page, 'page-news');
   await page.evaluate(() => window.LeylineNav.show('play'));
-  await page.evaluate(() => window.LeylineHome.show(3));
+  await page.evaluate(() => window.LeylineHome.show(4));
   await page.click('.hero-slide[data-key="host"] .hs-go');
   assert.equal((await where(page)).page, 'page-host');
   await page.evaluate(() => window.LeylineNav.show('play'));
-  await page.evaluate(() => window.LeylineHome.show(2));
+  await page.evaluate(() => window.LeylineHome.show(3));
   await page.click('.hero-slide[data-key="browser"] .hs-go');
   assert.equal(await page.textContent('#pb-realm'), 'In your browser', 'the play bar switches to browser play');
   assert.equal(await page.evaluate(() => localStorage.getItem('leyline.mode')), 'browser');
   assert.match(await page.textContent('.hero-slide[data-key="browser"] .hs-go'), /on/);
-  await page.evaluate(() => window.LeylineHome.show(0));
+  await page.evaluate(() => window.LeylineHome.show(1));
   await page.click('.hero-slide[data-key="mode"] .hs-go');
   assert.equal((await where(page)).page, 'page-modes');
   await page.waitForFunction(() => { const c = document.querySelector('#md-list .md-card[data-mode="azeroth-survivors"]'); return c && c.classList.contains('md-flash'); });
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('the launch slide: Play now selects the Dalaran Hangout and plays; Join the Discord opens the named link', async () => {
+  const { page, ctx, errors } = await open({ ms: 600000 });
+  await page.waitForFunction(() => window.LeylineHome.slides()[0] === 'hangout');
+  await page.evaluate(() => window.LeylineHome.show(0));
+  await page.click('.hero-slide[data-key="hangout"] .hs-go2');
+  assert.ok(await page.evaluate(() => window.__calls.some(([c, a]) => c === 'open_link' && a.name === 'discord')), 'openLink("discord")');
+  await page.evaluate(() => { const r = document.getElementById('play-realm'); r.value = 'custom'; document.getElementById('play-custom').value = 'relay.openvanilla.app:40002'; });
+  await page.click('.hero-slide[data-key="hangout"] .hs-go');
+  await page.waitForFunction(() => window.__calls.some(([c]) => c === 'play'));
+  assert.equal(await page.inputValue('#play-realm'), 'official');
+  assert.deepEqual(await page.evaluate(() => window.__calls.find(([c]) => c === 'play')[1]), { client: 'c335a-1', realm: 'play.openvanilla.app' }, 'the 3.3.5a client on the Hangout');
+  assert.equal(await page.textContent('#pb-realm'), 'Dalaran Hangout');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('the launch slide without a 3.3.5a client: Play now is browser play (the Hangout in the browser, nothing to install)', async () => {
+  const { page, ctx, errors } = await open({ ms: 600000, noClients: true });
+  await page.waitForFunction(() => window.LeylineHome.slides()[0] === 'hangout');
+  await page.evaluate(() => window.LeylineHome.show(0));
+  await page.click('.hero-slide[data-key="hangout"] .hs-go');
+  await page.waitForFunction(() => window.__calls.some(([c]) => c === 'open_browser_play'));
+  assert.equal(await page.evaluate(() => window.LeylineApp.mode()), 'browser');
+  assert.ok(!(await page.evaluate(() => window.__calls.some(([c]) => c === 'play'))));
   assert.deepEqual(errors, []);
   await ctx.close();
 });

@@ -125,6 +125,20 @@ function LeylineGuard(ms)
         debug.sethook(); guardOn = false
     end
 end
+-- Mode keys are override click bindings (Modes.lua M.Capture). key() is the browser client: one click when a key
+-- goes down and one when it comes up, and OnClick's down is always false (it never fires OnKeyUp on a keyboard
+-- frame, which is why Modes.lua doesn't use one).
+local bindings = {}
+function SetOverrideBindingClick(owner, prio, k, button) bindings[k] = button; return 1 end
+function ClearOverrideBindings(owner) bindings = {} end
+local phys = {}
+local function key(k, down)
+    if (phys[k] or false) == down then return end
+    phys[k] = down or nil
+    local b = bindings[k] and _G[bindings[k]]
+    if b then b:Fire("OnClick", "LeftButton", false) end
+end
+local function tap(k) key(k, true); key(k, false) end
 local function drew(prefix) local c = 0 for _, d in ipairs(draws) do if d:sub(1, #prefix) == prefix then c = c + 1 end end return c end
 
 dofile(dir .. "/ModeAPI.lua")
@@ -174,20 +188,68 @@ M.Solo(M.BUILTIN)
 check("solo Bumper Balls places the arena here", drew("origin here") == 1 and drew("ent ") >= 4)
 check("and follows your ball", drew("cam follow") >= 1)
 local before = drew("mv ")
-_G["LeylineModesKeys"]:Fire("OnKeyDown", "W")
+check("the mode's keys and Esc are bound while it plays", M.capturing and bindings.W == "LeylineModesKeyW" and bindings.ESCAPE == "LeylineModesKeyESCAPE")
+check("and the mode keys it doesn't use too (they don't walk you)", bindings.Q == "LeylineModesKeyQ" and bindings.UP == "LeylineModesKeyUP")
+key("W", true)
 for i = 1, 20 do _G["LeylineModesHud"]:Fire("OnUpdate", 0.05) end
-check("your keys roll your ball", drew("mv ") > before)
-_G["LeylineModesKeys"]:Fire("OnKeyDown", "ESCAPE")
-check("Esc lets go of the keys", not _G["LeylineModesKeys"]:IsShown())
+check("your keys roll your ball", drew("mv ") > before and M.held.W)
+key("W", false)
+check("a key you let go of is let go (the browser client sends no key up)", not M.held.W)
+key("W", true); key("D", true); key("W", false)
+check("two keys at once: let go of one, the other stays", M.held.D and not M.held.W)
+key("D", false)
+check("and then neither", next(M.held) == nil)
+key("A", true); key("A", false); key("A", true); key("A", false)
+check("taps in a row end let go", next(M.held) == nil)
+key("Q", true)
+check("a mode key this mode doesn't use does nothing", next(M.held) == nil)
+key("Q", false)
+-- a client that says which (OnClick's down) is believed
+_G["LeylineModesKeyS"]:Fire("OnClick", "LeftButton", true)
+_G["LeylineModesKeyS"]:Fire("OnClick", "LeftButton", true)   -- a second "down" stays down
+check("a client's own down is believed", M.held.S and M.clickDownSeen)
+_G["LeylineModesKeyS"]:Fire("OnClick", "LeftButton", false)
+check("and its up", not M.held.S)
+M.clickDownSeen = false
+key("W", true)
+key("ESCAPE", true); key("ESCAPE", false)
+check("Esc lets go of the keys", not M.capturing and next(bindings) == nil and next(M.held) == nil)
+key("W", false)
+M.Capture(true)
+check("Back to the game takes them again", M.capturing and bindings.W == "LeylineModesKeyW" and next(M.held) == nil)
 M.Leave()
 check("leaving clears the arena", draws[#draws] == "cam off" or draws[#draws - 1] == "clear")
+check("leaving gives the keys back", not M.capturing and next(bindings) == nil)
 
 -- Coin Dash runs its 60 seconds and ends with a winner
 draws = {}
 M.Solo(M.COINDASH)
 check("Coin Dash builds an arena and coins", drew("ent ") >= 15)
-_G["LeylineModesKeys"]:Fire("OnKeyDown", "W")
+-- Run to the nearest coin, again and again (the live smoke's mode stopped on the first one it picked up: a new
+-- coin was added to the table being walked, "invalid key to 'next'").
+local function nearestCoin(H)
+    local ball, best, bd
+    for _, e in pairs(H.ents) do if e.shape == "ball" then ball = e end end
+    for _, e in pairs(H.ents) do
+        if e.color == "ffd700" or e.color == "50b4ff" then
+            local d = (e.x - ball.x) ^ 2 + (e.z - ball.z) ^ 2
+            if not bd or d < bd then best, bd = e, d end
+        end
+    end
+    return ball, best
+end
+for i = 1, 500 do
+    local H = M.host
+    if not H then break end
+    local ball, c = nearestCoin(H)
+    key("W", c.z - ball.z > 0.3); key("S", c.z - ball.z < -0.3); key("D", c.x - ball.x > 0.3); key("A", c.x - ball.x < -0.3)
+    _G["LeylineModesHud"]:Fire("OnUpdate", 0.05)
+end
+for _, k in ipairs({ "W", "A", "S", "D" }) do key(k, false) end
+check("Coin Dash: picking up coins keeps it running", M.host and not M.host.failed and (M.score.Ann or 0) >= 8)
+key("W", true)
 for i = 1, 1250 do _G["LeylineModesHud"]:Fire("OnUpdate", 0.05) end
+key("W", false)
 check("Coin Dash ends after a minute", M.state == "finished" and (table.concat(M.notes, " ")):find("wins Coin Dash", 1, true) ~= nil)
 t = t + 5; for _, f in ipairs(frames) do if f.scripts.OnUpdate and not f.name then f:Fire("OnUpdate", 0.016) end end
 -- the editor: the template runs
@@ -474,10 +536,10 @@ local function walkTo(x, z)
         local dx, dz = x - a.x, z - a.z
         if dx * dx + dz * dz < 0.3 then break end
         local keys = { W = dz > 0.3, S = dz < -0.3, D = dx > 0.3, A = dx < -0.3 }
-        for k, v in pairs(keys) do _G["LeylineModesKeys"]:Fire(v and "OnKeyDown" or "OnKeyUp", k) end
+        for k, v in pairs(keys) do key(k, v) end
         tick(1)
     end
-    for _, k in ipairs({ "W", "A", "S", "D" }) do _G["LeylineModesKeys"]:Fire("OnKeyUp", k) end
+    for _, k in ipairs({ "W", "A", "S", "D" }) do key(k, false) end
     tick(1)
 end
 tick(2)
@@ -720,6 +782,23 @@ for i = 1, 1000 do M.Host.Update(cc, 0.05, function(d) ccOut[#ccOut + 1] = d end
 local ccText = table.concat(ccOut, ";")
 check("examples: Coin Collect plays 45 seconds and ends", not cc.failed and cc.endText and cc.endText:find("Coin Collect", 1, true) and cc.state.left == 0)
 check("examples: Coin Collect shows its own HUD lines, one of them per player", ccText:find("t,time,*,Time: 30", 1, true) and ccText:find("t,mine,Bo,Your coins: 0", 1, true))
+-- Coin Collect: run to coin after coin (a coin picked up used to spawn the next inside pairs(coins): "invalid key
+-- to 'next'" stopped the mode, as Coin Dash did in the live smoke 2026-10-30)
+local cr = M.Host.Load(EX[1].text, { "Ann" }, 5)
+M.Host.Start(cr)
+local crHeld = {}
+for i = 1, 600 do
+    local ball, best, bd
+    for _, e in pairs(cr.ents) do if e.shape == "ball" then ball = e end end
+    for _, e in pairs(cr.ents) do
+        if e.color == "ffd700" and ball then local d = (e.x - ball.x) ^ 2 + (e.z - ball.z) ^ 2; if not bd or d < bd then best, bd = e, d end end
+    end
+    if not ball or not best or cr.failed or cr.endText then break end
+    local want = { W = best.z - ball.z > 0.3, S = best.z - ball.z < -0.3, D = best.x - ball.x > 0.3, A = best.x - ball.x < -0.3 }
+    for k, v in pairs(want) do if (crHeld[k] or false) ~= v then crHeld[k] = v; M.Host.Key(cr, "Ann", k, v) end end
+    M.Host.Update(cr, 0.05, noop)
+end
+check("examples: Coin Collect keeps running while you pick up coin after coin", not cr.failed and (cr.scores.Ann or 0) >= 8)
 local kh = M.Host.Load(EX[2].text, { "Ann" }, 3)
 M.Host.Start(kh)
 local held, everHeld = {}, false

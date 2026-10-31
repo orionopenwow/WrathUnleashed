@@ -869,7 +869,7 @@ class Hub:
         discord = self.portal("DISCORD_URL") or ""
         foot_links = [("Docs", "/wrath/docs"), ("Download", dl), ("Community", f"{home}#community"), ("Status", f"{home}#status"),
                       ("Catalog", f"{BASE}/catalog"), ("Creators", f"{BASE}/creators"), ("Submit a mod", f"{BASE}/submit")]
-        social = ([("Discord", discord)] if discord else []) + [("GitHub", repo)]
+        social = [("GitHub", repo)]
         hs = self.health_state()
         health = (f'<a class="hb-health {hs}" href="{home}#status"><span class="hb-hdot" aria-hidden="true"></span>'
                   f'{HEALTH_WORDS[hs]}</a>') if hs else ""
@@ -879,7 +879,7 @@ class Hub:
                           for t, h in foot_links) + '</nav>'
                 f'<div class="hb-foot-row"><a class="hb-brand small" href="{home}" aria-label="Leyline Launcher">{self._wordmark()}</a>'
                 '<p class="hb-foot-fine">Open source. No shop, nothing to buy. Bots are labelled.</p>'
-                '<nav class="hb-social" aria-label="Elsewhere">'
+                '<nav class="hb-social" aria-label="Elsewhere">' + self.discord_btn()
                 + "".join(f'<a href="{e(h)}" rel="noopener noreferrer">{e(t)}</a>' for t, h in social)
                 + '</nav></div></div></footer>')
         robots = "" if front_on() else '<meta name="robots" content="noindex">'
@@ -992,16 +992,19 @@ class Hub:
         players = st.get("players") if st and isinstance(st.get("players"), int) else rec.get("players")
         bots = st.get("bots") if st and isinstance(st.get("bots"), int) else rec.get("bots")
         home = {**rec, "home": True, "official": True, "live": live, "players": players, "bots": bots, "build": BROWSER_BUILD,
-                "name": sample.get("name") or self.portal("REALM_NAME") or "Official realm",
+                "name": HANGOUT_NAME,   # the Wrath realm, sampler or not: one name everywhere at launch
+                "kind": HANGOUT_KIND, "tagline": rec.get("tagline") or HANGOUT_LINE,
                 "temporary": bool(sample.get("temporary")), "featured": False, "new": False, "group": "home",
                 "address": self.portal("PUBLIC_HOST") or "play.openvanilla.app"}
         fits = lambda r: net.matches(r, f) and f.get("client") in (None, client_of(r))   # noqa: E731
         rows = [home] if fits(home) else []
+        rest = []
         for r in shown:
             if r["sample"] or not fits(r):
                 continue
             port, relay = r.get("port"), r.get("relay") or "relay.openvanilla.app"
-            rows.append({**r, "home": False, "address": f"{relay}:{port}" if port else ""})
+            rest.append({**r, "home": False, "address": f"{relay}:{port}" if port else ""})
+        rows += sorted(rest, key=lineup_rank)   # stable: the network's order inside each group
         return rows, t, ok, f, net.facets([r for r in shown if not r["sample"]])
 
     def realm_row(self, r: dict) -> str:
@@ -1010,7 +1013,7 @@ class Hub:
         client = client_of(r)
         name = neutral(r.get("name")) or "A realm"
         bdg = []
-        if r.get("home") or r.get("official"):
+        if r.get("home") or lineup_rank(r) == 0:
             bdg.append('<span class="hb-bdg o">Official</span>')
         if r.get("temporary"):
             bdg.append('<span class="hb-bdg">Temporary</span>')
@@ -1050,8 +1053,7 @@ class Hub:
         rid = r.get("id") or ""
         data = ' data-home="1"' if r.get("home") else (f' data-rid="{e(rid)}"' if rid else "")
         # the hover / focus preview: the realm's own tagline and its tags, laid over the rows below (no layout shift)
-        line = neutral(r.get("tagline"), 120) or ("The official realm: one click and you are in, in this browser."
-                                                  if r.get("home") else "")
+        line = neutral(r.get("tagline"), 120) or (HANGOUT_LINE if r.get("home") else "")
         tags = [TAG_WORDS.get(t, net.TAG_LABEL[t]) for t in r.get("tags") or [] if t in net.TAG_LABEL]
         pv = (f'<div class="hb-rl-pv" role="note">' + (f"<p>{e(line)}</p>" if line else "")
               + (f'<p class="hb-rl-pt">{"".join(f"<span>{e(t)}</span>" for t in tags)}</p>' if tags else "")
@@ -1067,7 +1069,8 @@ class Hub:
         fill = 0 if not live or not players else max(6, min(100, round(100 * players / cap)))
         bar = (f'<span class="hb-rl-bar" aria-hidden="true"><i style="width:{fill}%"></i></span>' if live else "")
         return (f'<li class="hb-rl{" home" if r.get("home") else ""}{" pv" if pv else ""}{"" if live else " off"}"{data} data-client="{client}" '
-                f'data-live="{1 if live else 0}" data-players="{players or 0}">{icon}<div class="hb-rl-n"><b>{e(name)}</b>{verchip}{"".join(bdg)}'
+                f'data-live="{1 if live else 0}" data-players="{players or 0}">{icon}<div class="hb-rl-n"><b>{e(name)}</b>'
+                + (f'<span class="hb-rl-k">{e(r["kind"])}</span>' if r.get("kind") else "") + f'{verchip}{"".join(bdg)}'
                 f'<span class="hb-rl-m">{e(" · ".join(meta))}</span></div>{count.replace("</div>", bar + "</div>", 1) if live else count}'
                 f'<div class="hb-rl-a">{"".join(acts)}</div>{pv}</li>')
 
@@ -1094,6 +1097,39 @@ class Hub:
                 '<p class="hb-rl-none" hidden>No realms match. Try Any, or everyone.</p>' + stale +
                 f'<p class="hb-more"><a href="{BASE}/realms">Every realm, with filters</a> · '
                 '<a href="/wrath/host">Host your own</a></p></section>')
+
+    def discord_btn(self, cls: str = "hb-ghost") -> str:
+        """The Join the Discord button (wrath_portal.DISCORD_URL); "" when the portal has none."""
+        d = self.portal("DISCORD_URL") or ""
+        if not d.startswith("https://"):
+            return ""
+        return (f'<a class="{cls} hb-dc" href="{html.escape(d)}" rel="noopener noreferrer">'
+                '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 6.5C4 5.1 5.1 4 6.5 4h11C18.9 4 20 5.1 20 6.5v8'
+                'c0 1.4-1.1 2.5-2.5 2.5H11l-4.5 3.5V17h0C5.1 17 4 15.9 4 14.5z"/><circle cx="9" cy="10.5" r="1.2"/>'
+                '<circle cx="15" cy="10.5" r="1.2"/></svg>Join the Discord</a>')
+
+    def hangout_open(self, got=None) -> str:
+        """Under the hero (launch, owner 2026-10-30): the Dalaran Hangout is open, the front door. Play in your browser
+        and Join the Discord; the players there now when the realm says so."""
+        e = html.escape
+        home = next((r for r in (got[0] if got else []) if r.get("home")), None)
+        rs = self.portal("realm_status")
+        try:
+            st = rs() if rs else None
+        except Exception:   # noqa: BLE001
+            st = None
+        live = bool(st.get("online")) if st else bool(home and home.get("live"))
+        pl = (st or {}).get("players") if st else (home or {}).get("players")
+        now = (f'<span class="hb-ho-live"><span class="hb-dot" aria-hidden="true"></span>'
+               + (f'<span data-tick="home"><b class="hb-tn">{int(pl)}</b> in Dalaran now</span>' if isinstance(pl, int) and pl > 0 else "Open now")
+               + "</span>") if live else ""
+        return ('<section class="hb-ho hb-rv" id="hangout" aria-labelledby="hb-ho-h">'
+                f'<div class="hb-ho-t"><p class="hb-eyebrow">{e(HANGOUT_NAME)} · {e(HANGOUT_KIND)}{now}</p>'
+                '<h2 id="hb-ho-h">The Dalaran Hangout is open</h2>'
+                '<!-- TODO(owner): the Hangout line, his words -->'
+                '<p class="hb-ho-l">Everyone meets in Dalaran: say hello, try minigolf and the game modes, then head out together. '
+                'Nothing to install.</p></div>'
+                f'<p class="hb-ho-a"><a class="hb-cta sm" href="/wrath">Play in your browser</a>{self.discord_btn()}</p></section>')
 
     def how_strip(self) -> str:
         e = html.escape
@@ -1315,7 +1351,8 @@ class Hub:
              "belongs to its authors, under the licence they chose.",
              ["What's hot and who made it, from real rankings", "News from the launcher and the realms"]
              + (["The Discord, linked from everywhere"] if discord else []),
-             [(BASE + "/catalog", "Explore", False), (BASE + "/news", "News", False)], community_art),
+             [(BASE + "/catalog", "Explore", False), (BASE + "/news", "News", False)]
+             + ([(discord, "Join the Discord", True)] if discord else []), community_art),
         ]
         out = []
         for n, (icon, eyebrow, title, lede, points, acts, art) in enumerate(secs):
@@ -1578,12 +1615,17 @@ class Hub:
                           f'{e(p["date"])}</small><b>{e(p["title"])}</b></a></li>' for p in posts)
             news = ('<div class="hb-cm-p" id="news" aria-labelledby="hb-nw-h" role="group"><h3 id="hb-nw-h" class="hb-cm-h">News</h3>'
                     f'<ul class="hb-nwl">{lis}</ul><p class="hb-cm-more"><a href="{BASE}/news">All the news</a></p></div>')
-        if not (hot or crs or news):
+        dc = self.discord_btn("hb-cta sm")
+        if not (hot or crs or news or dc):
             return ""
         side = f'<div class="hb-cm-side">{crs}{news}</div>' if (crs or news) else ""
+        # the Discord, first in the community section (launch: "the Discord is promoted everywhere")
+        meet = ('<!-- TODO(owner): the Discord line --><div class="hb-cm-dc"><p><b>Where everyone meets.</b> Find a group, show what you made, ask anything, '
+                f'hear about new realms first.</p>{dc}</div>') if dc else ""
+        grid = f'<div class="hb-cm-g{"" if hot and side else " one"}">{hot}{side}</div>' if (hot or side) else ""
         return ('<section class="hb-sec hb-cm hb-rv" id="community" aria-labelledby="hb-cm-h"><div class="hb-ms-head">'
                 f'<h2 id="hb-cm-h">Community</h2><a href="{BASE}/catalog">Browse the catalog</a></div>'
-                f'<div class="hb-cm-g{"" if hot and side else " one"}">{hot}{side}</div></section>')
+                f'{meet}{grid}</section>')
 
     # ---------------------------------------------------------------- the gallery (owner 2026-10-30: "in game screenshots
     # or cdn pulls or at least something and featured mods on the site in a gallery for promo and appeal")
@@ -1841,7 +1883,7 @@ class Hub:
             '<p class="hb-sub-h">One launcher for every classic client and every server: your game, your realm, one click.</p>'
             # no buttons under the line (owner 2026-10-30): Download and Play are in the side menu
             '<p class="hb-note">Free and open source, for Windows, macOS and Linux. Nothing to buy.</p></section>'
-            + self.ticker(got) + self.realm_section(got) + self.how_strip() + self.counters(got, items) + self.featured_mod(items) + self.features(got)
+            + self.hangout_open(got) + self.ticker(got) + self.realm_section(got) + self.how_strip() + self.counters(got, items) + self.featured_mod(items) + self.features(got)
             + self.posters(got) + self.herokey_teaser(got) + self.community(items) + self.mod_strip(items) + status +
             '<p class="hb-fine">Community projects are links: nothing of theirs is hosted here. Each belongs to its '
             'authors, under the licence they chose. Leyline is an independent open-source project.</p>')
@@ -2538,7 +2580,27 @@ text-decoration:none;color:var(--lk-text-2)!important}
 .hb-foot-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 24px}
 .hb-brand.small .ly-spin{--ly-spin-size:32px!important}.hb-brand.small .hb-word b{font-size:16px}.hb-brand.small .hb-word i{font-size:12px}
 .hb-foot-fine{margin:0;color:var(--lk-muted);font-size:13px;flex:1 1 220px}
-.hb-social{display:flex;gap:16px}
+.hb-social{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+/* Join the Discord (the footer, the Hangout band, the community section) */
+.hb-dc{display:inline-flex;align-items:center;gap:8px}.hb-dc svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;
+stroke-linejoin:round}.hb-dc svg circle{fill:currentColor;stroke:none}
+.hb-social a.hb-dc{min-height:34px;padding:0 12px;border-radius:var(--lk-r-sm);border:1px solid var(--lk-border-strong);color:var(--lk-text)!important;font-weight:650}
+.hb-social a.hb-dc:hover{text-decoration:none;border-color:var(--lk-accent);background:var(--lk-accent-soft)}
+/* the Dalaran Hangout band under the hero */
+.hb-ho{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px 24px;margin:0 0 18px;padding:18px 22px;
+border:1px solid var(--lk-border-strong);border-radius:var(--lk-r);background:linear-gradient(120deg,rgba(91,141,239,.16),rgba(139,108,240,.10) 60%,rgba(20,23,31,.55));
+box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.hb-ho-t{flex:1 1 340px;min-width:0}.hb-ho .hb-eyebrow{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin:0 0 4px}
+.hb-ho h2{margin:0 0 4px;font-size:clamp(20px,2.4vw,26px);font-weight:800;line-height:1.15}
+.hb-ho-l{margin:0;color:var(--lk-text-2);font-size:14.5px;max-width:620px}
+.hb-ho-live{display:inline-flex;align-items:center;gap:6px;color:var(--lk-text-2);font-weight:600;text-transform:none;letter-spacing:0}
+.hb-ho-live b{color:var(--lk-text)}
+.hb-ho-a{display:flex;flex-wrap:wrap;gap:10px;margin:0}.hb-ho-a .hb-ghost{min-height:42px;padding:0 16px;font-size:14.5px}
+.hb-rl-k{margin-left:6px;color:var(--lk-text-2);font-weight:500;font-size:13px}.hb-rl-k::before{content:"· "}
+@media (max-width:560px){.hb-rl-k{display:block;margin:0}.hb-rl-k::before{content:none}}
+.hb-cm-dc{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 18px;margin:0 0 14px;padding:14px 16px;
+border:1px solid var(--lk-border);border-radius:var(--lk-r);background:var(--lk-surface)}
+.hb-cm-dc p{margin:0;color:var(--lk-text-2);flex:1 1 280px}.hb-cm-dc b{color:var(--lk-text)}
 /* the sub-pages (catalog, item, creators, realms, beacon, submit): the same flat panels */
 .hb .ly-panel{background:var(--lk-surface);border:1px solid var(--lk-border);border-radius:var(--lk-r);padding:20px;margin:16px 0}
 .hb h1{font-size:clamp(28px,4.6vw,40px);line-height:1.1;margin:0 0 10px;font-weight:800;letter-spacing:-.01em}
@@ -3291,6 +3353,20 @@ TAG_WORDS = {"blizzlike": "Original rules"}   # the network's tag labels the hub
 def client_of(r: dict) -> str:
     return "browser" if r.get("build", 12340) == BROWSER_BUILD else "own"
 FRONT_REALMS = 60       # rows sent on the front page (8 show until a filter is used; the rest are on the realm list)
+# The launch lineup (owner 2026-10-30): the Dalaran Hangout is our own realm, the Wrath realm where everyone meets in
+# Dalaran, pinned first everywhere; then the official records the staff mark (Vanilla Remastered, when its record
+# exists), then the rest of the network in its own order.
+HANGOUT_NAME = "Dalaran Hangout"
+HANGOUT_KIND = "the Wrath realm"
+HANGOUT_LINE = "The Wrath realm, where everyone meets in Dalaran. One click and you are in, in this browser."
+OFFICIAL_NAMES = ("vanilla remastered",)   # an official realm known by name until its record carries official/pinned
+
+
+def lineup_rank(r: dict) -> int:
+    """0 for an official lineup record (staff official, pinned, or a lineup name), else 1: the hub sorts these first
+    after the Hangout, keeping the network's order inside each group."""
+    nm = str(r.get("name") or "").strip().lower()
+    return 0 if r.get("official") or r.get("pinned") or nm in OFFICIAL_NAMES else 1
 
 # Icons for the products (24x24 strokes, the launcher's nav style).
 ICONS = {

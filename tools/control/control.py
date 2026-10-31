@@ -98,7 +98,15 @@ STEPS = {
     "frontpage-off": ("tools/front-page/Front page as home - off.bat", "Undo: the site's home opens the game's sign-in page again", False),
     "ov112-check": ("tools/ov112-off/Turn off 1.12 jobs - dry run.bat", "1.12 Open Vanilla jobs: what would be turned off (read-only)", False),
     "ov112-off": ("tools/ov112-off/Turn off 1.12 jobs - do it.bat", "Turn off the 1.12 Open Vanilla jobs (crons, timers, containers; backup in /root)", False),
-    "ov112-on": ("tools/ov112-off/Turn 1.12 jobs back on.bat", "Undo: turn the 1.12 Open Vanilla jobs back on", False),
+    # Vanilla Remastered (owner 2026-10-30 20:38: the 1.12 realm back as an optional official server, hosted by us
+    # until a community host takes it over through the Leyline network; docs/VANILLA-REMASTERED.md). ov112-on starts
+    # only the realm's own login and world servers (as vr-realmd / vr-mangosd, no published port); vr-beacon lists it.
+    "ov112-realm-check": ("tools/ov112-off/Turn on the 1.12 realm - check.bat", "1.12 realm: what turning it on would do, and how the 1.12 site is reached (read-only)", False),
+    "ov112-on": ("tools/ov112-off/Turn on the 1.12 realm.bat", "1.12 realm on: its login and world servers only (backup, self-check, rollback)", False),
+    "ov112-realm-off": ("tools/ov112-off/Turn off the 1.12 realm.bat", "Undo: the 1.12 realm's login and world servers off again (kept)", False),
+    "ov112-undo": ("tools/ov112-off/Turn 1.12 jobs back on.bat", "Undo ov112-off in full: every 1.12 job back as it was (Duels, Herald, timers too)", False),
+    "vr-beacon": ("hosting/vanilla-remastered/Put Vanilla Remastered on Leyline.bat", "Vanilla Remastered on Leyline (the 1.12 realm as an official Beacon)", False),
+    "vr-beacon-off": ("hosting/vanilla-remastered/Take Vanilla Remastered off Leyline.bat", "Take Vanilla Remastered off Leyline (the 1.12 realm keeps running)", False),
     "ovsite": ("tools/launcher-site/Land Leyline-Launcher site.bat", "openvanilla.app: land the site and repo cleanup on Leyline-Launcher main (Pages publishes it)", False),
     "ghclean-check": ("tools/github-cleanup/GitHub cleanup - dry run.bat", "What the GitHub cleanup would delete (read-only)", False),
     "ghclean": ("tools/github-cleanup/GitHub cleanup - do it.bat", "GitHub cleanup: old releases and packages (owner's choices, 2026-10-30)", False),

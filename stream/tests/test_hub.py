@@ -209,8 +209,22 @@ check("Community: two columns on wide screens, one on a phone",
       ".hb-cm-g{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)" in front
       and "@media (max-width:900px){.hb-cm-g{grid-template-columns:minmax(0,1fr)}}" in front)
 foot = re.search(r'<footer class="hb-foot">.*?</footer>', front, re.S).group(0)
-check("footer: Docs, Download, Community, Status, the wordmark, Discord and GitHub only",
-      all(f">{x}<" in foot for x in ("Docs", "Download", "Community", "Status", "Discord", "GitHub")) and "<b>Leyline</b>" in foot)
+check("footer: Docs, Download, Community, Status, the wordmark, Join the Discord and GitHub only",
+      all(f">{x}<" in foot for x in ("Docs", "Download", "Community", "Status", "GitHub")) and "<b>Leyline</b>" in foot
+      and f'href="{wp.DISCORD_URL}" rel="noopener noreferrer"' in foot and "</svg>Join the Discord</a>" in foot)
+# launch (2026-10-30): the Dalaran Hangout is the front door, the Discord everywhere
+ho = re.search(r'<section class="hb-ho[^"]*" id="hangout".*?</section>', front, re.S)
+check("launch: under the hero, The Dalaran Hangout is open, Play in your browser and Join the Discord",
+      ho and "<h2 id=\"hb-ho-h\">The Dalaran Hangout is open</h2>" in ho.group(0)
+      and '<a class="hb-cta sm" href="/wrath">Play in your browser</a>' in ho.group(0)
+      and f'href="{wp.DISCORD_URL}"' in ho.group(0) and "TODO(owner): the Hangout line" in ho.group(0)
+      and front.index('class="hb-hero"') < front.index('id="hangout"') < front.index('id="realms"'))
+cm = re.search(r'<section class="hb-sec hb-cm hb-rv" id="community".*?</section>', front, re.S)
+check("launch: the community section opens with Join the Discord, and the Community feature section links it too",
+      cm and 'class="hb-cm-dc"' in cm.group(0) and f'href="{wp.DISCORD_URL}"' in cm.group(0)
+      and re.search(r'id="f-community".*?Join the Discord</a>', front, re.S))
+check("launch: the Hangout row comes first, named, labelled the Wrath realm",
+      re.search(r'<li class="hb-rl home[^"]*" data-home="1"[^>]*>.*?<b>Dalaran Hangout</b><span class="hb-rl-k">the Wrath realm</span>', front))
 # the owner's 2026-10-30 additions: realms under the hero, the feature sections in order, how it works, the polish
 fs = re.findall(r'<section class="hb-fs hb-rv( flip)?" id="f-([a-z]+)".*?<p class="hb-eyebrow">.*?</span>([^<]+)</p><h2[^>]*>([^<]+)</h2>'
                 r'<p class="hb-lede">([^<]+)</p><ul class="hb-points">(.*?)</ul><p class="hb-fs-a">(.*?)</p></div>'
@@ -1205,6 +1219,25 @@ check("a bad external list never takes the index down", 'class="hb-ext-s"' not i
       and n_before > 0 and len(HB.hub.index()) == n_before)
 shutil.copy(os.path.join(HERE, "hub", "community-index.json"), HUBDIR)
 shutil.rmtree(ART_TMP, ignore_errors=True)
+
+# ---------------------------------------------------------------- the launch lineup: the Hangout, then the official ones
+with wp._listing_lock:
+    keep_listing = dict(wp._listing)
+    wp._listing.update(realms=[realm_rec("busybusybusybusy", "Busy Den", 12340, 30, port=40202),
+                               realm_rec("vanillavanillava", "Vanilla Remastered", 5875, 0, port=40206),
+                               realm_rec("staffstaffstaffs", "Staff Pick", 12340, 1, port=40207)],
+                       ok=True, fetched=True, at=time.monotonic() + 1e6, when=time.time())
+lr = HB.hub.realm_rows()
+names = [r["name"] for r in lr[0]] if lr else []
+check("launch lineup: the Dalaran Hangout pinned first, then Vanilla Remastered (official by name until its record says so), "
+      "then the network's own order", names[:2] == ["Dalaran Hangout", "Vanilla Remastered"] and names.index("Busy Den") < names.index("Staff Pick"), names)
+check("launch lineup: a record marked official or pinned joins the lineup", HB.lineup_rank({"official": True}) == 0
+      and HB.lineup_rank({"pinned": True}) == 0 and HB.lineup_rank({"name": "Busy Den"}) == 1)
+lfp = req("/wrath/leyline-preview")[2].decode()
+check("launch lineup: Vanilla Remastered shows Official, its client version only in the hb-ver chip",
+      re.search(r'<b>Vanilla Remastered</b><span class="hb-ver"[^>]*>[^<]+</span><span class="hb-bdg o">Official</span>', lfp))
+with wp._listing_lock:
+    wp._listing.clear(); wp._listing.update(keep_listing)
 
 # ---------------------------------------------------------------- shipping
 bat = open(os.path.join(HERE, "Update sign-in and warm-up.bat"), encoding="utf-8").read()

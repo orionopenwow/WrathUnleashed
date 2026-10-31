@@ -57,6 +57,7 @@ the one-time setup files to `setup/`; `Play WotLK (one click).bat` (now `Play lo
 | `relay/` | The relay: tunnels for hosts, join page, realm listing (Beacons), per-IP limits; `Deploy relay.bat` (Autopilot `relay`) | yes |
 | `discord/` | The Discord bridge | yes |
 | `hangout/` | The Dalaran Hangout as a Beacon on Leyline (Autopilot `hangout`, `hangout-off`) | no |
+| `vanilla-remastered/` | The old 1.12 realm as the official Beacon "Vanilla Remastered" (Autopilot `vr-beacon`, `vr-beacon-off`; the realm itself: `ov112-on` in `tools/ov112-off/`). `docs/VANILLA-REMASTERED.md` | no |
 | `pack/` | `make-hostpack.py`: the host kit as a versioned download for the launcher's Host page | no |
 | `mesh-sim/` | The mesh simulator (realm list and relays without us), used by `tests/test_mesh.py`. Experimental, in place | no |
 | `site/` | The join page and the community-record schema | no |

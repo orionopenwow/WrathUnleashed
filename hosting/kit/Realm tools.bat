@@ -17,8 +17,10 @@ echo   6  claim      link the realm to your Hero Key account (token from openvan
 echo   7  signup     who may make accounts on the join page (invite / open / off)
 echo   8  logs       the last lines of every server's log
 echo   9  rules      after editing state\rules.txt or state\beacon.json: update the realm list text
-set /p "N=Pick 1-9: "
-for %%P in ("1 show" "2 friend" "3 newinvite" "4 public" "5 private" "6 claim" "7 signup" "8 logs" "9 rules") do for /f "tokens=1,2" %%A in (%%P) do if "%N%"=="%%A" goto %%B
+echo  10  browser    browser players on / off (on = Warden off, so the browser client can join)
+echo  11  maxplayers the most players at once (the server's cap and the realm list's)
+set /p "N=Pick 1-11: "
+for %%P in ("1 show" "2 friend" "3 newinvite" "4 public" "5 private" "6 claim" "7 signup" "8 logs" "9 rules" "10 browser" "11 maxplayers") do for /f "tokens=1,2" %%A in (%%P) do if "%N%"=="%%A" goto %%B
 echo Nothing picked. & pause & exit /b 0
 
 :show
@@ -35,7 +37,7 @@ echo That is your new invite link. The old one no longer lets anyone new in.
 pause & exit /b 0
 :public
 %T% visibility public
-echo Now public. Run "Host a Wrath realm.bat" once more to switch the anti-cheat on for stock clients.
+echo Now public: on the realm list within a minute.
 pause & exit /b 0
 :private
 %T% visibility private
@@ -49,6 +51,16 @@ pause & exit /b 0
 set "M=%~2"
 if "%M%"=="" set /p "M=invite / open / off: "
 %T% signup %M%
+pause & exit /b 0
+:browser
+set "M=%~2"
+if "%M%"=="" set /p "M=Browser players on / off: "
+%T% browser %M%
+pause & exit /b 0
+:maxplayers
+set "M=%~2"
+if "%M%"=="" set /p "M=Most players at once (0 = the ruleset's own): "
+%T% listing --max-players %M%
 pause & exit /b 0
 :rules
 %T% rules && echo Done. The realm list and your join page show it within a minute ^(public realms^).

@@ -15,7 +15,11 @@
 -- The console commands answer only from the console / SOAP (player is nil), never from a player.
 -- Names and texts cross SOAP hex-encoded, so no quoting, spaces or markup can change the command.
 --
--- mod-ale events: 22 ON_CHANNEL_CHAT (event, player, msg, type, lang, channel): channel is the DBC id for the built-in
+--   Login welcome           (launch, 2026-10-30) one short line a few seconds after each login on the Dalaran Hangout:
+--                           the Discord invite, /golf and /modes. Not on a host kit's realm (host-realm.dat beside the
+--                           scripts, ov_hostctl.lua), never for bots; OV_WELCOME=0 turns it off. Independent of OV_DISCORD.
+--
+-- mod-ale events: 3 ON_LOGIN; 22 ON_CHANNEL_CHAT (event, player, msg, type, lang, channel): channel is the DBC id for the built-in
 -- channels and minus the characters-DB channelId for custom ones (0 when PreserveCustomChannels is off; then set
 -- OV_DISCORD_ANY_CUSTOM=1 to accept any custom channel). 42 ON_COMMAND (event, player, command, handler).
 
@@ -229,9 +233,35 @@ CharDBExecute("CREATE TABLE IF NOT EXISTS ov_discord_optout (guid INT UNSIGNED N
     .. "at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 if ON then loadChannelIds(); loadOptout() end
 
+-- login welcome ----------------------------------------------------------------------------------------------------
+local WELCOME_ON = (os.getenv("OV_WELCOME") or "1") ~= "0"
+local WELCOME_MS = 9000     -- after the other login lines (ov_go 5 s, ov_workshop 6 s, ov_playmode 7 s)
+local INVITE = "discord.gg/hVeUxYwbkr"   -- wrath_portal.DISCORD_URL; the in-game chat cannot open links, so the short form
+-- TODO(owner): the welcome line, his words
+local WELCOME = "|cff7289da[Dalaran Hangout]|r Welcome! Join the Discord: |cffffff00" .. INVITE
+    .. "|r. Try |cffffff00/golf|r for minigolf and |cffffff00/modes|r for game modes."   -- ASCII only: the game font
+
+local function hostKit()
+    local f = io.open(os.getenv("OV_HOST_FILE") or "/azerothcore/lua_scripts/host-realm.dat", "rb")
+    if f then f:close(); return true end
+    return false
+end
+local IS_HOST_KIT = hostKit()   -- a player-hosted realm from the host kit: not the Hangout
+
+local function onLoginWelcome(event, player)
+    if not WELCOME_ON or IS_HOST_KIT or not player then return end
+    local ok = pcall(function()
+        player:RegisterEvent(function(_, _, _, p)
+            if p and not isBot(p) then p:SendBroadcastMessage(WELCOME) end
+        end, WELCOME_MS, 1)
+    end)
+    if not ok and not isBot(player) then player:SendBroadcastMessage(WELCOME) end
+end
+
+RegisterPlayerEvent(3, onLoginWelcome) -- PLAYER_EVENT_ON_LOGIN
 RegisterPlayerEvent(22, onChannelChat) -- PLAYER_EVENT_ON_CHANNEL_CHAT
 RegisterPlayerEvent(42, onCommand)     -- PLAYER_EVENT_ON_COMMAND
 
 -- for tests
 OV_DISCORD_TEST = { hex = hex, unhex = unhex, gameSafe = gameSafe, onChannelChat = onChannelChat,
-    onCommand = onCommand, queue = function() return queue end, BOOT = BOOT }
+    onCommand = onCommand, queue = function() return queue end, BOOT = BOOT, onLoginWelcome = onLoginWelcome, WELCOME = WELCOME }

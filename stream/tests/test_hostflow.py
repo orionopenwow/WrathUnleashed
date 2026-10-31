@@ -24,7 +24,7 @@ class Relay(BaseHTTPRequestHandler):
     def do_GET(self):
         m = re.match(r"^/api/realms/([a-z2-7]{16})$", self.path)
         if m and m.group(1) in fake_relay["online"]:
-            return self.reply(200, {"realm_id": m.group(1), "online": True})
+            return self.reply(200, {"realm_id": m.group(1), "online": True, **fake_relay.get("listed", {}).get(m.group(1), {})})
         if self.path == "/api/listing/realms.json":
             return self.reply(200, {"realms": []})
         m = re.match(r"^/api/pair/([0-9a-f]{64})$", self.path)
@@ -484,6 +484,36 @@ fake_relay["online"].add(old_rid)
 hf._status.clear()
 req("GET", f"/wrath/host/{old_rid}", "bob")
 check("old record: the site forgets its key once online", hf.load(old_rid)["realm_key"] is None)
+
+# --- a newer relay says itself that the realm is listed, and how fast (launch smoke S6): no wait for the site's copy
+fast = hf.new_realm_secrets()
+fast.update(owner="WR000009", owner_display="W", created=1, name="Quick Start", preset="main", visibility="public",
+            gm="QGM", tagline="", rules=[], claimed=False, first_online=None)
+hf.save(fast)
+fast_rid = "quickquickquickq"
+fake_relay["pairs"][hf.pair_hash(fast["claim"])] = fast_rid
+fake_relay["online"].add(fast_rid)
+hf._status.clear()
+check("fast path: online, joining the list (polls every 5 s)", hf.status_of(fast)[0] == "online")
+st_page = hf.start_page(hf.load(fast["pending_id"])).decode()
+check("fast path: the page looks again in 5 s while it joins the list", '<meta http-equiv="refresh" content="5">' in st_page)
+fake_relay["listed"] = {fast_rid: {"listed": True, "listed_in_s": 0.3}}
+hf._status.clear()
+stt = hf.status_of(hf.load(fast["pending_id"]))
+check("fast path: listed from the relay, with the time it took", stt == ("listed", "Online, listed in 0.3 s", True), stt)
+check("fast path: the time is kept", hf.load(fast["pending_id"]).get("listed_in_s") == 0.3)
+check("listed-in format", (hf.fmt_secs(0.31), hf.fmt_secs(42.4), hf.fmt_secs(125)) == ("0.3 s", "42 s", "2 min 5 s"))
+
+# --- Browser players (Warden off) and Max players as the server's cap
+check("browser players: on/off on AzerothCore", hf.options({"browser": "off"}, "main") == ({"browser": "off"}, {})
+      and hf.options({"browser": "on"}, "dalaran") == ({"browser": "on"}, {}))
+check("browser players: not on CMaNGOS", "browser" in hf.options({"browser": "on"}, "cmangos-1.12.1")[1]
+      and hf.options({"browser": "off"}, "cmangos-1.12.1") == ({"browser": "off"}, {}))
+check("browser players: bad value", "browser" in hf.options({"browser": "maybe"}, "main")[1])
+st, h, b = req("GET", "/wrath/host", "carol")
+check("form: Browser players and Max players (the server's cap)", b'name="browser"' in b and b"Browser players" in b
+      and b"The server lets in no more than this" in b and b"shown on the list" not in b)
+check("prefill: browser from the game or launcher", hf.prefill("preset=main&browser=off")[0].get("browser") == "off")
 
 # --- per-account limit
 for i in range(2):

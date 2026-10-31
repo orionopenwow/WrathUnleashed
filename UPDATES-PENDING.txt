@@ -385,3 +385,10 @@
 1140a ship Save to GitHub: the friends panel in the top right, a shorter search box (GitHub then rebuilds Leyline.exe)
 1141a ship Save to GitHub: the friends panel merged into the title bar, a visible scroll bar on Home (GitHub then rebuilds Leyline.exe)
 1142a ship Save to GitHub: a see-through title bar (GitHub then rebuilds Leyline.exe)
+1143a ov112-realm-check Vanilla Remastered: read-only check of the 1.12 realm (nothing changes)
+1144a hostkit Host kit: Browser players switch, Max players caps the server, the den profile
+1144b relay Relay: Join text follows sign-up, listed-in time
+1144c signin Site: the Dalaran Hangout is open, Join the Discord, Browser players and Max players on the host page, Vanilla Remastered pinned when listed
+1144d scripts Hangout: Discord welcome line, mode keys let go, Coin Dash fix (live reload; a 5-minute warning if a restart is needed)
+1144e foreverui Mode keys let go (addon)
+1144f ship Save to GitHub: all of the above, launcher Hangout slide, realm picker lineup, host console switches (GitHub then rebuilds Leyline.exe)
