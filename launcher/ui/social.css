@@ -133,3 +133,12 @@ body:has(#page-play.on) .titlebar .winbtns { margin-left: 216px; }
 body:has(#page-play.on) main { padding-right: calc(216px + 20px); }
 body:has(#page-play.on) .home { grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 1150px) { body:has(#page-play.on) main { padding-right: calc(200px + 16px); } }
+/* owner 2026-10-30: "remove the bubble border and merge into header": the panel is part of the window's chrome, from the
+   very top (the window buttons sit on it) to the play bar, in the title bar's colour, square, one hairline on its left */
+body:has(#page-play.on) .home .card.home-friends {
+  top: 0; border-radius: 0; box-shadow: none; padding-top: 26px;
+  background: var(--t-chrome); -webkit-backdrop-filter: none; backdrop-filter: none;
+  border: 0; border-left: var(--t-border-w) solid var(--t-border);
+}
+body:has(#page-play.on) .home .card.home-friends .hf-me { border-bottom: 0; padding-top: 6px; }
+body:has(#page-play.on) .titlebar .winbtns { position: relative; z-index: 30; }
