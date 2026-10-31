@@ -905,6 +905,17 @@ class Workshop:
         return (json.dumps(doc, indent=1, ensure_ascii=False) + "\n").encode("utf-8")
 
     # ---------------------------------------------------------------- posts
+    blocked = None   # admin.blocked(activity, acct=, site=) -> refusal text; set by the portal
+
+    def _sanctioned(self, me: dict) -> str:
+        if self.blocked is None:
+            return ""
+        site = next((str(me.get(k)) for k in ("id", "user_id", "account_id", "username") if me.get(k)), "")[:64]
+        try:
+            return self.blocked("submit", site=site)
+        except Exception:   # noqa: BLE001
+            return ""
+
     def _post(self, path: str, req: dict) -> tuple[int, bytes, str, dict]:
         HTML = "text/html; charset=utf-8"
         form = req.get("form") or {}
@@ -919,6 +930,10 @@ class Workshop:
             if self.projects is None:
                 st, body = self.submit_page(req)
                 return 503, body, HTML, {}
+            blk = self._sanctioned(me)
+            if blk:   # a site-wide sanction (Leyline HQ: the portal sets self.blocked = admin.blocked)
+                st, body = self.submit_page(req, blk, form, 403)
+                return 403, body, HTML, {}
             ok, res = self.projects.submit(me, form)
             if ok:
                 return 303, b"", "text/plain", {"Location": f"/wrath/mods/p/{res['id']}?added=1"}

@@ -35,12 +35,18 @@ Public feeds (no sign-in, CORS *, cached a minute): what the launcher and the ot
     GET  /wrath/leyline/news.json           {"format": 1, "updated_at", "posts": [{id, date, tag, title, items[]}]}
     GET  /wrath/leyline/realm-overrides.json {"format": 1, "updated_at", "hidden": [ids], "official": [ids]}
 
-Who may come in (docs/ADMIN-CONSOLE.md): the signed-in website account (the same /api/me as everything else) is
+Leyline HQ (stream/hq.py, loaded from beside this file) is the home page and adds Needs you, Players, Game, notes
+and the JSON API; without it this module is the classic console. Site-wide sanctions (blocked()) and the relay's
+block feed (/wrath/leyline/relay-block.json) live here so the hooks in the other modules work either way.
+
+Who may come in (docs/ADMIN-CONSOLE.md, "Roles"): the signed-in website account (the same /api/me as everything else) is
     owner   when its account id is in WU_ADMIN_OWNERS
-    staff   when it is in the staff file (the owner grants it on /wrath/admin/staff), in WU_ADMIN_STAFF, or in
-            WU_MODS_ADMINS (the Workshop's own admins: stream/projects.py), or when its game account's GM level on
-            the realm is at least WU_ADMIN_GM_LEVEL (default 3; 0 turns that off), asked over SOAP ("ovadmin gm")
-Anyone else gets a plain "staff only" page (403) with their own account id, so the owner can grant it.
+    admin   when the staff file names it as admin (or without a role: entries from before roles), or WU_ADMIN_STAFF
+    mod     when the staff file names it as mod, WU_MODS_ADMINS (the Workshop's own admins: stream/projects.py), or
+            when its game account's GM level on the realm is at least WU_ADMIN_GM_LEVEL (default 3; 0 turns that
+            off), asked over SOAP ("ovadmin gm")
+Anyone else gets a plain "staff only" page (403) with their own account id, so the owner can grant it. A suspended
+account (a site-wide sanction) keeps no staff powers.
 
 Files (WU_ADMIN_DIR, default $WU_PORTAL_DATA/admin = /data/admin, the portal's one writable mount):
     staff.json            {"format": 1, "staff": {"<account id>": {"name", "by", "at"}}}
@@ -214,7 +220,7 @@ def _writable(d: str) -> bool:
 def audit(user: dict, action: str, target: str, before, after, ok: bool = True, note: str = "") -> None:
     rec = {"at": _iso(), "who": user.get("account", ""), "name": user.get("name", ""), "role": user.get("role", ""),
            "action": action, "target": str(target)[:120], "before": before, "after": after, "ok": bool(ok),
-           "note": str(note)[:300]}
+           "note": str(note)[:300], "via": user.get("via", "web")}
     line = json.dumps(rec, ensure_ascii=False, separators=(",", ":"), default=str) + "\n"
     with _lock:
         os.makedirs(admin_dir(), exist_ok=True)
@@ -289,7 +295,22 @@ def staff_file() -> dict:
 
 
 def env_staff() -> set[str]:
+    """Everyone the environment names: WU_ADMIN_STAFF (admins) and WU_MODS_ADMINS (the Workshop's admins: mods)."""
     return _csv_env("WU_ADMIN_STAFF") | _csv_env("WU_MODS_ADMINS")
+
+
+# owner > admin > mod (docs/ADMIN-CONSOLE.md, "Roles"). Mods: reports, hiding, resets, kicks and mutes. Admins: everything
+# a mod does plus approvals, sanctions, bans, realms and news. The owner: flags, staff, releases and notes to Claude.
+RANK = {"mod": 1, "admin": 2, "owner": 3}
+ROLES = ("mod", "admin")
+
+
+def rank(role: str) -> int:
+    return RANK.get("admin" if role == "staff" else role, 0)
+
+
+def can(user: dict, need: str) -> bool:
+    return rank(user.get("role", "")) >= rank(need)
 
 
 def gm_min() -> int:
@@ -324,14 +345,20 @@ def gm_level(game_user: str) -> int:
 
 
 def role_of(account: str, game_user_fn=None) -> str:
-    """"owner", "staff" or "" for a website account id. game_user_fn() -> the game account name (asked only when
-    the GM-level rule is needed)."""
+    """"owner", "admin", "mod" or "" for a website account id. game_user_fn() -> the game account name (asked only
+    when the GM-level rule is needed). The staff file names a role per person (an entry without one, from before
+    roles, is an admin); WU_ADMIN_STAFF are admins; WU_MODS_ADMINS and game GMs are mods."""
     if not account:
         return ""
     if account in owners():
         return "owner"
-    if account in staff_file() or account in env_staff():
-        return "staff"
+    s = staff_file().get(account)
+    if s is not None:
+        return s.get("role") if s.get("role") in ROLES else "admin"
+    if account in _csv_env("WU_ADMIN_STAFF"):
+        return "admin"
+    if account in _csv_env("WU_MODS_ADMINS"):
+        return "mod"
     need = gm_min()
     if need and game_user_fn is not None:
         try:
@@ -339,7 +366,7 @@ def role_of(account: str, game_user_fn=None) -> str:
         except Exception:   # noqa: BLE001
             user = ""
         if user and gm_level(user) >= need:
-            return "staff"
+            return "mod"
     return ""
 
 
@@ -401,34 +428,186 @@ def csrf_token(session: str, account: str) -> str:
     return hmac.new(_secret(), f"admin|{session}|{account}".encode(), hashlib.sha256).hexdigest()[:40]
 
 
-def who(h, path: str) -> dict | None:
-    """The signed-in staff member {account, name, role, session}, or None after answering (sign-in, 403, 503, 429)."""
+def who(h, path: str, api: bool = False) -> dict | None:
+    """The signed-in staff member {account, name, role, session, game, via}, or None after answering (sign-in, 403,
+    503, 429). api: answer in JSON (the HQ API, /wrath/admin/api/*) instead of pages and redirects."""
+    def refuse(status, title, text, page=None):
+        if api:
+            h.send(status, (json.dumps({"ok": False, "error": text}) + "\n").encode(), "application/json; charset=utf-8",
+                   headers=NOINDEX)
+        else:
+            h.send(status, page or page_simple(title, text), headers=NOINDEX)
     ip = h.ip()
     if not limits.hit("ip:" + ip, IP_PER_MIN):
-        h.send(429, page_simple("Slow down", "Too many requests. Wait a minute and try again."), headers=NOINDEX)
+        refuse(429, "Slow down", "Too many requests. Wait a minute and try again.")
         return None
     cookie = h.headers.get("Cookie", "")
     ua = h.headers.get("User-Agent", "")
     if "wr_session=" not in cookie:
-        h.redirect("/login?next=" + urllib.parse.quote(path, safe=""))
+        if api:
+            refuse(401, "Sign in", "Sign in first.")
+        else:
+            h.redirect("/login?next=" + urllib.parse.quote(path, safe=""))
         return None
     status, me = P("portal_get")("/api/me", cookie, ip, ua)
     if status in (401, 403) or 300 <= status < 400:
-        h.redirect("/login?next=" + urllib.parse.quote(path, safe=""))
+        if api:
+            refuse(401, "Sign in", "Sign in first.")
+        else:
+            h.redirect("/login?next=" + urllib.parse.quote(path, safe=""))
         return None
     if status != 200 or not isinstance(me, dict) or not me:
-        h.send(503, page_simple("Try again shortly", "The website isn't answering right now."), headers=NOINDEX)
+        refuse(503, "Try again shortly", "The website isn't answering right now.")
         return None
     account = account_of(me)
+    game = {}
 
     def game_user():
-        st, play = P("portal_get")("/api/play", cookie, ip, ua)
-        return str(play.get("user", "")) if st == 200 and isinstance(play, dict) else ""
+        if "user" not in game:
+            st, play = P("portal_get")("/api/play", cookie, ip, ua)
+            u = str(play.get("user", "")) if st == 200 and isinstance(play, dict) else ""
+            game["user"] = u.upper() if re.fullmatch(r"[A-Za-z0-9]{1,16}", u) else ""
+        return game["user"]
     role = role_of(account, game_user)
     if not role:
-        h.send(403, denied_page(account), headers=NOINDEX)
+        refuse(403, "Staff only", "This part of the site is for the Leyline staff.", denied_page(account))
         return None
-    return {"account": account, "name": display_of(me), "role": role, "session": _session(h)}
+    if role != "owner":   # a suspended account keeps no staff powers (the owner can't lock themself out)
+        san = sanction_of("suspend", site=account)
+        if san:
+            refuse(403, "Suspended", sanction_text(san))
+            return None
+    return {"account": account, "name": display_of(me), "role": role, "session": _session(h),
+            "game": game.get("user", ""), "via": "api" if api else "web"}
+
+
+# ----------------------------------------------------------------------------------------------
+# Site-wide sanctions (admin/sanctions.json): suspend, mute, nosubmit. Set on HQ (stream/hq.py); every hook asks
+# blocked(activity, acct=..., site=...) and refuses with the text it gets back. Never raises.
+# ----------------------------------------------------------------------------------------------
+
+SANCTION_TYPES = ("suspend", "mute", "nosubmit")
+# what each kind of activity is stopped by
+ACTIVITY = {"post": ("suspend", "mute"),        # forum posts and replies
+            "message": ("suspend", "mute"),     # friends and messages: send, friend requests
+            "submit": ("suspend", "nosubmit"),  # Workshop links, the index, + Your server
+            "realm": ("suspend",),              # Hero Key sign-in to community realms
+            "profile": ("suspend",),            # name, bio, picture changes
+            "staff": ("suspend",)}
+GAME_ACCT_RE = re.compile(r"^[A-Z0-9]{1,16}$")
+_san_cache = {"key": None, "doc": {}}
+
+
+def sanctions() -> dict:
+    """{id: {type, until (epoch, 0 = until lifted), reason, by, at, acct, site, lifted?}}: every sanction, lifted ones too."""
+    path = _apath("sanctions.json")
+    try:
+        st = os.stat(path)
+        key = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        key = None
+    if key is not None and _san_cache["key"] == key:
+        return _san_cache["doc"]
+    doc = _read_json(path, {}) if key else {}
+    s = doc.get("sanctions") if isinstance(doc.get("sanctions"), dict) else {}
+    clean = {k: v for k, v in s.items() if isinstance(k, str) and isinstance(v, dict) and v.get("type") in SANCTION_TYPES}
+    _san_cache.update(key=key, doc=clean)
+    return clean
+
+
+def sanction_active(v: dict, now: float | None = None) -> bool:
+    now = _now() if now is None else now
+    if v.get("lifted"):
+        return False
+    until = v.get("until")
+    return not (isinstance(until, (int, float)) and until > 0 and until <= now)
+
+
+def sanctions_for(acct: str = "", site: str = "", active: bool = True) -> list[dict]:
+    acct = str(acct or "").upper()
+    site = str(site or "")
+    out = []
+    for sid, v in sanctions().items():
+        if (acct and v.get("acct") == acct) or (site and v.get("site") == site):
+            if not active or sanction_active(v):
+                out.append(dict(v, id=sid))
+    return sorted(out, key=lambda v: str(v.get("at", "")), reverse=True)
+
+
+def sanction_of(kind: str, acct: str = "", site: str = "") -> dict | None:
+    """The active sanction of this type for this person, or None."""
+    try:
+        return next((v for v in sanctions_for(acct, site) if v.get("type") == kind), None)
+    except Exception:   # noqa: BLE001
+        return None
+
+
+def sanction_text(v: dict) -> str:
+    """What the player reads: plain words, the reason and until when."""
+    what = {"suspend": "Your Leyline account is suspended", "mute": "You can't post or send messages right now",
+            "nosubmit": "You can't add new things to Leyline right now"}.get(v.get("type"), "This is paused for your account")
+    until = v.get("until")
+    when = (" until " + time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(until))) if isinstance(until, (int, float)) and until > 0 else ""
+    reason = (": " + str(v.get("reason"))[:200]) if v.get("reason") else ""
+    return f"{what}{when}{reason}. Questions: ask on our Discord."
+
+
+def blocked(activity: str, acct: str = "", site: str = "") -> str:
+    """The text to refuse with when this person may not do this activity now, else "". The hooks in forum.py,
+    social.py, workshop.py, hostflow.py and wrath_portal.herokey_issue call it. Never raises: on any problem, ""."""
+    try:
+        kinds = ACTIVITY.get(activity, ("suspend",))
+        if not (acct or site):
+            return ""
+        for v in sanctions_for(acct, site):
+            if v.get("type") in kinds:
+                return sanction_text(v)
+    except Exception:   # noqa: BLE001
+        return ""
+    return ""
+
+
+def set_sanction(user: dict, kind: str, acct: str, site: str, hours: int, reason: str) -> tuple[dict, dict]:
+    if kind not in SANCTION_TYPES:
+        raise Refused("Pick suspend, mute or no new submissions.")
+    acct = str(acct or "").strip().upper()
+    site = str(site or "").strip()
+    if acct and not GAME_ACCT_RE.fullmatch(acct):
+        raise Refused("That is not a game account (letters and digits, up to 16).")
+    if site and not ACCOUNT_ID_RE.fullmatch(site):
+        raise Refused("That is not a website account id.")
+    if not acct and not site:
+        raise Refused("Say whose account: a game account or a website account id.")
+    if site and site in owners():
+        raise Refused("The owner can't be sanctioned.")
+    if not 0 <= hours <= 24 * 366:
+        raise Refused("Hours: 1 to 8784, or 0 for until it is lifted.")
+    if len(reason) < 3:
+        raise Refused("Say why (3 letters or more): the player reads it.")
+    sid = "s" + time.strftime("%Y%m%d%H%M%S", time.gmtime()) + secrets.token_hex(3)
+    rec = {"type": kind, "acct": acct, "site": site, "until": int(_now() + hours * 3600) if hours else 0,
+           "reason": reason, "by": user.get("account", ""), "at": _iso()}
+    with _lock:
+        doc = _read_json(_apath("sanctions.json"), {})
+        s = doc.get("sanctions") if isinstance(doc.get("sanctions"), dict) else {}
+        s[sid] = rec
+        _write_json(_apath("sanctions.json"), {"format": 1, "updated_at": _iso(), "sanctions": s}, 0o640)
+        _san_cache["key"] = None
+    return {}, dict(rec, id=sid)
+
+
+def lift_sanction(user: dict, sid: str) -> tuple[dict, dict]:
+    with _lock:
+        doc = _read_json(_apath("sanctions.json"), {})
+        s = doc.get("sanctions") if isinstance(doc.get("sanctions"), dict) else {}
+        v = s.get(sid)
+        if not isinstance(v, dict) or v.get("lifted"):
+            raise Refused("No such sanction (or it was lifted already).")
+        before = dict(v)
+        v["lifted"] = {"by": user.get("account", ""), "at": _iso()}
+        _write_json(_apath("sanctions.json"), {"format": 1, "updated_at": _iso(), "sanctions": s}, 0o640)
+        _san_cache["key"] = None
+    return before, {"lifted": True}
 
 
 # ----------------------------------------------------------------------------------------------
@@ -970,6 +1149,14 @@ document.querySelectorAll('form[data-confirm]').forEach(function(f){
 TABS = (("", "Dashboard"), ("catalog", "Catalog"), ("workshop", "Workshop"), ("hub", "Index"), ("realms", "Realms"),
         ("releases", "Releases"), ("flags", "Flags"), ("themes", "Themes"), ("reports", "Reports"),
         ("forum", "Forum"), ("profiles", "Profiles"), ("health", "Health"), ("staff", "Staff"), ("audit", "Audit"))
+# Leyline HQ's menu (stream/hq.py): eight plain words; Content and System open their own short row.
+HQ_TABS = (("", "Home"), ("inbox", "Needs you"), ("players", "Players"), ("realms", "Realms"), ("releases", "Releases"),
+           ("content", "Content"), ("game", "Game"), ("system", "System"))
+CONTENT_TABS = (("catalog", "Catalog"), ("workshop", "Workshop"), ("hub", "Index"), ("themes", "Themes"),
+                ("forum", "Forum"), ("profiles", "Profiles"), ("reports", "All reports"))
+SYSTEM_TABS = (("health", "Health"), ("numbers", "Numbers"), ("flags", "Flags"), ("staff", "Staff"), ("audit", "Audit"))
+TAB_GROUP = dict([(k, "content") for k, _ in CONTENT_TABS] + [(k, "system") for k, _ in SYSTEM_TABS]
+                 + [("person", "players"), ("notes", "")])
 
 
 def _css() -> str:
@@ -999,9 +1186,22 @@ def flash_sig(kind: str, text: str) -> str:
     return hmac.new(_secret(), f"flash|{kind}|{text}".encode(), hashlib.sha256).hexdigest()[:16]
 
 
+def _nav(tab: str) -> str:
+    if hq is None:
+        return "".join(f'<a href="/wrath/admin{"/" + k if k else ""}"{" class=on" if k == tab else ""}>{e(v)}</a>'
+                       for k, v in TABS)
+    group = TAB_GROUP.get(tab, tab)
+    first = {"content": "catalog", "system": "health"}
+    main = "".join(f'<a href="/wrath/admin{"/" + first.get(k, k) if k else ""}"{" class=on aria-current=page" if k == group else ""}>'
+                   f'{e(v)}</a>' for k, v in HQ_TABS)
+    sub = {"content": CONTENT_TABS, "system": SYSTEM_TABS}.get(group)
+    row = ('</nav><nav class="ad-top ad-sub" aria-label="' + e(group.title()) + '">' + "".join(
+        f'<a href="/wrath/admin/{k}"{" class=on aria-current=page" if k == tab else ""}>{e(v)}</a>' for k, v in sub)) if sub else ""
+    return main + row
+
+
 def shell(user: dict, tab: str, title: str, body: str, nonce: str, query: dict | None = None) -> bytes:
-    nav = "".join(f'<a href="/wrath/admin{"/" + k if k else ""}"{" class=on" if k == tab else ""}>{e(v)}</a>'
-                  for k, v in TABS)
+    nav = _nav(tab)
     q = query or {}
     msg = ""
     sig = (q.get("m") or [""])[0]
@@ -1009,19 +1209,25 @@ def shell(user: dict, tab: str, title: str, body: str, nonce: str, query: dict |
         msg = f'<p class="ad-msg" role="status">{e(q["ok"][0][:300])}</p>'
     elif q.get("err") and hmac.compare_digest(sig, flash_sig("err", q["err"][0])):
         msg = f'<p class="ad-msg err" role="alert">{e(q["err"][0][:300])}</p>'
+    brand = "Leyline HQ" if hq is not None else "Leyline Admin"
+    css = _css() + (hq.CSS if hq is not None else "")
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<meta name="robots" content="noindex,nofollow"><meta name="color-scheme" content="dark">'
-            f'<title>{e(title)} · Leyline Admin</title><style>{_css()}</style></head>'
+            f'<title>{e(title)} · {brand}</title><style>{css}</style></head>'
             f'<body class="ly"><div class="ly-glow"></div><div class="ly-wrap ad">'
-            f'<header class="ly-hero"><h1 class="ad">Leyline Admin</h1></header>'
-            f'<p class="ad-who">Signed in as {e(user["name"])} ({e(user["role"])})</p>'
-            f'<nav class="ad-top" aria-label="Admin">{nav}</nav>{msg}<main id="main">{body}</main></div>'
+            f'<header class="ly-hero ad-head"><h1 class="ad">{brand}</h1>'
+            f'<p class="ad-who">Signed in as {e(user["name"])} ({e(user["role"])})</p></header>'
+            f'<nav class="ad-top" aria-label="HQ">{nav}</nav>{msg}<main id="main">{body}</main></div>'
             f'<script nonce="{nonce}">{CONFIRM_JS}</script></body></html>').encode("utf-8")
 
 
 def act(user: dict, action: str, target: str, label: str, back: str, fields: str = "", confirm: str | None = None,
         danger: bool = False, block: bool = False) -> str:
-    """One action form. confirm: the text the staff member must type (the target, usually)."""
+    """One action form. confirm: the text the staff member must type (the target, usually). Nothing at all when this
+    person's role can't run the action (the server checks again)."""
+    spec = ACTIONS.get(action)
+    if spec is not None and not can(user, spec[1]):
+        return ""
     tok = csrf_token(user["session"], user["account"])
     c_attr = f' data-confirm="{e(confirm)}"' if confirm else ""
     c_box = (f'<input type="text" name="confirm" autocomplete="off" placeholder="type {e(confirm)}" '
@@ -1407,8 +1613,8 @@ def realms_page(user: dict) -> str:
     warn = '' if ok else f'<p class="ad-msg err">The relay\'s listing did not answer: {e(err)}</p>'
     return (f'<section class="ly-panel"><h2>Community realms</h2><p class="fine">From the Beacons relay\'s listing. Hide '
             f'takes a realm off /wrath/realms, the share links and /wrath/leyline/realm-overrides.json (which the launcher '
-            f'can honour); it does not stop the realm. To refuse a realm at the relay itself, add its id to the relay\'s '
-            f'RELAY_BLOCK_FILE. Flags are a staff note only. Featured realms go above the sample hangout on every '
+            f'can honour); it does not stop the realm. Block at the relay refuses it at the relay itself (admins; the relay polls '
+            f'/wrath/leyline/relay-block.json, and the relay\'s own RELAY_BLOCK_FILE still works). Flags are a staff note only. Featured realms go above the sample hangout on every '
             f'realm list; Verified is a badge (a host staff know). Player reports show under each realm. A realm whose '
             f'heartbeats stop shows offline at once and leaves the list after 6 h by itself.</p>{warn}{table}</section>')
 
@@ -1427,6 +1633,10 @@ def _realm_reports_html(user: dict, rid: str, back: str) -> str:
             + '</details>')
 
 
+def _takedown_block(form: str) -> str:
+    return f'<details><summary>Block at the relay</summary>{form}</details>' if form else ""
+
+
 def _realm_row(user: dict, r: dict, o: dict, back: str) -> str:
     rid = r["id"]
     hb = ", ".join(f"{k}: {v}" for k, v in r.get("hb", {}).items())
@@ -1442,10 +1652,14 @@ def _realm_row(user: dict, r: dict, o: dict, back: str) -> str:
                act(user, "realm.verify", rid, "Verify host", back))
             + (act(user, "realm.unflag", rid, "Clear flag", back) if o.get("flag") else
                act(user, "realm.flag", rid, "Flag", back, '<input type="text" name="reason" maxlength="200" '
-                   'placeholder="why (staff only)" aria-label="Reason" required>')))
+                   'placeholder="why (staff only)" aria-label="Reason" required>'))
+            + (act(user, "realm.unblock", rid, "Unblock at the relay", back) if rid in relay_blocks() else
+               _takedown_block(act(user, "realm.block", rid, "Block at the relay", back,
+                                   '<input type="text" name="reason" maxlength="200" placeholder="why (staff only)" '
+                                   'aria-label="Why block" required>', confirm=rid, danger=True))))
     return (f'<tr><td class="name"><b>{e(r["name"])}</b><span class="sub"><code>{e(rid)}</code> · {e(r.get("relay", ""))}</span>'
             f'{"<span class=sub>" + e(r["tagline"]) + "</span>" if r.get("tagline") else ""}'
-            f'{_tags((r.get("state") or "", "good" if r.get("state") == "live" else ""), ("claimed", "") if r.get("claimed") else ("unclaimed", ""), ("hidden", "bad") if o.get("hidden") else ("", ""), ("official", "good") if o.get("official") else ("", ""), ("flagged", "hot") if o.get("flag") else ("", ""), ("featured", "hot") if o.get("featured") else ("", ""), ("verified", "good") if o.get("verified") else ("", ""), (f"{nrep} reports", "bad") if nrep else ("", ""))}'
+            f'{_tags((r.get("state") or "", "good" if r.get("state") == "live" else ""), ("claimed", "") if r.get("claimed") else ("unclaimed", ""), ("hidden", "bad") if o.get("hidden") else ("", ""), ("official", "good") if o.get("official") else ("", ""), ("flagged", "hot") if o.get("flag") else ("", ""), ("featured", "hot") if o.get("featured") else ("", ""), ("verified", "good") if o.get("verified") else ("", ""), (f"{nrep} reports", "bad") if nrep else ("", ""), ("blocked at the relay", "bad") if rid in relay_blocks() else ("", ""))}'
             f'{"<span class=sub>Flag: " + e(o["flag"]) + "</span>" if o.get("flag") else ""}{_realm_reports_html(user, rid, back)}</td>'
             f'<td><span class="sub">last {e(r.get("last", ""))}</span><span class="sub">first {e(r.get("first", ""))}</span>'
             f'<span class="sub">{e(hb)[:300]}</span></td><td>{acts}</td></tr>')
@@ -1857,16 +2071,22 @@ def staff_page(user: dict) -> str:
         rows.append(f'<tr><td class="name"><code>{e(a)}</code></td><td>{_tags(("owner", "good"))} WU_ADMIN_OWNERS</td><td></td></tr>')
     for a, v in sorted(staff_file().items()):
         rev = act(user, "staff.revoke", a, "Revoke", back, confirm=a, danger=True) if owner else ""
+        role = v.get("role") if v.get("role") in ROLES else "admin"
         rows.append(f'<tr><td class="name"><code>{e(a)}</code> {e(str(v.get("name", "")))}</td>'
-                    f'<td>{_tags(("staff", ""))} granted by {e(str(v.get("by", "")))} {e(str(v.get("at", "")))}</td><td>{rev}</td></tr>')
-    for a in sorted(env_staff()):
-        rows.append(f'<tr><td class="name"><code>{e(a)}</code></td><td>{_tags(("staff", ""))} environment (WU_ADMIN_STAFF / WU_MODS_ADMINS)</td><td></td></tr>')
-    grant = act(user, "staff.grant", "new", "Grant staff", back,
+                    f'<td>{_tags((role, "good" if role == "admin" else ""))} granted by {e(str(v.get("by", "")))} {e(str(v.get("at", "")))}</td><td>{rev}</td></tr>')
+    for a in sorted(_csv_env("WU_ADMIN_STAFF")):
+        rows.append(f'<tr><td class="name"><code>{e(a)}</code></td><td>{_tags(("admin", "good"))} environment (WU_ADMIN_STAFF)</td><td></td></tr>')
+    for a in sorted(_csv_env("WU_MODS_ADMINS")):
+        rows.append(f'<tr><td class="name"><code>{e(a)}</code></td><td>{_tags(("mod", ""))} environment (WU_MODS_ADMINS, the Workshop\'s admins)</td><td></td></tr>')
+    grant = act(user, "staff.grant", "new", "Grant", back,
                 '<input type="text" name="account" maxlength="64" placeholder="account id" aria-label="Account id" required>'
-                '<input type="text" name="name" maxlength="40" placeholder="name (for this list)" aria-label="Name">') if owner else ""
+                '<input type="text" name="name" maxlength="40" placeholder="name (for this list)" aria-label="Name">'
+                '<select name="role" aria-label="Role"><option value="mod">mod</option><option value="admin">admin</option></select>') if owner else ""
     gm = gm_min()
-    return (f'<section class="ly-panel"><h2>Staff</h2><p class="fine">Owners come from WU_ADMIN_OWNERS. '
-            f'{"Game accounts with GM level " + str(gm) + " or more on the realm are staff too." if gm else "The GM-level rule is off."} '
+    return (f'<section class="ly-panel"><h2>Staff</h2><p class="fine">Three roles. <b>Mods</b> handle reports, hide things, '
+            f'reset profiles, kick and mute in the game. <b>Admins</b> do that and approve, sanction, ban, and look after '
+            f'realms and news. <b>The owner</b> also changes flags, staff and releases. Owners come from WU_ADMIN_OWNERS. '
+            f'{"Game accounts with GM level " + str(gm) + " or more on the realm are mods." if gm else "The GM-level rule is off."} '
             f'Someone without access sees their own account id on the staff-only page.</p>'
             f'<table class="ly-table"><tbody>{"".join(rows)}</tbody></table>{grant}</section>')
 
@@ -2367,11 +2587,16 @@ def a_staff_grant(user, target, form):
     if not ACCOUNT_ID_RE.fullmatch(acct):
         raise Refused("That is not an account id (it is shown on the staff-only page).")
     name = _clean_line(form.get("name"), 40)
+    role = form.get("role") or "mod"
+    if role not in ROLES:
+        raise Refused("Pick mod or admin.")
+    if acct in owners():
+        raise Refused("That account is an owner already (WU_ADMIN_OWNERS).")
     with _lock:
         doc = _read_json(_apath("staff.json"), {})
         s = doc.setdefault("staff", {})
         before = s.get(acct) or {}
-        s[acct] = {"name": name, "by": user["account"], "at": _iso()}
+        s[acct] = {"name": name, "role": role, "by": user["account"], "at": _iso()}
         doc["format"] = 1
         _write_json(_apath("staff.json"), doc, 0o640)
     return before, s[acct]
@@ -2388,71 +2613,72 @@ def a_staff_revoke(user, target, form):
     return before, {}
 
 
-# name -> (function, role needed, typed confirm: True = the target, a str = that word, None = none)
+# name -> (function, role needed: "mod" < "admin" < "owner", typed confirm: True = the target, a str = that word,
+# None = none). stream/hq.py adds its own (game.*, sanction.*, hq.*, ...) with register().
 ACTIONS = {
-    "mod.approve": (a_mod_state("approved"), "staff", None),
-    "mod.reject": (a_mod_state("rejected"), "staff", True),
-    "mod.unpublish": (a_mod_state("unpublished"), "staff", True),
-    "mod.feature": (a_mod_feature, "staff", None),
-    "mod.edit": (a_mod_edit, "staff", None),
-    "mod.check": (a_mod_check, "staff", None),
-    "link.hide": (a_link_hidden(True), "staff", True),
-    "link.unhide": (a_link_hidden(False), "staff", None),
-    "link.dismiss": (a_link_dismiss, "staff", None),
-    "link.approve": (a_link_state("approved"), "staff", None),
-    "link.reject": (a_link_state("rejected"), "staff", True),
-    "link.feature": (a_link_feature, "staff", None),
-    "link.edit": (a_link_edit, "staff", None),
-    "ws.approve": (a_ws_set("approve"), "staff", None),
-    "ws.reject": (a_ws_set("reject"), "staff", True),
-    "ws.unpublish": (a_ws_set("pending"), "staff", True),
-    "ws.edit": (a_ws_edit, "staff", None),
-    "ws.check": (a_ws_check, "staff", None),
-    "ws.feature": (a_ws_feature, "staff", None),
-    "hub.approve": (a_hub_decide("approve"), "staff", None),
-    "hub.reject": (a_hub_decide("reject"), "staff", None),
-    "hub.delist": (a_hub_list("delist"), "staff", True),
-    "hub.relist": (a_hub_list("approve"), "staff", None),
-    "hub.rescan": (a_hub_rescan, "staff", None),
-    "realm.hide": (a_realm(lambda f: {"hidden": True}), "staff", True),
-    "realm.unhide": (a_realm(lambda f: {"hidden": None}), "staff", None),
-    "realm.official": (a_realm(lambda f: {"official": True}), "staff", True),
-    "realm.unofficial": (a_realm(lambda f: {"official": None}), "staff", None),
-    "realm.flag": (a_realm(_flag_reason), "staff", None),
-    "realm.unflag": (a_realm(lambda f: {"flag": None}), "staff", None),
-    "realm.feature": (a_realm(lambda f: {"featured": True}), "staff", None),
-    "realm.unfeature": (a_realm(lambda f: {"featured": None}), "staff", None),
-    "realm.verify": (a_realm(lambda f: {"verified": True}), "staff", None),
-    "realm.unverify": (a_realm(lambda f: {"verified": None}), "staff", None),
-    "realm.reports": (a_realm_reports, "staff", None),
+    "mod.approve": (a_mod_state("approved"), "admin", None),
+    "mod.reject": (a_mod_state("rejected"), "admin", True),
+    "mod.unpublish": (a_mod_state("unpublished"), "admin", True),
+    "mod.feature": (a_mod_feature, "admin", None),
+    "mod.edit": (a_mod_edit, "admin", None),
+    "mod.check": (a_mod_check, "mod", None),
+    "link.hide": (a_link_hidden(True), "mod", True),
+    "link.unhide": (a_link_hidden(False), "mod", None),
+    "link.dismiss": (a_link_dismiss, "mod", None),
+    "link.approve": (a_link_state("approved"), "admin", None),
+    "link.reject": (a_link_state("rejected"), "admin", True),
+    "link.feature": (a_link_feature, "admin", None),
+    "link.edit": (a_link_edit, "admin", None),
+    "ws.approve": (a_ws_set("approve"), "admin", None),
+    "ws.reject": (a_ws_set("reject"), "admin", True),
+    "ws.unpublish": (a_ws_set("pending"), "admin", True),
+    "ws.edit": (a_ws_edit, "admin", None),
+    "ws.check": (a_ws_check, "mod", None),
+    "ws.feature": (a_ws_feature, "admin", None),
+    "hub.approve": (a_hub_decide("approve"), "admin", None),
+    "hub.reject": (a_hub_decide("reject"), "admin", None),
+    "hub.delist": (a_hub_list("delist"), "admin", True),
+    "hub.relist": (a_hub_list("approve"), "admin", None),
+    "hub.rescan": (a_hub_rescan, "mod", None),
+    "realm.hide": (a_realm(lambda f: {"hidden": True}), "mod", True),
+    "realm.unhide": (a_realm(lambda f: {"hidden": None}), "mod", None),
+    "realm.official": (a_realm(lambda f: {"official": True}), "admin", True),
+    "realm.unofficial": (a_realm(lambda f: {"official": None}), "admin", None),
+    "realm.flag": (a_realm(_flag_reason), "mod", None),
+    "realm.unflag": (a_realm(lambda f: {"flag": None}), "mod", None),
+    "realm.feature": (a_realm(lambda f: {"featured": True}), "admin", None),
+    "realm.unfeature": (a_realm(lambda f: {"featured": None}), "admin", None),
+    "realm.verify": (a_realm(lambda f: {"verified": True}), "admin", None),
+    "realm.unverify": (a_realm(lambda f: {"verified": None}), "admin", None),
+    "realm.reports": (a_realm_reports, "mod", None),
     "channel.set": (a_channel_set, "owner", None),      # stable: types the version (checked inside)
     "channel.hold": (a_channel_hold, "owner", "hold"),
-    "news.add": (a_news_add, "staff", None),
-    "news.hide": (a_news_hidden(True), "staff", True),
-    "news.show": (a_news_hidden(False), "staff", None),
+    "news.add": (a_news_add, "admin", None),
+    "news.hide": (a_news_hidden(True), "admin", True),
+    "news.show": (a_news_hidden(False), "admin", None),
     "flag.set": (a_flag_set, "owner", True),
-    "report.note": (a_report_note, "staff", None),
-    "report.resolve": (a_report_status("resolved"), "staff", None),
-    "report.reopen": (a_report_status("open"), "staff", None),
-    "msg.resolve": (a_msg_status("done"), "staff", None),
-    "msg.dismiss": (a_msg_status("dismissed"), "staff", None),
-    "msg.reopen": (a_msg_status("open"), "staff", None),
-    "bug.set": (a_bug_set, "staff", None),
-    "profile.reset.avatar": (a_profile_reset("avatar"), "staff", None),
-    "profile.reset.bio": (a_profile_reset("bio"), "staff", None),
-    "profile.reset.name": (a_profile_reset("name"), "staff", True),
-    "forum.post.hide": (a_forum_post(True), "staff", None),
-    "forum.post.unhide": (a_forum_post(False), "staff", None),
-    "forum.thread.pin": (a_forum_thread("pinned", True), "staff", None),
-    "forum.thread.unpin": (a_forum_thread("pinned", False), "staff", None),
-    "forum.thread.lock": (a_forum_thread("locked", True), "staff", None),
-    "forum.thread.unlock": (a_forum_thread("locked", False), "staff", None),
-    "forum.thread.hide": (a_forum_thread("hidden", True), "staff", True),
-    "forum.thread.unhide": (a_forum_thread("hidden", False), "staff", None),
-    "forum.thread.merge": (a_forum_merge, "staff", True),
-    "forum.report.done": (a_forum_report("done"), "staff", None),
-    "forum.report.dismiss": (a_forum_report("dismissed"), "staff", None),
-    "forum.report.reopen": (a_forum_report("open"), "staff", None),
+    "report.note": (a_report_note, "mod", None),
+    "report.resolve": (a_report_status("resolved"), "mod", None),
+    "report.reopen": (a_report_status("open"), "mod", None),
+    "msg.resolve": (a_msg_status("done"), "mod", None),
+    "msg.dismiss": (a_msg_status("dismissed"), "mod", None),
+    "msg.reopen": (a_msg_status("open"), "mod", None),
+    "bug.set": (a_bug_set, "mod", None),
+    "profile.reset.avatar": (a_profile_reset("avatar"), "mod", None),
+    "profile.reset.bio": (a_profile_reset("bio"), "mod", None),
+    "profile.reset.name": (a_profile_reset("name"), "mod", True),
+    "forum.post.hide": (a_forum_post(True), "mod", None),
+    "forum.post.unhide": (a_forum_post(False), "mod", None),
+    "forum.thread.pin": (a_forum_thread("pinned", True), "mod", None),
+    "forum.thread.unpin": (a_forum_thread("pinned", False), "mod", None),
+    "forum.thread.lock": (a_forum_thread("locked", True), "mod", None),
+    "forum.thread.unlock": (a_forum_thread("locked", False), "mod", None),
+    "forum.thread.hide": (a_forum_thread("hidden", True), "mod", True),
+    "forum.thread.unhide": (a_forum_thread("hidden", False), "mod", None),
+    "forum.thread.merge": (a_forum_merge, "admin", True),
+    "forum.report.done": (a_forum_report("done"), "mod", None),
+    "forum.report.dismiss": (a_forum_report("dismissed"), "mod", None),
+    "forum.report.reopen": (a_forum_report("open"), "mod", None),
     "staff.grant": (a_staff_grant, "owner", None),
     "staff.revoke": (a_staff_revoke, "owner", True),
 }
@@ -2474,9 +2700,10 @@ def run_action(user: dict, form: dict) -> tuple[bool, str]:
     if action not in ACTIONS:
         return False, "Unknown action."
     fn, need, _ = ACTIONS[action]
-    if need == "owner" and user["role"] != "owner":
-        audit(user, action, target, None, None, ok=False, note="owner only")
-        return False, "Only the owner can do that."
+    if not can(user, need):
+        note = "owner only" if need == "owner" else "admins only"
+        audit(user, action, target, None, None, ok=False, note=note)
+        return False, "Only the owner can do that." if need == "owner" else "Only admins (and the owner) can do that."
     want = expected_confirm(action, target, form)
     if want is not None and str(form.get("confirm") or "").strip() != want:
         audit(user, action, target, None, None, ok=False, note="confirm text did not match")
@@ -2498,7 +2725,8 @@ def run_action(user: dict, form: dict) -> tuple[bool, str]:
 # Routing (wrath_portal.PageHandler calls match/get/post)
 # ----------------------------------------------------------------------------------------------
 
-FEEDS = {"/wrath/leyline/channel.json", "/wrath/leyline/news.json", "/wrath/leyline/realm-overrides.json"}
+FEEDS = {"/wrath/leyline/channel.json", "/wrath/leyline/news.json", "/wrath/leyline/realm-overrides.json",
+         "/wrath/leyline/relay-block.json"}
 FLAGS_FEED = "/wrath/leyline/flags.json"   # served here only while stream/leyline_net.py is not in the portal
 _MOD_PAGE = re.compile(r"^/wrath/admin/catalog/mod/([a-z][a-z0-9-]{1,31})$")
 
@@ -2517,6 +2745,8 @@ def feed(path: str) -> bytes:
         d = news_doc()
         doc = {"format": 1, "updated_at": d["updated_at"],
                "posts": [{k: p[k] for k in ("id", "date", "tag", "title", "items") if k in p} for p in d["posts"] if not p.get("hidden")][:20]}
+    elif path.endswith("/relay-block.json"):
+        doc = relay_block_feed()
     else:
         ov = realm_overrides()
         doc = {"format": 1, "updated_at": _read_json(_apath("realm-overrides.json"), {}).get("updated_at"),
@@ -2527,25 +2757,91 @@ def feed(path: str) -> bytes:
     return (json.dumps(doc, indent=1, ensure_ascii=False) + "\n").encode("utf-8")
 
 
-def get(h, path: str, query: dict) -> None:
-    if path in FEEDS or path == FLAGS_FEED:
-        lim = P("browse_limit")
-        if lim is not None and not lim.hit(h.ip(), 600):
-            h.send(429, b'{"error":"too many requests"}\n', "application/json")
-            return
-        h.send(200, feed(path), "application/json; charset=utf-8",
-               headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=60"})
-        return
-    user = who(h, path)
-    if user is None:
-        return
-    if not limits.hit("get:" + user["account"], PAGES_PER_MIN):
-        h.send(429, page_simple("Slow down", "Too many pages in a minute."), headers=NOINDEX)
-        return
-    tab = path[len("/wrath/admin/"):] if path.startswith("/wrath/admin/") else ""
+# ----------------------------------------------------------------------------------------------
+# The relay's block feed: /wrath/leyline/relay-block.json, which the Beacons relay polls (RELAY_BLOCK_FEED,
+# hosting/relay/wurelay/relay.py). Staff block a realm on HQ; the relay cuts it off, refuses its logins and leaves it
+# off its own list. Signed with HMAC-SHA256 when WU_RELAY_FEED_KEY is set (the relay checks it with the same key in
+# RELAY_BLOCK_FEED_KEY); the relay also caps how many new ids one update may add, and its own RELAY_BLOCK_FILE still wins.
+# ----------------------------------------------------------------------------------------------
+
+def relay_blocks() -> dict:
+    doc = _read_json(_apath("relay-block.json"), {})
+    b = doc.get("blocked") if isinstance(doc.get("blocked"), dict) else {}
+    return {k: v for k, v in b.items() if REALM_ID_RE.fullmatch(k) and isinstance(v, dict)}
+
+
+def relay_feed_sig(doc: dict) -> str:
+    key = os.environ.get("WU_RELAY_FEED_KEY", "")
+    if not key:
+        return ""
+    body = {k: v for k, v in doc.items() if k != "sig"}
+    return hmac.new(key.encode(), _canonical(body).encode(), hashlib.sha256).hexdigest()
+
+
+def relay_block_feed() -> dict:
+    """{"format": 1, "updated_at", "blocked": [{"id", "at"}], "sig"}: ids and times only (no reasons, no staff names)."""
+    b = relay_blocks()
+    doc = {"format": 1, "updated_at": _read_json(_apath("relay-block.json"), {}).get("updated_at") or "",
+           "blocked": [{"id": k, "at": str(v.get("at", ""))[:20]} for k, v in sorted(b.items())]}
+    sig = relay_feed_sig(doc)
+    if sig:
+        doc["sig"] = sig
+    return doc
+
+
+def set_relay_block(user: dict, rid: str, on: bool, reason: str = "") -> tuple[dict, dict]:
+    with _lock:
+        doc = _read_json(_apath("relay-block.json"), {})
+        b = doc.get("blocked") if isinstance(doc.get("blocked"), dict) else {}
+        before = {"blocked": rid in b}
+        if on:
+            if len(b) >= 500 and rid not in b:
+                raise Refused("The block list is full (500 realms).")
+            b[rid] = {"at": _iso(), "by": user.get("account", ""), "reason": reason}
+        else:
+            if rid not in b:
+                raise Refused("That realm is not blocked at the relay.")
+            b.pop(rid)
+        _write_json(_apath("relay-block.json"), {"format": 1, "updated_at": _iso(), "blocked": b}, 0o640)
+    return before, {"blocked": on}
+
+
+class _Self:
+    """This module, for hq.py (the portal loads modules without sys.modules): attributes are looked up live."""
+    def __getattr__(self, name):
+        try:
+            return globals()[name]
+        except KeyError:
+            raise AttributeError(name) from None
+
+
+def _load_hq():
+    """stream/hq.py beside this file: Leyline HQ (the home page, Needs you, Players, Game, notes, the JSON API).
+    Without it the console is the classic one."""
+    p = os.path.join(HERE, "hq.py")
+    if not os.path.isfile(p):
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location("wu_hq", p)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod.setup(_Self())
+        return mod
+    except Exception:   # noqa: BLE001
+        log.exception("hq.py did not load: the classic console is used")
+        return None
+
+
+def page_body(user: dict, path: str, tab: str, query: dict) -> tuple[int, str, str, str]:
+    """(status, tab, title, body) for one console page."""
+    if hq is not None:
+        got = hq.page(user, tab, query)
+        if got is not None:
+            st, title, body = got
+            return st, tab, title, body
     status = 200
-    if tab == "":
-        title, body = "Dashboard", dashboard(user)
+    if tab in ("", "numbers"):
+        title, body = "Numbers" if tab else "Dashboard", dashboard(user)
     elif tab == "catalog":
         title, body = "Catalog", catalog_page(user)
     elif _MOD_PAGE.match(path):
@@ -2576,6 +2872,33 @@ def get(h, path: str, query: dict) -> None:
         title, body = "Audit", audit_page(user, query)
     else:
         status, title, body = 404, "Not found", '<section class="ly-panel"><h2>Not found</h2></section>'
+    return status, tab, title, body
+
+
+def get(h, path: str, query: dict) -> None:
+    if path in FEEDS or path == FLAGS_FEED:
+        lim = P("browse_limit")
+        if lim is not None and not lim.hit(h.ip(), 600):
+            h.send(429, b'{"error":"too many requests"}\n', "application/json")
+            return
+        h.send(200, feed(path), "application/json; charset=utf-8",
+               headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=60"})
+        return
+    api = path.startswith("/wrath/admin/api/")
+    if api and hq is None:
+        h.send(404, b'{"ok":false,"error":"no API here"}\n', "application/json", headers=NOINDEX)
+        return
+    user = who(h, path, api=api)
+    if user is None:
+        return
+    if not limits.hit("get:" + user["account"], PAGES_PER_MIN):
+        h.send(429, page_simple("Slow down", "Too many pages in a minute."), headers=NOINDEX)
+        return
+    if api:
+        hq.api_get(h, user, path[len("/wrath/admin/api/"):], query)
+        return
+    tab = path[len("/wrath/admin/"):] if path.startswith("/wrath/admin/") else ""
+    status, tab, title, body = page_body(user, path, tab, query)
     nonce = secrets.token_urlsafe(16)
     h.send(status, shell(user, tab, title, body, nonce, query), nonce=nonce, headers=NOINDEX)
 
@@ -2587,10 +2910,17 @@ def read_form(h) -> dict | None:
         return None
     if n < 0 or n > MAX_FORM:
         return None
-    if h.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/x-www-form-urlencoded":
+    ctype = h.headers.get("Content-Type", "").split(";")[0].strip().lower()
+    if ctype not in ("application/x-www-form-urlencoded", "application/json"):
         return None
     try:
-        q = urllib.parse.parse_qs(h.rfile.read(n).decode("utf-8"), keep_blank_values=True, max_num_fields=30)
+        raw = h.rfile.read(n).decode("utf-8")
+        if ctype == "application/json":   # the HQ API: one flat object of strings and numbers
+            doc = json.loads(raw)
+            if not isinstance(doc, dict) or len(doc) > 30:
+                return None
+            return {str(k)[:40]: str(v) for k, v in doc.items() if isinstance(v, (str, int, float)) and not isinstance(v, bool)}
+        q = urllib.parse.parse_qs(raw, keep_blank_values=True, max_num_fields=30)
     except (UnicodeDecodeError, ValueError):
         return None
     return {k: v[0] for k, v in q.items()}
@@ -2598,36 +2928,60 @@ def read_form(h) -> dict | None:
 
 def _back(form: dict) -> str:
     b = str(form.get("back") or "/wrath/admin")
-    if not re.fullmatch(r"/wrath/admin(/[a-z0-9/-]*)?(\?[a-z]+=[a-z]+)?", b):
+    if not re.fullmatch(r"/wrath/admin(/[a-z0-9/-]*)?(\?[a-z]+=[A-Za-z0-9_.-]{1,64})?", b):
         b = "/wrath/admin"
     return b
 
 
+def same_site(h) -> bool:
+    """A POST from our own pages only: the browser says same-origin (or says nothing), and the Origin, or else the
+    Referer, is this site. "Origin: null" (a privacy context) passes only with Sec-Fetch-Site: same-origin."""
+    sfs = h.headers.get("Sec-Fetch-Site", "")
+    if sfs and sfs != "same-origin":
+        return False
+    site = f"https://{P('PUBLIC_HOST') or 'play.openvanilla.app'}"
+    origin = h.headers.get("Origin", "")
+    if origin:
+        return origin == site or (origin == "null" and sfs == "same-origin")
+    ref = h.headers.get("Referer", "")
+    return ref == site or ref.startswith(site + "/")
+
+
 def post(h, path: str) -> None:
-    if path != "/wrath/admin/act":
+    api = path == "/wrath/admin/api/act"
+    if path != "/wrath/admin/act" and not (api and hq is not None):
         h.send(405, b"method not allowed\n", "text/plain", headers=NOINDEX)
         return
-    origin = h.headers.get("Origin", "")
-    host = P("PUBLIC_HOST") or "play.openvanilla.app"
-    if origin and origin != f"https://{host}" and not (origin == "null" and h.headers.get("Sec-Fetch-Site", "") == "same-origin"):
-        h.send(403, page_simple("Refused", "That form came from another site."), headers=NOINDEX)
+
+    def refuse(status, text):
+        if api:
+            h.send(status, (json.dumps({"ok": False, "error": text}) + "\n").encode(), "application/json; charset=utf-8", headers=NOINDEX)
+        else:
+            h.send(status, page_simple("Refused", text), headers=NOINDEX)
+    if not same_site(h):
+        refuse(403, "That form came from another site.")
         return
     form = read_form(h)
     if form is None:
-        h.send(400, page_simple("Refused", "That form didn't arrive in one piece."), headers=NOINDEX)
+        refuse(400, "That form didn't arrive in one piece.")
         return
-    user = who(h, path)
+    user = who(h, path, api=api)
     if user is None:
         return
     if not limits.hit("post:" + user["account"], POSTS_PER_MIN):
-        h.send(429, page_simple("Slow down", f"At most {POSTS_PER_MIN} changes a minute."), headers=NOINDEX)
+        refuse(429, f"At most {POSTS_PER_MIN} changes a minute.")
         return
-    if not user["session"] or not hmac.compare_digest(str(form.get("csrf") or ""), csrf_token(user["session"], user["account"])):
+    tok = str(form.get("csrf") or h.headers.get("X-Leyline-CSRF", "") or "")
+    if not user["session"] or not hmac.compare_digest(tok, csrf_token(user["session"], user["account"])):
         audit(user, str(form.get("action") or "")[:40], str(form.get("target") or "")[:120], None, None, ok=False,
               note="CSRF token missing or wrong")
-        h.send(403, page_simple("Refused", "That form is out of date. Go back, reload the page and try again."), headers=NOINDEX)
+        refuse(403, "That form is out of date. Go back, reload the page and try again.")
         return
     ok, msg = run_action(user, form)
+    if api:
+        h.send(200 if ok else 400, (json.dumps({"ok": ok, "message": msg}) + "\n").encode(), "application/json; charset=utf-8",
+               headers=NOINDEX)
+        return
     back = _back(form)
     sep = "&" if "?" in back else "?"
     h.send_response(303)
@@ -2637,3 +2991,6 @@ def post(h, path: str) -> None:
     h.send_header("X-Robots-Tag", "noindex, nofollow")
     h.send_header("Content-Length", "0")
     h.end_headers()
+
+
+hq = _load_hq()

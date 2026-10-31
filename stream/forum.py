@@ -1062,6 +1062,17 @@ def page_report(h, who, query: dict, note: str = "", status: int = 200) -> None:
     _shell(h, "Report · Forum · Leyline", body, PAGE + "/report", who, status)
 
 
+def _sanctioned(who: dict, sub: str) -> str:
+    """The refusal text when a sanction stops this post (reports stay open to everyone), else ""."""
+    try:
+        adm = P("admin")
+    except Exception:   # noqa: BLE001: a portal without the admin console
+        adm = None
+    if adm is None or sub.startswith("report") or not hasattr(adm, "blocked"):
+        return ""
+    return adm.blocked("post", acct=who.get("acct", ""))
+
+
 def _down(h) -> None:
     _shell(h, "Forum · Leyline", '<section class="fm-head"><div><h1>Forum</h1><p>The website\'s sign-in isn\'t answering right '
            'now. Try again shortly.</p></div></section>', PAGE, None, 503)
@@ -1147,6 +1158,10 @@ def post(h, path: str) -> None:
     sub = path[len(PAGE):].strip("/")
     if not who:
         return _see_other(h, _signin_url(PAGE))
+    blk = _sanctioned(who, sub)
+    if blk:   # a site-wide sanction (Leyline HQ, stream/admin.py blocked()): no new posts while it lasts
+        return _shell(h, "Forum · Leyline", f'<section class="fm-head"><div><h1>Forum</h1><p>{html.escape(blk)}</p></div></section>',
+                      PAGE, who, 403)
     store.seen(who["acct"], who["name"], who["tag"], who["staff"])
     tok = form.get("t", "")
     try:

@@ -311,7 +311,7 @@ check("the Forum tab: staff only", st == 403)
 st, _, body = req("GET", "/wrath/admin/forum", "staff1")
 check("the Forum tab: the reported post, its reason and the thread", st == 200 and "Reported posts" in body and "spam" in body
       and "Addon pack for my Den" in body and "forum.post.hide" in body, body[:500])
-check("the dashboard counts open forum reports", re.search(r"<b>1</b><span>Open forum reports", req("GET", "/wrath/admin", "staff1")[2]))
+check("the dashboard counts open forum reports", re.search(r"<b>1</b><span>Open forum reports", req("GET", "/wrath/admin/numbers", "staff1")[2]))
 csrf = re.search(r'name="csrf" value="([0-9a-f]+)"', body).group(1)
 
 

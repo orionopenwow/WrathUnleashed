@@ -819,6 +819,8 @@ def herokey_issue(user: str, rid: str, login_ttl: int) -> dict | None:
     Never logged: the login is the player's alone."""
     if not herokey_on() or not REALM_ID_RE.match(rid or "") or not ACCOUNT_RE.match(user or ""):
         return None
+    if admin is not None and getattr(admin, "blocked", None) and admin.blocked("realm", acct=user.upper()):
+        return None   # suspended on Leyline HQ: no Hero Key sign-in to community realms
     if not herokey_limit.hit("hk:" + user.upper(), 60) or not herokey_limit.hit("hk-all", 20000):
         return None
     try:
@@ -836,6 +838,9 @@ def herokey_issue_api(acct: str, realm, via: str) -> tuple[int, dict]:
         return 400, {"error": "That is not a realm id."}
     if realm == hangout_id():
         return 400, {"error": f"{REALM_NAME} uses your own game login."}
+    blk = admin.blocked("realm", acct=str(acct).upper()) if admin is not None and getattr(admin, "blocked", None) else ""
+    if blk:
+        return 403, {"error": blk}
     if not any(r["id"] == realm and r["live"] for r in community_realms()[0]):
         return 404, {"error": "That realm isn't online right now."}
     t = herokey_issue(acct, realm, herokey_mod.LOGIN_TTL_LAUNCHER if via == "launcher" else herokey_mod.LOGIN_TTL_WEB)
@@ -2288,6 +2293,7 @@ if workshop_mod is not None:
         workshop = None
 if workshop is not None and admin is not None:
     workshop.adjust = admin.adjust_catalog   # staff overrides: unpublished, featured, edited (stream/admin.py)
+    workshop.blocked = getattr(admin, "blocked", None)   # site-wide sanctions: no new links (Leyline HQ)
 
 
 class _Window:
