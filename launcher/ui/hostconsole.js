@@ -52,13 +52,16 @@
   const TOOLS = [["invite", "Invite links"], ["friends", "Accounts for friends"], ["vis", "Public or private"],
     ["signup", "Who may sign up"], ["browser", "Browser players"], ["max", "Max players"], ["logs", "Server logs"], ["rules", "House rules"]];
   // tools that change a setting of the kit's own realm: not for a linked server (its own settings), browser only on AzerothCore
-  const toolShown = (k, c) => !(c.linked && (k === "browser" || k === "max" || k === "signup")) && !(k === "browser" && (c.core || "azerothcore") !== "azerothcore");
+  // and a Den has no player limit to set (the kit sets 10 for it, docs/DEN.md)
+  const toolShown = (k, c) => !(c.linked && (k === "browser" || k === "max" || k === "signup")) && !(k === "browser" && (c.core || "azerothcore") !== "azerothcore")
+    && !(k === "max" && c.profile === DEN);
   // the cores the host pack runs (stream/hub.py HOST_CORES): one click only for what the kit hosts today
   const CORES = [["azerothcore", "AzerothCore", "One click"], ["cmangos", "CMaNGOS", "One click"], ["trinitycore", "TrinityCore", "Coming"],
     ["vmangos", "vMaNGOS", "Coming"], ["own", "Your own", "Relay agent"]];
   // the rulesets, in plain words (host/profiles.rs PROFILES; the kit's own presets)
   const RULESETS = {
     vanillaplus: ["Vanilla+", "The original world to 60, made to stay up.", "Always on"],
+    den: ["My Den", "A private room to build in: you and the friends you invite. No bots.", "Private"],
     dalaran: ["Dalaran hangout", "Light: a one-time boost, no bots."],
     main: ["Classic levelling", "From level 1 at 3x, or a one-time boost."],
     brawl: ["Brawl", "Everyone starts at the top level."],
@@ -67,7 +70,11 @@
     "cmangos-2.4.3": ["Second era", "A plain realm on CMaNGOS."],
     "tcpp-4.3.4": ["Fourth era", "A plain realm on TrinityCore."],
   };
-  const ORDER = ["vanillaplus", "dalaran", "main", "progression", "brawl", "cmangos-1.12.1", "cmangos-2.4.3", "tcpp-4.3.4"];
+  const ORDER = ["vanillaplus", "den", "dalaran", "main", "progression", "brawl", "cmangos-1.12.1", "cmangos-2.4.3", "tcpp-4.3.4"];
+  // Make my Den (docs/DEN.md): the kit's "den" profile, private and sign-up from the invite link only, never bots, at
+  // most 10 players (the kit writes those; host/profiles.rs starts it with --private). No bots or max-players choice.
+  const DEN = "den";
+  const DEN_FACTS = [["Private", "only friends with your invite link"], ["Sign-up", "from your invite link only"], ["No bots", "just you and your friends"]];
   // the guide: short how-tos, each with its page on the website (lib.rs LINKS: hostdocs, alwayson)
   const GUIDE = [
     ["start", "Start your realm", "Pick a ruleset and press Start. A window opens: leave it running. The first start imports the databases, 5 to 20 minutes.", "hostdocs"],
@@ -146,6 +153,7 @@
   let autoTab = true;
   let openTool = null;
   let timer = null;
+  let askedFor = null;        // a ruleset asked for from elsewhere (the play bar's My Den): picked once offered
   const ui = {};
 
   const say = (text, kind) => { if (ui.status) { ui.status.textContent = text || ""; ui.status.className = "status hc-status" + (kind ? " " + kind : ""); } };
@@ -155,12 +163,33 @@
     kit = e.detail || null;
     const want = kit && kit.realm ? "console" : "setup";
     if (want !== mode) { mode = want; build(); if (autoTab) { tab("main"); autoTab = false; } }
-    if (mode === "console") refresh(); else loadSetup();
+    if (mode === "console") { refresh(); applyWant(); } else loadSetup();
   });
-  document.addEventListener("leyline:page", (e) => {
-    clearInterval(timer);
-    if (e.detail && e.detail.page === "host") timer = setInterval(() => { if (isOn() && mode === "console" && !document.hidden) refresh(true); }, 20000);
+  // the play bar's My Den with no Den on this PC: the Host page with Make my Den picked
+  document.addEventListener("leyline:host-ruleset", (e) => {
+    askedFor = (e.detail && e.detail.profile) || null;
+    tab("main");
+    applyWant();
   });
+  function applyWant() {
+    if (!askedFor || !mode) return;
+    const id = askedFor;
+    if (mode === "console") {
+      askedFor = null;
+      const name = (kit && kit.realm && kit.realm.name) || "a realm";
+      if (id === DEN) say(`This host kit runs ${name}. A kit hosts one realm, so your Den needs a host kit of its own.`, "warn");
+      return;
+    }
+    if (!offers) return;    // loadSetup calls again once the rulesets are in
+    askedFor = null;
+    const o = offers.find((x) => x.id === id);
+    if (!o) { say("Your Host pack has no Den yet: update it under Kit & settings.", "warn"); return; }
+    if (o.note) { say(o.note, "warn"); return; }
+    pick(id).then(() => {
+      const b = ui.rules && ui.rules.querySelector(`.hc-rs[data-profile="${id}"]`);
+      if (b) { b.scrollIntoView({ block: "nearest" }); b.focus(); }
+    });
+  }
 
   function build() {
     main.replaceChildren();
@@ -412,7 +441,7 @@
   function paint() {
     const c = con || { services: [], docker: false };
     if (c.name) ui.name.textContent = c.name;
-    ui.kicker.textContent = c.linked ? "Your server, linked" : "Your realm console";
+    ui.kicker.textContent = c.linked ? "Your server, linked" : c.profile === DEN ? "Your Den" : "Your realm console";
     // the badge
     if (stat && stat.online) {
       setBadge("ok", stat.listed ? "Online · listed" : (stat.visibility === "private" || c.visibility === "private") ? "Online · private" : "Online");
@@ -636,6 +665,11 @@
     ui.go.disabled = true;
     ui.goHint = mk("span", "hc-fine", "Pick a ruleset.");
     go.append(ui.go, ui.goHint);
+    // My Den: what the kit sets for it, in place of choices (no bots, no player limit)
+    ui.den = mk("ul", "hc-den");
+    ui.den.setAttribute("aria-label", "My Den");
+    for (const [b, t] of DEN_FACTS) { const li = mk("li", ""); li.append(mk("b", "", b), mk("span", "", t)); ui.den.append(li); }
+    ui.den.hidden = true;
     ui.status = mk("p", "status hc-status");
     ui.status.setAttribute("role", "status");
     const link = mk("div", "hc-linkcard");
@@ -647,7 +681,7 @@
     // before anything else, while the Host pack or Docker is missing (owner 2026-10-30: "make getting the host pack more obvious")
     ui.ready = mk("div", "hc-ready");
     ui.ready.hidden = true;
-    sw.append(top, rune(), lede, ui.ready, mk("p", "hc-bh", "Pick a ruleset"), ui.rules, go, ui.status, link, rune(), mk("p", "hc-bh", "Runs on"), coreChips(linkServer));
+    sw.append(top, rune(), lede, ui.ready, mk("p", "hc-bh", "Pick a ruleset"), ui.rules, ui.den, go, ui.status, link, rune(), mk("p", "hc-bh", "Runs on"), coreChips(linkServer));
     const side = mk("aside", "hc-box hc-side");
     side.append(mk("p", "hc-bh", "Guide"), guideList(true));
     wrap.append(sw, side);
@@ -658,7 +692,7 @@
   function paintRulesets() {
     if (!ui.rules) return;
     ui.rules.replaceChildren();
-    const list = offers || ORDER.slice(0, 5).map((id) => ({ id, clients: [], note: null, core: "azerothcore" }));
+    const list = offers || ORDER.slice(0, 6).map((id) => ({ id, clients: [], note: null, core: "azerothcore" }));
     const ids = ORDER.filter((id) => list.some((o) => o.id === id));
     for (const id of ids) {
       const o = list.find((x) => x.id === id);
@@ -683,7 +717,9 @@
     ui.go.disabled = !ready || !picked;
     ui.go.textContent = name ? `Start ${name}` : "Start";
     ui.goHint.textContent = !ready ? "Get the Host pack first (step 1 above)." : !picked ? "Pick a ruleset."
-      : picked === "vanillaplus" ? "Always on: it comes back after a reboot." : "The first start takes 5 to 20 minutes.";
+      : picked === "vanillaplus" ? "Always on: it comes back after a reboot."
+      : picked === DEN ? "Then invite friends with your invite link. The first start takes 5 to 20 minutes." : "The first start takes 5 to 20 minutes.";
+    if (ui.den) ui.den.hidden = picked !== DEN;
   }
   async function pick(id) {
     const o = (offers || []).find((x) => x.id === id);
@@ -761,6 +797,7 @@
       if (prof[1] && prof[1].profile && !picked) picked = prof[1].profile;
     }
     paintRulesets();
+    applyWant();
     if (!pre) return;
     pre.replaceChildren();
     const chip = (ok, text, onFix) => {

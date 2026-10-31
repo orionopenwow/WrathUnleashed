@@ -17,10 +17,11 @@ const RID = 'abcdefghijk2345a';
 
 const FAKE = (setUp) => {
   const calls = (window.__calls = []);
-  const realm = setUp ? { realm_id: 'abcdefghijk2345a', name: 'Frost Haven', visibility: 'public', relay: 'relay.openvanilla.app', profile: 'vanillaplus' } : null;
+  const den = setUp === 'den';   // a Den set up on this PC (docs/DEN.md)
+  const realm = setUp ? { realm_id: 'abcdefghijk2345a', name: den ? 'My Den' : 'Frost Haven', visibility: den ? 'private' : 'public', relay: 'relay.openvanilla.app', profile: den ? 'den' : 'vanillaplus' } : null;
   const svc = (role, state, text) => ({ role, state, text });
   let rules = ['Be kind.', 'No gold selling.'];
-  let visibility = 'public';
+  let visibility = den ? 'private' : 'public';
   window.__TAURI__ = { core: { invoke: async (cmd, args) => {
     calls.push([cmd, args]);
     switch (cmd) {
@@ -30,11 +31,11 @@ const FAKE = (setUp) => {
       case 'deep_link_take': return null;
       case 'host_info': return { dir: '/home/me/kit', is_kit: !window.__noKit, has_windows_script: true, has_unix_script: true, problems: [], seeds: [], realm };
       case 'host_console': return { set_up: !!realm, linked: false, name: realm ? realm.name : '', realm_id: realm ? realm.realm_id : '',
-        profile: 'vanillaplus', core: 'azerothcore', visibility, signup: 'invite', herokey: false, claim_sent: false, browser: true, max_players: 0,
+        profile: realm ? realm.profile : 'vanillaplus', core: 'azerothcore', visibility, signup: 'invite', herokey: false, claim_sent: false, browser: true, max_players: den ? 10 : 0,
         relay: 'relay.openvanilla.app', relay_connected: true, relay_error: null, docker: true,
         services: [svc('database', 'ok', 'ready'), svc('login', 'ok', 'ready'), svc('world', 'ok', 'ready'), svc('agent', 'ok', 'connected')],
         uptime: '3 days', gm: true, gm_note: null, invite: 'https://relay.openvanilla.app/join/abcdefghijk2345a' };
-      case 'host_status': return { realm_id: args.realmId, online: true, name: 'Frost Haven', visibility, address: 'relay.openvanilla.app:40002', players: 12, bots: 0, listed: visibility === 'public' };
+      case 'host_status': return { realm_id: args.realmId, online: true, name: realm ? realm.name : 'Frost Haven', visibility, address: 'relay.openvanilla.app:40002', players: 12, bots: 0, listed: visibility === 'public' };
       case 'host_gm':
         if (args.action === 'status') return 'gm=1\nup=3725\nplayers=12\nbots=0\nrestart=0\nallow=off\nallowed=0\nvis=public\nmotd=-';
         return { announce: 'Announced to everyone online.', kick: `${args.data} was kicked.`, ban: 'Banned.', restart: 'Restart in 5 minutes. Everyone online was told.' }[args.action] || 'Done.';
@@ -57,6 +58,7 @@ const FAKE = (setUp) => {
       case 'host_profiles': return [[
         { id: 'vanillaplus', label: 'x', version: '3.3.5a', core: 'azerothcore', in_kit: true, clients: [{ id: 'c1', name: 'Mine', path: '/g' }], note: null },
         { id: 'dalaran', label: 'x', version: '3.3.5a', core: 'azerothcore', in_kit: true, clients: [{ id: 'c1', name: 'Mine', path: '/g' }], note: null },
+        { id: 'den', label: 'x', version: '3.3.5a', core: 'azerothcore', in_kit: true, clients: [{ id: 'c1', name: 'Mine', path: '/g' }], note: null },
         { id: 'main', label: 'x', version: '3.3.5a', core: 'azerothcore', in_kit: true, clients: [{ id: 'c1', name: 'Mine', path: '/g' }], note: null },
         { id: 'cmangos-1.12.1', label: 'x', version: '1.12.1', core: 'cmangos', in_kit: true, clients: [], note: 'Add your own client of that version on the Clients page first.' },
       ], null];
@@ -215,9 +217,9 @@ test('the health check, and the realm tools', async () => {
 test('no realm yet: the setup start (Vanilla+ always on, Link my server) and the guide', async () => {
   const { page, errors } = await open(false);
   assert.equal(await page.textContent('#hc-tab-main'), 'Start');
-  await page.waitForFunction(() => document.querySelectorAll('.hc-rs').length === 4);
+  await page.waitForFunction(() => document.querySelectorAll('.hc-rs').length === 5);
   assert.deepEqual(await page.$$eval('.hc-rs', (l) => l.map((x) => [x.dataset.profile, x.querySelector('b').textContent, x.disabled])),
-    [['vanillaplus', 'Vanilla+', false], ['dalaran', 'Dalaran hangout', false], ['main', 'Classic levelling', false], ['cmangos-1.12.1', 'True Vanilla', true]]);
+    [['vanillaplus', 'Vanilla+', false], ['den', 'My Den', false], ['dalaran', 'Dalaran hangout', false], ['main', 'Classic levelling', false], ['cmangos-1.12.1', 'True Vanilla', true]]);
   assert.equal(await page.textContent('.hc-rs[data-profile="vanillaplus"] em'), 'Always on');
   assert.ok(await page.isDisabled('#hc-start'));
   await page.click('.hc-rs[data-profile="vanillaplus"]');
@@ -250,6 +252,41 @@ test('no realm yet: the setup start (Vanilla+ always on, Link my server) and the
   assert.ok(await page.isVisible('#hp-card') && await page.isVisible("#hc-pane-kit ol.steps"));
   assert.doesNotMatch(await page.textContent('#page-host'), NO_BRANDS);
   assert.deepEqual(errors, []);
+});
+
+test('Make my Den: private and invite-only, no bots, no player limit; picked from the play bar; its console', async () => {
+  const { page, errors } = await open(false);
+  await page.waitForFunction(() => document.querySelectorAll('.hc-rs').length === 5);
+  const card = '.hc-rs[data-profile="den"]';
+  assert.equal(await page.textContent(`${card} .hc-rs-l`), 'A private room to build in: you and the friends you invite. No bots.');
+  assert.equal(await page.textContent(`${card} em`), 'Private');
+  assert.equal(await page.isVisible('.hc-den'), false, 'the Den facts only once it is picked');
+  await page.click(card);
+  await page.waitForFunction(() => window.__calls.some(([c, a]) => c === 'host_choose' && a.profile === 'den'));
+  assert.equal(await page.textContent('#hc-start'), 'Start My Den');
+  assert.ok(await page.isVisible('.hc-den'));
+  assert.deepEqual(await page.$$eval('.hc-den li', (l) => l.map((x) => x.querySelector('b').textContent)), ['Private', 'Sign-up', 'No bots']);
+  assert.match(await page.textContent('.hc-den'), /invite link only/);
+  assert.equal(await page.locator('#page-host input[type="number"]:visible, #page-host [data-tool="max"]:visible').count(), 0, 'no bots or max-players control');
+  await page.click('.hc-rs[data-profile="main"]');
+  assert.equal(await page.isVisible('.hc-den'), false);
+  // the play bar's My Den asks for it: picked again
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent('leyline:host-ruleset', { detail: { profile: 'den' } })));
+  await page.waitForFunction(() => document.querySelector('.hc-rs[data-profile="den"].on'));
+  assert.equal((await calls(page, 'host_choose')).pop().profile, 'den');
+  await page.click('#hc-start');
+  await page.waitForFunction(() => window.__calls.some(([c]) => c === 'host_start'));
+  assert.doesNotMatch(await page.textContent('#page-host'), NO_BRANDS);
+  assert.deepEqual(errors, []);
+
+  // a Den set up on this PC: its console, with no Max players tool
+  const den = await open('den');
+  await den.page.waitForFunction(() => document.querySelector('.hc-run') && document.querySelector('.hc-run').textContent === 'Online · private');
+  assert.equal(await den.page.textContent('.hc-k'), 'Your Den');
+  assert.equal(await den.page.textContent('.hc-t'), 'My Den');
+  const shown = await den.page.$$eval('.hc-tool', (l) => l.filter((x) => !x.parentElement.hidden).map((x) => x.dataset.tool));
+  assert.ok(!shown.includes('max') && shown.includes('invite') && shown.includes('signup'), shown.join(','));
+  assert.deepEqual(den.errors, []);
 });
 
 test('the console in the Light theme reads the light tokens', async () => {

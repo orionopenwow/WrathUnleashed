@@ -228,8 +228,13 @@ pub fn plan(kit: &Path, seed: Option<&str>, os: HostOs, has: impl Fn(&str) -> bo
                 None => vec!["bash".into(), LEYLINE_SCRIPT.into(), "host".into()],
             };
             // Vanilla+ is made to stay up: Docker (and so the realm) comes back after a reboot (docs/leyline/always-on.md).
-            if seed.is_none() && profiles::read_choice(kit).is_some_and(|c| c.profile == "vanillaplus") {
+            let chosen = if seed.is_none() { profiles::read_choice(kit).map(|c| c.profile) } else { None };
+            if chosen.as_deref() == Some("vanillaplus") {
                 cmd.push("--always-on".into());
+            }
+            // A Den is private (docs/DEN.md: leyline host --ruleset den --private; the ruleset comes in the env).
+            if chosen.as_deref() == Some(profiles::DEN) {
+                cmd.push("--private".into());
             }
             if !env.is_empty() {
                 let mut e: Vec<String> = vec!["env".into()];
@@ -647,6 +652,15 @@ mod tests {
         assert!(!plan(k.path(), Some(&seed), HostOs::Linux, |t| t == "konsole").unwrap().args.contains(&"--always-on".to_string()), "a seed has its own answers");
         profiles::choose(k.path(), "main", None).unwrap();
         assert!(!plan(k.path(), None, HostOs::Linux, |t| t == "konsole").unwrap().args.contains(&"--always-on".to_string()));
+        assert!(!plan(k.path(), None, HostOs::Linux, |t| t == "konsole").unwrap().args.contains(&"--private".to_string()), "only a Den");
+        // My Den: leyline host --ruleset den --private (the ruleset and private in the env too, for the Windows kit)
+        profiles::choose(k.path(), "den", None).unwrap();
+        let d = plan(k.path(), None, HostOs::Linux, |t| t == "konsole").unwrap();
+        assert_eq!(&d.args[d.args.len() - 4..], &["bash", "leyline", "host", "--private"]);
+        assert!(d.args.contains(&"LEYLINE_RULESET=den".to_string()) && d.args.contains(&"LEYLINE_VISIBILITY=private".to_string()), "{:?}", d.args);
+        let w = plan(k.path(), None, HostOs::Windows, |_| false).unwrap();
+        assert!(w.env.contains(&("WU_PROFILE".into(), "den".into())) && w.env.contains(&("WU_VISIBILITY".into(), "private".into())));
+        assert!(!plan(k.path(), Some(&seed), HostOs::Linux, |t| t == "konsole").unwrap().args.contains(&"--private".to_string()), "a seed has its own answers");
 
         assert!(plan_link(k.path(), HostOs::Windows, |_| false).unwrap_err().contains(LINK_SCRIPT));
         touch(k.path(), LINK_SCRIPT, b"@echo off");

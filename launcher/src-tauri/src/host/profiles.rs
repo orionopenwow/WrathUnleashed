@@ -8,6 +8,10 @@
 //!
 //! The choice is kept in the kit folder (`state/launcher-host.json`) and handed to the kit's script as
 //! `WU_PROFILE` / `LEYLINE_RULESET` and `WU_CLIENT_DIR` (3.3.5a: `WU_WOW_DIR`) when the realm starts.
+//!
+//! A Den (`den`, docs/DEN.md: a private room to build in) is always private: its start also gets
+//! `LEYLINE_VISIBILITY` / `WU_VISIBILITY=private` (and `host.rs` adds `--private`), and on its first start the name
+//! "My Den". The kit then makes its join page take accounts only from the invite link and never runs bots.
 
 use crate::clients::{Build, ClientProfile};
 use serde::{Deserialize, Serialize};
@@ -27,6 +31,7 @@ pub struct KitProfile {
 
 pub const PROFILES: &[KitProfile] = &[
     KitProfile { id: "dalaran", label: "3.3.5a: a light Dalaran hangout (boost to 80, no bots)", build: Build::V335a, core: "azerothcore", own_folder: false },
+    KitProfile { id: "den", label: "3.3.5a: My Den (a private room to build in)", build: Build::V335a, core: "azerothcore", own_folder: false },
     KitProfile { id: "main", label: "3.3.5a: normal from level 1, or a one-time boost", build: Build::V335a, core: "azerothcore", own_folder: false },
     KitProfile { id: "brawl", label: "3.3.5a: everyone starts at 80", build: Build::V335a, core: "azerothcore", own_folder: false },
     KitProfile { id: "progression", label: "3.3.5a: blizzlike progression", build: Build::V335a, core: "azerothcore", own_folder: false },
@@ -43,6 +48,16 @@ pub fn id_ok(id: &str) -> bool {
         && b[0].is_ascii_alphanumeric()
         && b.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'.' || *c == b'-')
         && !id.contains("..")
+}
+
+/// The private room to build in (docs/DEN.md): private, sign-up from the invite link only, no bots.
+pub const DEN: &str = "den";
+/// A new Den's name (the kit's own question otherwise).
+pub const DEN_NAME: &str = "My Den";
+
+/// The profiles that never run bots (the kit refuses them): the Dalaran hangout and a Den.
+pub fn no_bots(id: &str) -> bool {
+    id == "dalaran" || id == DEN
 }
 
 pub fn find(id: &str) -> Option<&'static KitProfile> {
@@ -163,6 +178,17 @@ pub fn env_for(kit: &Path) -> Vec<(String, String)> {
     let Some(c) = read_choice(kit) else { return Vec::new() };
     let Some(p) = find(&c.profile) else { return Vec::new() };
     let mut env = vec![("WU_PROFILE".to_string(), c.profile.clone()), ("LEYLINE_RULESET".to_string(), c.profile.clone())];
+    if c.profile == DEN {
+        for k in ["LEYLINE_VISIBILITY", "WU_VISIBILITY"] {
+            env.push((k.to_string(), "private".to_string()));
+        }
+        // the first start only: a realm already set up keeps its own name
+        if !kit.join("state").join("host.json").is_file() {
+            for k in ["LEYLINE_NAME", "WU_NAME"] {
+                env.push((k.to_string(), DEN_NAME.to_string()));
+            }
+        }
+    }
     if !c.client_dir.is_empty() && Path::new(&c.client_dir).is_dir() {
         let key = if p.build == Build::V335a { "WU_WOW_DIR" } else { "WU_CLIENT_DIR" };
         env.push((key.to_string(), c.client_dir));
@@ -200,7 +226,7 @@ mod tests {
 
     #[test]
     fn ids_are_never_paths() {
-        for ok in ["dalaran", "cmangos-1.12.1", "tcpp-4.3.4"] {
+        for ok in ["dalaran", "den", "cmangos-1.12.1", "tcpp-4.3.4"] {
             assert!(id_ok(ok), "{ok}");
         }
         for bad in ["", "a", "../x", "a/b", "A-b", "x..y", ".hidden", "a b", "c:\\x"] {
@@ -220,7 +246,9 @@ mod tests {
         let o = offers_in(Some(&k), &mine, true);
         assert_eq!(o.len(), PROFILES.len());
         let ready: Vec<&str> = o.iter().filter(|x| x.note.is_none()).map(|x| x.id.as_str()).collect();
-        assert_eq!(ready, ["dalaran", "main", "brawl", "progression", "vanillaplus", "cmangos-2.4.3"]);
+        assert_eq!(ready, ["dalaran", "den", "main", "brawl", "progression", "vanillaplus", "cmangos-2.4.3"]);
+        let den = o.iter().find(|x| x.id == "den").unwrap();
+        assert_eq!((den.version.as_str(), den.core.as_str(), den.clients[0].path.as_str()), ("3.3.5a", "azerothcore", "/games/335"));
         let tbc = o.iter().find(|x| x.id == "cmangos-2.4.3").unwrap();
         assert_eq!((tbc.version.as_str(), tbc.clients[0].path.as_str()), ("2.4.3", "/games/243"));
         let classic = o.iter().find(|x| x.id == "cmangos-1.12.1").unwrap();
@@ -249,10 +277,40 @@ mod tests {
         assert!(env.contains(&("WU_CLIENT_DIR".into(), games.display().to_string())));
         choose(&k, "dalaran", Some(&wrath)).unwrap();
         assert!(env_for(&k).contains(&("WU_WOW_DIR".into(), games.display().to_string())));
+        assert!(!env_for(&k).iter().any(|(k, _)| k.ends_with("VISIBILITY") || k.ends_with("NAME")), "only a Den is made private");
         choose(&k, "", None).unwrap();
         assert!(env_for(&k).is_empty(), "forgotten");
         fs::write(k.join("state/launcher-host.json"), r#"{"profile":"../evil","client_dir":"/"}"#).unwrap();
         assert!(env_for(&k).is_empty());
+        let _ = fs::remove_dir_all(&k);
+        let _ = fs::remove_dir_all(&games);
+    }
+
+    /// A Den (docs/DEN.md): private, its own name on the first start only, never bots.
+    #[test]
+    fn a_den_is_private_and_has_no_bots() {
+        let k = kit("den", &[]);
+        let games = std::env::temp_dir().join(format!("wu-profiles-den-335-{}", std::process::id()));
+        fs::create_dir_all(&games).unwrap();
+        let wrath = client("b", Build::V335a, games.to_str().unwrap());
+        let p = find(DEN).unwrap();
+        assert_eq!((p.build, p.core, p.own_folder), (Build::V335a, "azerothcore", false));
+        assert!(p.label.contains("My Den"));
+        assert!(no_bots("den") && no_bots("dalaran") && !no_bots("main") && !no_bots("brawl"));
+        let tbc = client("a", Build::V243, games.to_str().unwrap());
+        assert!(choose(&k, DEN, Some(&tbc)).unwrap_err().contains("needs a 3.3.5a client"));
+        choose(&k, DEN, Some(&wrath)).unwrap();
+        let env = env_for(&k);
+        for (key, v) in [("WU_PROFILE", "den"), ("LEYLINE_RULESET", "den"), ("LEYLINE_VISIBILITY", "private"), ("WU_VISIBILITY", "private"),
+            ("LEYLINE_NAME", "My Den"), ("WU_NAME", "My Den")] {
+            assert!(env.contains(&(key.into(), v.into())), "{key}={v}: {env:?}");
+        }
+        assert!(env.contains(&("WU_WOW_DIR".into(), games.display().to_string())));
+        // set up once: the realm keeps its own name, and stays private
+        fs::write(k.join("state/host.json"), r#"{"realm_id":"abcdefghijk2345a","name":"Bea's Den","profile":"den"}"#).unwrap();
+        let env = env_for(&k);
+        assert!(!env.iter().any(|(k, _)| k.ends_with("NAME")), "{env:?}");
+        assert!(env.contains(&("LEYLINE_VISIBILITY".into(), "private".into())));
         let _ = fs::remove_dir_all(&k);
         let _ = fs::remove_dir_all(&games);
     }

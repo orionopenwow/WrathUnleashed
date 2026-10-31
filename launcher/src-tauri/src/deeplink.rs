@@ -133,7 +133,7 @@ pub fn host_query(q: &str) -> Option<String> {
     let core = get("core")?;
     let preset = get("preset")?;
     let presets: &[&str] = match core {
-        "azerothcore" => &["dalaran", "main", "brawl", "progression", "vanillaplus"],
+        "azerothcore" => &["dalaran", "den", "main", "brawl", "progression", "vanillaplus"],
         "cmangos" => &["cmangos-1.12.1", "cmangos-2.4.3"],
         _ => return None,
     };
@@ -152,7 +152,7 @@ pub fn host_query(q: &str) -> Option<String> {
         && ["on", "off"].contains(&get("herokey")?);
     let optional = ["xp", "loot", "rep"].iter().all(|k| ok(k, &|v| ac && small_int(v, 1, 10)))
         && ok("start", &|v| preset == "main" && (v == "level1" || v == "boost"))
-        && ok("bots", &|v| ac && preset != "dalaran" && small_int(v, 0, 200))
+        && ok("bots", &|v| ac && !crate::host::profiles::no_bots(preset) && small_int(v, 0, 200))
         && ok("region", &|v| REGIONS.contains(&v))
         && ok("lang", &|v| {
             let (a, b) = v.split_once('-').unwrap_or((v, ""));
@@ -211,6 +211,11 @@ mod tests {
         assert_eq!(host_query(short).as_deref(),
             Some("core=cmangos&preset=cmangos-1.12.1&name=Old%20One&type=normal&vis=public&signup=open&herokey=off"));
         assert_eq!(parse("leyline://host?manage=bots"), Some(Link::Host("manage=bots".into())));
+        // My Den (docs/DEN.md): an AzerothCore ruleset, private and invite-only from the game's Host window
+        let den = "core=azerothcore&preset=den&name=My+Den&type=normal&vis=private&signup=invite&herokey=off";
+        assert_eq!(host_query(den).as_deref(),
+            Some("core=azerothcore&preset=den&name=My%20Den&type=normal&vis=private&signup=invite&herokey=off"));
+        assert_eq!(host_query(&format!("{den}&bots=0")), None, "a Den never takes bots, not even 0");
         let json = serde_json::to_value(Link::Host("manage=list".into())).unwrap();
         assert_eq!(json, serde_json::json!({"action": "host", "id": "manage=list"}));
     }
@@ -226,6 +231,9 @@ mod tests {
             GAME.replace("region=eu", "region=mars"), GAME.replace("lang=pt-BR", "lang=klingon"), GAME.replace("lang=pt-BR", "lang=pt-"),
             GAME.replace("tags=pvp%2Crp", "tags=bots"), GAME.replace("max=100", "max=-1"), GAME.replace("name=Frost", "name=%ZZ"),
             "core=azerothcore&preset=dalaran&name=Den&type=normal&bots=10&vis=public&signup=open&herokey=off".into(),
+            "core=azerothcore&preset=den&name=Den&type=normal&bots=10&vis=private&signup=invite&herokey=off".into(),
+            "core=azerothcore&preset=den&name=Den&type=normal&start=boost&vis=private&signup=invite&herokey=off".into(),
+            "core=cmangos&preset=den&name=Den&type=normal&vis=private&signup=invite&herokey=off".into(),
             "core=azerothcore&preset=brawl&name=Den&type=normal&start=level1&vis=public&signup=open&herokey=off".into(),
             "core=cmangos&preset=cmangos-2.4.3&name=Den&type=normal&xp=3&vis=public&signup=open&herokey=off".into(),
             "manage=evil".into(), "manage=bots&core=azerothcore".into(), "x".repeat(700),

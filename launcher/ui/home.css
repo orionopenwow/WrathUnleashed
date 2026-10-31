@@ -225,3 +225,11 @@ html[data-base="light"] .hs-side { box-shadow: 0 14px 30px rgba(16, 24, 40, .12)
 /* the play bar's realm picker: the Hangout's label beside its name ("Dalaran Hangout · the Wrath realm") */
 .pb-opt-kind { flex: none; font-size: 12px; font-weight: 500; color: var(--t-text-2); white-space: nowrap; }
 .pb-opt-kind::before { content: "· "; }
+
+/* the play bar's realm picker: marks in place of an initial for the rows that are not a listed realm (My Den, the
+   private room on this PC: a house; Play in your browser: a globe), and the bar's own icon while My Den is chosen */
+.rl-ic.pb-mark-ic { display: grid; place-items: center; color: var(--t-accent-strong); text-shadow: none;
+  background: color-mix(in srgb, var(--t-accent) 16%, var(--t-raised)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--t-accent) 40%, transparent); }
+.rl-ic.pb-mark-ic svg { display: block; }
+.pb-realm .rl-ic.pb-mark-ic svg { width: 18px; height: 18px; }
+.rl-ic.pb-web-ic { color: var(--t-text-2); background: var(--t-raised); box-shadow: inset 0 0 0 1px var(--t-border-strong); }
