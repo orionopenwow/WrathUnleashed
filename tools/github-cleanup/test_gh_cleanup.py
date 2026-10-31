@@ -11,7 +11,7 @@ class Fake:
         if s.endswith("user --jq .login"): return 0, self.who
         if "releases/latest" in s: return 0, "v1.56"
         if "releases?per_page" in s: return 0, json.dumps(self.rels)
-        if "packages?package_type" in s: return (0, json.dumps([{"name": n} for n in ("openvanilla-realm", "openwow-realm")])) if self.pk_ok else (1, "HTTP 403 needs read:packages")
+        if "packages?package_type" in s: return (0, json.dumps([{"name": n} for n in ("openvanilla-realm", "openwow-realm", "old-pkg")])) if self.pk_ok else (1, "HTTP 403 needs read:packages")
         if "-X DELETE" in s: return 0, ""
         return 1, "?"
 
@@ -33,13 +33,25 @@ class T(unittest.TestCase):
         f = Fake(); rc, o = go(f, {"keep_release": "v1.55", "delete_release_tags": []}, ["--go"])
         self.assertEqual(rc, 1); self.assertFalse(any("DELETE" in a for a in f.calls))
     def test_go(self):
-        f = Fake(); plan = {"keep_release": "v1.56", "delete_release_tags": [f"v1.{i}" for i in range(51, 56)], "delete_packages": ["openwow-realm", "openvanilla-realm", "gone-one"]}
+        f = Fake(); plan = {"keep_release": "v1.56", "delete_release_tags": [f"v1.{i}" for i in range(51, 56)], "delete_packages": ["old-pkg", "gone-one"]}
         rc, o = go(f, plan, ["--go"]); self.assertEqual(rc, 0, o)
         dels = [" ".join(a) for a in f.calls if "DELETE" in a]
         self.assertFalse(any("releases/56" in d or "releases/9" in d for d in dels), "newest and engine kept"); self.assertEqual(sum("git/refs/tags" in d for d in dels), 5)
-        self.assertTrue(any("container/openwow-realm" in d for d in dels)); self.assertIn("gone-one: already gone", o)
+        self.assertTrue(any("container/old-pkg" in d for d in dels)); self.assertIn("gone-one: already gone", o)
+    def test_112_images_never_deleted(self):
+        f = Fake(); plan = {"keep_release": "v1.56", "delete_release_tags": [f"v1.{i}" for i in range(51, 56)],
+                            "delete_packages": ["openvanilla-realm", "openvanilla-mangos", "openwow-realm", "openwow-mangos", "old-thing"]}
+        rc, o = go(f, plan, ["--go"]); self.assertEqual(rc, 0, o)
+        dels = " ".join(" ".join(a) for a in f.calls if "DELETE" in a)
+        for p in ("openvanilla-realm", "openvanilla-mangos", "openwow-realm", "openwow-mangos"):
+            self.assertNotIn(f"container/{p}", dels); self.assertIn(f"package {p}: KEPT", o)
+        self.assertIn("old-thing: already gone", o)
+        for p in ("OpenVanilla-Realm", "wenilla-realm", "cmangos-classic", "leyline-relay", "vanilla-remastered"):
+            self.assertTrue(g.protected_package(p), p)
+        self.assertFalse(g.protected_package("wu-ac-wotlk"))
+
     def test_no_scope(self):
-        f = Fake(pk_ok=False); plan = {"keep_release": "v1.56", "delete_release_tags": [f"v1.{i}" for i in range(51, 56)], "delete_packages": ["openwow-realm"]}
+        f = Fake(pk_ok=False); plan = {"keep_release": "v1.56", "delete_release_tags": [f"v1.{i}" for i in range(51, 56)], "delete_packages": ["old-pkg"]}
         rc, o = go(f, plan, ["--go"]); self.assertEqual(rc, 1); self.assertIn("gh auth refresh", o)
 
 if __name__ == "__main__": unittest.main()

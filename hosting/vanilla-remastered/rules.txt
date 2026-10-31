@@ -1,0 +1,6 @@
+# Vanilla Remastered's house rules on the Leyline realm list (one per line, up to 10, 120 characters each).
+# Lines starting with # are ignored. Deployed by "Put Vanilla Remastered on Leyline.bat" (the "vr-beacon" step).
+Be kind: no harassment, hate speech or spam.
+No cheats, bots or exploits. Report bugs to the Leyline team.
+Bots are always labelled and never counted as players.
+Hosted by the Leyline team for now: a community host may take it over later, with your characters.
