@@ -39,6 +39,7 @@ const FAKE = (p2p) => {
       case 'realms_list': return { realms, network: { realms: 3, players: 33, bots: 40 }, from_cache: false, saved_at: 1, error: null };
       case 'p2p_flags': return { effective: { p2p_hosting: p2p, limits: {} }, known: [], local: { overrides: {} }, site: {} };
       case 'host_listing': return details;
+      case 'host_info': return window.__kit || { dir: null, is_kit: false, problems: [], seeds: [], realm: null };
       case 'host_listing_set': details = args.details; return 'Saved. The realm list shows them within a minute.';
       case 'open_url': return null;
       case 'back_to_official': return 'Back on the official realm.';
@@ -68,7 +69,7 @@ const names = (page) => page.$$eval('#rl-list .realm-card .name', (n) => n.map((
 test('Realms page: the official realm first, the slim line, one tag, players, Report, Host your own', async () => {
   const { page, errors } = await open(false);
   assert.deepEqual(await names(page), ['Wrath Unleashed', 'Picked', 'Busy Den', 'Asleep'], 'the official realm first (one name: Wrath Unleashed), then the network order');
-  assert.equal(await page.textContent('#rl-net'), '3 realms · 33 playing');
+  assert.equal(await page.textContent('#rl-net'), '3 community realms · 33 playing', 'the network count says what it counts');
   assert.equal(await page.getAttribute('#rl-net', 'title'), '40 bots too');
   const cards = page.locator('#rl-list .realm-card');
   const badges = (i) => cards.nth(i).locator('.rl-bdg').allTextContents();
@@ -99,7 +100,7 @@ test('Realms page: the official realm first, the slim line, one tag, players, Re
   assert.equal(await cards.nth(2).locator('.rl-bar i').evaluate((e) => e.style.width), '30%', 'players fill the bar');
   assert.ok(await cards.nth(3).evaluate((e) => e.classList.contains('off') && getComputedStyle(e).opacity < 1), 'an offline realm is dimmed');
   assert.equal(await cards.nth(3).locator('.rl-bar').count(), 0);
-  assert.equal(await cards.nth(1).locator('.acts .btn').first().textContent(), 'PLAY');
+  assert.equal(await cards.nth(1).locator('.acts .btn').first().textContent(), 'Play');
   assert.doesNotMatch(await cards.nth(2).textContent(), /Direct connect/, 'direct connect only with p2p_hosting on');
   assert.equal(await cards.nth(0).locator('button:has-text("Report")').count(), 0, 'no Report on the sample');
   await cards.nth(2).locator('button:has-text("Report")').click();
@@ -171,7 +172,7 @@ test('Realms page: the FILTERS popover, its count, Clear filters; the … menu',
   assert.deepEqual(errors, []);
 });
 
-test('Realms page: no community realms: one line and HOST ONE', async () => {
+test('Realms page: no community realms: one line, and the Host your own banner is the one call to action', async () => {
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
@@ -188,7 +189,9 @@ test('Realms page: no community realms: one line and HOST ONE', async () => {
   await page.click('.nav[data-page="realms"]');
   await page.waitForFunction(() => document.querySelector('#rl-list .rl-empty'));
   assert.match(await page.textContent('#rl-list .rl-empty'), /No community realms yet/);
-  await page.click('#rl-list .rl-empty button:has-text("HOST ONE")');
+  assert.equal(await page.locator('#rl-list .rl-empty button').count(), 0, 'no second HOST ONE: the banner below has Start a realm');
+  assert.ok(await page.isVisible('#rl-host-cta'));
+  await page.click('#rl-host');
   assert.ok(await page.locator('#page-host').evaluate((e) => e.classList.contains('on')));
   assert.deepEqual(errors, []);
   await page.close();
@@ -199,12 +202,20 @@ test('Direct connect shows with p2p_hosting on; the Host page saves the realm li
   await page.click('#rl-refresh');
   await page.waitForTimeout(100);
   assert.match(await page.locator('#rl-list .realm-card').nth(2).textContent(), /Direct connect available/, 'on the one line');
+  // the realm list settings: under Advanced at the end of Host pack & settings, only once there is a realm to list
   await page.click('.nav[data-page="host"]');
+  await page.click('#hc-tab-kit');
+  assert.equal(await page.isVisible('#hl-adv'), false, 'no realm yet: no realm list settings');
+  await page.evaluate(() => { window.__kit = { dir: '/k', is_kit: true, problems: [], seeds: [{ kind: 'sh', file_name: 'my.sh', in_kit: true, realm_id: 'abc' }], realm: null }; });
+  await page.evaluate(() => loadHost());
+  await page.waitForFunction(() => !document.getElementById('hl-adv').hidden);
+  assert.equal(await page.textContent('#hl-adv summary'), 'Advanced: how players find your realm');
+  await page.click('#hl-adv summary');
   await page.waitForFunction(() => document.querySelector('#hl-card input[value="rp"]') && document.querySelector('#hl-card input[value="rp"]').checked);
   assert.equal(await page.inputValue('#hl-card select'), 'eu');
   await page.check('#hl-card input[value="pvp"]');
   await page.fill('#hl-card input[type="number"]', '80');
-  await page.click('#hl-card button:has-text("SAVE")');
+  await page.click('#hl-card button:has-text("Save")');
   await page.waitForFunction(() => window.__calls.some(([c]) => c === 'host_listing_set'));
   const sent = await page.evaluate(() => window.__calls.find(([c]) => c === 'host_listing_set')[1].details);
   assert.deepEqual(sent, { tags: ['pvp', 'rp'], region: 'eu', language: 'de', max_players: 80, direct: false }, 'direct stays off unless ticked');
@@ -266,7 +277,7 @@ test('A website\'s Open in launcher (leyline://realm/<id>) shows that realm with
   assert.ok(await page.locator('#page-realms').evaluate((e) => e.classList.contains('on')));
   assert.equal(await page.textContent('#rl-list .realm-card.linked .name'), 'Busy Den');
   assert.match(await page.textContent('#rl-status'), /From the website: Busy Den\. Press PLAY/);
-  assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.textContent), 'PLAY');
+  assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.textContent), 'Play');
   const started = await page.evaluate(() => window.__calls.map(([c]) => c).filter((c) => /^(play|play_realm|start_)/.test(c)));
   assert.deepEqual(started, [], 'nothing starts by itself');
   assert.deepEqual(errors, []);

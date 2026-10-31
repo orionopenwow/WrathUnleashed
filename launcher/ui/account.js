@@ -123,10 +123,10 @@
     const count = el("span", "ac-count", `${draft.bio.length}/${BIO_MAX}`); count.setAttribute("aria-live", "polite");
     bio.oninput = () => { draft.bio = bio.value; count.textContent = `${bio.value.length}/${BIO_MAX}`; };
     const acts = el("div", "ac-acts");
-    const save = el("button", "btn primary", welcome ? "SAVE AND CONTINUE" : "SAVE"); save.type = "submit"; save.id = "ac-save";
+    const save = el("button", "btn primary", welcome ? "Save and continue" : "Save"); save.type = "submit"; save.id = "ac-save";
     acts.append(save);
     if (welcome) {
-      const skip = el("button", "btn", "SKIP FOR NOW"); skip.type = "button"; skip.id = "ac-skip";
+      const skip = el("button", "btn", "Skip for now"); skip.type = "button"; skip.id = "ac-skip";
       skip.onclick = () => submit(true);
       acts.append(skip);
     }
@@ -149,16 +149,16 @@
       b.onclick = () => S().openLink(link);
       li.append(t, b); ul.append(li);
     };
-    row("Hero Key", "Your key signs you in on any device. Unlinking a way is done there too.", "MANAGE", "herokey");
-    if (ways.google) row("Google", "", "LINK GOOGLE", "linkgoogle");
-    if (ways.discord) row("Discord", "", "LINK DISCORD", "linkdiscord");
-    row("Leyline launchers", "This one and any others signed in as you. Revoke one there.", "LINKED LAUNCHERS", "linkedlaunchers");
+    row("Hero Key", "Your key signs you in on any device. Unlinking a way is done there too.", "Manage", "herokey");
+    if (ways.google) row("Google", "", "Link Google", "linkgoogle");
+    if (ways.discord) row("Discord", "", "Link Discord", "linkdiscord");
+    row("Leyline launchers", "This one and any others signed in as you. Revoke one there.", "Linked launchers", "linkedlaunchers");
     wc.append(ul);
     view.append(wc);
 
     const so = el("section", "card ac-card ac-out");
     const sot = el("div"); sot.append(el("h3", "", "Sign out"), el("p", "hint", "Signs this launcher out and revokes its sign-in on the website."));
-    const sob = el("button", "btn", "SIGN OUT"); sob.type = "button"; sob.id = "ac-signout";
+    const sob = el("button", "btn", "Sign out"); sob.type = "button"; sob.id = "ac-signout";
     sob.onclick = () => S().signOut();
     const web = el("button", "link-s", "Your profile on the website ›"); web.type = "button"; web.onclick = () => S().openLink("profile");
     so.append(sot, el("div", "ac-acts", ""), web);

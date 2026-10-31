@@ -141,7 +141,12 @@ test('no clients: every family greyed; a greyed row opens Find your game files; 
   assert.match(guide, /backup/i);
   assert.match(guide, /friend/i);
   assert.doesNotMatch(guide, /world of warcraft|\bwow\b|warcraft|lich king|blizzard|torrent/i);
-  assert.equal(await page.locator('#page-findfiles a, #page-findfiles [data-link]').count(), 0, 'no links out of the app at all');
+  // the only ways out: the Discord (people help find or restore files) and the player guide; never a download
+  assert.deepEqual(await page.$$eval('#page-findfiles a, #page-findfiles [data-link]', (l) => l.map((x) => x.dataset.link || x.href)), ['discord', 'gettingstarted']);
+  assert.equal(await page.locator('#page-findfiles .ff-card').count(), 5);
+  assert.match(await page.textContent('#page-findfiles .ff-dc'), /Still stuck\?[\s\S]*Ask on the Discord: people help find or restore files\.[\s\S]*Join the Discord/i);
+  await page.click('#ff-discord');
+  assert.ok(await page.evaluate(() => window.__calls.some(([c, a]) => c === 'open_link' && a.name === 'discord')), 'Join the Discord opens the named link');
   await page.click('#ff-pick');
   assert.equal(await pageOn(page), 'page-clients');
   assert.ok(await page.evaluate(() => window.__calls.some(([c]) => c === 'pick_folder')), 'CHOOSE A FOLDER… asks for the folder');

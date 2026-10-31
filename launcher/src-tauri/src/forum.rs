@@ -16,6 +16,8 @@ pub const API_BASE: &str = "https://play.openvanilla.app/wrath/forum/api";
 /// The forum's pages on the website (New thread, a thread, Reply open there).
 pub const PAGE: &str = "https://play.openvanilla.app/wrath/leyline/forum";
 pub const TIMEOUT: Duration = Duration::from_secs(8);
+/// What the player reads when the forum can't be reached (never the network library's text).
+pub const UNREACHABLE: &str = "The forum isn't reachable right now. Try again, or ask on the Discord.";
 
 /// What the UI may ask: (action, the parameters it may send).
 pub const ACTIONS: &[(&str, &[&str])] = &[
@@ -101,7 +103,13 @@ pub fn seen(url: &str) -> bool {
 pub fn call(action: &str, args: &Value) -> Result<Value, String> {
     let path = request_for(action, args)?;
     let body = crate::net::get(&format!("{}/{path}", base()), TIMEOUT)
-        .map_err(|e| if e.contains("404") { "That isn't on the forum any more.".to_string() } else { format!("The forum isn't answering right now ({e}).") })?;
+        .map_err(|e| {
+            if e.contains("404") {
+                return "That isn't on the forum any more.".to_string();
+            }
+            eprintln!("forum: {e}"); // the detail for whoever is helping; the player gets a plain line
+            UNREACHABLE.to_string()
+        })?;
     let v: Value = serde_json::from_str(&body).map_err(|_| "The forum sent something odd. Try again later.".to_string())?;
     remember(&v);
     Ok(v)

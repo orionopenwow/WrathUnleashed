@@ -9,6 +9,8 @@
   const call = window.__TAURI__ && window.__TAURI__.core
     ? window.__TAURI__.core.invoke
     : async () => { throw "This is a preview page: open it in the Leyline app."; };
+  // never a raw error to the player (friendly.js): the error goes to the console, the player gets a plain line
+  const oops = (e, fb) => (window.LeylineFriendly ? window.LeylineFriendly(e, fb) : (fb || "Something went wrong. Try again."));
   const byId = (id) => document.getElementById(id);
   const mk = (tag, cls, text) => {
     const e = document.createElement(tag);
@@ -79,13 +81,13 @@
   const GUIDE = [
     ["start", "Start your realm", "Pick a ruleset and press Start. A window opens: leave it running. The first start imports the databases, 5 to 20 minutes.", "hostdocs"],
     ["stop", "Stop it", "Stop keeps characters, accounts and your invite link. Start again any time; it picks up where it was.", "hostdocs"],
-    ["update", "Update", "When a new Host pack is out, update it under Kit & settings, then press Start again. Your realm and its links are kept.", "hostdocs"],
+    ["update", "Update", "When a new Host pack is out, update it under Host pack & settings, then press Start again. Your realm and its links are kept.", "hostdocs"],
     ["public", "Go public", "Realm tools, Public or private. A public realm is on the Leyline realm list within a minute; a private one only takes your invite link.", "hostdocs"],
     ["invite", "Invite friends", "Realm tools, Invite links: copy the link and send it. Friends open it once and make their own account there.", "hostdocs"],
     ["claim", "Claim it with your Hero Key", "A listed realm shows as Unclaimed until you claim it. Get a claim token on the website and paste it under Public or private.", "alwayson"],
     ["alwayson", "Always on", "Vanilla+ starts always on: Docker brings it back after a reboot. With Docker Desktop, turn on its start at sign-in and keep the PC awake.", "alwayson"],
     ["link", "Link a server you already run", "Any core, here or elsewhere: Link my server runs only the relay agent next to it and never changes your server.", "alwayson"],
-    ["backups", "Backups", "Stop the realm, then copy the kit folder: state holds your realm's key and links. Characters live in Docker's wu-database volume.", "hostdocs"],
+    ["backups", "Backups", "Stop the realm, then copy the Host pack folder: state holds your realm's key and links. Characters live in Docker's wu-database volume.", "hostdocs"],
     ["trouble", "When something's wrong", "Run the health check: each line says what to fix. Server logs are under Realm tools.", "hostdocs"],
   ];
 
@@ -177,13 +179,13 @@
     if (mode === "console") {
       askedFor = null;
       const name = (kit && kit.realm && kit.realm.name) || "a realm";
-      if (id === DEN) say(`This host kit runs ${name}. A kit hosts one realm, so your Den needs a host kit of its own.`, "warn");
+      if (id === DEN) say(`This Host pack runs ${name}. A Host pack hosts one realm, so your Den needs a Host pack of its own.`, "warn");
       return;
     }
     if (!offers) return;    // loadSetup calls again once the rulesets are in
     askedFor = null;
     const o = offers.find((x) => x.id === id);
-    if (!o) { say("Your Host pack has no Den yet: update it under Kit & settings.", "warn"); return; }
+    if (!o) { say("Your Host pack has no Den yet: update it under Host pack & settings.", "warn"); return; }
     if (o.note) { say(o.note, "warn"); return; }
     pick(id).then(() => {
       const b = ui.rules && ui.rules.querySelector(`.hc-rs[data-profile="${id}"]`);
@@ -387,7 +389,7 @@
     if (b) b.disabled = true;
     say("Sending to your realm…");
     try { say(await call("host_gm", { action, data }), "ok"); return true; }
-    catch (e) { say(String(e), "bad"); return false; }
+    catch (e) { say(oops(e), "bad"); return false; }
     finally { if (b) b.disabled = false; }
   }
 
@@ -428,7 +430,7 @@
     const rid = kit && kit.realm && kit.realm.realm_id;
     try {
       const [c, s] = await Promise.all([
-        call("host_console").catch((e) => { if (!quiet) say(String(e), "bad"); return null; }),
+        call("host_console").catch((e) => { if (!quiet) say(oops(e), "bad"); return null; }),
         rid ? call("host_status", { realmId: rid }).then((x) => { statErr = null; return x; }).catch((e) => { statErr = String(e); return null; }) : null,
       ]);
       if (mode !== "console") return;
@@ -483,14 +485,14 @@
 
   async function startRealm() {
     say("Starting your realm…");
-    try { say(await call("host_start", {}), "ok"); } catch (e) { say(String(e), "bad"); }
+    try { say(await call("host_start", {}), "ok"); } catch (e) { say(oops(e), "bad"); }
     setTimeout(() => refresh(true), 20000);
   }
   async function stopRealm() {
     if (!(await ask("Stop the realm?", "Everyone online is saved and sent off. Characters, accounts and your invite link are kept.", "Stop"))) return;
     ui.stop.disabled = true;
     say("Stopping…");
-    try { say(await call("host_stop"), "ok"); } catch (e) { say(String(e), "bad"); }
+    try { say(await call("host_stop"), "ok"); } catch (e) { say(oops(e), "bad"); }
     ui.stop.disabled = false;
     gmStat = null;
     refresh(true);
@@ -503,7 +505,7 @@
     ui.chkSum.hidden = true;
     for (const { li, d } of Object.values(ui.checks)) { li.className = "c-run"; d.hidden = true; }
     let r = null;
-    try { r = await call("host_check"); } catch (e) { say(String(e), "bad"); }
+    try { r = await call("host_check"); } catch (e) { say(oops(e), "bad"); }
     ui.run.disabled = false;
     ui.run.textContent = "Run check";
     if (!r) { for (const { li } of Object.values(ui.checks)) li.className = "c-idle"; return; }
@@ -544,7 +546,7 @@
     if (b) b.disabled = true;
     say("Saving…");
     try { say(await call("host_tool", { name, arg: arg || null }), "ok"); await refresh(true); return true; }
-    catch (e) { say(String(e), "bad"); return false; }
+    catch (e) { say(oops(e), "bad"); return false; }
     finally { if (b) b.disabled = false; }
   }
   async function copyInvite() {
@@ -579,7 +581,7 @@
         const b = ev.currentTarget;
         if (!(await ask("Make a new invite link?", "The old link stops letting anyone new in. Friends who joined keep playing.", "Make a new link"))) return;
         b.disabled = true;
-        try { code.textContent = await call("host_new_invite"); say("New invite link made.", "ok"); } catch (e) { say(String(e), "bad"); }
+        try { code.textContent = await call("host_new_invite"); say("New invite link made.", "ok"); } catch (e) { say(oops(e), "bad"); }
         b.disabled = false;
       }));
       d.append(code, row, mk("p", "hc-fine", c.visibility === "private" ? "Private: the part after # is the key. Send it only to friends." : "Friends open it once, make their own account, then play."));
@@ -619,7 +621,7 @@
     } else if (k === "logs") {
       const pre = mk("pre", "hc-logs", "Reading the logs…");
       const row = mk("div", "hc-row");
-      const load = async () => { try { pre.textContent = (await call("host_logs", { lines: 200 })) || "(no log lines yet)"; pre.scrollTop = pre.scrollHeight; } catch (e) { pre.textContent = String(e); } };
+      const load = async () => { try { pre.textContent = (await call("host_logs", { lines: 200 })) || "(no log lines yet)"; pre.scrollTop = pre.scrollHeight; } catch (e) { pre.textContent = oops(e); } };
       row.append(btn("Refresh", "btn small", load));
       d.append(pre, row);
       load();
@@ -635,7 +637,7 @@
       const row = mk("div", "hc-row");
       row.append(btn("Save", "btn small primary", async (ev) => {
         const b = ev.currentTarget; b.disabled = true;
-        try { say(await call("host_rules_set", { lines: ta.value.split("\n") }), "ok"); } catch (e) { say(String(e), "bad"); }
+        try { say(await call("host_rules_set", { lines: ta.value.split("\n") }), "ok"); } catch (e) { say(oops(e), "bad"); }
         b.disabled = false;
       }), n);
       d.append(ta, row);
@@ -726,19 +728,19 @@
     picked = id;
     paintRulesets();
     try { await call("host_choose", { profile: id, clientId: o && o.clients[0] ? o.clients[0].id : null }); say(""); }
-    catch (e) { say(String(e), "bad"); }
+    catch (e) { say(oops(e), "bad"); }
   }
   async function startPicked() {
     ui.go.disabled = true;
     say("Starting your realm…");
-    try { say(await call("host_start", {}), "ok"); } catch (e) { say(String(e), "bad"); }
+    try { say(await call("host_start", {}), "ok"); } catch (e) { say(oops(e), "bad"); }
     paintGo();
     setTimeout(() => { if (typeof loadHost === "function") loadHost(); }, 20000);   // app.js: read the kit again
   }
   async function linkServer() {
-    if (!(kit && kit.is_kit)) { say("Get the Host pack first (Kit & settings).", "warn"); return; }
+    if (!(kit && kit.is_kit)) { say("Get the Host pack first (Host pack & settings).", "warn"); return; }
     say("Opening Link my server…");
-    try { say(await call("host_link_start"), "ok"); } catch (e) { say(String(e), "bad"); }
+    try { say(await call("host_link_start"), "ok"); } catch (e) { say(oops(e), "bad"); }
   }
 
   // the two things a host needs first, as two big numbered steps; gone once both are ready
@@ -783,7 +785,7 @@
       await call("set_host_kit", { path: dir });
       say("The Host pack is ready.", "ok");
       if (typeof loadHost === "function") loadHost();   // app.js: re-read the kit
-    } catch (e) { say(String(e), "bad"); b.disabled = false; b.textContent = "Try again"; }
+    } catch (e) { say(oops(e), "bad"); b.disabled = false; b.textContent = "Try again"; }
   }
 
   async function loadSetup() {

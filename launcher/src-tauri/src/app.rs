@@ -353,7 +353,7 @@ async fn realm_status(realm: String, status_url: Option<String>) -> Result<statu
     blocking(move || Ok(status::check(&realm, url.as_deref()))).await
 }
 
-/// Open one of the launcher's fixed pages (`crate::LINKS`) by name: Discord, support, news, docs, the site.
+/// Open one of the launcher's fixed pages (`crate::LINKS`) by name: Discord, news, docs, the site.
 #[tauri::command]
 fn open_link(app: AppHandle, name: String) -> Result<(), String> {
     let url = crate::link(&name).ok_or("Unknown link.")?;
@@ -928,6 +928,8 @@ pub fn run() {
             // the Forum page: reading the website's forum, opening its pages (forum.rs)
             crate::forum::commands::forum_call,
             crate::forum::commands::forum_open,
+            // the News page: the website's news feed (news.rs)
+            crate::news::commands::news_list,
             // the Modes page (modes.rs)
             crate::modes::commands::modes_list,
             crate::modes::commands::mode_open_browser,

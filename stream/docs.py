@@ -28,6 +28,7 @@ import threading
 # The fixed, allow-listed pages: (name, title in the table of contents). The order is the contents' order.
 PAGES = (
     ("index", "Overview"),
+    ("getting-started", "Getting started"),   # the player guide (the launcher's Help and Find your game files link it). TODO(owner): his words
     ("play", "Play"),
     ("commands", "Commands"),
     ("mods", "Mod format"),

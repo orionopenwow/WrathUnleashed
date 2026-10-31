@@ -59,7 +59,7 @@
     // named link. TODO(owner): the kicker and the line, his words.
     if (App.playHangout) {
       out.push({ key: "hangout", kicker: "Open now · " + App.HANGOUT.kind, title: "Join " + App.HANGOUT.name,
-        line: "Everyone meets in Dalaran. Say hello, then try /golf and /modes.",
+        line: "Start at level 1 or boost to 80. Say hello, then try /golf and /modes.",
         chips: hangoutChips, photo: true, side: hangoutSide, cta: "Play now", run: () => App.playHangout(),
         cta2: "Join the Discord", run2: () => App.openLink("discord") });
     }
@@ -709,6 +709,7 @@
   document.addEventListener("leyline:realms", () => { renderRealms(); build(); });
   document.addEventListener("leyline:catalog", () => { build(); renderMods(); });
   document.addEventListener("leyline:modes", () => { build(); renderModes(); });
+  document.addEventListener("leyline:news", () => { build(); renderNewsRow(); });   // the website's news feed came in (app.js loadNews)
   document.addEventListener("leyline:page", (e) => { if ((e.detail || {}).page === "play") loadForum(); });
   build();
   loadForum();

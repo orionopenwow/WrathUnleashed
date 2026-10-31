@@ -166,14 +166,14 @@ test('INSTALL in one click into the picked client, then INSTALLED ✓ and UPDATE
   const upd = [{ key: 'mod:bravo', name: 'Bravo', version: '0.9.0', source: 'catalog', update: '1.0.0', in_catalog: true, enabled: true, files: [], addons: ['Bravo'], patches: [] }];
   const { page, errors } = await open({ installedMods: upd });
   const btn = card(page, 'mod:alpha').locator('.acts .btn');
-  assert.equal(await btn.textContent(), 'INSTALL');
-  assert.equal(await card(page, 'mod:bravo').locator('.acts .btn').textContent(), 'UPDATE');
+  assert.equal(await btn.textContent(), 'Install');
+  assert.equal(await card(page, 'mod:bravo').locator('.acts .btn').textContent(), 'Update');
   assert.equal(await card(page, 'mod:bravo').locator('.acts .btn').getAttribute('title'), 'Update to 1.0.0');
   assert.equal(await card(page, 'link:0123456789ab').locator('.acts .btn').count(), 0, 'a community link has no INSTALL (and no page here)');
   await btn.click();
   await page.waitForFunction(() => /Installed Alpha v1\.0\.0 in My Wrath/.test(document.getElementById('cat-status').textContent));
   assert.deepEqual(await calls(page, 'mod_install'), [{ client: 'c335a-1', project: 'mod:alpha' }]);
-  await page.waitForFunction(() => document.querySelector('#cat-grid .mod-card[data-id="mod:alpha"] .acts .btn').textContent === 'INSTALLED ✓');
+  await page.waitForFunction(() => document.querySelector('#cat-grid .mod-card[data-id="mod:alpha"] .acts .btn').textContent === 'Installed ✓');
   assert.ok(await card(page, 'mod:alpha').locator('.acts .btn').isDisabled());
   assert.deepEqual(await calls(page, 'open_url'), [], 'the button does not open the page');
   assert.deepEqual(errors, []);
@@ -189,7 +189,7 @@ test('rating stars: saved, or the sign-in note', async () => {
   await page.close();
   ({ page, errors } = await open({ signedOut: true }));
   await card(page, 'mod:bravo').locator('.stars button').first().click();
-  await page.waitForFunction(() => /Sign in on Home \(top right\)/.test(document.getElementById('cat-status').textContent));
+  await page.waitForFunction(() => /Sign in \(top right\) to rate mods/.test(document.getElementById('cat-status').textContent));
   assert.deepEqual(errors, []);
   await page.close();
 });

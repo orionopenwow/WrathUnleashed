@@ -106,7 +106,7 @@
           body: `${c.name} has its own copy of these addon folders. Leyline did not put them there, so it asks first.`,
           list: info.folders.map((f) => "Interface/AddOns/" + f),
           fine: "Yes moves your copies, whole, into the game folder's Leyline/backup and puts ours in. Uninstall puts yours back.",
-          yes: "MOVE MINE ASIDE AND INSTALL", no: "CANCEL",
+          yes: "Move mine aside and install", no: "Cancel",
         });
         if (!a.yes) throw "Not installed: your own copies stay as they are.";
         r = await invoke("addons_install", { client: c.id, replace: true });
@@ -173,13 +173,13 @@
     if (supported) {
       const running = busy.has(c.id);
       if (!s.installed || s.update || s.missing.length) {
-        const b = el("button", "btn small" + (s.update || !s.installed ? " primary" : ""), running ? "WORKING…" : s.installed ? (s.update ? "UPDATE" : "REPAIR") : "INSTALL");
+        const b = el("button", "btn small" + (s.update || !s.installed ? " primary" : ""), running ? "Working…" : s.installed ? (s.update ? "Update" : "Repair") : "Install");
         b.disabled = running || !ov || !ov.pack;
         b.addEventListener("click", () => install(c));
         acts.append(b);
       }
       if (s.installed || (s.backups && s.backups.length)) {
-        const b = el("button", "btn small danger", running && s.installed ? "WORKING…" : "UNINSTALL");
+        const b = el("button", "btn small danger", running && s.installed ? "Working…" : "Uninstall");
         b.title = "Takes out exactly what Leyline put in (and puts your own copies back)";
         b.disabled = running;
         b.addEventListener("click", () => remove(c));
@@ -273,7 +273,7 @@
     await load(false);
     const s = forClient(profile.id);
     if (!ov.pack || !s || s.installed) return;
-    const a = await ask({ title: COPY.setupTitle, body: `Install the Leyline addons in ${profile.name}? ${COPY.pitch}`, fine: COPY.safe, yes: "INSTALL", no: "NOT NOW" });
+    const a = await ask({ title: COPY.setupTitle, body: `Install the Leyline addons in ${profile.name}? ${COPY.pitch}`, fine: COPY.safe, yes: "Install", no: "Not now" });
     if (a.yes) await install(profile);
   }
 
@@ -291,7 +291,7 @@
         return;
       }
       if (!(await invoke("addons_should_offer", { client: c.id }))) return;
-      const a = await ask({ title: COPY.playTitle, body: COPY.playBody, fine: COPY.safe, yes: "INSTALL AND PLAY", no: "PLAY WITHOUT", ask: true });
+      const a = await ask({ title: COPY.playTitle, body: COPY.playBody, fine: COPY.safe, yes: "Install and play", no: "Play without", ask: true });
       if (a.dontAsk) {
         try { ov.prefs = await invoke("addons_set_prefs", { dontAsk: true }); } catch (_) { /* fine */ }
         renderSettings();

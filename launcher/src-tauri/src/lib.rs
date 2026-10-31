@@ -21,6 +21,7 @@ pub mod host;
 pub mod launch;
 pub mod modes; // the Modes page: game modes one click away (modes agent)
 pub mod mods;
+pub mod news; // the News page: the website's news feed, read only (news.rs)
 pub mod net;
 pub mod p2p;
 pub mod pe_version;
@@ -52,16 +53,16 @@ pub const LINKS: &[(&str, &str)] = &[
     ("linkgoogle", "https://play.openvanilla.app/auth/google/start?link=1"),
     ("linkdiscord", "https://play.openvanilla.app/auth/discord/start?link=1"),
     ("linkedlaunchers", "https://play.openvanilla.app/wrath/link"),
-    ("news", "https://play.openvanilla.app/wrath/leyline"),
+    ("news", "https://play.openvanilla.app/wrath/leyline/news"),
     ("docs", "https://play.openvanilla.app/wrath/docs"),
+    ("gettingstarted", "https://play.openvanilla.app/wrath/docs/getting-started"), // the player guide (Help, Find your game files)
     ("mods", "https://play.openvanilla.app/wrath/mods"),
     ("discord", "https://discord.gg/hVeUxYwbkr"),
     ("forum", forum::PAGE), // the website's forum: posting happens there (forum.rs)
     ("forumnew", "https://play.openvanilla.app/wrath/leyline/forum/new"),
-    ("support", "https://ko-fi.com/orionvanilla"),
     ("github", "https://github.com/orionopenwow/Leyline"),
     ("host", host::HOST_PAGE),
-    ("hostguide", "https://github.com/orionopenwow/Leyline/blob/main/hosting/INSTALL-OPERATE.md"),
+    ("hostguide", "https://play.openvanilla.app/wrath/docs/hosting"), // the Host pack and its settings
     ("hostdocs", "https://play.openvanilla.app/wrath/docs/hosting"), // the host console's guide (host/console.rs)
     ("alwayson", "https://play.openvanilla.app/wrath/docs/always-on"),
     ("themes", "https://github.com/orionopenwow/WrathUnleashed/blob/main/docs/THEMES.md"), // themes agent
@@ -101,8 +102,17 @@ mod link_tests {
     }
 
     #[test]
+    fn news_and_the_player_guide_link_to_the_site_and_nothing_asks_for_money() {
+        assert_eq!(super::link("news"), Some("https://play.openvanilla.app/wrath/leyline/news"));
+        assert_eq!(super::link("gettingstarted"), Some("https://play.openvanilla.app/wrath/docs/getting-started"));
+        assert!(super::link("support").is_none());
+        assert!(super::LINKS.iter().all(|(_, u)| !u.contains("ko-fi") && !u.contains("patreon")));
+    }
+
+    #[test]
     fn the_host_guide_links_to_the_site_docs() {
         assert_eq!(super::link("hostdocs"), Some("https://play.openvanilla.app/wrath/docs/hosting"));
+        assert_eq!(super::link("hostguide"), Some("https://play.openvanilla.app/wrath/docs/hosting"));
         assert_eq!(super::link("alwayson"), Some("https://play.openvanilla.app/wrath/docs/always-on"));
         let mut names: Vec<&str> = super::LINKS.iter().map(|(n, _)| *n).collect();
         names.sort();
