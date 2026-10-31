@@ -194,17 +194,21 @@ svg { flex: none; }
 .chip-txt span { font-size: 13px; font-weight: 600; }
 .chip-txt i { font-style: normal; font-size: 11.5px; color: var(--t-ok); }
 /* the one account control (owner 2026-10-30: Home's Account card is gone, so this one stands out) */
+/* the online pill is off the title bar (owner 2026-10-30: "remove the online bubble"); the realm's state shows in
+   the play bar and on Home's Server card. The account button: the same 38px height and radius as the search box. */
+#tb-status { display: none !important; }
 #tb-account {
-  height: 42px; padding: 0 6px 0 5px; gap: 10px; border-radius: 999px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--t-accent) 22%, var(--t-panel)), color-mix(in srgb, var(--t-accent-2) 14%, var(--t-panel)));
-  border: 1px solid color-mix(in srgb, var(--t-accent) 55%, transparent);
-  box-shadow: 0 0 0 1px rgba(0,0,0,.25), 0 4px 14px color-mix(in srgb, var(--t-accent) 28%, transparent);
+  height: 38px; padding: 0 4px 0 4px; gap: 8px; border-radius: var(--t-radius-sm);
+  background: var(--t-surface); border: var(--t-border-w) solid var(--t-border);
+  box-shadow: none;
 }
-#tb-account:hover { border-color: var(--t-accent); filter: brightness(1.08); }
-#tb-account .chip-crest { width: 32px; height: 32px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--t-accent) 60%, transparent); }
+#tb-account:hover { border-color: var(--t-accent); background: var(--t-raised); }
+#tb-account .chip-crest { width: 28px; height: 28px; border-radius: 7px; box-shadow: none; }
+#tb-account .chip-crest b { font-size: 12px; }
+#tb-account .chip-txt span { font-size: 13px; font-weight: 600; }
 .chip-go {
-  margin-left: 4px; padding: 6px 10px; border-radius: 999px; font: 700 10.5px var(--t-font); letter-spacing: .08em;
-  background: var(--t-accent); color: #fff;
+  margin-left: 2px; height: 28px; padding: 0 10px; display: grid; place-items: center; border-radius: 6px;
+  font: 700 10.5px var(--t-font); letter-spacing: .08em; background: var(--t-accent); color: var(--t-on-accent);
 }
 /* the window buttons tucked into the top-right corner (owner 2026-10-30): flush with the edge, small, no gap */
 .winbtns { display: flex; gap: 0; align-self: flex-start; margin-left: 4px; }
