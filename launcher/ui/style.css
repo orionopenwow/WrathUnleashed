@@ -565,6 +565,43 @@ html[data-base="light"] .pb-menu { box-shadow: 0 -10px 30px rgba(16, 24, 40, 0.1
 .play:disabled { opacity: 0.5; filter: none; cursor: default; }
 .caption { display: none; }
 @media (max-width: 1150px) { .playbar { grid-template-columns: 240px minmax(0, 1fr) auto; gap: 14px; } .play { width: 220px; } }
+/* owner 2026-10-30 22:15: PLAY in the style of the game's red menu button (the modern client's red "Back" button),
+   drawn in CSS only: no game art ships with the launcher. Deep crimson, a thin gold rim, a soft top sheen, gold
+   lettering in Leyline Display (OFL). */
+@font-face { font-family: "Leyline Display"; font-weight: 400 900; src: url("art/leyline-display.woff2") format("woff2"); font-display: swap; }
+.play {
+  position: relative; border-radius: 7px;
+  border: 1px solid #c9a24a;
+  background:
+    linear-gradient(180deg, rgba(255, 214, 160, 0.20) 0%, rgba(255, 214, 160, 0.04) 46%, rgba(0, 0, 0, 0) 52%, rgba(0, 0, 0, 0.22) 100%),
+    radial-gradient(120% 140% at 50% 0%, #c41a12 0%, #8f0d08 55%, #5a0604 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(60, 8, 4, 0.9),
+    inset 0 0 0 2px rgba(255, 196, 120, 0.22),
+    inset 0 10px 18px rgba(255, 120, 80, 0.16),
+    inset 0 -10px 16px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(0, 0, 0, 0.7),
+    0 6px 18px rgba(0, 0, 0, 0.55),
+    0 0 24px rgba(200, 30, 20, 0.22);
+  transition: filter 0.15s, transform 0.08s, box-shadow 0.15s;
+}
+.play::before {
+  content: ""; position: absolute; inset: 3px; border-radius: 5px; pointer-events: none;
+  border: 1px solid rgba(255, 210, 140, 0.18);
+}
+.play::after {
+  content: "PLAY"; font: 700 26px/1 "Leyline Display", Georgia, serif; letter-spacing: 0.18em;
+  color: #ffd56a;
+  background: linear-gradient(180deg, #fff1b8 0%, #ffd34f 45%, #e0a21c 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 1px 0 rgba(40, 4, 0, 0.9)) drop-shadow(0 0 6px rgba(255, 180, 60, 0.25));
+}
+.play:hover { filter: brightness(1.12) saturate(1.05); box-shadow:
+    inset 0 0 0 1px rgba(60, 8, 4, 0.9), inset 0 0 0 2px rgba(255, 196, 120, 0.3), inset 0 10px 18px rgba(255, 140, 90, 0.22),
+    inset 0 -10px 16px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(0, 0, 0, 0.7), 0 6px 18px rgba(0, 0, 0, 0.55), 0 0 30px rgba(230, 40, 25, 0.35); }
+.play:active { transform: translateY(1px); filter: brightness(0.94); }
+.play:focus-visible { outline: 2px solid #ffd56a; outline-offset: 3px; }
+
 @media (prefers-reduced-motion: reduce) { .pb-caret { transition: none; } }
 
 /* ---------------------------------------------------------------- Find your game files */
