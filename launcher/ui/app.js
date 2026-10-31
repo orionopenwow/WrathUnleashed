@@ -772,23 +772,43 @@ async function loadRanks(refresh) {
 }
 // Without rankings (offline on first start): the kind from the catalog's own fields, like rankings.rs kind_of.
 const kindOf = (p) => (p.category === "sandbox" ? "mode" : (p.kind === "ui" || p.category === "addons") ? "addon" : "mod");
+const kindFor = (p) => (ranked && ranked.metrics && ranked.metrics[p.id] && ranked.metrics[p.id].kind) || kindOf(p);
+// Kinds sit in the one Show menu with the categories (themes have their own tab, Discover › Themes).
+const KINDS = [["addon", "Addons"], ["mod", "Realm mods and tools"], ["mode", "Game modes"]];
+const SORTS = ["hot", "rising", "top", "installs", "installs30", "new", "updated"];
+if (!SORTS.includes(catFilter.sort)) catFilter.sort = "hot";
 function renderSorts() {
-  document.querySelectorAll("#cat-sorts [data-sort]").forEach((b) => {
-    const on = b.dataset.sort === catFilter.sort;
-    b.classList.toggle("on", on);
-    b.setAttribute("aria-selected", on ? "true" : "false");
-  });
-  $("cat-kind").value = catFilter.kind;
+  $("cat-sort").value = catFilter.sort;
 }
-document.querySelectorAll("#cat-sorts [data-sort]").forEach((b) => b.addEventListener("click", async () => {
-  catFilter.sort = b.dataset.sort;
+$("cat-sort").addEventListener("change", async () => {
+  catFilter.sort = $("cat-sort").value;
   try { localStorage.setItem("leyline.catSort", catFilter.sort); } catch (_) { /* fine */ }
   await loadRanks(false);
   renderCatalog();
-}));
-$("cat-kind").addEventListener("change", async () => {
-  catFilter.kind = $("cat-kind").value;
-  await loadRanks(false);
+});
+// The Show menu: All, the kinds and the categories that have something to show (with the client filter on, for this client).
+function renderShowMenu(pool) {
+  const sel = $("cat-cat");
+  const want = catFilter.kind ? "kind:" + catFilter.kind : catFilter.cat ? "cat:" + catFilter.cat : "";
+  const kinds = {}, cats = {};
+  for (const p of pool) { kinds[kindFor(p)] = (kinds[kindFor(p)] || 0) + 1; cats[p.category] = (cats[p.category] || 0) + 1; }
+  const opt = (v, label, n) => { const o = el("option", "", n === undefined ? label : `${label} (${n})`); o.value = v; return o; };
+  const opts = [opt("", "All", pool.length)];
+  const kg = el("optgroup"); kg.label = "Kind";
+  for (const [k, label] of KINDS) if (kinds[k] || want === "kind:" + k) kg.append(opt("kind:" + k, label, kinds[k] || 0));
+  const cg = el("optgroup"); cg.label = "Category";
+  for (const k of catalog.categories) if (cats[k.id] || want === "cat:" + k.id) cg.append(opt("cat:" + k.id, k.name, cats[k.id] || 0));
+  if (kg.children.length > 1) opts.push(kg);
+  if (cg.children.length) opts.push(cg);
+  sel.replaceChildren(...opts);
+  sel.value = want;
+  if (sel.value !== want) sel.value = "";
+}
+$("cat-cat").addEventListener("change", async () => {
+  const v = $("cat-cat").value;
+  const kind = v.startsWith("kind:") ? v.slice(5) : "";
+  catFilter.cat = v.startsWith("cat:") ? v.slice(4) : "";
+  if (kind !== catFilter.kind) { catFilter.kind = kind; await loadRanks(false); }
   renderCatalog();
 });
 
@@ -815,20 +835,9 @@ function renderCatalog() {
   const c = pickedClient();
   const q = $("cat-q").value.trim().toLowerCase();
   const fitOnly = $("cat-fit").checked;
-  const counts = {};
-  for (const p of catalog.projects) counts[p.category] = (counts[p.category] || 0) + 1;
-  const chips = $("cat-chips");
-  chips.replaceChildren();
-  const chip = (id, label, n) => {
-    const b = el("button", "chip-btn" + (catFilter.cat === id ? " on" : ""), n === undefined ? label : `${label} ${n}`);
-    b.type = "button";
-    b.addEventListener("click", () => { catFilter.cat = id; renderCatalog(); });
-    chips.append(b);
-  };
-  chip("", "All", catalog.projects.length);
-  for (const k of catalog.categories) chip(k.id, k.name, counts[k.id] || 0);
-
+  $("pane-discover").classList.toggle("fit-off", !fitOnly);
   renderSorts();
+  renderShowMenu(catalog.projects.filter((p) => !fitOnly || !c || fitsClient(p, c)));
   const grid = $("cat-grid");
   grid.replaceChildren();
   let ordered = catalog.projects;
@@ -846,24 +855,17 @@ function renderCatalog() {
   });
   if (!list.length) {
     const cat = catalog.categories.find((k) => k.id === catFilter.cat);
-    grid.append(el("p", "hint", catalog.projects.length
-      ? (cat && !counts[cat.id] ? `No mods in ${cat.name} yet. Make the first one: see MAKE A MOD.` : "Nothing matches.")
+    grid.append(el("p", "hint dc-empty", catalog.projects.length
+      ? (cat && !catalog.projects.some((p) => p.category === cat.id) ? `No mods in ${cat.name} yet. Make the first one: see MAKE A MOD.` : "Nothing matches.")
       : "The Workshop list is not here yet."));
     return;
   }
   for (const p of list) grid.append(projectCard(p, c));
 }
 
-// A card's numbers and its rating stars. Rating needs the Community › Friends sign-in (the same website sign-in).
-function statsLine(p) {
-  const m = ranked && ranked.metrics ? ranked.metrics[p.id] : null;
-  const st = el("div", "stats");
-  if (m) {
-    const r = m.rating || {};
-    st.append(el("span", "rating", r.n ? `★ ${Number(r.avg).toFixed(1)} · ${r.n} rating${r.n === 1 ? "" : "s"}` : "No ratings yet"));
-    st.append(el("span", "installs", `${m.installs.all} install${m.installs.all === 1 ? "" : "s"}`));
-    if (m.rising) st.append(el("span", "tag good", "Rising"));
-  }
+// Rating stars on a card's picture (shown on hover and focus). Rating needs the Community › Friends sign-in (the
+// same website sign-in).
+function rateStars(p) {
   const stars = el("span", "stars");
   stars.setAttribute("role", "group");
   stars.setAttribute("aria-label", `Rate ${p.name}`);
@@ -872,11 +874,10 @@ function statsLine(p) {
     b.type = "button";
     b.title = `${n} star${n > 1 ? "s" : ""}`;
     b.setAttribute("aria-label", `Rate ${n} star${n > 1 ? "s" : ""}`);
-    b.addEventListener("click", () => rateProject(p, n, stars));
+    b.addEventListener("click", (ev) => { ev.stopPropagation(); rateProject(p, n, stars); });
     stars.append(b);
   }
-  st.append(stars);
-  return st;
+  return stars;
 }
 async function rateProject(p, n, box) {
   try {
@@ -889,43 +890,148 @@ async function rateProject(p, n, box) {
   }
 }
 
+// ------------------------------------------------------------------ Discover cards: a picture, a name, one line
+// The picture: the catalog's own (thumb, preview, screenshots[0], images[0], when a catalog has them), else the
+// Workshop's first screenshot of a packaged mod (/wrath/mods/<id>/shot/0), else the hub's copy of a GitHub repo's
+// preview (/wrath/art/hub-thumbs/<owner>__<repo>.webp). Only from the site itself (the window's CSP allows no other
+// host). Lazy; while it loads, and when there is none (a 404), the tile drawn from the name shows.
+const SITE = "https://play.openvanilla.app";
+function siteImage(u) {
+  if (typeof u !== "string" || !u) return "";
+  if (/^\/wrath\/[A-Za-z0-9._~\/-]+$/.test(u) && !u.includes("..")) return SITE + u;
+  if (u.startsWith(SITE + "/") && /^[A-Za-z0-9._~\/:-]+$/.test(u) && !u.includes("..")) return u;
+  return "";
+}
+function thumbUrl(p) {
+  const first = (v) => (Array.isArray(v) ? v[0] : v);
+  for (const v of [p.thumb, p.thumbnail, p.preview, first(p.screenshots), first(p.images), p.icon]) {
+    const u = siteImage(typeof v === "object" && v ? v.url : v);
+    if (u) return u;
+  }
+  const mid = p.id.startsWith("mod:") ? p.id.slice(4) : "";
+  if (p.source === "packaged" && /^[a-z0-9-]+$/.test(mid)) return `${SITE}/wrath/mods/${mid}/shot/0`;
+  const gh = /^https:\/\/github\.com\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99}?)(?:\.git)?\/?$/.exec(p.repo || "");
+  if (gh) return `${SITE}/wrath/art/hub-thumbs/${gh[1].toLowerCase()}__${gh[2].toLowerCase()}.webp`;
+  return "";
+}
+// A small glyph per category (24x24, stroked), for the drawn tile.
+const CAT_GLYPHS = {
+  addons: "M9 4h4v2.5a1.5 1.5 0 0 0 3 0V4h4v6h-2.5a1.5 1.5 0 0 0 0 3H20v7H4v-7h2.5a1.5 1.5 0 0 0 0-3H4V4z",
+  graphics: "M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z",
+  sandbox: "M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5",
+  maps: "M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14",
+  builds: "M4 20h16M6 20V10l6-5 6 5v10M10 20v-5h4v5",
+  encounters: "M5 19L19 5M14 5h5v5M5 5l5 5M14 14l5 5M19 14v5h-5",
+  models: "M12 3l8 4.5v9L12 21l-8-4.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9",
+  "realm-scripts": "M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16",
+  presets: "M5 6h14M5 12h14M5 18h14M9 4v4M15 10v4M8 16v4",
+  audio: "M9 18V6l11-2v12M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z",
+  tools: "M14.5 5.5a4 4 0 0 0-5 5L4 16v4h4l5.5-5.5a4 4 0 0 0 5-5L16 12l-4-4z",
+  conversions: "M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17.5l9 5 9-5",
+};
+function genTile(p) {
+  const t = el("span", "dc-gen");
+  t.setAttribute("aria-hidden", "true");
+  const h = nameHue(p.name || p.id);
+  t.style.setProperty("--h1", String(h));
+  t.style.setProperty("--h2", String((h + 48) % 360));
+  t.append(el("b", "", ([...String(p.name || "?").trim()][0] || "?").toUpperCase()));
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", CAT_GLYPHS[p.category] || CAT_GLYPHS.addons);
+  svg.append(path);
+  t.append(svg);
+  return t;
+}
+function cardThumb(p) {
+  const box = el("div", "dc-thumb");
+  box.append(genTile(p));
+  const u = thumbUrl(p);
+  if (u) {
+    const img = el("img");
+    img.alt = "";
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.referrerPolicy = "no-referrer";
+    img.width = 480;
+    img.height = 270;
+    img.addEventListener("load", () => { if (img.naturalWidth > 1) box.classList.add("has-img"); else img.remove(); });
+    img.addEventListener("error", () => { img.remove(); box.classList.remove("has-img"); });
+    img.src = u;
+    box.append(img);
+  }
+  return box;
+}
+// The first sentence of a description (the card clamps it to one line; the whole text is its tooltip).
+function firstLine(text) {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  const m = /^(.+?[.!?])(\s|$)/.exec(t);
+  return m ? m[1] : t;
+}
+const shortNum = (n) => (n >= 10000 ? Math.round(n / 1000) + "k" : n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(n));
+
 function projectCard(p, c) {
-  const card = el("article", "mod-card" + (p.id === linkedId ? " linked" : ""));
+  const card = el("article", "mod-card dc-card" + (p.id === linkedId ? " linked" : ""));
   card.dataset.id = p.id;
-  const top = el("div", "top");
-  top.append(el("b", "name", p.name));
-  if (p.version) top.append(el("span", "ver-s", "v" + p.version));
-  const cat = catalog.categories.find((k) => k.id === p.category);
-  const tags = el("div", "tags");
-  tags.append(el("span", "tag", p.source === "packaged" ? "Packaged" : "Community link"));
-  if (cat) tags.append(el("span", "tag", cat.name));
-  tags.append(el("span", "tag", p.builds.length ? p.builds.map((b) => (b === "any" ? "Any build" : b)).join(" · ") : "Any build"));
-  if (p.on_wrath) tags.append(el("span", "tag gold", "On the Wrath realm"));
   const fits = fitsClient(p, c);
-  if (c && !fits) tags.append(el("span", "tag warn", `Not for ${c.build}`));
-  card.append(top, tags, el("p", "desc", p.description || ""));
-  const credit = el("p", "credit", p.credits || [p.author, p.licence || "licence not stated"].filter(Boolean).join(" · "));
-  card.append(credit, statsLine(p));
+  const thumb = cardThumb(p);
+  const cat = catalog.categories.find((k) => k.id === p.category);
+  if (c && !fits) thumb.append(el("span", "dc-tag warn", `Not for ${c.build}`));
+  else if (cat) thumb.append(el("span", "dc-tag", cat.name));
+  thumb.append(rateStars(p));
+  const body = el("div", "dc-body");
+  const page = p.page || p.repo || "";
+  const name = el(page ? "button" : "b", "name", p.name);
+  if (page) {
+    name.type = "button";
+    name.title = `Open ${p.name}'s page`;
+    name.addEventListener("click", () => openUrl(page));
+    card.classList.add("can-open");
+  }
+  const line = firstLine(p.description);
+  const desc = el("p", "desc", line);
+  if (p.description && p.description.trim() !== line) desc.title = p.description;
+  body.append(name, desc);
+  const foot = el("div", "dc-foot");
+  const meta = el("div", "dc-meta");
+  if (p.version) meta.append(el("span", "ver-s", "v" + p.version));
+  const m = ranked && ranked.metrics ? ranked.metrics[p.id] : null;
+  if (m) {
+    const r = m.rating || {};
+    if (r.n) { const s = el("span", "rating", `★ ${Number(r.avg).toFixed(1)}`); s.title = `${r.n} rating${r.n === 1 ? "" : "s"}`; meta.append(s); }
+    const all = (m.installs && m.installs.all) || 0;
+    const ins = el("span", "installs", shortNum(all));
+    ins.title = `${all} install${all === 1 ? "" : "s"}`;
+    meta.append(ins);
+    if (m.rising) { const r = el("span", "rising", "▲"); r.title = "Rising"; r.setAttribute("aria-label", "Rising"); meta.append(r); }
+  } else if (p.source !== "packaged") meta.append(el("span", "src", "Community"));
   const acts = el("div", "acts");
-  const mine = installed.find((m) => m.key === p.id);
+  const mine = installed.find((x) => x.key === p.id);
   if (p.source === "packaged" && p.download) {
     const b = el("button", "btn small");
     b.type = "button";
     if (!c) { b.textContent = "INSTALL"; b.disabled = true; b.title = "Add a game client first"; }
     else if (!fits) { b.textContent = "INSTALL"; b.disabled = true; b.title = `Made for ${p.builds.join(" / ")} clients`; }
-    else if (mine && mine.update) b.textContent = `UPDATE TO ${mine.update}`;
-    else if (mine) { b.textContent = "INSTALLED"; b.disabled = true; }
-    else b.textContent = "INSTALL";
-    b.addEventListener("click", () => installProject(p, b));
-    acts.append(b);
+    else if (mine && mine.update) { b.textContent = "UPDATE"; b.title = `Update to ${mine.update}`; b.classList.add("primary"); }
+    else if (mine) { b.textContent = "INSTALLED ✓"; b.disabled = true; b.classList.add("done"); }
+    else { b.textContent = "INSTALL"; b.classList.add("primary"); }
+    b.addEventListener("click", (ev) => { ev.stopPropagation(); installProject(p, b); });
     if (p.kind === "realm") b.title = "A realm mod: it runs on a realm that installs it, not in your game";
-  } else if (p.source !== "packaged") {
-    acts.append(el("span", "hint", "Get it from its page, then drop the zip on Mods › Installed."));
+    acts.append(b);
+  } else if (page) {
+    const b = el("button", "btn small", "GET ↗");
+    b.type = "button";
+    b.title = "Get it from its page, then drop the zip on Mods › Installed.";
+    b.addEventListener("click", (ev) => { ev.stopPropagation(); openUrl(page); });
+    acts.append(b);
   }
-  if (p.page) acts.append(linkBtn("Page", p.page));
-  if (p.repo) acts.append(linkBtn("Source", p.repo));
-  if (p.author_url) acts.append(linkBtn("Author", p.author_url));
-  card.append(acts);
+  foot.append(meta, acts);
+  body.append(foot);
+  card.append(thumb, body);
+  // the whole card opens the page (the name is the keyboard way in; buttons and stars keep their own clicks)
+  if (page) card.addEventListener("click", (ev) => { if (!ev.target.closest("button, a, select, input")) openUrl(page); });
   return card;
 }
 
