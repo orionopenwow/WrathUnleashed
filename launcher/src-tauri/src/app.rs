@@ -898,6 +898,14 @@ pub fn run() {
             crate::p2p::cmds::host_listing, // the realm list details (host.rs ListingDetails)
             crate::p2p::cmds::host_volunteer_relay, // Leyline mesh: relay for others (host.rs volunteer_relay)
             crate::p2p::cmds::host_listing_set,
+            // the host console: health, GM controls, Check my realm, realm tools, Link my server (host/console.rs)
+            crate::p2p::cmds::host_console,
+            crate::p2p::cmds::host_gm,
+            crate::p2p::cmds::host_check,
+            crate::p2p::cmds::host_tool,
+            crate::p2p::cmds::host_rules,
+            crate::p2p::cmds::host_rules_set,
+            crate::p2p::cmds::host_link_start,
             crate::p2p::cmds::p2p_flags,
             crate::p2p::cmds::p2p_set_flag,
             crate::p2p::cmds::p2p_set_limits,

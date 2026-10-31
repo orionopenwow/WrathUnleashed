@@ -35,7 +35,14 @@
 --            join = "https://.../join/<id>" }        (join only for a public realm: a private invite holds a secret)
 -- No file (the operator's own realm): those lines say "-" and the window points at the launcher.
 --
--- mod-ale used: RegisterPlayerEvent 3 ON_LOGIN, 4 ON_LOGOUT; Player:GetGMRank / GetName / GetGUIDLow / KickPlayer /
+-- The launcher's host console (launcher/src-tauri/src/host/console.rs) runs the same actions from the host's own PC,
+-- out of game: it adds a row to ov_host_queue in the characters database (docker exec into the realm's own database
+-- container; the kit has no SOAP), and this script runs it as the console within QUEUE_EVERY ms and writes the answer
+-- back ("ok:<text>", "err:<text>" or "status:<lines>"). The same checks, limits and five-minute restart as the window;
+-- a row older than QUEUE_MAX_AGE seconds is answered "err" and never run late. Only on a host kit's realm (the facts
+-- file above is there when the script loads); the operator's own realm never polls.
+--
+-- mod-ale used: RegisterPlayerEvent 3 ON_LOGIN, 4 ON_LOGOUT; CreateLuaEvent (the console queue); Player:GetGMRank / GetName / GetGUIDLow / KickPlayer /
 -- SendBroadcastMessage / RegisterEvent; GetPlayerByName, GetPlayersInWorld, SendWorldMessage, RunCommand,
 -- CharDBQuery / CharDBExecute, AuthDBQuery, GetRealmID.
 
@@ -46,6 +53,7 @@ local MOD = "wuhost"
 local GM_LEVEL = tonumber(os.getenv("OV_HOSTCTL_GM") or "") or 3
 local FILE = os.getenv("OV_HOST_FILE") or "/azerothcore/lua_scripts/host-realm.dat"
 local RESTART_DELAY = 300
+local QUEUE_EVERY, QUEUE_MAX_AGE = 3000, 120
 local ACTION_COOLDOWN, ANNOUNCE_COOLDOWN, RESTART_COOLDOWN = 2, 10, 600
 local MAX_TEXT, MAX_ALLOW = 200, 500
 local TAG = "|cff5b8def[Realm]|r "
@@ -206,9 +214,18 @@ end
 
 local motd = nil
 
+-- The launcher's host console stands in for a player: the realm's owner, above every GM level; its answer is kept here.
+local CONSOLE = { console = true }
+function CONSOLE:GetGUIDLow() return 0 end
+function CONSOLE:GetName() return "the host console" end
+function CONSOLE:GetGMRank() return 255 end
+
 -- ---------------------------------------------------------------- replies
 
-local function reply(player, kind, data) OVMod.Send(player, MOD, kind, data or "") end
+local function reply(player, kind, data)
+    if player == CONSOLE then CONSOLE.answer = { kind, data or "" }; return end
+    OVMod.Send(player, MOD, kind, data or "")
+end
 local function ok(player, text) reply(player, "ok", text) end
 local function err(player, text) reply(player, "err", text) end
 
@@ -401,7 +418,64 @@ end
 RegisterPlayerEvent(3, onLogin)    -- PLAYER_EVENT_ON_LOGIN
 RegisterPlayerEvent(4, onLogout)   -- PLAYER_EVENT_ON_LOGOUT
 
+-- ---------------------------------------------------------------- the launcher's host console (ov_host_queue)
+
+local QUEUE_TABLE = "CREATE TABLE IF NOT EXISTS ov_host_queue (id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, "
+    .. "action VARCHAR(16) NOT NULL, data VARBINARY(255) NOT NULL, at INT UNSIGNED NOT NULL, done TINYINT NOT NULL "
+    .. "DEFAULT 0, result VARBINARY(1024) NULL) ENGINE=InnoDB"
+local queueSeen, lastClean = {}, 0
+
+local function unhex(h)
+    if type(h) ~= "string" or #h % 2 ~= 0 or h:find("[^%x]") then return nil end
+    return (h:gsub("%x%x", function(x) return string.char(tonumber(x, 16)) end))
+end
+local function hex(s) return (s:gsub(".", function(c) return string.format("%02X", c:byte()) end)) end
+
+-- One look at the queue: runs what waits (at most 5), answers each row once.
+function H.RunQueue()
+    local q = charQuery("SELECT id, action, HEX(data), at FROM ov_host_queue WHERE done = 0 ORDER BY id LIMIT 5")
+    local n = 0
+    if q then
+        repeat
+            local id = tonumber(q:GetString(0))
+            if id and not queueSeen[id] then
+                queueSeen[id] = true
+                local action, data, at = q:GetString(1), unhex(q:GetString(2) or ""), tonumber(q:GetString(3)) or 0
+                CONSOLE.answer = nil
+                if os.time() - at > QUEUE_MAX_AGE then
+                    CONSOLE.answer = { "err", "That waited too long, so it was not done." }
+                elseif not data or not (action == "status" or ACTIONS[action]) then
+                    CONSOLE.answer = { "err", "The realm doesn't know that control." }
+                else
+                    H.Handle(CONSOLE, action, data)
+                    log("console: " .. action)
+                end
+                local a = CONSOLE.answer or { "err", "No answer." }
+                local text = (a[1] .. ":" .. a[2]):sub(1, 1000)
+                charExec(string.format("UPDATE ov_host_queue SET done = 1, result = UNHEX('%s') WHERE id = %d", hex(text), id))
+                n = n + 1
+            end
+        until not q:NextRow()
+    end
+    local now = os.time()
+    if n == 0 and now - lastClean > 3600 then
+        lastClean = now
+        charExec("DELETE FROM ov_host_queue WHERE at < " .. math.floor(now - 86400))
+    end
+    return n
+end
+
+do
+    local hostFile = io.open(FILE, "rb")
+    if hostFile then
+        hostFile:close()
+        charExec(QUEUE_TABLE)
+        if CreateLuaEvent then CreateLuaEvent(function() H.RunQueue() end, QUEUE_EVERY, 0) end
+    end
+end
+
 -- for tests
 H._restart, H._allow, H.RESTART_DELAY, H.GM_LEVEL = restart, allow, RESTART_DELAY, GM_LEVEL
+H.CONSOLE, H.QUEUE_MAX_AGE = CONSOLE, QUEUE_MAX_AGE
 H.OnLogin = onLogin
 return H

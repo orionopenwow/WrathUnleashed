@@ -107,6 +107,51 @@ pub async fn host_listing_set(details: host::ListingDetails) -> Result<String, S
     blocking(move || host::set_listing_details(&kit()?, &details)).await
 }
 
+// ---------------------------------------------------------------- the host console (host/console.rs)
+
+/// The realm on this PC: its services, uptime, the relay, whether the GM controls work now.
+#[tauri::command]
+pub async fn host_console() -> Result<host::console::Console, String> {
+    blocking(|| Ok(host::console::console(&kit()?))).await
+}
+
+/// One GM control (announce, motd, kick, ban, unban, allow, restart, cancel, status), run by the realm's own script.
+/// A restart is always the five-minute one: no delay is taken from here.
+#[tauri::command]
+pub async fn host_gm(action: String, data: Option<String>) -> Result<String, String> {
+    blocking(move || host::console::gm(&kit()?, &action, data.as_deref().unwrap_or(""))).await
+}
+
+/// Check my realm, sorted into its five checks.
+#[tauri::command]
+pub async fn host_check() -> Result<host::console::CheckReport, String> {
+    blocking(|| host::console::check(&kit()?)).await
+}
+
+/// A realm tool by name (public, private, signup-invite|open|off, claim with its token).
+#[tauri::command]
+pub async fn host_tool(name: String, arg: Option<String>) -> Result<String, String> {
+    blocking(move || host::console::tool(&kit()?, &name, arg.as_deref())).await
+}
+
+#[tauri::command]
+pub fn host_rules() -> Result<Vec<String>, String> {
+    Ok(host::console::rules(&kit()?))
+}
+
+#[tauri::command]
+pub async fn host_rules_set(lines: Vec<String>) -> Result<String, String> {
+    blocking(move || host::console::set_rules(&kit()?, &lines)).await
+}
+
+/// `leyline link` (Link my server.bat) in a window of its own.
+#[tauri::command]
+pub fn host_link_start() -> Result<String, String> {
+    let plan = host::plan_link(&kit()?, HostOs::current(), host::on_path)?;
+    host::run(&plan)?;
+    Ok(plan.note)
+}
+
 #[tauri::command]
 pub async fn p2p_flags() -> Result<View, String> {
     blocking(|| Ok(flags::load(&settings::app_dir(), flags::URL))).await
