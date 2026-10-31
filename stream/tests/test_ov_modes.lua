@@ -782,6 +782,23 @@ for i = 1, 1000 do M.Host.Update(cc, 0.05, function(d) ccOut[#ccOut + 1] = d end
 local ccText = table.concat(ccOut, ";")
 check("examples: Coin Collect plays 45 seconds and ends", not cc.failed and cc.endText and cc.endText:find("Coin Collect", 1, true) and cc.state.left == 0)
 check("examples: Coin Collect shows its own HUD lines, one of them per player", ccText:find("t,time,*,Time: 30", 1, true) and ccText:find("t,mine,Bo,Your coins: 0", 1, true))
+-- Coin Collect: run to coin after coin (a coin picked up used to spawn the next inside pairs(coins): "invalid key
+-- to 'next'" stopped the mode, as Coin Dash did in the live smoke 2026-10-30)
+local cr = M.Host.Load(EX[1].text, { "Ann" }, 5)
+M.Host.Start(cr)
+local crHeld = {}
+for i = 1, 600 do
+    local ball, best, bd
+    for _, e in pairs(cr.ents) do if e.shape == "ball" then ball = e end end
+    for _, e in pairs(cr.ents) do
+        if e.color == "ffd700" and ball then local d = (e.x - ball.x) ^ 2 + (e.z - ball.z) ^ 2; if not bd or d < bd then best, bd = e, d end end
+    end
+    if not ball or not best or cr.failed or cr.endText then break end
+    local want = { W = best.z - ball.z > 0.3, S = best.z - ball.z < -0.3, D = best.x - ball.x > 0.3, A = best.x - ball.x < -0.3 }
+    for k, v in pairs(want) do if (crHeld[k] or false) ~= v then crHeld[k] = v; M.Host.Key(cr, "Ann", k, v) end end
+    M.Host.Update(cr, 0.05, noop)
+end
+check("examples: Coin Collect keeps running while you pick up coin after coin", not cr.failed and (cr.scores.Ann or 0) >= 8)
 local kh = M.Host.Load(EX[2].text, { "Ann" }, 3)
 M.Host.Start(kh)
 local held, everHeld = {}, false

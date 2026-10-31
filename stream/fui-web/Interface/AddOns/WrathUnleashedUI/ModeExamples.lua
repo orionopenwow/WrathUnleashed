@@ -84,16 +84,19 @@ function OnTick(dt)
         local nx, nz, d = Vec.Norm(r.x, r.z)
         if d > R - 0.6 then r.x, r.z = nx * (R - 0.6), nz * (R - 0.6) end
         Ent.Move(r.id, r.x, 0.6, r.z)
+        local got = 0
         for id, c in pairs(coins) do
             if Vec.Dist(r.x, r.z, c.x, c.z) < 1 then
                 Ent.Remove(id)
                 coins[id] = nil
                 Score.Add(p, 1)
                 if Score.Get(p) % 5 == 0 then HUD.Tell(p, Score.Get(p) .. " coins!") end
-                spawnCoin()
-                showHud()
+                got = got + 1
             end
         end
+        -- new coins after the walk: adding to a table while pairs() walks it is an error
+        for i = 1, got do spawnCoin() end
+        if got > 0 then showHud() end
     end
 end
 ]==] }
