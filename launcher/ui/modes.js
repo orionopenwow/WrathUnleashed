@@ -12,6 +12,8 @@
   "use strict";
   const tauri = window.__TAURI__ && window.__TAURI__.core ? window.__TAURI__.core.invoke : null;
   const invoke = tauri || (async () => { throw "This is a preview page: open it in the Leyline app."; });
+  // never a raw error to the player (friendly.js): the error goes to the console, the player gets a plain line
+  const oops = (e, fb) => (window.LeylineFriendly ? window.LeylineFriendly(e, fb) : (fb || "Something went wrong. Try again."));
   const $ = (id) => document.getElementById(id);
   const el = (tag, cls, text) => {
     const e = document.createElement(tag);
@@ -52,7 +54,7 @@
       <div class="toolbar">
         <label class="inline">Play with <select class="client-pick" data-for="modes"></select></label>
         <span class="md-how" id="md-how"></span>
-        <button type="button" class="btn small" id="md-refresh">REFRESH</button>
+        <button type="button" class="btn small" id="md-refresh">Refresh</button>
       </div>
       <p class="net-line" id="md-net" aria-live="polite"></p>
       <p class="status" id="md-status" role="status"></p>
@@ -71,7 +73,7 @@
     try { return localStorage.getItem("leyline.mode") === "browser"; } catch (_) { return false; }
   }
   function renderHow() {
-    $("md-how").textContent = browserMode() ? "PLAY opens your web browser (change it on Home)." : "PLAY starts your game client (change it on Home).";
+    $("md-how").textContent = browserMode() ? "PLAY opens your web browser (change it in the play bar)." : "PLAY starts your game client (change it in the play bar).";
   }
 
   function playersText(p) {
@@ -90,7 +92,7 @@
     $("md-net").textContent = "Loading…";
     let l;
     try { l = await invoke("modes_list"); }
-    catch (e) { loaded = false; $("md-net").textContent = ""; say(String(e), "bad"); return; }   // opening the page tries again
+    catch (e) { loaded = false; $("md-net").textContent = ""; say(oops(e), "bad"); return; }   // opening the page tries again
     modes = Array.isArray(l.modes) ? l.modes : [];
     const live = modes.filter((m) => m.status === "live").length;
     let line = `${live} to play · ${modes.length - live} coming soon`;
@@ -127,12 +129,12 @@
     }
     const acts = el("div", "acts");
     if (m.status === "live" && (m.kind === "realm" || m.kind === "offline")) {
-      const b = el("button", "btn small md-play", "PLAY");
+      const b = el("button", "btn small md-play", "Play");
       b.type = "button";
       b.addEventListener("click", () => play(m, b));
       acts.append(b);
     } else if (m.status === "live" && m.kind === "realm-type") {
-      const b = el("button", "btn small", "HOST IT");
+      const b = el("button", "btn small", "Host it");
       b.type = "button";
       b.title = "This mode is a realm type: host one with the Host pack, or find one on Realms.";
       b.addEventListener("click", () => {
@@ -142,7 +144,7 @@
       acts.append(b);
     } else if (m.status !== "live") {
       // Not playable yet: say so where PLAY would be, so it never looks like a broken button.
-      const b = el("button", "btn small md-soon", "COMING SOON");
+      const b = el("button", "btn small md-soon", "Coming soon");
       b.type = "button";
       b.disabled = true;
       b.title = `${m.title} isn't playable yet. It shows here when it is.`;
@@ -154,7 +156,7 @@
       b.type = "button";
       b.title = u;
       b.addEventListener("click", async () => {
-        try { await invoke("mode_open_credit", { id: m.id, n: i }); } catch (e) { say(String(e), "bad"); }
+        try { await invoke("mode_open_credit", { id: m.id, n: i }); } catch (e) { say(oops(e), "bad"); }
       });
       acts.append(b);
     });
@@ -184,15 +186,15 @@
       }
       const state = await invoke("get_state");
       const c = pickedClient(state);
-      if (!c) { say("Add your 3.3.5a game folder first (Clients), or switch Home to play in the browser.", "bad"); return; }
-      if (c.build !== "3.3.5a") { say(`${m.title} runs on the 3.3.5a realm: pick a 3.3.5a client above.`, "bad"); return; }
+      if (!c) { say("Add your game folder first, or pick Play in your browser in the play bar.", "bad"); return; }
+      if (c.build !== "3.3.5a") { say(`${m.title} plays with your Wrath game folder: pick it in the play bar, or add it first.`, "bad"); return; }
       if (window.LeylineAddons) await window.LeylineAddons.beforePlay(c);   // modes want the Leyline addons (addons.js)
       say("Starting…");
       const ready = await invoke("mode_prepare_desktop", { client: c.id, id: m.id });
       const started = await invoke("play", { client: c.id, realm: state.official_realm || OFFICIAL });
       say(`${started} ${ready}`, "ok");
     } catch (e) {
-      say(String(e), "bad");
+      say(oops(e), "bad");
     } finally {
       btn.disabled = false;
     }

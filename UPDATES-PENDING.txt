@@ -434,3 +434,12 @@
 1158a signin Site: Leyline HQ (one console: status, Needs you, releases, notes, players, sanctions, game tools)
 1158b hqnote Fill HQ: recent changes and the first notes from Claude
 1158c ship Save to GitHub: Leyline HQ
+1159a signin Site: shared rate limiter, timeouts and a connection cap, typed device-link code, getting-started guide
+1159b firewall-check Read-only: what the firewall limits would add
+1159c caddy-check Read-only: the live Caddy and compose config to the PC (secrets removed)
+1159d scripts Realm: chat anti-spam settings, raw bot commands through the limits, help line in the welcome (the new settings restart the realm with the 5-minute warning)
+1160a relay Relay: word filter on realm listings, new realms get a short grace period, held links go to review
+1160b signin Site: plain "how the network works" page, host needs shown up front, "You're live" after hosting, fresh guides; the addon marketplace (29 reviewed addons install straight from their authors into AddOns)
+1161a foreverui Character create: the random-name dice no longer covers the start of the name field
+1161c firewall Server: per-address connection limits on the game and web ports, and a day ban for anyone guessing passwords (dry run checked 07:39)
+1161d ship Save to GitHub: addon marketplace in the launcher, friendly errors, news, Help, host console, network quick wins and security fixes (GitHub then rebuilds Leyline.exe)

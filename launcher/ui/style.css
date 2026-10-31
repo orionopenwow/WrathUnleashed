@@ -588,6 +588,15 @@ html[data-base="light"] .pb-menu { box-shadow: 0 -10px 30px rgba(16, 24, 40, 0.1
 @media (max-width: 900px) { .ff-grid { grid-template-columns: minmax(0, 1fr); } }
 .panel.ff .ff-grid > .ff-card { margin-top: 0; }
 .ff-card p { margin: 0 0 10px; color: var(--t-text-2); font-size: 13.5px; }
+.ff-grid > .ff-dc { grid-column: 1 / -1; }   /* the fifth card, Still stuck? (the Discord), across the row */
+.ff-guide { margin: 12px 0 0; }
+.help-dc { margin-top: 12px; }
+.cl-more { margin: 2px 0 8px; font-size: 12.5px; color: var(--t-muted); }
+.cl-more summary { cursor: pointer; width: max-content; }
+.cl-more .meta { margin-top: 6px; }
+.hl-adv { margin-top: 18px; }
+.hl-adv > summary { cursor: pointer; font-weight: 600; color: var(--t-text-2); }
+.hl-adv > .card { margin-top: 10px; }
 .ff-card .row { margin-top: 4px; }
 .ff-list { margin: 0 0 10px; padding-left: 18px; display: grid; gap: 6px; font-size: 13.5px; color: var(--t-text-2); }
 .ff-list b { color: var(--t-text); margin-right: 4px; }
@@ -891,10 +900,6 @@ html[data-base="light"] .rl-ic.crystal { background: radial-gradient(circle at 5
 .dlg p { margin: 0 0 10px; font-size: 13px; color: var(--t-text-2); }
 .dlg p.small { font-size: 12px; color: var(--t-muted); }
 .dlg ul { margin: 0 0 12px; padding-left: 18px; font: 12px ui-monospace, Consolas, monospace; color: var(--t-text); max-height: 140px; overflow: auto; user-select: text; }
-
-/* Support / tip buttons are hidden on the owner's request (2026-10-29) until he brings them back:
-   delete this rule and the `hidden` attributes on [data-link="support"] in index.html. */
-[data-link="support"] { display: none !important; }
 
 /* the Discord buttons: a chat-bubble icon in Discord's purple on the left, inside the button (owner 2026-10-30).
    A generic bubble, not Discord's own logo; to use the official mark, put Discord's brand-kit SVG at

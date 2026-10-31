@@ -1,5 +1,6 @@
 # WrathUnleashed: test the realm Lua scripts on every push, and deploy the changed ones to the live realm
 # (live "reload ale", no restart; luaup.sh backs up each file and puts the old ones back if the reload fails).
+# The deploy key is restricted to one command on the server (server/luaup-ci.sh): no shell, scripts in only.
 # Owner's standing rule (2026-10-24): Claude may push and deploy to the live realm once tests pass.
 # Needs two repository secrets, set once by "setup\Set up automatic deploys.bat": WU_DEPLOY_SSH_KEY, WU_KNOWN_HOSTS.
 name: realm scripts
@@ -11,6 +12,7 @@ on:
       - "stream/lua/ov_slices.lua"
       - "stream/tests/**"
       - "realm/luaup.sh"
+      - "server/luaup-ci.sh"
       - ".github/workflows/realm-scripts.yml"
   pull_request:
     paths:
@@ -25,7 +27,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq lua5.1
       - name: ov_slices (realm rule, Dungeon Finder gate)
         run: |
@@ -71,7 +73,7 @@ jobs:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
       - name: changed scripts
@@ -96,8 +98,9 @@ jobs:
           install -m 700 -d ~/.ssh
           printf '%s\n' "$KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
           printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
-          cp realm/luaup.sh /tmp/up/luaup.sh.txt
+          # The deploy key can only run /srv/wrath/luaup-ci.sh (forced command in authorized_keys, server/luaup-ci.sh):
+          # a tar of scripts the realm already runs goes in on stdin; it checks them and reloads them live (luaup.sh).
           tar -cf /tmp/up.tar -C /tmp/up .
-          ssh -i ~/.ssh/deploy -o BatchMode=yes root@play.openvanilla.app \
-            'T=$(mktemp -d) && tar -x -C $T -f - && sed "s/\r$//" $T/luaup.sh.txt > $T/luaup.sh && rm -f $T/luaup.sh.txt && (cd $T && tar -cf - *.lua) | bash $T/luaup.sh 2>&1 | tee /tmp/wu-luaup.log; rm -rf $T; grep -q "^LUAUP OK" /tmp/wu-luaup.log' < /tmp/up.tar
+          ssh -i ~/.ssh/deploy -o BatchMode=yes -T root@play.openvanilla.app < /tmp/up.tar 2>&1 | tee /tmp/wu-luaup.log
+          grep -q "^LUAUP OK" /tmp/wu-luaup.log
           rm -f ~/.ssh/deploy

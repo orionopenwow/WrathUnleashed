@@ -5,6 +5,8 @@
   const call = window.__TAURI__ && window.__TAURI__.core
     ? window.__TAURI__.core.invoke
     : async () => { throw "This is a preview page: open it in the Leyline app."; };
+  // never a raw error to the player (friendly.js): the error goes to the console, the player gets a plain line
+  const oops = (e, fb) => (window.LeylineFriendly ? window.LeylineFriendly(e, fb) : (fb || "Something went wrong. Try again."));
   const byId = (id) => document.getElementById(id);
   const mk = (tag, cls, text) => {
     const e = document.createElement(tag);
@@ -18,7 +20,7 @@
 
   // ---------------------------------------------------------------- Host page: the pack and Docker
   const page = byId("page-host");
-  // the Host page's "Kit & settings" tab (hostconsole.js has the console and the guide)
+  // the Host page's "Host pack & settings" tab (hostconsole.js has the console and the guide)
   const panel = page && (byId("hc-pane-kit") || page.querySelector(".panel"));
   if (!panel) return;
   const packCard = mk("section", "card");
@@ -38,21 +40,21 @@
 
   let pack = null;
   async function useKit(dir) {
-    try { await call("set_host_kit", { path: dir }); } catch (e) { note(packStatus, String(e), "bad"); return; }
+    try { await call("set_host_kit", { path: dir }); } catch (e) { note(packStatus, oops(e), "bad"); return; }
     if (typeof loadHost === "function") loadHost();   // app.js: re-read the kit
   }
   async function loadPack() {
-    try { pack = await call("hostpack_info"); } catch (e) { packLine.textContent = String(e); return; }
+    try { pack = await call("hostpack_info"); } catch (e) { packLine.textContent = oops(e); return; }
     packActs.replaceChildren();
     const inst = pack.installed, av = pack.available;
     if (!inst) {
       packLine.textContent = av ? `Not installed. Version ${av.version}${av.size ? `, ${Math.ceil(av.size / 1024)} KB` : ""}.`
         : `Not installed. ${pack.error || "The Host pack is not listed yet."}`;
-      if (av) packActs.append(btn("GET THE HOST PACK", "btn", install));
+      if (av) packActs.append(btn("Get the Host pack", "btn", install));
     } else {
       packLine.textContent = `Installed: version ${inst.version}` + (pack.update && av ? `. Version ${av.version} is out.` : ".") + ` Folder: ${pack.kit_dir}`;
-      if (pack.update) packActs.append(btn(`UPDATE TO ${av.version}`, "btn", install));
-      packActs.append(btn("USE THE HOST PACK", "btn", () => useKit(pack.kit_dir)));
+      if (pack.update) packActs.append(btn(`Update to ${av.version}`, "btn", install));
+      packActs.append(btn("Use the Host pack", "btn", () => useKit(pack.kit_dir)));
     }
   }
   async function install() {
@@ -62,18 +64,18 @@
       const [inst, dir] = await call("hostpack_install");
       note(packStatus, `Host pack ${inst.version} installed and checked. Your realm's own files were kept.`, "ok");
       await useKit(dir);
-    } catch (e) { note(packStatus, String(e), "bad"); }
+    } catch (e) { note(packStatus, oops(e), "bad"); }
     loadPack();
   }
   async function loadDocker() {
     dockLine.textContent = "Checking Docker…";
     dockActs.replaceChildren();
     let d;
-    try { d = await call("docker_info"); } catch (e) { dockLine.textContent = String(e); return; }
+    try { d = await call("docker_info"); } catch (e) { dockLine.textContent = oops(e); return; }
     dockLine.className = "hint " + (d.state === "ready" ? "ok" : "warn");
     dockLine.textContent = (d.state === "ready" ? `Docker ${d.version || ""} is ready.` : d.help);
-    if (d.state !== "ready") dockActs.append(linkBtn("GET DOCKER", d.get_url.includes("engine") ? "dockerengine" : "docker"));
-    dockActs.append(btn("CHECK AGAIN", "btn small", loadDocker));
+    if (d.state !== "ready") dockActs.append(linkBtn("Get Docker", d.get_url.includes("engine") ? "dockerengine" : "docker"));
+    dockActs.append(btn("Check again", "btn small", loadDocker));
   }
 
   // ---------------------------------------------------------------- Host page: realm controls
@@ -90,26 +92,26 @@
     inviteLine.textContent = invite ? `Invite link: ${invite}` : "The invite link appears after the first start.";
   }
   ctl.append(
-    btn("STOP", "btn small", async () => {
+    btn("Stop", "btn small", async () => {
       note(ctlStatus, "Stopping…");
-      try { note(ctlStatus, await call("host_stop"), "ok"); } catch (e) { note(ctlStatus, String(e), "bad"); }
+      try { note(ctlStatus, await call("host_stop"), "ok"); } catch (e) { note(ctlStatus, oops(e), "bad"); }
     }),
-    btn("LOGS", "btn small", async () => {
+    btn("Logs", "btn small", async () => {
       if (!logs.hidden) { logs.hidden = true; return; }
       note(ctlStatus, "Reading the logs…");
       try { logs.textContent = await call("host_logs", { lines: 200 }) || "(no log lines yet)"; logs.hidden = false; logs.scrollTop = logs.scrollHeight; note(ctlStatus, ""); }
-      catch (e) { note(ctlStatus, String(e), "bad"); }
+      catch (e) { note(ctlStatus, oops(e), "bad"); }
     }),
-    btn("COPY INVITE LINK", "btn small", async () => {
+    btn("Copy invite link", "btn small", async () => {
       await loadInvite();
       if (!invite) { note(ctlStatus, "No invite link yet: start your realm once.", "warn"); return; }
       try { await navigator.clipboard.writeText(invite); note(ctlStatus, "Copied. Friends open it once, then play from the launcher or the browser.", "ok"); }
       catch { note(ctlStatus, invite, "ok"); }
     }),
-    btn("NEW INVITE LINK", "btn small", async () => {
+    btn("New invite link", "btn small", async () => {
       note(ctlStatus, "Making a new invite link…");
       try { invite = await call("host_new_invite"); inviteLine.textContent = `Invite link: ${invite}`; note(ctlStatus, "New link made. The old one no longer lets anyone new in.", "ok"); }
-      catch (e) { note(ctlStatus, String(e), "bad"); }
+      catch (e) { note(ctlStatus, oops(e), "bad"); }
     }),
   );
   if (hostCard) hostCard.append(ctl, inviteLine, ctlStatus, logs);
@@ -118,7 +120,7 @@
   // Tags, region, language and the player limit are the network's filters; they live in the kit's state/beacon.json
   // (host.rs ListingDetails) and reach the list with the next heartbeat. Direct connections stay off unless the
   // host allows them AND the network turns them on (the p2p_hosting flag); nothing here turns a flag on.
-  const TAGS = [["blizzlike", "Blizzlike"], ["boosted", "Boosted"], ["custom", "Custom"], ["pvp", "PvP"], ["rp", "RP"], ["hangout", "Hangout"], ["bots", "Bots"]];
+  const TAGS = [["blizzlike", "Original rules"], ["boosted", "Boosted"], ["custom", "Custom"], ["pvp", "PvP"], ["rp", "RP"], ["hangout", "Hangout"], ["bots", "Bots"]];
   const REGIONS = [["", "Not shown"], ["na-east", "North America east"], ["na-west", "North America west"], ["sa", "South America"],
     ["eu", "Europe"], ["africa", "Africa"], ["me", "Middle East"], ["asia", "Asia"], ["oce", "Oceania"]];
   const listCard = mk("section", "card");
@@ -144,12 +146,22 @@
   const listStatus = mk("p", "status");
   listCard.append(lhead, mk("p", "lede", "How players find your realm: the rules it runs, where it is and its language. Bots are tagged by themselves when your realm runs them."),
     tagBox, fields, dl, mk("div", "row"), listStatus);
-  listCard.lastChild.previousSibling.append(btn("SAVE", "btn small", saveListing));
-  panel.insertBefore(listCard, packCard.nextSibling);
+  listCard.lastChild.previousSibling.append(btn("Save", "btn small", saveListing));
+  // Advanced (owner audit 2026-10-30): the realm list settings sit under a disclosure at the end of the tab, shown once
+  // there is a realm to list (app.js "leyline:kit": a realm, or its realm file in the Host pack)
+  const listAdv = mk("details", "hl-adv");
+  listAdv.id = "hl-adv";
+  listAdv.hidden = true;
+  listAdv.append(mk("summary", "", "Advanced: how players find your realm"), listCard);
+  panel.append(listAdv);
+  document.addEventListener("leyline:kit", (e) => {
+    const k = e.detail;
+    listAdv.hidden = !(k && (k.realm || (k.seeds || []).some((x) => x.in_kit)));
+  });
 
   async function loadListing() {
     let d;
-    try { d = await call("host_listing"); } catch (e) { note(listStatus, String(e), "warn"); return; }
+    try { d = await call("host_listing"); } catch (e) { note(listStatus, oops(e), "warn"); return; }
     tagChecks.forEach((c) => { c.checked = d.tags.includes(c.value); });
     region.value = d.region || "";
     lang.value = d.language || "";
@@ -165,7 +177,7 @@
       direct: direct.checked,
     };
     note(listStatus, "Saving…");
-    try { note(listStatus, await call("host_listing_set", { details }), "ok"); } catch (e) { note(listStatus, String(e), "bad"); }
+    try { note(listStatus, await call("host_listing_set", { details }), "ok"); } catch (e) { note(listStatus, oops(e), "bad"); }
   }
 
   // ---------------------------------------------------------------- Host page: which game (host any client)
@@ -201,25 +213,25 @@
     const o = offers.find((x) => x.id === gameSel.value);
     if (o && o.note) { note(gameStatus, ""); return; }
     if (!o) {
-      try { await call("host_choose", { profile: "", clientId: null }); note(gameStatus, "The kit keeps the realm it hosts, or asks on its first start.", "ok"); }
-      catch (e) { note(gameStatus, String(e), "bad"); }
+      try { await call("host_choose", { profile: "", clientId: null }); note(gameStatus, "The Host pack keeps the realm it hosts, or asks on its first start.", "ok"); }
+      catch (e) { note(gameStatus, oops(e), "bad"); }
       return;
     }
     try {
       await call("host_choose", { profile: o.id, clientId: clientSel.value || null });
-      note(gameStatus, `Saved: START MY REALM hosts a ${o.version} realm.`, "ok");
-    } catch (e) { note(gameStatus, String(e), "bad"); }
+      note(gameStatus, `Saved: Start my realm hosts a ${o.version} realm.`, "ok");
+    } catch (e) { note(gameStatus, oops(e), "bad"); }
   }
   gameSel.addEventListener("change", () => { showClients(); saveGame(); });
   clientSel.addEventListener("change", saveGame);
   async function loadGames() {
     let r;
-    try { r = await call("host_profiles"); } catch (e) { gameHint.textContent = String(e); return; }
+    try { r = await call("host_profiles"); } catch (e) { gameHint.textContent = oops(e); return; }
     if (!Array.isArray(r) || !Array.isArray(r[0])) return;
     const [list, choice] = r;
     offers = list.filter((o) => o && Array.isArray(o.clients));
     gameSel.replaceChildren();
-    const first = mk("option", "", "As set up before (or the kit asks)"); first.value = ""; gameSel.append(first);
+    const first = mk("option", "", "As set up before (or the Host pack asks)"); first.value = ""; gameSel.append(first);
     for (const o of offers) {
       const op = mk("option", "", o.note ? `${o.label} (needs a ${o.version} client)` : o.label);
       op.value = o.id; op.disabled = !!o.note; gameSel.append(op);
@@ -250,7 +262,7 @@
 
   async function loadFlags() {
     let v;
-    try { v = await call("p2p_flags"); } catch (e) { note(advStatus, String(e), "bad"); return; }
+    try { v = await call("p2p_flags"); } catch (e) { note(advStatus, oops(e), "bad"); return; }
     advList.replaceChildren();
     for (const [name, label] of v.known) {
       const row = mk("label", "inline");
@@ -262,7 +274,7 @@
       sel.value = local === null ? "" : (local ? "on" : "off");
       sel.addEventListener("change", async () => {
         try { await call("p2p_set_flag", { name, value: sel.value === "" ? null : sel.value === "on" }); note(advStatus, "Saved.", "ok"); loadFlags(); }
-        catch (e) { note(advStatus, String(e), "bad"); }
+        catch (e) { note(advStatus, oops(e), "bad"); }
       });
       row.append(mk("span", "", `${label}: ${v.effective[name] ? "ON" : "off"} `), sel);
       advList.append(row);
@@ -273,22 +285,22 @@
     const limRow = mk("div", "row");
     const l1 = mk("label", "inline", "Upload cap KB/s (0 = none) "); l1.append(up);
     const l2 = mk("label", "inline", "Share back up to % of size (0 = never) "); l2.append(ratio);
-    limRow.append(l1, l2, btn("SAVE LIMITS", "btn small", async () => {
+    limRow.append(l1, l2, btn("Save limits", "btn small", async () => {
       try {
         await call("p2p_set_limits", { limits: { seed_upload_kbps: +up.value || 0, seed_ratio_pct: +ratio.value || 0, max_peers: lim.max_peers || 30 } });
         note(advStatus, "Limits saved.", "ok");
-      } catch (e) { note(advStatus, String(e), "bad"); }
+      } catch (e) { note(advStatus, oops(e), "bad"); }
     }));
     advList.append(limRow);
     natLine.replaceChildren();
     if (v.effective.p2p_hosting) {
-      natLine.append(btn("CHECK MY NETWORK", "btn small", async () => {
+      natLine.append(btn("Check my network", "btn small", async () => {
         note(advStatus, "Asking a STUN server for this PC's public address…");
         try {
           const r = await call("p2p_nat_check");
           const words = { open: "no router in the way", endpoint_independent: "direct connections can work", symmetric: "direct connections will not work: the relay is used", unknown: "could not tell", blocked: "UDP is blocked: the relay is used" };
           note(advStatus, `Network: ${words[r.kind] || r.kind}.`, r.kind === "open" || r.kind === "endpoint_independent" ? "ok" : "warn");
-        } catch (e) { note(advStatus, String(e), "bad"); }
+        } catch (e) { note(advStatus, oops(e), "bad"); }
       }));
     }
     // "Help the network: relay for others" (docs/LEYLINE-MESH.md): only when the website offers it AND this PC is "On".
@@ -296,14 +308,14 @@
       const hostIn = mk("input", ""); hostIn.placeholder = "this PC's public name, like relay.example.org"; hostIn.size = 34;
       const vRow = mk("div", "row");
       vRow.append(mk("span", "hint", "Relaying needs a public name for this PC and ports 80, 443 and 41000-41051 open. Players' game traffic passes through it (never passwords). "), hostIn,
-        btn("START RELAYING", "btn small", async () => {
+        btn("Start relaying", "btn small", async () => {
           note(advStatus, "Starting the community relay…");
           try { note(advStatus, await call("host_volunteer_relay", { on: true, publicHost: hostIn.value.trim(), region: null }), "ok"); }
-          catch (e) { note(advStatus, String(e), "bad"); }
+          catch (e) { note(advStatus, oops(e), "bad"); }
         }),
-        btn("STOP", "btn small", async () => {
+        btn("Stop", "btn small", async () => {
           try { note(advStatus, await call("host_volunteer_relay", { on: false, publicHost: null, region: null }), "ok"); }
-          catch (e) { note(advStatus, String(e), "bad"); }
+          catch (e) { note(advStatus, oops(e), "bad"); }
         }));
       advList.append(vRow);
     }

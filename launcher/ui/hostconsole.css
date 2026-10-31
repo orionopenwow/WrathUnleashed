@@ -202,6 +202,9 @@ button.hc-core-b:hover { border-color: var(--t-accent); }
 /* ---------------------------------------------------------------- the setup start */
 .hc-setup { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; align-items: start; }
 .hc-lede { color: var(--t-text-2); font-size: 13.5px; max-width: 62ch; margin: 0 0 16px !important; }
+.hc-needs { color: var(--t-text-2); font-size: 13px; max-width: 70ch; margin: -8px 0 14px !important; }
+.hc-needs b { color: var(--t-text); }
+.hc-ver { display: inline-block; padding: 0 7px; border-radius: 999px; border: 1px solid var(--t-border, rgba(255,255,255,.18)); font-size: 12px; }
 .hc-pre { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
 .hc-pill {
   display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 10px; border-radius: 999px; font: 600 12px var(--t-font);

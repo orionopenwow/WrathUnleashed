@@ -11,8 +11,9 @@
     GET /wrath/mods/<id>/shot/<n>       screenshot n (0-based) of the mod
     GET /wrath/mods/catalog.json        the catalog itself, for tools (CORS *)
 
-Community projects (stream/projects.py): links people add, listed at once beside the packaged mods (no review
-queue; nothing is hosted, links only). Every card has a Credits line: author, licence, repo.
+Community projects (stream/projects.py): links people add, listed at once beside the packaged mods unless the
+hub's rules hold one for a person (no open licence, cheats, decompiled or leaked material: stream/hub.py link_problems);
+nothing is hosted, links only. Every card has a Credits line: author, licence, repo.
 
     GET  /wrath/mods?build=3.3.5a|1.12&source=packaged|community   more filters, with the ones above
     GET  /wrath/mods/p/<pid>             one community project: its credits, the link, Report (Hide for admins)
@@ -117,6 +118,11 @@ PERM_WORDS = {
 _CAT_PATH_RE = re.compile(r"^/wrath/mods/c/([^/]{1,40})$")
 _PATH_RE = re.compile(r"^/wrath/mods(?:/(catalog\.json|[^/]{1,40})(?:/(download|shot)(?:/(\d{1,2}))?)?)?$")
 _PROJ_RE = re.compile(r"^/wrath/mods/p/([0-9a-f]{12})(?:/(report|hide|unhide))?$")
+
+
+# A link the hub's rules held (stream/projects.py, stream/hub.py link_problems): said plainly, without the reasons
+QUEUED_NOTE = ("Thanks: this one waits for a person to check it before it's listed (we check licences, and keep "
+               "cheats and leaked or decompiled material off the Workshop).")
 
 
 def _load_projects():
@@ -816,7 +822,7 @@ class Workshop:
         return status, self._page(f"{p['name']} · Workshop", f"/wrath/mods/p/{pid}", f"Project: {p['name']} · Leyline",
                                   body, p["description"] or "A community project on the Leyline network.")
 
-    def submit_page(self, req=None, error: str = "", form=None, status: int = 200) -> tuple[int, bytes]:
+    def submit_page(self, req=None, error: str = "", form=None, status: int = 200, note: str = "") -> tuple[int, bytes]:
         e = html.escape
         me = self._me(req)
         form = form or {}
@@ -825,7 +831,7 @@ class Workshop:
             status = 503
         elif not isinstance(me, dict) or not me:
             inner = ('<p>Sign in with your Hero Key (or Google) to add a link. Each link shows its author, licence and '
-                     'repo, and lists straight away.</p><p class="wk-actions"><a class="wk-btn violet" '
+                     'repo, and most list straight away.</p><p class="wk-actions"><a class="wk-btn violet" '
                      'href="/login?next=%2Fwrath%2Fmods%2Fsubmit">Sign in to add a link</a></p>')
         elif self.projects is None or not self.projects.writable():
             inner = '<p class="wk-msg" role="alert">Adding links is closed right now. Please try again later.</p>'
@@ -835,7 +841,8 @@ class Workshop:
             pick = form.get("builds") or "3.3.5a"
             builds = "".join(f'<label><input type="radio" name="builds" value="{v}"{" checked" if pick == v else ""}> {lbl}</label>'
                              for v, lbl in (("3.3.5a", "3.3.5a"), ("1.12", "1.12"), ("both", "Both"), ("any", "Any build")))
-            err = f'<p class="wk-msg" role="alert">{e(error)}</p>' if error else ""
+            err = (f'<p class="wk-msg" role="alert">{e(error)}</p>' if error else
+                   f'<p class="wk-msg" role="status">{e(note)}</p>' if note else "")
             inner = (
                 f'{err}<form class="wk-form" method="post" action="/wrath/mods/submit">'
                 f'<input type="hidden" name="t" value="{self._token(req, "submit")}">'
@@ -848,7 +855,7 @@ class Workshop:
                 '<label>One-line description <span class="hint">What it does, in up to 140 characters.</span>'
                 f'<input type="text" name="description" required minlength="10" maxlength="140" '
                 f'value="{e(form.get("description", ""))}"></label>'
-                '<p class="ly-fine" style="text-align:left;margin:0">It lists straight away, credited to its author. '
+                '<p class="ly-fine" style="text-align:left;margin:0">Most links list straight away, credited to the author; one with no open licence, or that looks like a cheat or leaked material, waits for a person first. '
                 'Links only: nothing is uploaded or hosted here. Anyone signed in can report a link.</p>'
                 '<p class="wk-actions" style="margin:0"><button class="wk-btn violet" type="submit">Add the link</button></p></form>')
         body = ('<p><a href="/wrath/mods">&larr; All mods</a></p>'
@@ -935,6 +942,8 @@ class Workshop:
                 st, body = self.submit_page(req, blk, form, 403)
                 return 403, body, HTML, {}
             ok, res = self.projects.submit(me, form)
+            if ok and isinstance(res, dict) and res.get("review"):   # the hub's rules held it: a person checks it first
+                return 303, b"", "text/plain", {"Location": "/wrath/mods/submit?queued=1"}
             if ok:
                 return 303, b"", "text/plain", {"Location": f"/wrath/mods/p/{res['id']}?added=1"}
             msg, _, existing = str(res).partition("|")
@@ -994,7 +1003,7 @@ class Workshop:
         if path == "/wrath/mods/credits":
             return 200, self.credits_page(), HTML, {}
         if path == "/wrath/mods/submit":
-            st, body = self.submit_page(req)
+            st, body = self.submit_page(req, note=QUEUED_NOTE if (query or {}).get("queued") else "")
             return st, body, HTML, {}
         pm = _PROJ_RE.fullmatch(path or "")
         if pm:

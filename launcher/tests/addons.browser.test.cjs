@@ -114,7 +114,7 @@ test('Clients: the row on a 3.3.5a card only, Install, then Update and Remove', 
   assert.match(await row.textContent(), /Leyline addons/);
   assert.match(await row.textContent(), /Recommended for Wrath Unleashed: game modes, golf, Edit mode, your Den\./);
   assert.match(await row.locator('.ad-state').textContent(), /^Not installed$/);
-  await row.getByRole('button', { name: 'INSTALL' }).click();
+  await row.getByRole('button', { name: 'Install', exact: true }).click();
   await page.waitForFunction(() => /Installed the Leyline addons/.test(document.querySelector('#cl-list .ad-slot').textContent));
   assert.deepEqual(await calls(page, 'addons_install'), [{ client: 'c335a-1', replace: false }]);
   assert.match(await slot(page, 'c335a-1').locator('.ad-state').textContent(), /Installed and up to date/);
@@ -133,7 +133,7 @@ test('Clients: an update ready, and a download that does not check out', async (
   const row = slot(page, 'c335a-1');
   assert.match(await row.locator('.ad-state').textContent(), /Update ready: v2026\.1031\.900/);
   assert.equal(await calls(page, 'addons_auto_update').then((c) => c.length), 0, 'update on start is off');
-  await row.getByRole('button', { name: 'UPDATE' }).click();
+  await row.getByRole('button', { name: 'Update', exact: true }).click();
   await page.waitForFunction(() => /did not check out/.test(document.querySelector('#cl-list .ad-slot .ad-note.bad').textContent));
   assert.match(await slot(page, 'c335a-1').locator('.ad-state').textContent(), /Update ready/, 'still the old version');
   assert.deepEqual(errors, []);
@@ -144,7 +144,7 @@ test('Clients: your own copy of one of ours: asked first, then moved aside; Remo
   const { page, ctx, errors } = await open({ addons: { 'c335a-1': { foreign: ['OVQoL'] } } });
   const row = slot(page, 'c335a-1');
   assert.match(await row.locator('.ad-state').textContent(), /You have your own OVQoL/);
-  await row.getByRole('button', { name: 'INSTALL' }).click();
+  await row.getByRole('button', { name: 'Install', exact: true }).click();
   await page.waitForSelector('#ad-dlg[open]');
   assert.equal(await page.textContent('#ad-dlg-title'), 'You already have some of these');
   assert.deepEqual(await page.$$eval('#ad-dlg-list li', (l) => l.map((x) => x.textContent)), ['Interface/AddOns/OVQoL']);
@@ -159,7 +159,7 @@ test('Clients: your own copy of one of ours: asked first, then moved aside; Remo
 
 test('Clients: saying no to moving your copy installs nothing', async () => {
   const { page, ctx } = await open({ addons: { 'c335a-1': { foreign: ['OVQoL'] } } });
-  await slot(page, 'c335a-1').getByRole('button', { name: 'INSTALL' }).click();
+  await slot(page, 'c335a-1').getByRole('button', { name: 'Install', exact: true }).click();
   await page.waitForSelector('#ad-dlg[open]');
   await page.click('#ad-dlg-no');
   await page.waitForFunction(() => /your own copies stay as they are/.test(document.querySelector('#cl-list .ad-slot').textContent));
@@ -185,7 +185,7 @@ test('the setup step: adding a 3.3.5a client offers the addons', async () => {
   await page.waitForSelector('#ad-dlg[open]');
   assert.equal(await page.textContent('#ad-dlg-title'), 'One more step: the Leyline addons');
   assert.match(await page.textContent('#ad-dlg-body'), /Install the Leyline addons in New Wrath\? Recommended for Wrath Unleashed/);
-  assert.equal(await page.textContent('#ad-dlg-yes'), 'INSTALL');
+  assert.equal(await page.textContent('#ad-dlg-yes'), 'Install');
   await page.click('#ad-dlg-yes');
   await page.waitForFunction(() => window.__calls.some(([c, a]) => c === 'addons_install' && a.client === 'c335a-2'));
   assert.deepEqual(errors, []);
@@ -267,7 +267,7 @@ test('not published yet: no Install button, and PLAY does not ask', async () => 
   const { page, ctx, errors } = await open({ noPack: true });
   const row = slot(page, 'c335a-1');
   assert.match(await row.locator('.ad-state').textContent(), /Not published yet/);
-  assert.equal(await row.getByRole('button', { name: 'INSTALL' }).isDisabled(), true);
+  assert.equal(await row.getByRole('button', { name: 'Install', exact: true }).isDisabled(), true);
   await page.evaluate(() => window.LeylineNav.show('play'));
   await page.click('#play-go');
   await page.waitForFunction(() => window.__calls.some(([c]) => c === 'play'));

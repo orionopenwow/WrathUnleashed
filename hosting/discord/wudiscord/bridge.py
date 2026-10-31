@@ -35,6 +35,17 @@ Environment:
   WU_DISCORD_DRY_RUN         1 = log what would be posted / said, touch neither Discord nor the realm
   WU_SITE_URL                the site named in the User-Agent Discord asks for (default https://play.openvanilla.app)
   LOG_LEVEL                  default INFO
+
+New-realm announcements (OFF by default; the owner's choice to turn on). Our rule is that humans share Discord links;
+an automated post is a different thing, so this stays off unless the owner sets WU_DISCORD_ANNOUNCE_REALMS=1. When on,
+every WU_DISCORD_ANNOUNCE_EVERY seconds it reads the site's realm list and posts one line per realm that is public,
+live, claimed by a Hero Key account, whose name passed the word filter (community.nameOk), and that has been listed for
+ANNOUNCE_GRACE seconds at least: "New realm listed: <name> — <link>". Each realm once (its id is kept in the state
+file); on the first run every realm already listed is marked as seen, so turning it on never floods the channel.
+  WU_DISCORD_ANNOUNCE_REALMS 1 = on (default 0, off)
+  DISCORD_ANNOUNCE_CHANNEL_ID  where the lines go (default: DISCORD_CHAT_CHANNEL_ID)
+  WU_DISCORD_REALMS_URL      the realm list (default <WU_SITE_URL>/wrath/realms.json)
+  WU_DISCORD_ANNOUNCE_EVERY  seconds between looks (default 300, at least 60)
 """
 from __future__ import annotations
 
@@ -66,6 +77,10 @@ POSTS_PER_WINDOW, POST_WINDOW = 4, 5.0         # Discord allows 5 per 5 s per ch
 USER_MAX, USER_WINDOW = 4, 20.0                # Discord -> game: per Discord user
 GAME_SAY_MAX, GAME_SAY_WINDOW = 20, 60.0       # Discord -> game: everyone together
 PLAYER_MAX, PLAYER_WINDOW = 5, 30.0            # game -> Discord: per character (the Lua has its own cap too)
+ANNOUNCE_GRACE = 600       # a realm is announced only after this long on the list (the hub's "New realm" waits as long)
+ANNOUNCE_MAX = 2000        # realm ids remembered as announced
+ANNOUNCE_PER_ROUND = 3
+RID_RE = re.compile(r"^[a-z2-7]{16}$")
 # Shown to players in game: the rule is that players never see these names; masked in Discord -> game text.
 GAME_BRAND_WORDS = re.compile(r"(?i)world\s+of\s+warcraft|\bwarcraft\b|\bwow\b|lich\s+king|\bblizzard\b")
 
@@ -256,6 +271,12 @@ class Config:
         self.state_path = env.get("WU_DISCORD_STATE", "/var/lib/wu-discord/state.json")
         self.api = env.get("WU_DISCORD_API", "https://discord.com/api/v10").rstrip("/")
         self.dry_run = env.get("WU_DISCORD_DRY_RUN", "0") == "1"
+        site = env.get("WU_SITE_URL", "https://play.openvanilla.app").rstrip("/")
+        self.site = site
+        self.announce = env.get("WU_DISCORD_ANNOUNCE_REALMS", "0").strip() == "1"   # off unless the owner turns it on
+        self.announce_channel = env.get("DISCORD_ANNOUNCE_CHANNEL_ID", "").strip() or self.chat_channel
+        self.realms_url = env.get("WU_DISCORD_REALMS_URL", "").strip() or site + "/wrath/realms.json"
+        self.announce_every = max(60.0, float(env.get("WU_DISCORD_ANNOUNCE_EVERY", "300") or 300))
 
     def problems(self) -> list[str]:
         p = []
@@ -263,6 +284,10 @@ class Config:
             p.append("DISCORD_BOT_TOKEN is not set")
         if not self.chat_channel.isdigit():
             p.append("DISCORD_CHAT_CHANNEL_ID is not set (a channel id: digits)")
+        if self.announce and not self.announce_channel.isdigit():
+            p.append("DISCORD_ANNOUNCE_CHANNEL_ID must be a channel id (digits)")
+        if self.announce and not self.realms_url.startswith("https://") and not self.realms_url.startswith("http://127.0.0.1"):
+            p.append("WU_DISCORD_REALMS_URL must be an https address")
         if self.bug_channel and not self.bug_channel.isdigit():
             p.append("DISCORD_BUG_CHANNEL_ID must be a channel id (digits) or empty")
         if not self.soap_user or not self.soap_pass:
@@ -271,13 +296,14 @@ class Config:
 
     def __repr__(self):  # never the token or the SOAP password
         return (f"Config(chat={self.chat_channel}, bugs={self.bug_channel or '-'}, soap={self.soap_url}, "
-                f"soap_user={self.soap_user}, links={sorted(self.link_allow)}, poll={self.poll})")
+                f"soap_user={self.soap_user}, links={sorted(self.link_allow)}, poll={self.poll}, "
+                f"announce={'on ' + self.announce_channel if self.announce else 'off'})")
 
 
 class State:
     def __init__(self, path: str):
         self.path = path
-        self.data = {"discord_after": None, "bug_after": None, "boot": None, "seq": 0}
+        self.data = {"discord_after": None, "bug_after": None, "boot": None, "seq": 0, "announced": None}
         try:
             with open(path, encoding="utf-8") as f:
                 self.data.update(json.load(f))
@@ -444,6 +470,54 @@ def parse_pull(text: str):
 
 
 # -------------------------------------------------------------------------------------------------------------------
+# new-realm announcements (off by default)
+# -------------------------------------------------------------------------------------------------------------------
+
+def _iso(v) -> float | None:
+    if not isinstance(v, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", v):
+        return None
+    try:
+        import calendar
+        return float(calendar.timegm(time.strptime(v, "%Y-%m-%dT%H:%M:%SZ")))
+    except (ValueError, OverflowError):
+        return None
+
+
+def announceable(rec, now: float) -> str | None:
+    """The realm id when this realm-list record may be announced, else None: a community realm (never ours), live,
+    claimed, its name passed the word filter, listed for ANNOUNCE_GRACE at least."""
+    if not isinstance(rec, dict) or rec.get("official") or rec.get("state") != "live":
+        return None
+    com = rec.get("community") if isinstance(rec.get("community"), dict) else {}
+    rid = com.get("realmId")
+    if not isinstance(rid, str) or not RID_RE.match(rid) or com.get("official") or com.get("sample") or com.get("pinned"):
+        return None
+    if com.get("claimed") is not True or com.get("nameOk") is not True:
+        return None
+    name = rec.get("name")
+    if not isinstance(name, str) or not name.strip() or GAME_BRAND_WORDS.search(name):
+        return None
+    t = _iso(com.get("firstSeen"))
+    if t is None or now - t < ANNOUNCE_GRACE:
+        return None
+    return rid
+
+
+def announce_line(name: str, rid: str, site: str) -> str:
+    """"New realm listed: <name> — <link>", the name made safe (no pings, no markdown, one line)."""
+    n = escape_md(defuse_mentions(_CONTROL.sub(" ", name)).strip())[:64]
+    return f"New realm listed: {n} — {site}/wrath/r/{rid}"
+
+
+def fetch_realms(url: str, urlopen=urllib.request.urlopen) -> list:
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+    with urlopen(req, timeout=8) as r:
+        doc = json.loads(r.read(2_000_000).decode("utf-8"))
+    realms = doc.get("realms") if isinstance(doc, dict) else None
+    return realms if isinstance(realms, list) else []
+
+
+# -------------------------------------------------------------------------------------------------------------------
 # the bridge
 # -------------------------------------------------------------------------------------------------------------------
 
@@ -457,6 +531,9 @@ class Bridge:
         self.players = Window(PLAYER_MAX, PLAYER_WINDOW, clock)
         self.users = Window(USER_MAX, USER_WINDOW, clock)
         self.game_says = Window(GAME_SAY_MAX, GAME_SAY_WINDOW, clock)
+        self.clock = clock
+        self.next_announce = 0.0
+        self.fetch = fetch_realms
 
     # -- start ------------------------------------------------------------------------------------------------------
     def start(self):
@@ -547,10 +624,42 @@ class Bridge:
                 continue
             self.soap.command(f"wudiscord say {name.encode().hex()} {text.encode().hex()}")
 
+    # -- new realms -> Discord (off unless WU_DISCORD_ANNOUNCE_REALMS=1) ---------------------------------------------
+    def announce_realms(self, now: float | None = None):
+        if not self.cfg.announce or self.clock() < self.next_announce:
+            return
+        self.next_announce = self.clock() + self.cfg.announce_every
+        now = time.time() if now is None else now
+        try:
+            realms = self.fetch(self.cfg.realms_url)
+        except Exception as e:   # noqa: BLE001 - the site down never stops the chat bridge
+            log.info("realm list not reachable for announcements: %s", type(e).__name__)
+            return
+        st = self.state.data
+        first = st.get("announced") is None
+        seen = list(st.get("announced") or [])
+        posted = 0
+        for rec in realms:
+            rid = announceable(rec, now)
+            if not rid or rid in seen:
+                continue
+            seen.append(rid)
+            if first or posted >= ANNOUNCE_PER_ROUND:
+                if not first:
+                    seen.pop()        # over this round's cap: the next round posts it
+                continue
+            line = announce_line(rec["name"], rid, self.cfg.site)
+            if self.cfg.dry_run:
+                log.info("dry run: announce <- %s", line)
+            else:
+                self.discord.post(self.cfg.announce_channel, line)
+            posted += 1
+        st["announced"] = seen[-ANNOUNCE_MAX:]
+
     # -- one round --------------------------------------------------------------------------------------------------
     def step(self):
         errors = []
-        for part in (self.pull_game, self.flush, self.pull_discord):
+        for part in (self.pull_game, self.flush, self.pull_discord, self.announce_realms):
             try:
                 part()
             except TransportError as e:

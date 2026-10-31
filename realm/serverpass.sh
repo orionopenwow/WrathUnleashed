@@ -14,6 +14,8 @@
 #      Bots always pass on loot: AC_PLAYERBOTS_LOOT_NEED_ROLL_LEVEL = 0 and _LOOT_GREED_ROLL_LEVEL = 0 turn
 #      need and greed votes into pass, _LOOT_ROLL_DISENCHANT = 0, _LOOT_ROLL_RECIPE = 0, _FREE_METHOD_LOOT = 0
 #      (no looting under free-for-all). AC_PLAYERBOTS_ALLOW_GUILD_BOTS = 0: own-account alts only.
+#      Chat anti-spam (docs/SECURITY-HARDENING.md): ChatFlood 6 messages / 1 s -> 30 s mute, ChatLevelReq Say 1,
+#      Channel 5, Whisper 5, ChatStrictLinkChecking Severity 1 / Kick 0. A first run with them restarts the realm.
 #   3b. Bot talent specs: mod-playerbots' premade specs (realm/playerbots-specs.env, 256 AC_PLAYERBOTS_PREMADE_SPEC_*
 #      lines) go into the profile, so ".recruit" can give each bot its role's talents.
 #   1b. The web armory (play.openvanilla.app/wrath/armory, stream/armory.py), when armory-export.py rides
@@ -143,7 +145,10 @@ for kv in AC_DUNGEON_ACCESS_REQUIREMENTS_LFGLEVEL_DBCOVERRIDE=1 AC_ALLOW_TWO_SID
     AC_PLAYERBOTS_MAX_ADDED_BOTS=9 OV_COMPANIONS_PER_PLAYER_RAID=9 OV_COMPANIONS_GROUP_MAX=10 \
     OV_COMPANIONS_REALM_MAX=60 OV_COMPANIONS_RAID25=0 \
     AC_PLAYERBOTS_LOOT_NEED_ROLL_LEVEL=0 AC_PLAYERBOTS_LOOT_GREED_ROLL_LEVEL=0 AC_PLAYERBOTS_LOOT_ROLL_DISENCHANT=0 \
-    AC_PLAYERBOTS_LOOT_ROLL_RECIPE=0 AC_PLAYERBOTS_FREE_METHOD_LOOT=0 AC_PLAYERBOTS_ALLOW_GUILD_BOTS=0; do
+    AC_PLAYERBOTS_LOOT_ROLL_RECIPE=0 AC_PLAYERBOTS_FREE_METHOD_LOOT=0 AC_PLAYERBOTS_ALLOW_GUILD_BOTS=0 \
+    AC_CHAT_FLOOD_MESSAGE_COUNT=6 AC_CHAT_FLOOD_MESSAGE_DELAY=1 AC_CHAT_FLOOD_MUTE_TIME=30 \
+    AC_CHAT_LEVEL_REQ_SAY=1 AC_CHAT_LEVEL_REQ_CHANNEL=5 AC_CHAT_LEVEL_REQ_WHISPER=5 \
+    AC_CHAT_STRICT_LINK_CHECKING_SEVERITY=1 AC_CHAT_STRICT_LINK_CHECKING_KICK=0; do
   k=${kv%%=*}; v=${kv#*=}
   if grep -qE "^$k=" "$PF"; then sed -i "s#^$k=.*#$k=$v#" "$PF"; else printf '%s=%s\n' "$k" "$v" >> "$PF"; fi
   [ "$(docker exec ov-ac-worldserver printenv "$k" 2>/dev/null || true)" = "$v" ] || need=1

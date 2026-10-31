@@ -363,7 +363,13 @@ local function safeName(n)
     return n
 end
 
-local function botCommand(owner, text) owner:RunCommand("playerbots bot " .. text) end
+local selfCommand = false   -- true while we run our own bot command (so the raw-command guard lets it through)
+local function botCommand(owner, text)
+    selfCommand = true
+    local ok, err = pcall(owner.RunCommand, owner, "playerbots bot " .. text)
+    selfCommand = false
+    if not ok then error(err, 0) end
+end
 local function whisper(owner, bot, text) try(owner, "Whisper", text, 0, bot) end
 
 -- A command to one bot, as if the owner whispered it: straight into the bot's command queue when mod-ale has
@@ -1362,6 +1368,50 @@ end
 ------------------------------------------------------------------------------------------------
 local COMMANDS = { companions = true, companion = true, recruit = true, buddy = true, dismiss = true }
 
+-- The module's own chat commands (.playerbots bot add <name> / addclass <class> / addaccount / init=...) from a
+-- player who isn't a GM would skip every limit above (per player, per realm, group size, cooldown). They go
+-- through the same checks as .recruit instead; the rest (list, remove, logout, help) passes through.
+local RAW_BOT = { playerbots = true, playerbot = true, bot = true }
+local RAW_PASS = { list = true, ls = true, remove = true, rm = true, logout = true, help = true }
+
+local function isGM(player)
+    local rank = tonumber(try(player, "GetGMRank") or 0) or 0
+    return rank > 0 or try(player, "IsGM") == true
+end
+
+local function rawBotCommand(player, words, rawWords)
+    local sub, at = nil, nil
+    if words[1] == "bot" then sub, at = words[2], 3
+    elseif words[2] == "bot" then sub, at = words[3], 4
+    else return nil end                                 -- other module commands keep their own security levels
+    if selfCommand or not sub or RAW_PASS[sub] or isGM(player) or isBot(player) then return nil end
+    replyTo[player:GetGUIDLow()] = nil
+    if not botsBuilt(player) then comingSoon(player); return false end
+    if not onSwitch() then say(player, "Bots are off on this realm."); return false end
+    if sub == "add" and rawWords[at] and not rawWords[at + 1] and not rawWords[at]:find(",", 1, true) then
+        altCommand(player, rawWords[at])              -- one of the player's own characters, as .recruit alt
+    elseif sub == "addclass" and words[at] and not words[at + 1] then
+        local cls = classOf(words[at])
+        if not cls then return say(player, "Usage: |cffffff00.recruit tank|healer|dps <class>|r") or false end
+        if cls == "dk" and player:GetLevel() < dkLevel() then
+            say(player, "Death Knights join from level " .. dkLevel() .. "."); return false
+        end
+        local role, spec
+        for _, r in ipairs(ROLE_ORDER) do
+            for _, pk in ipairs(ROLES[r].picks) do
+                if not role and pk[1] == cls then role, spec = r, pk[2] end
+            end
+        end
+        if not role then return say(player, "Usage: |cffffff00.recruit tank|healer|dps <class>|r") or false end
+        if room(player, 1) == 0 then return false end
+        queue(player, { { cls = CLASS[cls], word = cls, spec = spec, role = role } })
+        say(player, string.format("Recruiting a %s bot: it joins your group in a few seconds.", CLASS_LABEL[CLASS[cls]] or cls))
+    else
+        say(player, "Bring bots with |cffffff00.recruit|r (party, raid, tank, healer, dps, alt <name>) or the Bots window.")
+    end
+    return false
+end
+
 local function onCommand(event, player, command)
     if not player then return end
     local raw = (command or ""):gsub("^[%.!]", "")
@@ -1370,6 +1420,7 @@ local function onCommand(event, player, command)
     for w in text:gmatch("%S+") do words[#words + 1] = w end
     for w in raw:gmatch("%S+") do rawWords[#rawWords + 1] = w end
     local cmd = words[1]
+    if RAW_BOT[cmd] then return rawBotCommand(player, words, rawWords) end
     if not COMMANDS[cmd] then return end
     if isBot(player) then return false end
     replyTo[player:GetGUIDLow()] = nil   -- typed: the answers go to the chat

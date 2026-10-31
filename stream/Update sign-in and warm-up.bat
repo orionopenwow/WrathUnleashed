@@ -18,6 +18,8 @@ set "T=%TEMP%\wu-fastloop.tgz"
 if exist "%T%" del /q "%T%"
 set "LINKS="
 if exist links.py set "LINKS=links.py"
+rem the shared rate limits (ratelimit.py) every module below uses; the portal runs a stand-in without it
+if exist ratelimit.py set "LINKS=%LINKS% ratelimit.py"
 if exist demo.py set "LINKS=%LINKS% demo.py"
 if exist armory.py set "LINKS=%LINKS% armory.py"
 if exist modes.py if exist modes_data.py set "LINKS=%LINKS% modes.py modes_data.py"
@@ -29,6 +31,8 @@ if exist projects.py set "LINKS=%LINKS% projects.py"
 rem Leyline flags.json and the Host pack listing (leyline_net.py; hostpack.json from hosting\pack\make-hostpack.py)
 if exist leyline_net.py set "LINKS=%LINKS% leyline_net.py"
 if exist leyline_net.py if exist hostpack.json set "LINKS=%LINKS% hostpack.json"
+rem reviewed upstream addons for all.json (upstream_addons.py and upstream-addons.json from tools\addon-curate\curate.py), always as a pair
+if exist upstream_addons.py if exist upstream-addons.json set "LINKS=%LINKS% upstream_addons.py upstream-addons.json"
 rem the Leyline network: the realm browser, /wrath/realms.json and realm reports (network.py)
 if exist network.py set "LINKS=%LINKS% network.py"
 rem Leyline friends and messages (/wrath/api/social, /wrath/link)
@@ -64,7 +68,7 @@ echo [1/2] Uploading...
 scp %OPTS% "%T%" %HOST%:/tmp/wu-fastloop.tgz || (echo Upload failed. If it says "timed out", wait 2 minutes and run this again. & pause & exit /b 1)
 
 echo [2/2] Applying it on the server (under a minute)...
-ssh %OPTS% %HOST% "mkdir -p /srv/wrath/fastloop && rm -rf /srv/wrath/fastloop/www-files /srv/wrath/fastloop/docs /srv/wrath/fastloop/hub && tar -xzf /tmp/wu-fastloop.tgz -C /srv/wrath/fastloop && rm -f /tmp/wu-fastloop.tgz && cd /srv/wrath/fastloop && sed -i 's/\r$//' fastloop.sh wrath_portal.py $(ls links.py demo.py armory.py modes.py modes_data.py playmodes.py workshop.py creations.py hostflow.py ed25519_pure.py herokey_sso.py projects.py social.py forum.py profiles.py network.py docs.py leyline_net.py admin.py wu-mod.py hq.py hub.py hub_rank.py 2>/dev/null) && bash fastloop.sh 2>&1 | tee fastloop.log; grep -q '^FASTLOOP OK' fastloop.log"
+ssh %OPTS% %HOST% "mkdir -p /srv/wrath/fastloop && rm -rf /srv/wrath/fastloop/www-files /srv/wrath/fastloop/docs /srv/wrath/fastloop/hub && tar -xzf /tmp/wu-fastloop.tgz -C /srv/wrath/fastloop && rm -f /tmp/wu-fastloop.tgz && cd /srv/wrath/fastloop && sed -i 's/\r$//' fastloop.sh wrath_portal.py $(ls ratelimit.py links.py demo.py armory.py modes.py modes_data.py playmodes.py workshop.py creations.py hostflow.py ed25519_pure.py herokey_sso.py projects.py social.py forum.py profiles.py network.py docs.py leyline_net.py upstream_addons.py admin.py wu-mod.py hq.py hub.py hub_rank.py 2>/dev/null) && bash fastloop.sh 2>&1 | tee fastloop.log; grep -q '^FASTLOOP OK' fastloop.log"
 if errorlevel 1 (
   echo.
   echo It did not report success; see the lines above. Anything it changed was put back.

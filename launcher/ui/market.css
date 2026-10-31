@@ -1,0 +1,56 @@
+/* The addon marketplace in Mods › Discover (market.js): the sub-category chips, upstream addon cards (credit line,
+   licence chip, "Works on" badge, update dot) and the detail dialog. Tokens only (style.css), so themes apply. */
+.mk-bar { margin: 2px 0 12px; }
+.mk-bar[hidden] { display: none; }
+.mk-bar .mk-works-chip { margin-left: auto; }
+.mk-bar .mk-works-chip::before {
+  content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%;
+  background: var(--t-ok); vertical-align: 1px; opacity: 0.85;
+}
+
+.mk-card .mk-credit {
+  display: flex; gap: 5px; min-width: 0; margin: 1px 0 0; font-size: 11.5px; color: var(--t-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mk-card .mk-credit span { overflow: hidden; text-overflow: ellipsis; }
+.mk-card .mk-credit span:first-child { color: var(--t-text-2); flex: none; max-width: 45%; }
+.mk-sep { opacity: 0.6; flex: none; }
+.mk-lic {
+  padding: 2px 7px; border-radius: 99px; font-size: 10.5px; font-weight: 600;
+  background: color-mix(in srgb, var(--t-ok) 14%, transparent); color: var(--t-ok);
+}
+.mk-lic.none { background: var(--t-surface-2); color: var(--t-muted); font-weight: 500; }
+.dc-tag.mk-ui-tag { color: #ffd98a; }
+.mk-card .acts { gap: 6px; }
+.mk-card .acts .mk-src { background: transparent; }
+
+.mk-badge {
+  display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 99px;
+  font: 600 10.5px/1.5 var(--t-font); color: var(--t-ok); background: color-mix(in srgb, var(--t-ok) 15%, transparent);
+  white-space: nowrap;
+}
+.mk-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.mk-badge.on-thumb {
+  position: absolute; left: 8px; bottom: 8px; z-index: 2; color: #bff3d6;
+  background: rgba(10, 12, 18, 0.62); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.mk-dot {
+  position: absolute; right: 9px; top: 9px; z-index: 2; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--t-accent); box-shadow: 0 0 0 2px rgba(10, 12, 18, 0.55), 0 0 10px var(--t-accent);
+}
+
+.mk-dlg { width: min(560px, calc(100vw - 48px)); }
+.mk-dhead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 4px; }
+.mk-dhead h3 { margin: 0; }
+.mk-warn {
+  padding: 8px 10px; border-radius: var(--t-radius-xs); font-size: 12.5px;
+  color: var(--t-text) !important; background: color-mix(in srgb, var(--t-warn) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--t-warn) 40%, transparent);
+}
+.mk-facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 4px 0 12px; font-size: 12.5px; }
+.mk-facts dt { color: var(--t-muted); }
+.mk-facts dd { margin: 0; color: var(--t-text); min-width: 0; overflow-wrap: anywhere; }
+.mk-facts dd .link-s { padding: 0; }
+.mk-dlg ul.mk-list { font-family: var(--t-font); font-size: 13px; }
+html[data-base="light"] .mk-badge.on-thumb { color: #0f6b3a; background: rgba(255, 255, 255, 0.82); }
+html[data-base="light"] .mk-dot { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8); }

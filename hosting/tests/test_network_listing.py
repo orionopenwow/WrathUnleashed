@@ -252,5 +252,78 @@ class Setup(unittest.TestCase):
         self.assertEqual((rec["tags"], rec["language"], rec["region"]), (["custom"], None, "eu"))
 
 
+
+class ScoreCap(unittest.TestCase):
+    def test_score_never_counts_players_the_relay_does_not_see(self):
+        now = time.time()
+        h = Host()
+        st = lambda ip: types.SimpleNamespace(ip=ip)   # noqa: E731
+        sess = types.SimpleNamespace(visibility="public", streams={1: st("a"), 2: st("a"), 3: st("b")}, listed_at=1,
+                                     rtt_ms=None, signup=None)
+        relay = types.SimpleNamespace(blocked=set(), sessions={h.rid: sess}, state={"realms": {}}, mesh=None)
+        L = listing.Listing(cfg(), relay)
+        self.assertEqual(L.heartbeat(h.beat(now, players=500), "198.51.100.20", now=now)[0], 200)
+        r = L.realms_json(now)["realms"][0]
+        self.assertEqual(r["community"]["playersConfirmed"], 2)
+        self.assertEqual(r["community"]["lastHeartbeat"]["players"], 500, "the count shown is the realm's own")
+        self.assertEqual(r["community"]["score"], listing.score(True, 2, 0, None, None, True))
+
+
+class WordFilter(unittest.TestCase):
+    """The listing's word filter: brand words out of the host's text, slurs refused; the same lists as the website's
+    host form (stream/hostflow.py), which ships apart from the relay."""
+
+    def test_same_lists_as_the_website(self):
+        import ast
+        import re
+        src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "stream", "hostflow.py")
+        tree = ast.parse(open(src, encoding="utf-8").read())
+        got = {}
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+                n = node.targets[0].id
+                if n == "SLURS":
+                    got[n] = ast.literal_eval(node.value)
+                elif n == "BANNED":
+                    got[n] = ast.literal_eval(node.value.args[0])
+                elif n == "_LEET":
+                    got[n] = tuple(ast.literal_eval(a) for a in node.value.args)
+        self.assertEqual(got.get("SLURS"), listing.SLURS)
+        self.assertEqual(got.get("BANNED"), listing.BANNED.pattern)
+        self.assertEqual(str.maketrans(*got["_LEET"]), listing._LEET)
+        self.assertTrue(re.compile(got["BANNED"]).search("World of Warcraft"))
+
+    def test_brand_words_taken_out(self):
+        rec = listing.clean_record({"name": "WoW Frost Haven", "tagline": "Best Warcraft fun",
+                                    "summary": "Wrath of the Lich King, blizzlike", "rules": ["No Blizzard talk", "Be kind"]})
+        self.assertEqual(rec["name"], "Frost Haven")
+        self.assertFalse(rec["name_ok"])
+        self.assertEqual(rec["tagline"], "Best fun")
+        self.assertEqual(rec["summary"], "Wrath, blizzlike")
+        self.assertEqual(rec["rules"], ["No talk", "Be kind"])
+        ok = listing.clean_record({"name": "Frost Haven"})
+        self.assertTrue(ok["name_ok"])
+        for fine in ("Raccoon Den", "Spicy Duels", "Scunthorpe", "Wowza", "Flowow"):
+            self.assertTrue(listing.clean_record({"name": fine})["name_ok"], fine)
+
+    def test_slurs_refused(self):
+        L = listing.Listing(cfg())
+        now = time.time()
+        for bad in ("Fag Den", "n1gger town", "R E T A R D S", "f.a.g.g.o.t"):
+            st, body = L.heartbeat(Host().beat(now, record={"name": bad}), "198.51.100.9", now=now)
+            self.assertEqual(st, 400, bad)
+            self.assertIn("not allowed", body["error"])
+        h = Host()
+        st, _ = L.heartbeat(h.beat(now, record={"name": "Fine Realm", "tagline": "kike", "rules": ["no tranny jokes", "ok"]}),
+                            "198.51.100.10", now=now)
+        self.assertEqual(st, 200)
+        r = L.realms_json(now)["realms"][0]
+        self.assertEqual((r["tagline"], r["rules"], r["community"]["nameOk"]), ("", ["ok"], True))
+        h2 = Host()
+        L.heartbeat(h2.beat(now, record={"name": "Blizzard Haven"}), "198.51.100.11", now=now)
+        r2 = next(r for r in L.realms_json(now)["realms"] if r["community"]["realmId"] == h2.rid)
+        self.assertEqual((r2["name"], r2["community"]["nameOk"]), ("Haven", False))
+
+
 if __name__ == "__main__":
     unittest.main()

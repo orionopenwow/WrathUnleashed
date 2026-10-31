@@ -1360,14 +1360,51 @@ fn resolve_ci(client: &Path, rel: &str) -> String {
     out.join("/")
 }
 
+/// What the player's native-code OK is stored under: the mod's key plus a digest of every native file it brings
+/// (its client-relative name and sha256), so the OK covers these exact files. An update that changes a DLL, an
+/// .asi or their settings has a new consent key and asks again. `<key>:<16 hex>`, or `native:<32 hex>` for a key
+/// too long for that (what `mod_native_confirm` takes: at most 80 of `[A-Za-z0-9:._-]`).
+pub fn native_consent_key(key: &str, plan: &Plan) -> String {
+    use sha2::{Digest, Sha256};
+    let mut files: Vec<(String, String)> = plan
+        .natives
+        .iter()
+        .map(|n| (n.rel.to_ascii_lowercase(), net::sha256_file(&n.abs).unwrap_or_else(|_| format!("unreadable:{}", n.size))))
+        .collect();
+    files.sort();
+    let mut h = Sha256::new();
+    for (rel, sha) in &files {
+        h.update(rel.as_bytes());
+        h.update([0u8]);
+        h.update(sha.as_bytes());
+        h.update([b'\n']);
+    }
+    let d = h.finalize().iter().map(|b| format!("{b:02x}")).collect::<String>();
+    let plain = key.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, ':' | '.' | '_' | '-'));
+    if plain && key.len() + 17 <= 80 {
+        format!("{key}:{}", &d[..16])
+    } else {
+        let mut k = Sha256::new();
+        k.update(key.as_bytes());
+        k.update([0u8]);
+        k.update(d.as_bytes());
+        let kd = k.finalize().iter().map(|b| format!("{b:02x}")).collect::<String>();
+        format!("native:{}", &kd[..32])
+    }
+}
+
 fn native_confirm_error(meta: &InstallMeta, plan: &Plan) -> String {
     let files: Vec<&str> = plan.natives.iter().map(|n| n.rel.as_str()).collect();
-    format!("{NATIVE_CONFIRM}{}", serde_json::json!({ "key": meta.key, "name": meta.name, "files": files }))
+    // "key" is the consent key (what mod_native_confirm stores); "mod" is the mod's own key.
+    format!(
+        "{NATIVE_CONFIRM}{}",
+        serde_json::json!({ "key": native_consent_key(&meta.key, plan), "mod": meta.key, "name": meta.name, "files": files })
+    )
 }
 
 /// Put a validated plan into the client. Replaces the same mod (same key) when it is already installed (an
 /// update): files the player changed since are not lost, see `Installed::kept`. Native code needs `native_ok`
-/// (the player's one-time OK for this mod); without it the error starts with `NATIVE_CONFIRM`. Nothing that is
+/// (the player's OK for this mod and these exact native files, `native_consent_key`); without it the error starts with `NATIVE_CONFIRM`. Nothing that is
 /// installed is ever run.
 pub fn install(client: &Path, build: Build, meta: InstallMeta, plan: &Plan, native_ok: bool) -> Result<Installed, String> {
     if !plan.errors.is_empty() {
@@ -1692,8 +1729,8 @@ impl Drop for Scratch {
     }
 }
 
-/// Check and install a local zip, .MPQ, native file (.dll, .asi, .exe) or folder. `native_ok(key)` says whether
-/// the player already OK'd native code for that mod.
+/// Check and install a local zip, .MPQ, native file (.dll, .asi, .exe) or folder. `native_ok(consent key)` says
+/// whether the player already OK'd that mod's native files as they are now (`native_consent_key`).
 pub fn install_local(client: &Path, build: Build, src: &Path, native_ok: &dyn Fn(&str) -> bool) -> Result<Installed, String> {
     let st = Staging::new(client).map_err(|e| format!("could not make a staging folder in the client: {e}"))?;
     let files = st.files();
@@ -1725,7 +1762,7 @@ pub fn install_local(client: &Path, build: Build, src: &Path, native_ok: &dyn Fn
     let plan = validate(&staged, build);
     let mut meta = local_meta(&plan);
     meta.sha256 = sha;
-    let ok = native_ok(&meta.key);
+    let ok = native_ok(&native_consent_key(&meta.key, &plan));
     install(client, build, meta, &plan, ok)
 }
 
@@ -1746,6 +1783,9 @@ pub fn install_project(
         } else {
             "This is a community link: get it from its page, then drop the zip on My Mods.".into()
         });
+    }
+    if p.source == "upstream" {
+        return crate::upstream::install(client, build, p, catalog_origin, scratch); // from the author's repo (upstream.rs)
     }
     if !p.fits(build) {
         return Err(format!("{} is made for the {} client, not this {} one.", p.name, p.builds.join(" / "), build.catalog_tag()));
@@ -1789,7 +1829,7 @@ pub fn install_project(
         category: p.category.clone(),
         credits: p.credits.clone(),
     };
-    let ok = native_ok(&meta.key);
+    let ok = native_ok(&native_consent_key(&meta.key, &plan));
     install(client, build, meta, &plan, ok)
 }
 
@@ -1831,8 +1871,14 @@ pub fn with_updates(man: &Manifest, catalog: &[Project], build: Build) -> Vec<In
         .filter(|m| m.key != crate::addons::KEY)
         .map(|m| {
             let p = catalog.iter().find(|p| p.id == m.key && p.installable() && p.fits(build));
-            let update = p.and_then(|p| p.version.clone()).filter(|v| newer(v, &m.version));
-            InstalledView { mod_: m.clone(), update, in_catalog: p.is_some() }
+            let update = match p {
+                Some(p) if p.source == "upstream" => crate::upstream::update_for(m, p), // by rev (r736, 3x05...)
+                _ => p.and_then(|p| p.version.clone()).filter(|v| newer(v, &m.version)),
+            };
+            // TOC titles can carry colour codes and the game's brand words: My Mods shows them cleaned.
+            let name = crate::upstream::clean_title(&m.name);
+            let mod_ = Installed { name: if name.is_empty() { m.name.clone() } else { name }, ..m.clone() };
+            InstalledView { mod_, update, in_catalog: p.is_some() }
         })
         .collect()
 }
@@ -2459,6 +2505,7 @@ pub mod tests {
         let v: serde_json::Value = serde_json::from_str(json).unwrap();
         assert_eq!(v["files"], serde_json::json!(["d3d9.dll", "fix.conf"]));
         let key = v["key"].as_str().unwrap().to_string();
+        let modkey = v["mod"].as_str().unwrap().to_string();
         assert_eq!(tree(c.path()), before, "nothing installed before the OK");
 
         let m = install_local(c.path(), Build::V335a, &z, &|k| k == key).unwrap();
@@ -2467,11 +2514,41 @@ pub mod tests {
         assert!(m.warnings.iter().any(|w| w.contains("native code")));
         assert_eq!(fs::read(c.path().join("d3d9.dll")).unwrap(), b"MZ\x90\x00dll");
         // Off and on again, then out.
-        set_enabled(c.path(), &key, false).unwrap();
+        set_enabled(c.path(), &modkey, false).unwrap();
         assert!(!c.path().join("d3d9.dll").exists());
-        set_enabled(c.path(), &key, true).unwrap();
-        uninstall(c.path(), &key).unwrap();
+        set_enabled(c.path(), &modkey, true).unwrap();
+        uninstall(c.path(), &modkey).unwrap();
         assert_eq!(tree(c.path()), before);
+
+        // The OK is for these exact native files: the same mod with a changed DLL asks again, the same files don't.
+        let mj = br#"{"id":"dx-fix","name":"DX Fix","version":"1.0.0"}"#;
+        let v1 = write(d.path(), "dx1.zip", &zip_of(&[("mod.json", mj), ("native/d3d9.dll", b"MZone"), ("native/dx.ini", b"a=1")]));
+        let e = install_local_t(c.path(), Build::V335a, &v1).unwrap_err();
+        let info: serde_json::Value = serde_json::from_str(e.strip_prefix(NATIVE_CONFIRM).unwrap()).unwrap();
+        let ok1 = info["key"].as_str().unwrap().to_string();
+        assert_eq!(info["mod"], "mod:dx-fix");
+        assert!(ok1.starts_with("mod:dx-fix:") && ok1.len() == "mod:dx-fix:".len() + 16, "{ok1}");
+        let oks = std::cell::RefCell::new(vec![ok1.clone()]);
+        let allowed = |k: &str| oks.borrow().iter().any(|x| x == k);
+        install_local(c.path(), Build::V335a, &v1, &allowed).unwrap();
+        let again = write(d.path(), "dx1b.zip", &zip_of(&[("mod.json", mj), ("native/dx.ini", b"a=1"), ("native/d3d9.dll", b"MZone")]));
+        install_local(c.path(), Build::V335a, &again, &allowed).expect("the same files: no new question");
+        let v2 = write(d.path(), "dx2.zip", &zip_of(&[("mod.json", mj), ("native/d3d9.dll", b"MZtwo"), ("native/dx.ini", b"a=1")]));
+        let e = install_local(c.path(), Build::V335a, &v2, &allowed).unwrap_err();
+        let info2: serde_json::Value = serde_json::from_str(e.strip_prefix(NATIVE_CONFIRM).expect("a changed DLL asks again")).unwrap();
+        let ok2 = info2["key"].as_str().unwrap().to_string();
+        assert_ne!(ok1, ok2);
+        assert_eq!(fs::read(c.path().join("d3d9.dll")).unwrap(), b"MZone", "the old DLL stays until the new one is OK'd");
+        let v3 = write(d.path(), "dx3.zip", &zip_of(&[("mod.json", mj), ("native/d3d9.dll", b"MZone"), ("native/dx.ini", b"a=2")]));
+        assert!(install_local(c.path(), Build::V335a, &v3, &allowed).unwrap_err().starts_with(NATIVE_CONFIRM), "changed settings ask too");
+        oks.borrow_mut().push(ok2);
+        install_local(c.path(), Build::V335a, &v2, &allowed).unwrap();
+        assert_eq!(fs::read(c.path().join("d3d9.dll")).unwrap(), b"MZtwo");
+        uninstall(c.path(), "mod:dx-fix").unwrap();
+        assert_eq!(tree(c.path()), before);
+        // A key too long for "<key>:<hex>" still gets a consent key mod_native_confirm takes.
+        let long = native_consent_key(&format!("local:{}", "a".repeat(70)), &Plan::default());
+        assert!(long.starts_with("native:") && long.len() <= 80, "{long}");
 
         // A package's native/ folder, with an .asi in a folder Leyline makes and takes away again.
         let mj = br#"{"id":"fps-fix","name":"FPS Fix","version":"1.0.0"}"#;

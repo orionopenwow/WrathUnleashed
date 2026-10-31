@@ -52,8 +52,8 @@ https://play.openvanilla.app/wrath/mods. It is public, `Access-Control-Allow-Ori
 
 | field | meaning |
 | --- | --- |
-| `id` | stable: `mod:<mod id>` or `link:<12 hex>` |
-| `source` | `packaged` (our catalog, with a zip) or `community` (a link only: nothing is hosted) |
+| `id` | stable: `mod:<mod id>`, `up:<slug>` or `link:<12 hex>` |
+| `source` | `packaged` (our catalog, with a zip), `community` (a link only: nothing is hosted) or `upstream` (a reviewed addon the launcher installs from its author's repo) |
 | `category` | one of the 13 `categories` ids (`mods/categories.json`); `themes` holds launcher theme packs (`docs/THEMES.md`) |
 | `builds` | `3.3.5a`, `1.12`, or `any`; a project for both lists both |
 | `author`, `author_url`, `licence`, `repo` | the credit. `licence` is `""` when the repo states none: show "licence not stated" |
@@ -61,6 +61,7 @@ https://play.openvanilla.app/wrath/mods. It is public, `Access-Control-Allow-Ori
 | `stars`, `last_push`, `last_checked` | from the forge's public API (GitHub, GitLab, Codeberg); `null` / `""` when unknown |
 | `version` … `sha256` | packaged mods only; `null` for community links |
 | `featured` | `true` when staff featured it in the Admin Console (docs/ADMIN-CONSOLE.md); show it first or badge it |
+| `tags`, `install`, `addons`, `requires`, `conflicts`, `replaces_ui`, `native`, `blp`, `mirror_allowed`, `licence_source`, `review`, `compat`, `folder_name`, `size`, `file_count` | upstream addons only (`source: "upstream"`, id `up:<slug>`): curated third-party addons the launcher installs from the author's own repo, never hosted by us unless `mirror_allowed`. `install` is `{from, url, rev, sha256, size, file_count, strip_prefix, folders, files_digest}` (the full file list stays in `mods/upstream.json`). `credits` reads "<name> by <author> · <licence or "licence not stated"> · Installs from the author's GitHub"; `page` is the repo. Only reviewed entries are in all.json. mods/SPEC.md, "Upstream addons", has the rules |
 
 Sorted by name. Hidden links, and mods staff rejected or unpublished, are left out. New fields may appear in format 1: ignore what you don't know.
 Show the text as text (never as HTML) and open `repo` / `page` in the browser.

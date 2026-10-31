@@ -1,7 +1,8 @@
 //! The Workshop catalog: `/wrath/mods/all.json` from the site (mods/all-json.md), cached for offline use.
 //!
-//! One list of every project: packaged mods (a zip the site hosts, with its sha256) and community links (a
-//! repo only, nothing hosted). Every value is checked again here: text is trimmed, links must be plain https,
+//! One list of every project: packaged mods (a zip the site hosts, with its sha256), community links (a
+//! repo only, nothing hosted) and upstream addons (curated third-party addons installed straight from the
+//! author's repo, `upstream.rs`). Every value is checked again here: text is trimmed, links must be plain https,
 //! downloads must come from the catalog's own site, and anything malformed is dropped rather than shown.
 
 use crate::clients::Build;
@@ -50,8 +51,32 @@ pub struct Project {
     pub on_wrath: Option<bool>,
     pub download: Option<String>,
     pub sha256: Option<String>,
-    /// The zip's size in bytes, when the catalog says (catalog.json does; all.json may later).
+    /// The zip's size in bytes, when the catalog says (catalog.json does; all.json may later). For an upstream
+    /// addon: what it unpacks to.
     pub size: Option<u64>,
+
+    // ---- upstream addons only (`source: "upstream"`, id `up:<slug>`; mods/all-json.md)
+    /// Sub-category chips (`unit-frames`, `nameplates`, `meters`...).
+    pub tags: Vec<String>,
+    /// How to install it from the author (checked by `upstream::install_ok`; None drops it to a link).
+    pub install: Option<crate::upstream::Install>,
+    /// The addon folders it installs.
+    pub addons: Vec<String>,
+    /// Other `up:` entries it needs, and ones it cannot sit beside (same folders).
+    pub requires: Vec<String>,
+    pub conflicts: Vec<String>,
+    /// A whole-interface replacement (ElvUI and the like): may conflict with the Leyline UI.
+    pub replaces_ui: bool,
+    /// Never true for a listed entry (native code is never an upstream addon).
+    pub native: bool,
+    /// `none` or `author-art` (the author's own .blp textures, installed from upstream only).
+    pub blp: String,
+    /// The licence is open and there is no .blp art: we may host a copy.
+    pub mirror_allowed: bool,
+    pub licence_source: String,
+    pub file_count: Option<u64>,
+    pub review: Option<crate::upstream::Review>,
+    pub compat: Option<crate::upstream::Compat>,
 }
 
 impl Project {
@@ -65,9 +90,9 @@ impl Project {
         build != Build::Other
             && (self.builds.is_empty() || self.builds.iter().any(|b| b == "any" || Build::from_tag(b) == Some(build)))
     }
-    /// Leyline can download and install it (a packaged mod with a zip on the site).
+    /// Leyline can download and install it (a packaged mod with a zip on the site, or a reviewed upstream addon).
     pub fn installable(&self) -> bool {
-        self.source == "packaged" && self.download.is_some()
+        (self.source == "packaged" && self.download.is_some()) || (self.source == "upstream" && self.install.is_some())
     }
 }
 
@@ -94,7 +119,7 @@ fn link(s: &str) -> String {
     }
 }
 
-/// A catalog id: `mod:<mod id>` (wu-mod.py's id rule) or `link:<12 hex>`.
+/// A catalog id: `mod:<mod id>` (wu-mod.py's id rule), `up:<slug>` (the same rule) or `link:<12 hex>`.
 pub fn id_ok(id: &str) -> bool {
     let slug = |s: &str| {
         (3..=32).contains(&s.len())
@@ -104,7 +129,7 @@ pub fn id_ok(id: &str) -> bool {
             && !s.ends_with('-')
     };
     match id.split_once(':') {
-        Some(("mod", m)) => slug(m),
+        Some(("mod", m)) | Some(("up", m)) => slug(m),
         Some(("link", h)) => h.len() == 12 && h.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
         _ => false,
     }
@@ -122,7 +147,13 @@ pub fn clean_in(mut p: Project, origin: &str, all: bool) -> Option<Project> {
     if !id_ok(&p.id) {
         return None;
     }
-    p.source = if p.source == "packaged" && p.id.starts_with("mod:") { "packaged".into() } else { "community".into() };
+    p.source = if p.source == "packaged" && p.id.starts_with("mod:") {
+        "packaged".into()
+    } else if p.source == "upstream" && p.id.starts_with("up:") {
+        "upstream".into()
+    } else {
+        "community".into()
+    };
     p.name = text(&p.name, 64);
     if p.name.is_empty() {
         p.name = p.id.split(':').nth(1).unwrap_or_default().to_string();
@@ -169,7 +200,56 @@ pub fn clean_in(mut p: Project, origin: &str, all: bool) -> Option<Project> {
             && net::origin(d).as_deref() == Some(origin)
             && d[origin.len()..].starts_with('/')
     });
+    clean_upstream(&mut p, origin);
     Some(p)
+}
+
+/// The upstream fields made safe. An upstream entry whose install block does not check out (`upstream::install_ok`),
+/// that is not reviewed, or that claims native code, stays listed as a plain link (its repo) and installs nothing.
+fn clean_upstream(p: &mut Project, origin: &str) {
+    let tag = |t: &String| !t.is_empty() && t.len() <= 24 && t.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    p.tags = std::mem::take(&mut p.tags).into_iter().filter(tag).take(8).collect();
+    p.licence_source = text(&p.licence_source, 80);
+    if p.source != "upstream" {
+        p.install = None;
+        p.addons.clear();
+        p.requires.clear();
+        p.conflicts.clear();
+        p.replaces_ui = false;
+        p.mirror_allowed = false;
+        p.review = None;
+        p.compat = None;
+        return;
+    }
+    p.download = None;
+    p.name = crate::upstream::clean_title(&p.name);
+    if p.name.is_empty() {
+        p.name = p.id[3..].to_string();
+    }
+    p.blp = if p.blp == "author-art" { p.blp.clone() } else { "none".into() };
+    let ids = |v: Vec<String>| v.into_iter().filter(|x| x.starts_with("up:") && id_ok(x)).take(16).collect::<Vec<_>>();
+    p.requires = ids(std::mem::take(&mut p.requires));
+    p.conflicts = ids(std::mem::take(&mut p.conflicts));
+    p.addons = std::mem::take(&mut p.addons).into_iter().filter(|a| crate::upstream::name_ok(a)).take(32).collect();
+    p.review = p.review.take().map(|r| crate::upstream::Review { by: text(&r.by, 60), at: text(&r.at, 25), notes: text(&r.notes, 300) });
+    p.compat = p.compat.take().map(|c| crate::upstream::Compat {
+        realm: text(&c.realm, 48),
+        status: if matches!(c.status.as_str(), "works" | "broken") { c.status } else { "untested".into() },
+        checked_at: text(&c.checked_at, 25),
+    });
+    let reviewed = p.review.as_ref().is_some_and(|r| !r.by.is_empty());
+    let ok = !p.native
+        && reviewed
+        && p.install.as_ref().is_some_and(|i| crate::upstream::install_ok(i, &p.repo, origin, p.mirror_allowed, p.blp == "author-art"));
+    if !ok {
+        p.source = "community".into();
+        p.install = None;
+    }
+    if let Some(i) = &p.install {
+        p.size = Some(i.size);
+        p.file_count = Some(i.file_count);
+        p.sha256 = i.sha256.clone();
+    }
 }
 
 /// The categories and projects of an all.json document.
@@ -307,6 +387,49 @@ mod tests {
         // A reply that is not a catalog does not replace the cache.
         let bad = serve_routes(vec![("/wrath/mods/all.json", "200 OK", br#"{"mods":[]}"#.to_vec())]);
         assert!(fetch_from(&format!("{bad}/wrath/mods/all.json"), d.path()).unwrap().from_cache);
+    }
+
+    #[test]
+    fn upstream_entries_install_only_when_their_install_block_checks_out() {
+        let c1 = "0123456789abcdef0123456789abcdef01234567";
+        let entry = |extra: &str| {
+            format!(
+                r#"{{"id":"up:frames","source":"upstream","name":"|cff00ff00Frames|r (WotLK)","builds":["3.3.5a"],
+                "repo":"https://github.com/alice/Frames","tags":["unit-frames","BAD TAG"],"blp":"none","native":false,
+                "review":{{"by":"owner","at":"2026-10-31T00:00:00Z","notes":""}},"requires":["up:lib","link:x","evil"],
+                "install":{{"from":"commit-archive","url":"https://github.com/alice/Frames/archive/{c1}.zip","rev":"{c1}",
+                  "size":10,"file_count":1,"strip_prefix":"Frames-{c1}/","folders":{{"Frames":"Frames"}},
+                  "files_digest":"{d}"}}{extra}}}"#,
+                d = "ab".repeat(32)
+            )
+        };
+        let doc = |e: &str| format!(r#"{{"projects":[{e}]}}"#);
+        let one = |e: &str| parse(&serde_json::from_str(&doc(e)).unwrap(), "https://play.openvanilla.app").unwrap().1.remove(0);
+        let p = one(&entry(""));
+        assert_eq!(p.source, "upstream");
+        assert!(p.installable() && p.download.is_none());
+        assert_eq!(p.name, "Frames", "brand words and colour codes out of the name");
+        assert_eq!(p.tags, vec!["unit-frames"]);
+        assert_eq!(p.requires, vec!["up:lib"]);
+        // A download that is not the entry's own repo, an unreviewed entry, native code, a mirror without
+        // mirror_allowed: listed as a link, never installed.
+        let other = entry("").replace("github.com/alice/Frames/archive", "github.com/mallory/Frames/archive");
+        let unreviewed = entry("").replace(r#""by":"owner""#, r#""by":"""#);
+        let native = entry("").replace(r#""native":false"#, r#""native":true"#);
+        let mirror = entry("").replace(
+            &format!(r#""from":"commit-archive","url":"https://github.com/alice/Frames/archive/{c1}.zip""#),
+            r#""from":"mirror","sha256":"abababababababababababababababababababababababababababababababab","url":"https://play.openvanilla.app/wrath/mods/up/frames.zip""#,
+        );
+        for (what, e) in [("other repo", other), ("unreviewed", unreviewed), ("native", native), ("mirror", mirror.clone())] {
+            let p = one(&e);
+            assert_eq!(p.source, "community", "{what}");
+            assert!(!p.installable() && p.install.is_none(), "{what}");
+        }
+        let allowed = one(&mirror.replace(r#""native":false"#, r#""native":false,"mirror_allowed":true"#));
+        assert!(allowed.installable(), "a mirror on our own site when the licence allows it");
+        // An "upstream" claim on a mod: id, or on a link: id, is not upstream.
+        let p = one(&entry("").replace("up:frames", "mod:frames"));
+        assert_eq!(p.source, "community");
     }
 
     #[test]

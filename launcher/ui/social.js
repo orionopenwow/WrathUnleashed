@@ -96,7 +96,7 @@
       w.append(sp, t);
       const c = el("p", "sx-code", code); c.setAttribute("aria-label", "Sign-in code " + code.split("").join(" "));
       const row = el("div", "sf-acts");
-      const again = el("button", "btn small", "OPEN THE PAGE AGAIN"); again.type = "button";
+      const again = el("button", "btn small", "Open the page again"); again.type = "button";
       again.onclick = () => invoke("social_signin_reopen").catch((e) => fail(String(e)));
       const cancel = el("button", "link-s", "Cancel"); cancel.type = "button"; cancel.onclick = cancelSignIn;
       row.append(again, cancel);
@@ -137,8 +137,8 @@
     if (!signedIn || !me) {
       const t = el("div", "hf-me-t");
       t.append(el("b", "hf-me-name", "Leyline"), el("span", "hf-me-st", "Signed out"));
-      const b = el("button", "btn small primary hf-signin", "SIGN IN"); b.type = "button"; b.id = "hf-signin";
-      b.title = "Sign in with your Hero Key, Google or Discord, in your browser";
+      const b = el("button", "btn small primary hf-signin", "Sign in"); b.type = "button"; b.id = "hf-signin";
+      b.title = "Sign in on the website, in your browser";   // neutral: the chooser lists only the ways the website offers
       b.setAttribute("aria-haspopup", "dialog");
       b.onclick = () => {
         if (flow.stage === "waiting") { renderCode(); return; }
@@ -274,7 +274,7 @@
     const h = el("h3", "", "Join the Discord"); h.id = "hf-dc-h";
     // TODO(owner): the Discord line in the launcher
     const p = el("p", "", "Find a group, voice chat, show what you made and hear about new realms first.");
-    const b = el("button", "btn small primary hf-dc-go", "JOIN THE DISCORD"); b.type = "button";
+    const b = el("button", "btn small primary hf-dc-go", "Join the Discord"); b.type = "button";
     b.onclick = () => openLink("discord");
     dc.append(ic, h, p, b);
     const fm = el("section", "hf-fm");

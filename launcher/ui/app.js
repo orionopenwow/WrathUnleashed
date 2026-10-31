@@ -22,7 +22,8 @@ const invoke = window.__TAURI__ && window.__TAURI__.core
       throw "This is a preview page: open it in the Leyline app.";
     };
 
-// What's new, shown on Home and on the News page. Newest first.
+// What's new, shown on Home and on the News page. Newest first. The website's news feed replaces these when it loads
+// (loadNews: the core's news_list, news.rs, /wrath/leyline/news.json); these are the offline copy.
 const NEWS = [
   { tag: "LEYLINE LAUNCHER 0.3", title: "EVERY CLIENT, EVERY SERVER", items: [
     "Finds every game client on your PC",
@@ -37,10 +38,10 @@ const NEWS = [
   { tag: "LEYLINE LAUNCHER 0.2", title: "MODS, REALMS AND HOSTING", items: [
     "Install, update, turn off and remove Workshop mods per client, or drop your own zip",
     "Play on community Beacons from the realm list, and back to Wrath in one click",
-    "Host your own realm from the Host page with the host kit",
+    "Host your own realm from the Host page with the Host pack",
   ] },
   { tag: "LEYLINE LAUNCHER 0.1", title: "ONE LAUNCHER FOR EVERY REALM", items: [
-    "Uses the game client already on your PC: 3.3.5a or 1.12.1",
+    "Uses the client you already have",
     "Sets the realm for you and keeps your original realmlist as a backup",
     "Or play Wrath in your browser, with nothing to install",
   ] },
@@ -55,6 +56,23 @@ function say(id, text, kind) {
   s.textContent = text || "";
   s.className = "status" + (kind ? " " + kind : "");
 }
+// Never a raw error to the player (friendly.js): the error goes to the console, the player gets a plain line. A line
+// the core wrote for players is shown as it is; anything technical gets the line for that place.
+const OOPS = {
+  "play-status": "That didn't work. Try again, or ask on the Discord.",
+  "cl-status": "Leyline couldn't use that folder. Pick the folder that holds the game, or see Find your game files.",
+  "cat-status": "Can't reach the Workshop. Try again.",
+  "mods-status": "That mod change didn't work. Try again, or ask on the Discord.",
+  "rl-status": "Can't reach the realm list right now. Try again, or ask on the Discord.",
+  "host-status-line": "The host didn't answer. Try again, or see the Guide tab.",
+  "set-status": "Couldn't save that. Try again.",
+  "count-status": "Couldn't save that. Try again.",
+  "upd-status": "Couldn't check for updates right now. Leyline tries again later.",
+};
+function oops(e, fallback) {
+  return window.LeylineFriendly ? window.LeylineFriendly(e, fallback) : (fallback || "Something went wrong. Try again.");
+}
+function sayErr(id, e, kind) { say(id, oops(e, OOPS[id]), kind || "bad"); }
 
 // ------------------------------------------------------------------ window (the title bar is ours)
 const win = window.__TAURI__ && window.__TAURI__.window ? window.__TAURI__.window.getCurrentWindow() : null;
@@ -65,7 +83,7 @@ $("win-close").addEventListener("click", () => win && win.close());
 // ------------------------------------------------------------------ links (a fixed list in the core)
 async function openLink(name) {
   try { await invoke("open_link", { name }); }
-  catch (e) { say("play-status", String(e), "bad"); }
+  catch (e) { sayErr("play-status", e); }
 }
 document.querySelectorAll("[data-link]").forEach((b) => b.addEventListener("click", () => openLink(b.dataset.link)));
 $("tb-account").addEventListener("click", () => openLink("account"));
@@ -179,9 +197,19 @@ $("search-form").addEventListener("submit", (ev) => {
 });
 
 // ------------------------------------------------------------------ news
-// Home's hero gallery and its News row read NEWS too (home.js); the News page lists every entry.
+// Home's hero gallery and its News row read the news too (home.js, App.news()); the News page lists every entry.
+let news = NEWS;
+async function loadNews() {
+  let r = null;
+  try { r = await invoke("news_list"); } catch (e) { console.error("[leyline] news", e); return; }   // keep the built-in posts
+  const posts = r && Array.isArray(r.posts) ? r.posts.filter((p) => p && typeof p.title === "string" && p.title) : [];
+  if (!posts.length) return;
+  news = posts.map((p) => ({ tag: [p.tag, p.date].filter(Boolean).join(" · "), title: p.title, items: Array.isArray(p.items) ? p.items : [] }));
+  renderNews();
+  document.dispatchEvent(new CustomEvent("leyline:news"));   // Home's What's new slide and News row (home.js)
+}
 function renderNews() {
-  $("news-full").replaceChildren(...NEWS.map((x) => {
+  $("news-full").replaceChildren(...news.map((x) => {
     const d = el("div", "news-entry");
     const ul = el("ul");
     ul.replaceChildren(...x.items.map((t) => el("li", "", t)));
@@ -319,9 +347,9 @@ async function refreshStatus() {
     if (s.state === "online") set("is-online", ms ? `Online  ${ms}` : "Online", ms ? `ONLINE  (${ms})` : "ONLINE", (counts.length ? counts : [host]).join(" · "));
     else if (s.state === "partial") set("is-partial", "Partly up", "PARTLY UP", "Login answers · world server down");
     else if (s.state === "offline") set("is-offline", "Offline", "OFFLINE", "World server down");
-    else set("is-partial", "No answer", "NO ANSWER", `${host} did not answer: check your connection`);
+    else set("is-partial", "No answer", "NO ANSWER", "The realm didn't answer: check your connection");
   } catch (e) {
-    set("is-partial", "No answer", "STATUS UNAVAILABLE", String(e));
+    set("is-partial", "No answer", "STATUS UNAVAILABLE", oops(e, "Couldn't check the realm right now."));
   }
 }
 setInterval(() => { if (state) refreshStatus(); }, 60000);
@@ -356,7 +384,7 @@ function renderPlay() {
   sel.disabled = s.clients.length === 0;
   renderClientMenu();
   if ($("play-empty")) $("play-empty").hidden = s.clients.length !== 0;
-  if ($("client-change")) $("client-change").textContent = s.clients.length ? "CHANGE GAME FOLDER" : "ADD YOUR GAME FOLDER";
+  if ($("client-change")) $("client-change").textContent = s.clients.length ? "Change game folder" : "Add your game folder";
   const official = !s.selected_realm || s.selected_realm === state.official_realm;
   $("play-realm").value = official ? "official" : "custom";
   $("play-custom").value = official ? "" : s.selected_realm;
@@ -498,7 +526,7 @@ document.addEventListener("leyline:page", (e) => {
 });
 $("ff-pick").addEventListener("click", async () => {
   show("clients");
-  try { addClient(await invoke("pick_folder")); } catch (e) { say("cl-status", String(e), "bad"); }
+  try { addClient(await invoke("pick_folder")); } catch (e) { sayErr("cl-status", e); }
 });
 $("ff-browser").addEventListener("click", () => { setMode("browser"); show("play"); });
 
@@ -549,7 +577,7 @@ async function playDen() {
   if (!link) { say("play-status", "Your Den has no invite link yet: start it once on the Host page.", "warn"); return; }
   let j;
   try { j = await invoke("join_invite", { client: own.id, link }); }
-  catch (e) { say("play-status", `${e} Is your Den running? Start it on the Host page.`, "bad"); return; }
+  catch (e) { say("play-status", oops(e, "Your Den didn't answer.") + " Is your Den running? Start it on the Host page.", "bad"); return; }
   try { localStorage.setItem("leyline.den", j.address); } catch (_) { /* the bar then shows the address */ }
   $("play-client").value = own.id;
   $("play-realm").value = "custom";
@@ -695,8 +723,9 @@ function renderPlayBar() {
   } else if (mode === "browser") {
     head = "READY · NOTHING TO INSTALL";
   } else if (!c) {
-    head = "SET UP YOUR GAME CLIENT"; warn = true;
-    detail = "Point Leyline at your game folder";
+    // no game folder: PLAY opens Find your game files (which has browser play too)
+    head = "ADD YOUR GAME FOLDER"; warn = true;
+    detail = "PLAY shows where to find it, or play in your browser";
   } else if (chosenRealmBuild() && c.build !== chosenRealmBuild()) {
     const need = chosenRealmBuild();
     head = `THIS SERVER NEEDS ${need.toUpperCase()}`; warn = true;
@@ -724,7 +753,7 @@ function renderPlayBar() {
   if (denChosen()) $("pb-realm-ic").innerHTML = MARKS.den;
   if (rmenuOpen) renderRealmMenu();
   renderClientMenu();
-  $("play-caption").textContent = mode === "browser" ? "IN YOUR BROWSER" : (c ? `ONLINE  ·  ${c.name.toUpperCase()}` : "ONLINE");
+  $("play-caption").textContent = mode === "browser" ? "IN YOUR BROWSER" : (c ? `ONLINE  ·  ${c.name.toUpperCase()}` : "NO GAME FOLDER YET");
 }
 
 $("play-realm").addEventListener("change", () => { realmChanged(); saveSelection(); });
@@ -735,11 +764,11 @@ $("play-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   if (mode === "browser") {
     try { await invoke("open_browser_play"); say("play-status", "Opened the browser client.", "ok"); }
-    catch (e) { say("play-status", String(e), "bad"); }
+    catch (e) { sayErr("play-status", e); }
     return;
   }
   const c = currentClient();
-  if (!c) { show("clients"); return; }
+  if (!c) { openFindFiles(); return; }   // no game folder yet: where to find one (and browser play)
   const realm = chosenRealm();
   if (!realm) { show("realms"); $("play-custom").focus(); return say("play-status", "Type a realm address.", "bad"); }
   $("play-go").disabled = true;
@@ -749,7 +778,7 @@ $("play-form").addEventListener("submit", async (ev) => {
     say("play-status", await invoke("play", { client: c.id, realm }), "ok");
     state = await invoke("get_state");
   } catch (e) {
-    say("play-status", String(e), "bad");
+    sayErr("play-status", e);
   } finally {
     $("play-go").disabled = false;
   }
@@ -760,29 +789,44 @@ function renderClients() {
   const list = $("cl-list");
   list.replaceChildren();
   if (state.settings.clients.length === 0) {
-    list.append(el("p", "hint", "No clients yet."));
+    // the empty state: where to look first
+    const p = el("p", "hint cl-empty", "No game folder yet. ");
+    const go = el("button", "link", "Find your game files ›");
+    go.type = "button";
+    go.addEventListener("click", () => openFindFiles());
+    p.append(go);
+    list.append(p);
     return;
   }
   for (const c of state.settings.clients) {
     const card = el("div", "card");
     const top = el("div", "top");
-    top.append(el("span", "name", c.name), el("span", "build", buildLabel(c.build)));
+    top.append(el("span", "name", c.name), el("span", "build", offeredBuild(c.build) ? c.build : "other build"));
     const tags = el("div", "tags");
-    if (buildTag(c.build) === "other") tags.append(el("span", "tag warn", `Other build${c.exe_version ? " " + c.exe_version : ""}: realms only, no mods`));
-    else tags.append(el("span", "tag", `Addons: Interface ${{"1.12.1": "11200", "2.4.3": "20400", "3.3.5a": "30300", "4.3.4": "40300", "5.4.8": "50400"}[c.build]}`));
-    if (BUILDS[c.build]) tags.append(el("span", "tag", `Realm address: ${BUILDS[c.build].file}`));
+    if (buildTag(c.build) === "other") tags.append(el("span", "tag warn", "Realms only, no mods"));
     const meta = el("div", "meta");
     meta.append(el("span", "", "Folder: " + c.path));
-    meta.append(el("span", "", "Realm: " + (c.realmlist || "not set")));
-    if (c.locale) meta.append(el("span", "", "Locale: " + c.locale));
     const check = el("span", "", "");
     meta.append(check);
+    // the technical lines, for whoever is helping: behind Details
+    const more = el("details", "cl-more");
+    more.append(el("summary", "", "Details"));
+    const tech = el("div", "meta");
+    if (buildTag(c.build) === "other") tech.append(el("span", "", `Build: ${c.exe_version || "unknown"}`));
+    else {
+      tech.append(el("span", "", `Build: ${buildLabel(c.build)}`));
+      tech.append(el("span", "", `Addons: Interface ${{"1.12.1": "11200", "2.4.3": "20400", "3.3.5a": "30300", "4.3.4": "40300", "5.4.8": "50400"}[c.build]}`));
+    }
+    if (BUILDS[c.build]) tech.append(el("span", "", `Realm address file: ${BUILDS[c.build].file}`));
+    tech.append(el("span", "", "Realm: " + (c.realmlist || "not set")));
+    if (c.locale) tech.append(el("span", "", "Locale: " + c.locale));
+    more.append(tech);
     const acts = el("div", "acts");
-    const bCheck = el("button", "btn small", "CHECK");
-    const bRename = el("button", "btn small", "RENAME");
-    const bRemove = el("button", "btn small danger", "REMOVE");
+    const bCheck = el("button", "btn small", "Check");
+    const bRename = el("button", "btn small", "Rename");
+    const bRemove = el("button", "btn small danger", "Remove");
     acts.append(bCheck, bRename, bRemove);
-    card.append(top, tags, meta, acts);
+    card.append(top, tags, meta, more, acts);
     card.dataset.client = c.id;
     if (window.LeylineAddons) window.LeylineAddons.clientCard(card, c);   // the Leyline addons row (addons.js)
     list.append(card);
@@ -794,14 +838,15 @@ function renderClients() {
         const d = await invoke("check_client", { id: c.id });
         if (d.complete) {
           check.className = "ok";
-          check.textContent = "Looks complete" + (d.exe_version ? ` (executable ${d.exe_version})` : "");
+          check.textContent = "Looks complete";
+          if (d.exe_version) check.title = `Executable ${d.exe_version}`;   // the technical part, on hover
         } else {
           check.className = "warn";
           check.textContent = "Missing: " + d.missing.join(", ");
         }
       } catch (e) {
         check.className = "warn";
-        check.textContent = String(e);
+        check.textContent = oops(e, "Couldn't check this folder right now.");
       }
     };
     bCheck.addEventListener("click", runCheck);
@@ -812,7 +857,7 @@ function renderClients() {
       input.maxLength = 60;
       const save = async () => {
         try { await invoke("rename_client", { id: c.id, name: input.value }); await refresh(); }
-        catch (e) { say("cl-status", String(e), "bad"); }
+        catch (e) { sayErr("cl-status", e); }
       };
       input.addEventListener("keydown", (e) => {
         if (e.key === "Enter") save();
@@ -827,13 +872,13 @@ function renderClients() {
     let armed = null;
     bRemove.addEventListener("click", async () => {
       if (!armed) {
-        bRemove.textContent = "CLICK AGAIN TO REMOVE";
-        armed = setTimeout(() => { armed = null; bRemove.textContent = "REMOVE"; }, 3000);
+        bRemove.textContent = "Click again to remove";
+        armed = setTimeout(() => { armed = null; bRemove.textContent = "Remove"; }, 3000);
         return;
       }
       clearTimeout(armed);
       try { await invoke("remove_client", { id: c.id }); await refresh(); say("cl-status", "Removed from Leyline. Your game folder was not touched.", "ok"); }
-      catch (e) { say("cl-status", String(e), "bad"); }
+      catch (e) { sayErr("cl-status", e); }
     });
     runCheck();
   }
@@ -854,11 +899,11 @@ async function addClient(path) {
     $("cl-path").value = "";
     if (window.LeylineAddons) window.LeylineAddons.offer(r.profile);   // a 3.3.5a client: the Leyline addons step (addons.js)
   } catch (e) {
-    say("cl-status", String(e), "bad");
+    sayErr("cl-status", e);
   }
 }
 $("cl-pick").addEventListener("click", async () => {
-  try { addClient(await invoke("pick_folder")); } catch (e) { say("cl-status", String(e), "bad"); }
+  try { addClient(await invoke("pick_folder")); } catch (e) { sayErr("cl-status", e); }
 });
 $("cl-add").addEventListener("click", () => addClient($("cl-path").value.trim()));
 $("cl-path").addEventListener("keydown", (e) => { if (e.key === "Enter") addClient($("cl-path").value.trim()); });
@@ -872,7 +917,10 @@ function renderSettings() {
   $("wine-note").textContent = state.windows
     ? "You are on Windows: clients start directly and these settings are not used."
     : "Clients are Windows programs. On this system Leyline starts them through Wine.";
-  $("wine-set").disabled = state.windows;
+  // on Windows clients start directly: no Wine settings to show (nor their Save)
+  $("wine-set").hidden = !!state.windows;
+  $("wine-set").disabled = !!state.windows;
+  if ($("set-save")) $("set-save").hidden = !!state.windows;
   $("set-count").checked = state.settings.count_installs !== false;
 }
 $("set-count").addEventListener("change", async () => {
@@ -881,13 +929,13 @@ $("set-count").addEventListener("change", async () => {
     await invoke("set_count_installs", { on });
     state.settings.count_installs = on;
     say("count-status", on ? "Your installs count toward the rankings." : "Your installs are not counted.", "ok");
-  } catch (e) { $("set-count").checked = !on; say("count-status", String(e), "bad"); }
+  } catch (e) { $("set-count").checked = !on; sayErr("count-status", e); }
 });
 $("set-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const wine = { enabled: $("wine-on").checked, command: $("wine-cmd").value.trim() || "wine", prefix: $("wine-prefix").value.trim() };
   try { await invoke("set_wine", { wine }); await refresh(); say("set-status", "Saved.", "ok"); }
-  catch (e) { say("set-status", String(e), "bad"); }
+  catch (e) { sayErr("set-status", e); }
 });
 
 // ------------------------------------------------------------------ the client pickers on Mods, Discover, Realms
@@ -920,7 +968,7 @@ document.querySelectorAll(".client-pick").forEach((sel) => sel.addEventListener(
 }));
 function needClient(statusId) {
   const c = pickedClient();
-  if (!c) { say(statusId, "Add your game client first (CHANGE GAME FOLDER on Home).", "bad"); return null; }
+  if (!c) { say(statusId, "Add your game folder first: pick Add a game folder… in the play bar.", "bad"); return null; }
   return c;
 }
 // The builds Leyline knows (clients.rs). "other" is any build it does not: it plays realms, but takes no mods.
@@ -950,7 +998,7 @@ const clientFor = (r) => {
 
 // ------------------------------------------------------------------ opening listed pages
 async function openUrl(url) {
-  try { await invoke("open_url", { url }); } catch (e) { say("play-status", String(e), "bad"); }
+  try { await invoke("open_url", { url }); } catch (e) { sayErr("play-status", e); }
 }
 function linkBtn(label, url) {
   const b = el("button", "link-s", label);
@@ -1014,6 +1062,7 @@ $("cat-cat").addEventListener("change", async () => {
   renderCatalog();
 });
 
+let catFailed = false;   // the Workshop could not be read and there is nothing to show: the status line says so, alone
 async function loadCatalog(quiet) {
   if (!quiet) say("cat-status", "Loading the Workshop…");
   try {
@@ -1022,9 +1071,13 @@ async function loadCatalog(quiet) {
     catalogNames = catalog.projects.map((p) => p.name);
     const when = catalog.saved_at ? new Date(catalog.saved_at * 1000).toLocaleString() : "an earlier visit";
     if (catalog.from_cache) say("cat-status", `Offline: showing the Workshop as it was ${when}.`, "warn");
-    else say("cat-status", `${catalog.projects.length} projects in the Workshop.`, "ok");
+    else say("cat-status", catalog.projects.length ? `${catalog.projects.length} projects in the Workshop.` : "", "ok");
+    catFailed = false;
   } catch (e) {
-    say("cat-status", String(e), "bad");
+    // one line, no count (owner audit 2026-10-30): the grid stays empty under it
+    console.error("[leyline] workshop", e);
+    catFailed = !catalog.projects.length;
+    say("cat-status", "Can't reach the Workshop. Try again.", "bad");
   }
   await loadRanks(true);
   renderModTiles();
@@ -1041,6 +1094,7 @@ function renderCatalog() {
   renderSorts();
   renderShowMenu(catalog.projects.filter((p) => !fitOnly || !c || fitsClient(p, c)));
   const grid = $("cat-grid");
+  if (window.LeylineMarket) window.LeylineMarket.bar(catFilter.cat);   // sub-category chips above the grid (market.js)
   grid.replaceChildren();
   let ordered = catalog.projects;
   if (ranked && ranked.ids) {
@@ -1052,13 +1106,15 @@ function renderCatalog() {
   const list = ordered.filter((p) => {
     if (catFilter.cat && p.category !== catFilter.cat) return false;
     if (fitOnly && c && !fitsClient(p, c)) return false;
-    if (q && !(`${p.name} ${p.description} ${p.author} ${p.category}`.toLowerCase().includes(q))) return false;
+    if (window.LeylineMarket && !window.LeylineMarket.keep(p)) return false;   // the addon chips (market.js)
+    if (q && !(`${p.name} ${p.description} ${p.author} ${p.category} ${window.LeylineMarket ? window.LeylineMarket.words(p) : ""}`.toLowerCase().includes(q))) return false;
     return true;
   });
   if (!list.length) {
+    if (catFailed) return;   // "Can't reach the Workshop. Try again." is already the one line
     const cat = catalog.categories.find((k) => k.id === catFilter.cat);
     grid.append(el("p", "hint dc-empty", catalog.projects.length
-      ? (cat && !catalog.projects.some((p) => p.category === cat.id) ? `No mods in ${cat.name} yet. Make the first one: see MAKE A MOD.` : "Nothing matches.")
+      ? (cat && !catalog.projects.some((p) => p.category === cat.id) ? `No mods in ${cat.name} yet. Make the first one: see Make a mod.` : "Nothing matches.")
       : "The Workshop list is not here yet."));
     return;
   }
@@ -1088,7 +1144,7 @@ async function rateProject(p, n, box) {
     if (ranked && ranked.metrics && ranked.metrics[p.id] && r && r.rating) ranked.metrics[p.id].rating = r.rating;
     say("cat-status", `Thanks: you rated ${p.name} ${n} star${n > 1 ? "s" : ""}.`, "ok");
   } catch (e) {
-    say("cat-status", String(e) === "signed_out" ? "Sign in on Home (top right) to rate mods (the same sign-in as the website)." : String(e), "bad");
+    say("cat-status", String(e) === "signed_out" ? "Sign in (top right) to rate mods: the same sign-in as the website." : oops(e, "Couldn't save your rating. Try again."), "bad");
   }
 }
 
@@ -1175,6 +1231,7 @@ function firstLine(text) {
 const shortNum = (n) => (n >= 10000 ? Math.round(n / 1000) + "k" : n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(n));
 
 function projectCard(p, c) {
+  if (p.source === "upstream" && window.LeylineMarket) return window.LeylineMarket.card(p, c);   // from the author (market.js)
   const card = el("article", "mod-card dc-card" + (p.id === linkedId ? " linked" : ""));
   card.dataset.id = p.id;
   const fits = fitsClient(p, c);
@@ -1214,16 +1271,16 @@ function projectCard(p, c) {
   if (p.source === "packaged" && p.download) {
     const b = el("button", "btn small");
     b.type = "button";
-    if (!c) { b.textContent = "INSTALL"; b.disabled = true; b.title = "Add a game client first"; }
-    else if (!fits) { b.textContent = "INSTALL"; b.disabled = true; b.title = `Made for ${p.builds.join(" / ")} clients`; }
-    else if (mine && mine.update) { b.textContent = "UPDATE"; b.title = `Update to ${mine.update}`; b.classList.add("primary"); }
-    else if (mine) { b.textContent = "INSTALLED ✓"; b.disabled = true; b.classList.add("done"); }
-    else { b.textContent = "INSTALL"; b.classList.add("primary"); }
+    if (!c) { b.textContent = "Install"; b.disabled = true; b.title = "Add a game client first"; }
+    else if (!fits) { b.textContent = "Install"; b.disabled = true; b.title = `Made for ${p.builds.join(" / ")} clients`; }
+    else if (mine && mine.update) { b.textContent = "Update"; b.title = `Update to ${mine.update}`; b.classList.add("primary"); }
+    else if (mine) { b.textContent = "Installed ✓"; b.disabled = true; b.classList.add("done"); }
+    else { b.textContent = "Install"; b.classList.add("primary"); }
     b.addEventListener("click", (ev) => { ev.stopPropagation(); installProject(p, b); });
     if (p.kind === "realm") b.title = "A realm mod: it runs on a realm that installs it, not in your game";
     acts.append(b);
   } else if (page) {
-    const b = el("button", "btn small", "GET ↗");
+    const b = el("button", "btn small", "Get ↗");
     b.type = "button";
     b.title = "Get it from its page, then drop the zip on Mods › Installed.";
     b.addEventListener("click", (ev) => { ev.stopPropagation(); openUrl(page); });
@@ -1279,14 +1336,14 @@ async function installProject(p, btn) {
   const c = needClient("cat-status");
   if (!c) return;
   btn.disabled = true;
-  btn.textContent = "INSTALLING…";
+  btn.textContent = "Installing…";
   const was = installed.find((m) => m.key === p.id);
   say("cat-status", `Downloading ${p.name}…`);
   try {
     const m = await withNativeOk(() => invoke("mod_install", { client: c.id, project: p.id }));
     say("cat-status", installedText(was ? "Updated" : "Installed", m, c), m.warnings.length ? "warn" : "ok");
   } catch (e) {
-    say("cat-status", String(e), "bad");
+    sayErr("cat-status", e);
   }
   await loadInstalled(true);
   renderCatalog();
@@ -1313,7 +1370,7 @@ async function handleDeepLink() {
   renderCatalog();
   const card = document.querySelector(`#cat-grid .mod-card[data-id="${CSS.escape(p.id)}"]`);
   if (card) { card.scrollIntoView({ block: "center" }); const b = card.querySelector(".acts .btn"); if (b && !b.disabled) b.focus(); }
-  say("cat-status", c ? `From the hub: ${p.name}. Press INSTALL to put it in ${c.name}.` : `From the hub: ${p.name}. Add your game client first, then press INSTALL.`, "ok");
+  say("cat-status", c ? `From the hub: ${p.name}. Press Install to put it in ${c.name}.` : `From the hub: ${p.name}. Add your game folder first, then press Install.`, "ok");
 }
 
 // The in-game Host window (leyline://host?<choices>, checked by deeplink.rs): the Host page with the host's choices and
@@ -1334,11 +1391,11 @@ const HOST_LABELS = [["core", "Core"], ["preset", "Ruleset"], ["name", "Realm na
   ["signup", "Accounts"], ["herokey", "Hero Key sign-in"], ["region", "Region"], ["lang", "Language"], ["tags", "Tags"],
   ["max", "Max players shown"]];
 const HOST_MANAGE = {
-  bots: ["Bots", "In your host kit folder: leyline options --bots 40 (0 turns them off), then restart the realm (leyline stop, then leyline host)."],
-  rates: ["Rates", "In your host kit folder: leyline options --xp 3 --loot 1 --rep 2 (1 to 10), then restart the realm (leyline stop, then leyline host)."],
-  signup: ["Sign-up", "In your host kit folder: leyline signup open (anyone), leyline signup invite (invite link only) or leyline signup off."],
-  list: ["The Leyline list", "In your host kit folder: leyline public (on the list) or leyline private (invite link only). The list changes within a minute."],
-  invite: ["Invite link", "Your realm's invite link is below, under YOUR REALM: COPY INVITE LINK. NEW INVITE LINK stops the old one."],
+  bots: ["Bots", "In your Host pack folder: leyline options --bots 40 (0 turns them off), then restart the realm (leyline stop, then leyline host)."],
+  rates: ["Rates", "In your Host pack folder: leyline options --xp 3 --loot 1 --rep 2 (1 to 10), then restart the realm (leyline stop, then leyline host)."],
+  signup: ["Sign-up", "In your Host pack folder: leyline signup open (anyone), leyline signup invite (invite link only) or leyline signup off."],
+  list: ["The Leyline list", "In your Host pack folder: leyline public (on the list) or leyline private (invite link only). The list changes within a minute."],
+  invite: ["Invite link", "Your realm's invite link is below, under Your realm: Copy invite link. New invite link stops the old one."],
 };
 
 function hostChoices(id) {
@@ -1378,7 +1435,7 @@ function showHostLink(id) {
   go.hidden = false;
   go.onclick = async () => {
     try { await invoke("open_host_form", { query: id }); say("host-status-line", "The website's host page is open with your choices: sign in, add your GM account name, press Start server, then come back here for steps 2 and 3.", "ok"); }
-    catch (e) { say("host-status-line", String(e), "bad"); }
+    catch (e) { sayErr("host-status-line", e); }
   };
   say("host-status-line", "Your choices from the game are below. Make the realm on the website, then start it here.", "ok");
 }
@@ -1442,7 +1499,7 @@ async function loadInstalled(quiet) {
     installed = r.mods;
   } catch (e) {
     installed = [];
-    if (!quiet) say("mods-status", String(e), "bad");
+    if (!quiet) sayErr("mods-status", e);
   }
   for (const badge of [$("nav-mods-count"), $("tab-mods-count")]) {
     if (!badge) continue;
@@ -1485,12 +1542,13 @@ async function updateMod(c, m) {
 function renderInstalled() {
   const c = pickedClient();
   if (window.LeylineAddons) window.LeylineAddons.renderMods(c);   // Our addons, above the Workshop mods (addons.js)
-  $("mods-client-note").textContent = c ? `${buildLabel(c.build)} · ${c.path}` : "";
+  $("mods-client-note").textContent = c ? (offeredBuild(c.build) ? c.build : "Other build") : "";
+  $("mods-client-note").title = c ? `${buildLabel(c.build)} · ${c.path}` : "";
   const list = $("mods-list");
   list.replaceChildren();
   const ups = installed.filter((m) => m.update);
   $("mods-update-all").hidden = ups.length < 2;
-  $("mods-update-all").textContent = `UPDATE ALL (${ups.length})`;
+  $("mods-update-all").textContent = `Update all (${ups.length})`;
   if (!c) { list.append(el("p", "hint", "Add your game client first.")); return; }
   if (buildTag(c.build) === "other" && !installed.length) { list.append(el("p", "hint", "Leyline does not know this client's build, so it installs no mods here. Realms work.")); return; }
   if (!installed.length) { list.append(el("p", "hint", "No mods in this client yet. Install from Mods › Discover, or drop one above.")); return; }
@@ -1514,27 +1572,27 @@ function renderInstalled() {
     else if (m.source === "catalog" && !m.in_catalog) meta.append(el("span", "warn", "No longer in the Workshop for this client"));
     for (const w of m.warnings || []) meta.append(el("span", "warn", w));
     const acts = el("div", "acts");
-    const tog = el("button", "btn small", m.enabled ? "TURN OFF" : "TURN ON");
+    const tog = el("button", "btn small", m.enabled ? "Turn off" : "Turn on");
     tog.addEventListener("click", () => modAction("mod_set_enabled", { client: c.id, key: m.key, on: !m.enabled }, m.enabled ? `Turned off ${m.name}.` : `Turned on ${m.name}.`));
     acts.append(tog);
     if (m.update) {
-      const up = el("button", "btn small", "UPDATE");
+      const up = el("button", "btn small", "Update");
       up.addEventListener("click", async () => {
         up.disabled = true;
-        up.textContent = "UPDATING…";
+        up.textContent = "Updating…";
         say("mods-status", `Downloading ${m.name} v${m.update}…`);
         try { say("mods-status", await updateMod(c, m), "ok"); }
-        catch (e) { say("mods-status", String(e), "bad"); }
+        catch (e) { sayErr("mods-status", e); }
         await loadInstalled();
         renderCatalog();
       });
       acts.append(up);
     }
     // One click: removal takes out only the files Leyline put in and you have not changed, so nothing of yours goes.
-    const rm = el("button", "btn small danger", "REMOVE");
+    const rm = el("button", "btn small danger", "Remove");
     rm.addEventListener("click", async () => {
       rm.disabled = true;
-      rm.textContent = "REMOVING…";
+      rm.textContent = "Removing…";
       try {
         const r = await invoke("mod_uninstall", { client: c.id, key: m.key });
         let t = `Removed ${m.name}: ${r.removed_files} files.`;
@@ -1542,7 +1600,7 @@ function renderInstalled() {
         if (r.kept.length) t += ` Kept files Leyline did not put there: ${r.kept.join(", ")}.`;
         if (m.source === "catalog") t += " Install it again any time from Mods › Discover.";
         say("mods-status", t, r.changed && r.changed.length ? "warn" : "ok");
-      } catch (e) { say("mods-status", String(e), "bad"); }
+      } catch (e) { sayErr("mods-status", e); }
       await loadInstalled();
       renderCatalog();
     });
@@ -1554,7 +1612,7 @@ function renderInstalled() {
 
 async function modAction(cmd, args, okText) {
   try { await invoke(cmd, args); say("mods-status", okText, "ok"); }
-  catch (e) { say("mods-status", String(e), "bad"); }
+  catch (e) { sayErr("mods-status", e); }
   await loadInstalled();
   renderCatalog();
 }
@@ -1595,7 +1653,7 @@ $("mods-update-all").addEventListener("click", async () => {
   for (const m of ups) {
     say("mods-status", `Updating ${m.name} (${done.length + 1} of ${ups.length})…`);
     try { await updateMod(c, m); done.push(m.name); }
-    catch (e) { say("mods-status", `${m.name}: ${e}`, "bad"); break; }
+    catch (e) { say("mods-status", `${m.name}: ` + oops(e, OOPS["mods-status"]), "bad"); break; }
   }
   if (done.length === ups.length) say("mods-status", `Updated ${done.join(", ")}.`, "ok");
   b.disabled = false;
@@ -1637,11 +1695,11 @@ async function loadRealms(quiet) {
     const n = l.realms.length - 1;
     networkTotals = l.network || null;
     if (l.from_cache) say("rl-status", `Offline: showing the list as it was ${when}.`, "warn");
-    else if (l.error) say("rl-status", "The community list is not reachable right now: " + l.error, "warn");
+    else if (l.error) { console.error("[leyline] realm list", l.error); say("rl-status", "The community list isn't reachable right now. Try Refresh in a minute.", "warn"); }
     else say("rl-status", "", "ok");   // the count is already on the network line above
     fillRealmFilters();
   } catch (e) {
-    say("rl-status", String(e), "bad");
+    sayErr("rl-status", e);
   }
   renderRealms();
   renderRealmRows();
@@ -1655,7 +1713,7 @@ async function loadRealms(quiet) {
 let networkTotals = null;
 let p2pHosting = false;   // direct connections are shown only when the p2p_hosting flag is on (Settings > Advanced)
 let heroKeyOn = false;    // "Sign in with your Hero Key" only with the herokey_sso flag on (docs/HERO-KEY-SSO.md)
-const TAG_LABELS = { blizzlike: "Blizzlike", boosted: "Boosted", custom: "Custom", pvp: "PvP", rp: "RP", hangout: "Hangout", bots: "Bots" };
+const TAG_LABELS = { blizzlike: "Original rules", boosted: "Boosted", custom: "Custom", pvp: "PvP", rp: "RP", hangout: "Hangout", bots: "Bots" };
 const REGION_LABELS = { "na-east": "North America east", "na-west": "North America west", sa: "South America", eu: "Europe",
   africa: "Africa", me: "Middle East", asia: "Asia", oce: "Oceania" };
 const RL_FILTERS = [
@@ -1707,7 +1765,8 @@ function clearRealmFilters() {
 }
 function networkLine(t) {
   if (!t) return "";
-  return `${t.realms} realm${t.realms === 1 ? "" : "s"} · ${t.players} playing`;
+  // the network's count is the community realms (the official realm is listed on its own, first)
+  return `${t.realms} community realm${t.realms === 1 ? "" : "s"} · ${t.players} playing`;
 }
 // A realm's look, as on the website: a hue from its name, the crystal for the official realm.
 function nameHue(name) {
@@ -1837,7 +1896,7 @@ function renderRealms() {
       hk.addEventListener("click", () => playRealmHeroKey(r, hk));
       acts.append(hk);
     }
-    const play = el("button", "btn small primary rl-play", "PLAY");
+    const play = el("button", "btn small primary rl-play", "Play");
     if (!state.settings.clients.length) { play.disabled = true; play.title = "Add a game client first"; }
     else if (!fit) { play.title = `This realm runs ${r.build}: PLAY says what is missing`; }
     else play.title = `Plays with ${fit.name}`;
@@ -1849,16 +1908,18 @@ function renderRealms() {
   const empty = (text, label, fn) => {
     const e = el("div", "rl-empty");
     e.append(el("span", "", text));
-    const b = el("button", "btn small", label);
-    b.type = "button";
-    b.addEventListener("click", fn);
-    e.append(b);
+    if (label) {
+      const b = el("button", "btn small", label);
+      b.type = "button";
+      b.addEventListener("click", fn);
+      e.append(b);
+    }
     box.append(e);
   };
   const realmsQ = $("rl-q").value.trim();
-  if (realmsCache.filter((r) => !r.official).length === 0) empty("No community realms yet. Be the first to run one.", "HOST ONE", () => show("host"));
-  else if (!community && realmsQ) empty(`No realm called “${realmsQ}”.`, "CLEAR SEARCH", () => { $("rl-q").value = ""; renderRealms(); });
-  else if (!community && nf) empty(mine && nf === 1 ? "None of the listed realms fits your clients." : "No realms match these filters.", "CLEAR FILTERS", clearRealmFilters);
+  if (realmsCache.filter((r) => !r.official).length === 0) empty("No community realms yet. Be the first to run one: see Host your own below.");   // the banner below is the one call to action
+  else if (!community && realmsQ) empty(`No realm called “${realmsQ}”.`, "Clear search", () => { $("rl-q").value = ""; renderRealms(); });
+  else if (!community && nf) empty(mine && nf === 1 ? "None of the listed realms fits your clients." : "No realms match these filters.", "Clear filters", clearRealmFilters);
 }
 for (const id of ["rl-f-build", "rl-f-tag", "rl-f-region", "rl-f-lang", "rl-f-now"]) {
   if ($(id)) $(id).addEventListener("change", () => renderRealms());
@@ -1904,7 +1965,7 @@ async function playRealm(r, btn) {
     say("rl-status", msg + (r.official ? "" : " First time here? Make your account with Make an account."), "ok");
     await refresh();
     renderRealms();
-  } catch (e) { say("rl-status", String(e), "bad"); }
+  } catch (e) { sayErr("rl-status", e); }
   btn.disabled = false;
 }
 
@@ -1923,7 +1984,7 @@ async function playRealmHeroKey(r, btn) {
       + `(it works for ${mins} minutes and is not saved).`, "ok");
     await refresh();
     renderRealms();
-  } catch (e) { say("rl-status", String(e), "bad"); }
+  } catch (e) { sayErr("rl-status", e); }
   btn.disabled = false;
 }
 
@@ -1933,14 +1994,14 @@ $("rl-back").addEventListener("click", async () => {
   const c = needClient("rl-status");
   if (!c) return;
   try { say("rl-status", await invoke("back_to_official", { client: c.id }), "ok"); await refresh(); renderRealms(); }
-  catch (e) { say("rl-status", String(e), "bad"); }
+  catch (e) { sayErr("rl-status", e); }
 });
 $("rl-restore").addEventListener("click", async () => {
   rlMenu(false);
   const c = needClient("rl-status");
   if (!c) return;
   try { say("rl-status", await invoke("restore_realmlist", { client: c.id }), "ok"); await refresh(); renderRealms(); }
-  catch (e) { say("rl-status", String(e), "bad"); }
+  catch (e) { sayErr("rl-status", e); }
 });
 $("rl-join").addEventListener("click", async () => {
   const c = needClient("rl-status");
@@ -1952,13 +2013,15 @@ $("rl-join").addEventListener("click", async () => {
     say("rl-status", `${j.name || "The realm"} is open for this PC; ${c.name} now points at ${j.address}. Press PLAY.`, "ok");
     $("rl-invite").value = "";
     await refresh();
-  } catch (e) { say("rl-status", String(e), "bad"); }
+  } catch (e) { sayErr("rl-status", e); }
 });
 
 // ------------------------------------------------------------------ Host
 let kit = null;
+const NO_KIT = { dir: null, is_kit: false, problems: [], seeds: [], realm: null };
 async function loadHost() {
-  try { kit = await invoke("host_info"); } catch (e) { say("host-status-line", String(e), "bad"); return; }
+  // no answer from the core: the page still opens on Start (the setup), never an empty tab
+  try { kit = (await invoke("host_info")) || Object.assign({}, NO_KIT); } catch (e) { sayErr("host-status-line", e); kit = Object.assign({}, NO_KIT); }
   renderHost();
 }
 
@@ -1970,8 +2033,8 @@ function hostRealmId() {
 
 function renderHost() {
   $("host-kit").textContent = kit.dir
-    ? (kit.is_kit ? `Host kit: ${kit.dir}` : `Chosen folder: ${kit.dir}`)
-    : "No kit folder chosen yet.";
+    ? (kit.is_kit ? `Host pack: ${kit.dir}` : `Chosen folder: ${kit.dir}`)
+    : "No Host pack folder chosen yet.";
   const probs = $("host-problems");
   probs.hidden = !kit.problems.length;
   probs.replaceChildren(...kit.problems.map((p) => el("li", "", p)));
@@ -1982,19 +2045,19 @@ function renderHost() {
     if (s.kind !== want) continue;
     const card = el("div", "card");
     const top = el("div", "top");
-    top.append(el("span", "name", s.file_name), el("span", "build", s.in_kit ? "IN THE KIT" : "IN DOWNLOADS"));
+    top.append(el("span", "name", s.file_name), el("span", "build", s.in_kit ? "In the Host pack" : "In Downloads"));
     const acts = el("div", "acts");
     if (s.in_kit) {
-      const b = el("button", "btn small", "START THIS REALM");
+      const b = el("button", "btn small", "Start this realm");
       b.disabled = !kit.is_kit;
       b.addEventListener("click", () => hostStart(s.file_name));
       acts.append(b);
     } else {
-      const b = el("button", "btn small", "COPY INTO THE KIT");
+      const b = el("button", "btn small", "Copy into the Host pack");
       b.disabled = !kit.is_kit;
       b.addEventListener("click", async () => {
         try { kit = await invoke("host_copy_seed", { fileName: s.file_name }); renderHost(); say("host-status-line", "Copied: now start it.", "ok"); }
-        catch (e) { say("host-status-line", String(e), "bad"); }
+        catch (e) { sayErr("host-status-line", e); }
       });
       acts.append(b);
     }
@@ -2004,7 +2067,7 @@ function renderHost() {
     seeds.append(card);
   }
   $("host-start").disabled = !kit.is_kit;
-  $("host-start").textContent = kit.realm ? `START ${kit.realm.name.toUpperCase() || "MY REALM"}` : "START MY REALM";
+  $("host-start").textContent = kit.realm ? `Start ${kit.realm.name || "my realm"}` : "Start my realm";
   const rid = hostRealmId();
   $("host-card").hidden = !rid;
   if (rid) {
@@ -2015,9 +2078,9 @@ function renderHost() {
 }
 
 async function hostStart(seed) {
-  say("host-status-line", "Starting the host kit…");
+  say("host-status-line", "Starting the Host pack…");
   try { say("host-status-line", await invoke("host_start", seed ? { seed } : {}), "ok"); }
-  catch (e) { say("host-status-line", String(e), "bad"); }
+  catch (e) { sayErr("host-status-line", e); }
   setTimeout(hostStatus, 20000);
 }
 
@@ -2040,7 +2103,7 @@ async function hostStatus() {
       set("is-offline", "OFFLINE", "The relay knows your realm, but your PC is not connected. Start it above.");
     }
   } catch (e) {
-    set("is-partial", "NOT SEEN YET", String(e));
+    set("is-partial", "NOT SEEN YET", oops(e, "The relay hasn't seen your realm yet."));
   }
 }
 
@@ -2048,7 +2111,7 @@ $("host-pick").addEventListener("click", async () => {
   const p = await invoke("pick_host_kit").catch(() => null);
   if (!p) return;
   try { kit = await invoke("set_host_kit", { path: p }); renderHost(); }
-  catch (e) { say("host-status-line", String(e), "bad"); }
+  catch (e) { sayErr("host-status-line", e); }
 });
 $("host-start").addEventListener("click", () => hostStart(null));
 $("host-refresh").addEventListener("click", () => loadHost());
@@ -2074,8 +2137,8 @@ function renderUpdate() {
   else if (upd.ready) { text = `Leyline ${upd.ready} is ready (you have ${i.current}). Restart when you like.` + (upd.game_running ? " Your game is open: restart after you close it." : ""); kind = "ok"; }
   else if (i.newer) { text = `Leyline ${i.latest} is out (you have ${i.current}). ${upd.note || ""}`; kind = "ok"; }
   else if (i.latest) { text = `You have the newest Leyline on the ${upd.channel} channel (${i.current}).` + (i.from_cache ? " (offline: from the last check)" : ""); kind = "ok"; }
-  else if (upd.checked_at) { text = i.error ? "Could not check: " + i.error : "No launcher releases on this channel yet."; kind = i.error ? "warn" : ""; }
-  if (upd.error && !upd.ready && !upd.downloading) { text += (text ? " " : "") + upd.error; kind = "warn"; }
+  else if (upd.checked_at) { text = i.error ? oops(i.error, OOPS["upd-status"]) : "No launcher releases on this channel yet."; kind = i.error ? "warn" : ""; }
+  if (upd.error && !upd.ready && !upd.downloading) { text += (text ? " " : "") + oops(upd.error, "The download didn't finish: Leyline tries again later."); kind = "warn"; }
   say("upd-status", text, kind);
 }
 async function loadUpdateState() {
@@ -2084,13 +2147,13 @@ async function loadUpdateState() {
 async function checkUpdate() {
   say("upd-status", "Checking…");
   try { upd = await invoke("launcher_update_check"); renderUpdate(); }
-  catch (e) { say("upd-status", String(e), "bad"); }
+  catch (e) { sayErr("upd-status", e); }
 }
 async function restartToUpdate() {
   if (!upd) return;
   if (!upd.ready) { if (upd.info && upd.info.url) openUrl(upd.info.url); return; }
   try { await invoke("launcher_update_restart"); }
-  catch (e) { say("upd-status", String(e), "bad"); say("play-status", String(e), "bad"); await loadUpdateState(); }
+  catch (e) { sayErr("upd-status", e); sayErr("play-status", e); await loadUpdateState(); }
 }
 $("upd-check").addEventListener("click", checkUpdate);
 $("upd-restart").addEventListener("click", restartToUpdate);
@@ -2099,7 +2162,7 @@ $("tb-update").addEventListener("click", restartToUpdate);
 $("upd-channel").addEventListener("change", async () => {
   say("upd-status", "Saved. Checking the new channel…");
   try { upd = await invoke("set_update_channel", { channel: $("upd-channel").value }); renderUpdate(); }
-  catch (e) { say("upd-status", String(e), "bad"); }
+  catch (e) { sayErr("upd-status", e); }
 });
 setInterval(loadUpdateState, 60000);
 
@@ -2120,7 +2183,7 @@ function playHangout() {
 }
 
 window.LeylineApp = {
-  news: () => NEWS, realms: () => realmsCache, catalog: () => catalog, mode: () => mode, setMode, openLink, playHangout, HANGOUT,
+  news: () => news, realms: () => realmsCache, catalog: () => catalog, mode: () => mode, setMode, openLink, playHangout, HANGOUT,
   realmIcon, realmVersion, hiddenBuild, nameHue,
   state: () => state,   // addons.js: the clients
 };
@@ -2133,11 +2196,12 @@ refresh().then(() => {
   loadCatalog(true).then(handleDeepLink);
   loadRealms(true);
   loadUpdateState();
+  loadNews();
   readKit();   // the realm picker's My Den: hosted on this PC or not
   setupDrop();
   let page = "play";
   try { page = localStorage.getItem("leyline.page") || "play"; } catch (_) { /* fine */ }
   show(page);   // an unknown or old page id: resolvePage maps it, or Home
 }).catch((e) => {
-  document.body.prepend(el("p", "status bad", "Leyline could not start: " + e));
+  document.body.prepend(el("p", "status bad", oops(e, "Leyline couldn't start. Close it and open it again, or ask on the Discord.")));
 });

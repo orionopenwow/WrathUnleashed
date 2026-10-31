@@ -1,7 +1,10 @@
 -- WrathUnleashed: Forever UI's character select, fixed for the browser client (v2).
 -- Runs after ForeverUIGlue.xml (GlueXML.toc, fui-overlay.py). Numbers are Forever UI's glue units.
 --
--- Scope, on purpose: the character select screen only. No hook on AccountLogin, RealmList,
+-- 0. Character create: the random-name dice no longer overlaps the start of the name field
+--    (anchors only, set once at load, before the screen is ever shown).
+--
+-- Scope otherwise, on purpose: the character select screen only. No hook on AccountLogin, RealmList,
 -- RealmWizard, GlueParent or any glue screen's OnShow/OnUpdate; nothing runs during the login ->
 -- character select switch (GlueScreenExit's fade). Every step is pcall-guarded: a failure leaves
 -- Forever UI's own layout as it was.
@@ -16,7 +19,26 @@
 --      the name clear of Enter World, the bottom row on one centre line.
 
 local G = ForeverUIGlue
-if type(G) ~= "table" or not CharacterSelect or not CharacterSelectUI then return end
+if type(G) ~= "table" then return end
+
+-- ---------- 0. Character create name row: dice, an 8-unit gap, then the field, centred together
+pcall(function()
+	local dice, field = ForeverUICharacterCreateRandomNameButton, CharacterCreateNameEdit
+	local row = ForeverUICharacterCreateNameChoice
+	if not (dice and field and row) then return end
+	local GAP = 8
+	local fieldW = field:GetWidth() or 343
+	if fieldW < 100 then fieldW = 343 end
+	local total = 48 + GAP + fieldW
+	-- room for the bracket art either side, as Forever UI sized it (10 + 48 + 343 + 48 + 10)
+	if (row:GetWidth() or 0) < total + 2 * (10 + 24) then row:SetWidth(total + 2 * (10 + 24)) end
+	dice:ClearAllPoints()
+	dice:SetPoint("LEFT", row, "CENTER", -total / 2, 10)
+	field:ClearAllPoints()
+	field:SetPoint("LEFT", dice, "RIGHT", GAP, 0)
+end)
+
+if not CharacterSelect or not CharacterSelectUI then return end
 
 local function try(f, ...)
 	local ok = pcall(f, ...)

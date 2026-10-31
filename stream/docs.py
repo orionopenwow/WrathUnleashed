@@ -28,6 +28,8 @@ import threading
 # The fixed, allow-listed pages: (name, title in the table of contents). The order is the contents' order.
 PAGES = (
     ("index", "Overview"),
+    ("network", "The network"),
+    ("getting-started", "Getting started"),   # the player guide (the launcher's Help and Find your game files link it). TODO(owner): his words
     ("play", "Play"),
     ("commands", "Commands"),
     ("mods", "Mod format"),
@@ -251,9 +253,9 @@ UNTIL_FLIP = (
      "(`launcher/herokey_v2.py` in Open Vanilla)"),
     ("hero-key", "What `launcher/passport.py` in Leyline Launcher does,",
      "What `launcher/passport.py` in Open Vanilla does,"),
-    ("hosting", "1. Download the host kit: [the host kit zip](",
-     "1. Download the host kit: [WrathUnleashed-host-kit.zip]("),
-    ("hosting", "You get the host kit's folder.",
+    ("hosting", "1. Download the Host pack: [the Host pack zip](",
+     "1. Download the Host pack: [WrathUnleashed-host-kit.zip]("),
+    ("hosting", "You get the Host pack's folder.",
      "You get a folder called `WrathUnleashed host`."),
     ("mods", "the lowest Leyline version the mod works with",
      "the lowest WU version the mod works with"),
@@ -263,8 +265,6 @@ UNTIL_FLIP = (
      "  \"author\": \"WrathUnleashed\","),
     ("play", "The player package has a `Play` .bat file that asks",
      "The player package has a `Play WrathUnleashed.bat` that asks"),
-    ("publishing", "2. Send the link to the Leyline team.",
-     "2. Send the link to the WrathUnleashed team."),
 )
 
 

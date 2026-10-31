@@ -2,7 +2,7 @@
 
 Leyline is a mod launcher and an open, peer-to-peer network for community game realms. Anyone can host a realm in one click, from the browser or the desktop launcher, and it is listed for everyone. You can find and install mods and addons, and play in the browser or with your own client. Everything is on GitHub under the MIT licence.
 
-Our own realm is the temporary Wrath Unleashed, a sample realm that gets our client additions first. It runs the 3.3.5a game on AzerothCore, and you can play it in the browser at [play.openvanilla.app/wrath](https://play.openvanilla.app/wrath).
+Our own realm is Wrath Unleashed, the official realm, which gets our client additions first. It runs the game client you already have, on AzerothCore, and you can play it in the browser at [play.openvanilla.app/wrath](https://play.openvanilla.app/wrath).
 
 ## The aims
 
@@ -26,26 +26,29 @@ Our own realm is the temporary Wrath Unleashed, a sample realm that gets our cli
 | The Workshop at /wrath/mods and the in-game Workshop tab | Live | [Publishing](publishing.md) |
 | Realm list at /wrath/realms and the in-game Leyline window | Live | [Hosting](hosting.md#the-realm-list) |
 | Web armory, Modes hub and share links | Live | [Play](play.md#share-links) |
-| These docs at /wrath/docs | Live once shipped with the sign-in step | this page |
-| Host kit and the `leyline host` command | Built | [Hosting](hosting.md) |
-| The relay (tunnels, join pages, listing) | Built | [Hosting](hosting.md#the-relay) |
+| These docs at /wrath/docs | Live | this page |
+| Host pack and the `leyline host` command | Live | [Hosting](hosting.md) |
+| The relay (tunnels, join pages, listing) | Live | [Hosting](hosting.md#the-relay) |
+| How the network fits together, for players | Live | [The network](network.md) |
 | Discord bridge | Built, off until the owner sets it up | [Hosting](hosting.md#discord-bridge) |
 | Drop your own 3.3.5a game folder on the streamed page to go anywhere | Built | [Play](play.md#use-your-own-game-folder-to-go-anywhere) |
 | Play in the browser with your own game folder | Built, behind a switch | [Play](play.md#in-the-browser-with-your-own-game-folder) |
 | Goldshire Inn guest pass (no sign-up) | Built, off by default | [Play](play.md#guest-pass) |
-| Realm claims with a Hero Key | Listing side built; website side planned | [Hero Key](hero-key.md) |
-| Leyline Launcher (desktop app): clients, mods, realms, hosting | Built (0.2), no release yet | [Launcher](launcher.md) |
+| Realm claims with a Hero Key (listing and website) | Built | [Hero Key](hero-key.md) |
+| Hero Key sign-in on community realms | Built, off until the owner turns it on | [Hero Key](hero-key.md) |
+| Relays sharing one realm list (the Leyline mesh) | Built, off until the owner turns it on | [Other servers](cross-server.md) |
+| Leyline Launcher (desktop app): clients, mods, realms, hosting | Live: released for download | [Launcher](launcher.md) |
 | `wu-mod test` on a local test realm | Planned | [Mod format](mods.md#what-is-planned) |
 | Signed mod packages | Planned | [Mod format](mods.md#what-is-planned) |
 | Hopping between realms from the in-game list | Planned | [Hosting](hosting.md#the-realm-list) |
 | Friends across realms | Planned | [Working together](unite.md) |
-| A directory of community relays | Planned | [Other servers](cross-server.md) |
 | Peer-to-peer realm list and mod sharing | Planned | [Launcher](launcher.md) |
 
 ## Where to go next
 
 - New player: [Play](play.md), then [Commands](commands.md).
 - Mod maker: [Mod format](mods.md), then [Publishing](publishing.md).
+- New to the network: [How the Leyline network works](network.md).
 - Host: [Hosting](hosting.md).
 - Running another server: [Other servers](cross-server.md) and [Working together](unite.md).
 - Accounts and sign-in: [Hero Key](hero-key.md).

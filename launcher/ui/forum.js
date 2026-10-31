@@ -16,9 +16,12 @@
     if (text !== undefined) e.textContent = text;
     return e;
   };
+  // never a raw error to the player (friendly.js): the error goes to the console
+  const DOWN = "The forum isn't reachable right now. Try again, or ask on the Discord.";
+  const oops = (e, fb) => (window.LeylineFriendly ? window.LeylineFriendly(e, fb) : fb);
   const call = (action, args) => invoke("forum_call", { action, args: args || {} });
   const open = (kind, arg) => invoke("forum_open", { kind, arg: arg === undefined ? null : String(arg) })
-    .then(() => say("Opened in your browser.", "ok")).catch((e) => say(String(e), "bad"));
+    .then(() => say("Opened in your browser.", "ok")).catch((e) => say(oops(e, "Couldn't open your browser. Try again."), "bad"));
 
   function say(text, kind) { const s = $("fm-status"); if (s) { s.textContent = text || ""; s.className = "status" + (kind ? " " + kind : ""); } }
 
@@ -40,8 +43,8 @@
 
   function loading(box) { box.replaceChildren(el("p", "hint fm-loading", "Loading…")); }
   function failed(box, e) {
-    box.replaceChildren(el("p", "fm-empty", String(e || "The forum isn't reachable right now.")));
-    const again = el("button", "btn small", "TRY AGAIN"); again.type = "button"; again.onclick = () => render();
+    box.replaceChildren(el("p", "fm-empty", oops(e, DOWN)));
+    const again = el("button", "btn small", "Try again"); again.type = "button"; again.onclick = () => render();
     box.append(again);
   }
 
@@ -126,7 +129,7 @@
         const c = cats.find((x) => x.id === view.cat) || {};
         const head = el("div", "fm-head");
         const t = el("div"); t.append(crumb(["Forum", { kind: "home" }]), el("h3", "fm-title", c.name || r.name || "Forum"), el("p", "hint", c.line || ""));
-        const nb = el("button", "btn small", c.staff_only ? "THE TEAM POSTS HERE" : "NEW THREAD HERE"); nb.type = "button";
+        const nb = el("button", "btn small", c.staff_only ? "The team posts here" : "New thread here"); nb.type = "button";
         nb.disabled = !!c.staff_only;
         nb.onclick = () => open("new", view.cat);
         head.append(t, nb);
@@ -146,11 +149,11 @@
         title.append(document.createTextNode(String(th.title || "")));
         t.append(crumb(["Forum", { kind: "home" }], [catName(th.cat), { kind: "cat", cat: th.cat, page: 1 }]), title);
         const acts = el("div", "fm-acts");
-        const rp = el("button", "btn small primary", th.locked ? "LOCKED" : "REPLY"); rp.type = "button";
+        const rp = el("button", "btn small primary", th.locked ? "Locked" : "Reply"); rp.type = "button";
         rp.disabled = !!th.locked;
         rp.title = "Opens the reply page on the website, in your browser";
         rp.onclick = () => open("reply", th.id);
-        const web = el("button", "btn small", "ON THE WEBSITE"); web.type = "button";
+        const web = el("button", "btn small", "On the website"); web.type = "button";
         web.onclick = () => open("thread", th.id);
         acts.append(rp, web);
         head.append(t, acts);
@@ -194,7 +197,7 @@
     if (q.length >= 2) go({ kind: "search", q: q.slice(0, 60) }); else say("Type at least two letters.", "warn");
   });
   if ($("fm-new")) $("fm-new").addEventListener("click", () => open("new", view.kind === "cat" ? view.cat : undefined));
-  if ($("fm-discord")) $("fm-discord").addEventListener("click", () => invoke("open_link", { name: "discord" }).catch((e) => say(String(e), "bad")));
+  if ($("fm-discord")) $("fm-discord").addEventListener("click", () => invoke("open_link", { name: "discord" }).catch((e) => say(oops(e, "Couldn't open your browser. Try again."), "bad")));
 
   window.LeylineForum = {
     load: () => render(),

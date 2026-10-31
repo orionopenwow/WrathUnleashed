@@ -69,6 +69,38 @@ BUILDS = {5875: ("1.12.1", "classic-1.12.1"), 8606: ("2.4.3", "tbc-2.4.3"), 1234
 LANG_RE = re.compile(r"^[a-z]{2,3}(-[A-Z]{2})?$")
 NEAR_MS = 45
 
+# The word filter (owner rules: player-facing text never names the game or its publisher, and no slurs). The same two
+# lists as stream/hostflow.py BANNED and SLURS (hosting/tests/test_network_listing.py checks they match): the relay and
+# the website ship apart, so each keeps its own copy. A brand word is taken out of the host's text; a name that was
+# changed that way is listed with community.nameOk false (the hub never calls it a "New realm"). A slur in the name
+# refuses the heartbeat; anywhere else it drops that line.
+BANNED = re.compile(r"(?i)world\s*of\s*warcraft|\bwow\b|warcraft|lich\s*king|blizzard")
+SLURS = ("beaner", "chink", "coon", "dyke", "fag", "faggot", "gook", "kike", "nigga", "nigger", "raghead", "retard",
+         "spic", "towelhead", "tranny", "wetback")
+_LEET = str.maketrans("013457@$!|", "oieastasii")
+_SLUR_RE = re.compile(r"(?<![a-z])(?:" + "|".join(sorted(SLURS, key=len, reverse=True)) + r")(?:s|z|es|ed)?(?![a-z])")
+
+
+def has_slur(text) -> bool:
+    """A slur in the text: as a word (with leetspeak undone: n1gg3r), or squashed ("f.a.g.g.o.t") for the long ones."""
+    if not isinstance(text, str) or not text:
+        return False
+    low = text.lower().translate(_LEET)
+    if _SLUR_RE.search(low):
+        return True
+    squashed = re.sub(r"[^a-z]", "", low)
+    return any(len(w) >= 6 and w in squashed for w in SLURS)
+
+
+def unbrand(text: str) -> str:
+    """The host's text with the brand words taken out ("Wrath of the Lich King" -> "Wrath"), spaces tidied."""
+    s = re.sub(r"(?i)\bwrath\s+of\s+the\s+lich\s*king\b", "Wrath", text or "")
+    if not BANNED.search(s):
+        return s          # nothing taken out: the host's text exactly as typed
+    s = BANNED.sub(" ", s)
+    s = re.sub(r"\s+([,.;:!?)])", r"\1", re.sub(r"\s{2,}", " ", s))
+    return s.strip(" -:,;/|")
+
 
 def _tags(v):
     if not isinstance(v, list):
@@ -103,15 +135,26 @@ def _text(v, n):
     return v[:n]
 
 
+def _filtered(v, n):
+    """One line of the host's text through the word filter: "" when it has a slur, the brand words taken out."""
+    t = _text(v, n)
+    return "" if has_slur(t) else unbrand(t)
+
+
 def clean_record(rec: dict) -> dict:
     rec = rec if isinstance(rec, dict) else {}
+    raw_name = _text(rec.get("name"), 32)
+    name = "" if has_slur(raw_name) else unbrand(raw_name)
     out = {
-        "name": _text(rec.get("name"), 32),
-        "tagline": _text(rec.get("tagline"), 80),
-        "summary": _text(rec.get("summary"), 400),
+        "name": name,
+        # the name passed the filter untouched (False: a brand word was taken out, or it was refused)
+        "name_ok": bool(name) and name == raw_name,
+        "name_refused": bool(raw_name) and has_slur(raw_name),
+        "tagline": _filtered(rec.get("tagline"), 80),
+        "summary": _filtered(rec.get("summary"), 400),
         "type": rec.get("type") if rec.get("type") in TYPES else "PvE",
         "ruleset": rec.get("ruleset") if rec.get("ruleset") in RULESETS else "custom",
-        "rules": [t for t in (_text(x, 120) for x in (rec.get("rules") or [])[:10]) if t],
+        "rules": [t for t in (_filtered(x, 120) for x in (rec.get("rules") or [])[:10]) if t],
         "discord": rec.get("discord") if isinstance(rec.get("discord"), str) and HTTPS_DISCORD.match(rec["discord"]) else None,
         "warden": rec.get("warden") if isinstance(rec.get("warden"), bool) else None,
         "language": rec.get("language") if isinstance(rec.get("language"), str) and LANG_RE.match(rec["language"]) else None,
@@ -200,6 +243,8 @@ class Listing:
         if not isinstance(seq, int) or seq < 0:
             return 400, {"error": "bad seq"}
         rec = clean_record(beat.get("record"))
+        if rec["name_refused"]:
+            return 400, {"error": "that realm name is not allowed on the list: please pick another"}
         if not rec["name"]:
             return 400, {"error": "record.name is required"}
         e = self.entries.get(rid)
@@ -281,6 +326,17 @@ class Listing:
         v = getattr(s, "rtt_ms", None)
         return v if isinstance(v, (int, float)) else None
 
+    def confirmed_players(self, rid):
+        """How many players the relay itself sees in this realm now: distinct addresses with a stream open through its
+        tunnel (TCP and browser alike). None without a relay or a tunnel (no cap then). The fair score never counts more
+        players than this, so a host can't climb the list by reporting players nobody brought; the count shown is still
+        the realm's own (people behind one address count once here, so this only ever lowers the score)."""
+        s = self.relay.sessions.get(rid) if self.relay is not None else None
+        streams = getattr(s, "streams", None)
+        if not isinstance(streams, dict):
+            return None
+        return len({getattr(st, "ip", None) for st in streams.values()} - {None})
+
     def delist(self, rid):
         if self.entries.pop(rid, None) is not None:
             self.dirty = True
@@ -328,6 +384,8 @@ class Listing:
         rtt = self.rtt_ms(rid)
         region_cfg = getattr(self.cfg, "region", "") or ""
         st = e["status"]
+        seen = self.confirmed_players(rid)
+        score_players = st.get("players") if seen is None else min(st.get("players") or 0, seen)
         return {
             "schema": 1,
             "slug": "c-" + rid,
@@ -358,12 +416,14 @@ class Listing:
             "community": {
                 "realmId": rid, "relay": relay, "signed": True,
                 "claimed": bool(e.get("claimed_by")), "claimedBy": e.get("claimed_by"),
+                "nameOk": rec.get("name_ok", True) is not False,
                 "firstSeen": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(e["first_seen"])),
                 "lastSeen": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(e["last_seen"])),
                 "lastHeartbeat": e["status"],
                 "uptime": {"h24": up24, "d7": up7},
                 "new": new,
-                "score": score(online, st.get("players"), st.get("bots"), up24, up7, new),
+                "score": score(online, score_players, st.get("bots"), up24, up7, new),
+                "playersConfirmed": seen,
                 "regionEstimate": region_cfg if (region_cfg in REGIONS and rtt is not None and rtt < NEAR_MS) else None,
                 "latency": None if rtt is None else ("near" if rtt < NEAR_MS else "mid" if rtt < 120 else "far"),
                 # ready but off: only when the relay operator turns it on AND the host allows it

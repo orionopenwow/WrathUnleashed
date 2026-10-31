@@ -164,8 +164,8 @@
     }
     bar.replaceChildren(
       el("span", "", "Previewing " + nameOf(current.id)),
-      btn("KEEP", "", () => busy(null, async () => { await apply(current.id, { save: true }); say("Theme set to " + nameOf(current.id) + ".", "ok"); })),
-      btn("UNDO", "", () => busy(null, async () => { await apply(saved.id, { save: false }); say(""); })),
+      btn("Keep", "", () => busy(null, async () => { await apply(current.id, { save: true }); say("Theme set to " + nameOf(current.id) + ".", "ok"); })),
+      btn("Undo", "", () => busy(null, async () => { await apply(saved.id, { save: false }); say(""); })),
     );
   }
 
@@ -200,11 +200,11 @@
     }
     const acts = el("div", "acts");
     if (!t.problem && t.id !== saved.id) {
-      acts.append(btn("USE", "", () => busy(null, async () => { await apply(t.id, { save: true }); say("Theme set to " + nameOf(t.id) + ".", "ok"); })));
-      if (t.id !== current.id) acts.append(btn("PREVIEW", "", () => busy(null, async () => { await apply(t.id, { save: false }); say(""); })));
+      acts.append(btn("Use", "", () => busy(null, async () => { await apply(t.id, { save: true }); say("Theme set to " + nameOf(t.id) + ".", "ok"); })));
+      if (t.id !== current.id) acts.append(btn("Preview", "", () => busy(null, async () => { await apply(t.id, { save: false }); say(""); })));
     }
     if (!t.builtin) {
-      acts.append(btn("REMOVE", "danger", () => busy(null, async () => {
+      acts.append(btn("Remove", "danger", () => busy(null, async () => {
         await invoke("theme_remove", { id: t.id });
         if (current.id === t.id || saved.id === t.id) await apply(DEFAULT, { save: true });
         await sync();
@@ -230,22 +230,22 @@
       const fromHere = have && have.project === p.id;
       const update = fromHere && p.version && have.version !== p.version;
       if (!have || update) {
-        acts.append(btn(update ? "UPDATE TO " + p.version : "INSTALL", "", () => busy(null, async () => {
+        acts.append(btn(update ? "Update to " + p.version : "Install", "", () => busy(null, async () => {
           say("Downloading " + p.name + "…");
           const t = await invoke("theme_install", { project: p.id });
           await sync();
           say(`Installed ${t.name}. Press USE to switch to it.`, "ok");
         })));
       } else {
-        const b = btn("INSTALLED", "", () => {});
+        const b = btn("Installed", "", () => {});
         b.disabled = true;
         acts.append(b);
       }
       if (have && !have.problem && have.id !== saved.id) {
-        acts.append(btn("USE", "", () => busy(null, async () => { await apply(have.id, { save: true }); say("Theme set to " + have.name + ".", "ok"); })));
+        acts.append(btn("Use", "", () => busy(null, async () => { await apply(have.id, { save: true }); say("Theme set to " + have.name + ".", "ok"); })));
       }
     } else {
-      acts.append(el("span", "hint", "Get it from its page, then INSTALL FROM A ZIP."));
+      acts.append(el("span", "hint", "Get it from its page, then Install from a zip."));
     }
     for (const [label, url] of [["Page", p.page], ["Source", p.repo], ["Author", p.author_url]]) {
       if (!url) continue;
@@ -279,14 +279,14 @@
       await sync();
       say(`Installed ${t.name}. Press USE to switch to it.`, "ok");
     });
-    row.append(btn("INSTALL FROM A ZIP…", "", () => pick(false)), btn("INSTALL FROM A FOLDER…", "", () => pick(true)));
+    row.append(btn("Install from a zip…", "", () => pick(false)), btn("Install from a folder…", "", () => pick(true)));
     return row;
   }
 
   function renderSettings(box) {
     const builtins = list.filter((t) => t.builtin).map(themeCard);
     const packs = list.filter((t) => !t.builtin).map(themeCard);
-    const go = btn("FIND MORE THEMES", "", () => { if (window.LeylineNav) window.LeylineNav.show("mods", false, "discover"); showTab("themes"); });
+    const go = btn("Find more themes", "", () => { if (window.LeylineNav) window.LeylineNav.show("mods", false, "discover"); showTab("themes"); });
     const actions = localButtons();
     actions.append(go);
     box.replaceChildren(
@@ -307,7 +307,7 @@
       section("Built in and installed", list.map(themeCard), ""),
     );
     const row = localButtons();
-    const make = el("button", "btn small", "MAKE A THEME");
+    const make = el("button", "btn small", "Make a theme");
     make.type = "button";
     make.addEventListener("click", () => invoke && invoke("open_link", { name: "themes" }).catch((e) => say(String(e), "bad")));
     row.append(make);

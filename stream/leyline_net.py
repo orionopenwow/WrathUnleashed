@@ -176,6 +176,12 @@ def hostpack(paths: tuple[str, ...] | None = None) -> dict | None:
     return None
 
 
+# The keys of one all.json project (stream/workshop.py all_json, mods/all-json.md)
+ALL_JSON_KEYS = ("id", "source", "name", "description", "category", "builds", "author", "author_url", "licence", "repo",
+                 "page", "credits", "stars", "last_push", "submitted_by", "submitted_at", "last_checked", "version", "kind",
+                 "permissions", "on_wrath", "download", "sha256", "featured")
+
+
 def hostpack_project(d: dict, public_base: str = "https://play.openvanilla.app") -> dict:
     """The Host pack as an all.json project (mods/all-json.md), category "tools", kind "hostpack"."""
     return {
@@ -203,7 +209,14 @@ def add_hostpack(all_json: bytes, d: dict | None = None) -> bytes:
         return all_json
     if not isinstance(projects, list) or any(isinstance(p, dict) and p.get("id") == "mod:host-pack" for p in projects):
         return all_json
-    projects.append(hostpack_project(d))
+    hp = hostpack_project(d)
+    # the same keys as every other project (mods/all-json.md), so all.json keeps one schema: size and torrent stay in
+    # hostpack.json (/wrath/leyline/hostpack.json and the release's own), where the launcher also looks
+    hp = {k: hp.get(k, False if k == "featured" else None) for k in ALL_JSON_KEYS}
+    # in name order, like the rest of the list
+    at = next((n for n, p in enumerate(projects) if isinstance(p, dict) and str(p.get("name", "")).lower() > hp["name"].lower()),
+              len(projects))
+    projects.insert(at, hp)
     return (json.dumps(doc, indent=1, ensure_ascii=False) + "\n").encode("utf-8")
 
 

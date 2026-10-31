@@ -1,11 +1,11 @@
 # Play
 
-There are three ways to play Wrath: streamed in the browser, in the browser with your own game folder, or in your own 3.3.5a client. They all use the same realm, the same account and the same characters.
+There are three ways to play Wrath: streamed in the browser, in the browser with your own game folder, or in your own game client with the [Leyline launcher](launcher.md). They all use the same realm, the same account and the same characters. New here? Start with [Getting started](getting-started.md).
 
 ## Sign in
 
 1. Open [play.openvanilla.app/wrath](https://play.openvanilla.app/wrath).
-2. Sign in with Google or your [Hero Key](hero-key.md).
+2. Sign in with your [Hero Key](hero-key.md) or Google (or Discord, when the site offers it).
 3. The site makes your game account for you. There are no separate Wrath accounts to ask for.
 
 A Hero Key saved in your browser signs you in by itself the next time. If that fails, you get the normal sign-in page.
@@ -16,7 +16,7 @@ A Hero Key saved in your browser signs you in by itself the next time. If that f
 
 - The browser streams a small part of the world: Dalaran, the capitals, the starting areas, arenas, dungeons and raids. Your character stays inside that part while you play this way.
 - No game files are needed for this.
-- Have a 3.3.5a game folder? Drop it on the game page to go anywhere. See [Use your own game folder to go anywhere](#use-your-own-game-folder-to-go-anywhere).
+- Have your own game folder? Drop it on the game page to go anywhere. See [Use your own game folder to go anywhere](#use-your-own-game-folder-to-go-anywhere).
 - The browser client downloads in the background while you read the realm page, so the game starts faster.
 - **End my browser pass** on the account page ends the session. Do this before you play the same account with your own files.
 
@@ -24,7 +24,7 @@ A new character picks once: start at level 1, or take a one-time boost to 80 wit
 
 ## Use your own game folder to go anywhere
 
-Streamed play keeps you in Dalaran, the capitals and the starting areas. With your own 3.3.5a game folder, the same browser tab plays the whole world, on the same realm and the same characters.
+Streamed play keeps you in Dalaran, the capitals and the starting areas. With your own game folder, the same browser tab plays the whole world, on the same realm and the same characters.
 
 **Which folder.** The folder you start the 3.3.5a game from. It holds a `Data` folder with `common.MPQ`, `lichking.MPQ`, the `patch` files and a language folder such as `enUS`, `enGB` or `deDE`. You can give the game folder itself or just its `Data` folder. It must be build 12340: the page reads the build from the files, and a 1.12 or 2.4.3 folder is refused. If you don't know where it is, search your computer for `lichking.MPQ`; the folder two levels up is the game folder.
 
@@ -56,22 +56,24 @@ The Leyline window and the line under the Esc menu say **Whole world: your game 
 
 This option is built but sits behind a switch on the server (`WU_OWNFILES=1`). When it is on, the account page shows **Play in the browser with my game folder**.
 
-- The page reads your own 3.3.5a game folder (or its `Data` folder) on your computer. Nothing is uploaded.
+- The page reads your own game folder (or its `Data` folder) on your computer. Nothing is uploaded.
 - The server sends no game data. You get the whole world, not only the streamed part.
 - The streamed page does the same when you drop your folder on it: see [Use your own game folder to go anywhere](#use-your-own-game-folder-to-go-anywhere).
 
 ## With your own client
 
-You need your own 3.3.5a install (build 12340). We don't provide game files.
+You need your own game install: the official realm runs the 3.3.5a game (build 12340). We don't provide game files; see [Getting started](getting-started.md#where-your-files-usually-are) for where they usually are.
 
-1. Sign in at [play.openvanilla.app/wrath](https://play.openvanilla.app/wrath).
-2. Open **Play with the desktop client or the player package**. It shows your account name and password. Sign in again any time to see them.
-3. Open `Data\enUS\realmlist.wtf` (or `Data\enGB\...`) in a text editor and change the line to `set realmlist play.openvanilla.app`.
-4. Delete the `Cache` folder next to the game, start it, and log in.
+1. Get the [Leyline launcher](launcher.md) and open it.
+2. Add your game folder: press **PLAY**, or pick **Add a game folder…** in the play bar. The launcher reads the version itself.
+3. Press **PLAY**. The launcher points your game at the realm (your original realm setting is kept as a backup) and starts it.
+4. Log in with your game account: sign in at [play.openvanilla.app/wrath](https://play.openvanilla.app/wrath) and open **Play with the desktop client or the player package** to see your account name and password.
 
-The player package has a `Play` .bat file that asks for your 3.3.5a folder once and opens the game in your browser. It only reads your own files, on your PC.
+**Without the launcher.** Open `Data\enUS\realmlist.wtf` (or `Data\enGB\...`) in a text editor, change the line to `set realmlist play.openvanilla.app`, delete the `Cache` folder next to the game, then start it.
 
-Wrath Unleashed is a 3.3.5a realm. A 1.12 or 2.4.3 client plays on community realms of its own build, and the [Leyline launcher](launcher.md) picks the right client from your own folders.
+The player package has a `Play` .bat file that asks for your game folder once and opens the game in your browser. It only reads your own files, on your PC.
+
+Other versions play on community realms of their own build, and the launcher picks the right client from your own folders.
 
 ## Community realms
 
@@ -81,7 +83,7 @@ To join one:
 
 1. Open its **Join** link. It looks like `https://relay.openvanilla.app/join/<realm id>`.
 2. Make an account on that page. Your password is turned into a login key in your browser. The relay and the host never see it.
-3. For a stock client, set the realm list to the line the join page shows. That is `set realmlist relay.openvanilla.app`, or the same with the realm's own port, such as `relay.openvanilla.app:40000`.
+3. In the launcher, paste the invite link under Realms › **Got an invite link?** and press **Join**. Without the launcher, set the realm list to the line the join page shows. That is `set realmlist relay.openvanilla.app`, or the same with the realm's own port, such as `relay.openvanilla.app:40000`.
 
 For a private realm, open the invite link on the same PC and internet connection you play from. The invite lasts 24 hours for that address.
 

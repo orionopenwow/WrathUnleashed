@@ -41,7 +41,9 @@ class Workflows(unittest.TestCase):
                 for s in j["steps"]:
                     self.assertTrue("uses" in s or "run" in s, f"{n}:{job}: {s}")
                     if "uses" in s and not s["uses"].startswith("./"):
-                        self.assertRegex(s["uses"], r"^[\w.-]+/[\w.-]+@(v\d+|stable)$", f"{n}: pin actions to a major")
+                        # pinned by commit (a moved tag can't change what runs); the line's comment names the tag
+                        self.assertRegex(s["uses"], r"^[\w.-]+/[\w.-]+@[0-9a-f]{40}$", f"{n}: pin actions to a commit SHA")
+                        self.assertRegex(text, re.escape(s["uses"]) + r" # (v\d+|stable)\n", f"{n}: name the tag in a comment")
             self.assertNotIn("\t", text, n)
 
     def test_hub_index(self):

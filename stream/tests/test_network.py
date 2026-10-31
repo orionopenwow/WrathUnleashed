@@ -43,6 +43,7 @@ LISTING = {"schema": 1, "kind": "community", "realms": [
     rec(FEAT, "Picked One", players=2, score=12, tags=["blizzlike", "pvp"], region="eu", build=5875, up=(95, 96)),
     rec(SLEEPY, "Sleepy Hollow", live=False, players=0, score=0),
     rec(HIDDEN, "Hidden Away", players=9, score=99),
+    rec("brandbrandbrandb", "WoW Warcraft Den", live=False, players=0, score=0),   # an older relay: no word filter
     {"name": "Old relay record", "state": "live", "profile": {"ruleset": "main"},     # a relay from before 2026-10-29
      "community": {"realmId": OLD, "lastHeartbeat": {"online": True, "players": 3, "bots": 0}}},
     {"name": "junk", "community": {"realmId": "../x"}, "tags": "pvp"},
@@ -149,10 +150,13 @@ i_busy, i_plain, i_old, i_sleepy = (page.find("<h2>Busy Den</h2>"), page.find("<
                                     page.find("<h2>Old relay record</h2>"), page.find("<h2>Sleepy Hollow</h2>"))
 check("order on the page: featured, the sample (pinned), by score, offline last",
       0 <= i_feat < i_sample < i_busy < i_plain < i_old < i_sleepy, (i_feat, i_sample, i_busy, i_plain, i_old, i_sleepy))
-check("the sample: labelled Temporary, its own numbers, Play", ">Temporary</span>" in page[i_sample:i_busy]
+check("the sample: no Temporary chip (read as a wipe), the start line, its own numbers, Play", ">Temporary</span>" not in page[i_sample:i_busy]
+      and "Start at level 1 or boost to 80" in page[i_sample:i_busy]
       and "4 playing · 10 bots" in page[i_sample:i_busy]
       and 'href="/wrath?go=h:dalaran">Play in Dalaran</a>' in page[i_sample:i_busy])
 check("the hangout's relay record is the sample, not listed twice", "<h2>Wrath Unleashed</h2>" not in page)
+check("names are neutral on /wrath/realms (an older relay's brand words dropped)", "<h2>Den</h2>" in page
+      and not re.search(r"(?i)\bwow\b|warcraft", page))
 check("hidden by staff: not on the page", "Hidden Away" not in page and HIDDEN not in page)
 check("network line: live community realms + the sample", "5 realms · 39 players online · 50 bots" in page,   # the hangout from its own status (4 players, 10 bots), not its record
       re.findall(r'net-line">([^<]*)', page))
@@ -189,7 +193,11 @@ st, h, raw = req("GET", "/wrath/realms.json")
 doc = json.loads(raw)
 ids = [r["community"]["realmId"] for r in doc["realms"]]
 check("realms.json: 200, CORS, network kind", st == 200 and h.get("access-control-allow-origin") == "*" and doc["kind"] == "network")
-check("realms.json: display order, hidden left out", ids == [FEAT, HANG, BUSY, PLAIN, OLD, SLEEPY], ids)
+check("realms.json: display order, hidden left out", ids == [FEAT, HANG, BUSY, PLAIN, OLD, "brandbrandbrandb", SLEEPY], ids)
+check("realms.json: a neutral name, nameOk false for a name the filter changed",
+      next(r for r in doc["realms"] if r["community"]["realmId"] == "brandbrandbrandb")["name"] == "Den"
+      and next(r for r in doc["realms"] if r["community"]["realmId"] == "brandbrandbrandb")["community"]["nameOk"] is False
+      and next(r for r in doc["realms"] if r["community"]["realmId"] == BUSY)["community"]["nameOk"] is True)
 check("realms.json: network totals", doc["network"] == {"realms": 5, "players": 39, "bots": 50}, doc["network"])
 c = {r["community"]["realmId"]: r for r in doc["realms"]}
 check("realms.json: featured, verified, sample, group", c[FEAT]["community"]["featured"] and c[FEAT]["community"]["verified"]

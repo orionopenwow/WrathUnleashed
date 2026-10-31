@@ -99,6 +99,12 @@ Settings (environment, /srv/wrath/portal.env):
                          realm/brand.sh on|off flips it with the realm's name and the in-game wording.
   PACKAGE_URL            optional link to the player package (shown on the page when set)
   BRIDGE_USERS           console logins the realm service may use (default WRSOAP,ADMINISTRATOR)
+  BRIDGE_PASS            the password the realm service sends with them (its SOAP password). Set: the bridge also
+                         checks it (constant time). Unset: the old check (the login name only) and a warning at start
+  WU_MAX_CONN            the most requests the page and the bridge serve at once (default 512); past it a caller
+                         gets 503 "busy" at once instead of piling up threads
+  WU_HANDLER_TIMEOUT     seconds a caller may sit idle on its socket (reading or writing) before it is dropped (30)
+  SOAP_TIMEOUT           seconds for one AzerothCore SOAP call, and the longest one waits for its turn (8)
   WU_STREAM              1 = browser streaming on, 0 = off (default 0)
   STREAM_HOST            default wrath.openvanilla.app
   STREAM_SLICES          the slice names /wrath/play accepts (default mini)
@@ -137,6 +143,7 @@ from __future__ import annotations
 import base64
 import collections
 import hashlib
+import hmac
 import html
 import importlib.util
 import json
@@ -196,6 +203,65 @@ def _load_module(name: str, file: str):
         return None
 
 
+def _load_ratelimit():
+    """stream/ratelimit.py (the shared limiter: time-based sweep, bounded keys, global caps, IPv6 /64 buckets), from
+    beside this file and shared with the modules through sys.modules["wu_ratelimit"]. When it is missing (an install
+    that sent only this file) a small stand-in with the same calls takes its place, so the page still runs."""
+    m = sys.modules.get("wu_ratelimit")
+    if m is not None:
+        return m
+    m = _load_module("wu_ratelimit", "ratelimit.py")
+    if m is None:
+        import types
+        m = types.ModuleType("wu_ratelimit")
+
+        class Limiter:
+            def __init__(self, seconds, clock=time.monotonic, max_keys=50000, sweep_every=None, global_keys=()):
+                self.seconds, self.clock, self.max_keys = seconds, clock, max_keys
+                self.global_keys, self.q, self.g, self.lock = set(global_keys), {}, {}, threading.Lock()
+                self.last = clock()
+
+            def _hit(self, table, key, limit, win, now):
+                q = table.setdefault(key, collections.deque())
+                while q and now - q[0] > win:
+                    q.popleft()
+                if len(q) >= limit:
+                    return False
+                q.append(now)
+                return True
+
+            def hit(self, key, limit, seconds=None):
+                now, win = self.clock(), seconds or self.seconds
+                with self.lock:
+                    if key in self.global_keys:
+                        return self._hit(self.g, key, limit, win, now)
+                    if now - self.last >= min(self.seconds, 60):
+                        self.q = {k: v for k, v in self.q.items() if v and now - v[-1] <= self.seconds}
+                        self.last = now
+                    ok = self._hit(self.q, key, limit, win, now)
+                    while len(self.q) > self.max_keys:
+                        self.q.pop(next(iter(self.q)))
+                    return ok
+
+            def cap(self, name, limit, seconds=None):
+                now = self.clock()
+                with self.lock:
+                    return self._hit(self.g, name, limit, seconds or self.seconds, now)
+
+            def clear(self):
+                with self.lock:
+                    self.q = {}
+
+        m.Limiter = Limiter
+        m.bucket = lambda ip: (ip or "")[:64]
+    sys.modules["wu_ratelimit"] = m
+    return m
+
+
+ratelimit = _load_ratelimit()
+rl_bucket = ratelimit.bucket   # the address a limit counts: IPv4 /32, IPv6 /64
+
+
 def _load_modes():
     """stream/modes.py (GET /wrath/modes and the go intent; its data is stream/modes_data.py), from beside
     this file. None when missing or broken: the portal runs without them."""
@@ -217,6 +283,7 @@ docs = _load_module("wu_docs", "docs.py")   # /wrath/docs (stream/docs.py: the L
 hostflow = _load_module("wu_hostflow", "hostflow.py")   # /wrath/host: "+ Your server" (stream/hostflow.py)
 creations = _load_module("wu_creations", "creations.py")   # /wrath/workshop: what players made (stream/creations.py)
 leyline_net = _load_module("wu_leyline_net", "leyline_net.py")   # /wrath/leyline/flags.json + the Host pack (stream/leyline_net.py)
+upstream_addons = _load_module("wu_upstream_addons", "upstream_addons.py")   # reviewed upstream addons in all.json (stream/upstream_addons.py)
 herokey_mod = _load_module("wu_herokey", "herokey_sso.py")   # Hero Key sign-in on Beacons (stream/herokey_sso.py)
 hub_mod = _load_module("wu_hub", "hub.py")   # /wrath/leyline-preview: the hidden Leyline hub (stream/hub.py)
 playmodes = _load_module("wu_playmodes", "playmodes.py")   # game modes: /wrath/modes.json, Games, ?go=mode: (stream/playmodes.py)
@@ -322,6 +389,9 @@ OFFICIAL_LEAD = f"{REALM_NAME}, the official realm" if BRAND else "The WrathUnle
 PLAY_STEP = "Run the <b>Play</b> file from the player package" if BRAND else "Run <b>Play WrathUnleashed.bat</b>"
 PACKAGE_URL = os.environ.get("PACKAGE_URL", "")
 BRIDGE_USERS = {u.strip().upper() for u in os.environ.get("BRIDGE_USERS", "WRSOAP,ADMINISTRATOR").split(",") if u.strip()}
+BRIDGE_PASS = os.environ.get("BRIDGE_PASS", "")   # the realm service's SOAP password: checked too when set
+MAX_CONN = max(8, int(os.environ.get("WU_MAX_CONN", "512") or 512))
+HANDLER_TIMEOUT = max(5.0, float(os.environ.get("WU_HANDLER_TIMEOUT", "30") or 30))
 PAGE_PORT = int(os.environ.get("PAGE_PORT", "8091"))
 BRIDGE_PORT = int(os.environ.get("BRIDGE_PORT", "7878"))
 # Only the live realm service may use the bridge: its "ovlive-realm" alias is its alone (staging,
@@ -387,6 +457,7 @@ def _tag_text(body: bytes, tag: str) -> str:
 
 
 _soap_lock = threading.Lock()  # AzerothCore's SOAP serves one request at a time
+SOAP_TIMEOUT = max(1.0, float(os.environ.get("SOAP_TIMEOUT", "8") or 8))
 
 
 def ac_soap(command: str) -> str:
@@ -405,9 +476,12 @@ def ac_soap(command: str) -> str:
         "SOAPAction": '"urn:AC#executeCommand"',
         "Authorization": f"Basic {token}",
     })
-    with _soap_lock:
+    # Wait for our turn at most SOAP_TIMEOUT (a stuck worldserver must not pile up every page thread behind it).
+    if not _soap_lock.acquire(timeout=SOAP_TIMEOUT):
+        raise SoapError("down", "the realm console is busy")
+    try:
         try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with urllib.request.urlopen(req, timeout=SOAP_TIMEOUT) as resp:
                 return _tag_text(resp.read(), "result")
         except urllib.error.HTTPError as e:
             if e.code in (401, 403):
@@ -415,6 +489,8 @@ def ac_soap(command: str) -> str:
             raise SoapError("fault", _tag_text(e.read(), "faultstring") or f"HTTP {e.code}") from None
         except (urllib.error.URLError, socket.timeout, OSError) as e:
             raise SoapError("down", str(e)) from None
+    finally:
+        _soap_lock.release()
 
 
 # Accounts already checked since this process started: name -> password fingerprint.
@@ -2212,7 +2288,7 @@ def leyline_page() -> bytes:
         '<section class="ly-panel" aria-labelledby="ly-what"><h2 id="ly-what">What Leyline does</h2><div class="ly-grid">'
         + feat("Play in the browser", f"No install: sign in with a Hero Key and play the flagship realm, {REALM_NAME}. "
                "Dalaran hangout, level 1 or a boost to 80, and a Dungeon Finder where labelled bots fill the group.")
-        + feat("Host your own realm", "Run a realm on your own PC with the host kit: your own GM login, house rules and "
+        + feat("Host your own realm", "Run a realm on your own PC with the Host pack: your own GM login, house rules and "
                "world preset. Private by invite link, or public on the realm list.")
         + feat("A relay that hides you", "Players reach your realm through the Leyline relay, so your home address stays "
                "hidden and you open no ports.")
@@ -2296,28 +2372,11 @@ if workshop is not None and admin is not None:
     workshop.blocked = getattr(admin, "blocked", None)   # site-wide sanctions: no new links (Leyline HQ)
 
 
-class _Window:
-    def __init__(self, seconds: int):
-        self.seconds, self.q, self.lock = seconds, {}, threading.Lock()
-
-    def hit(self, key: str, limit: int) -> bool:
-        now = time.monotonic()
-        with self.lock:
-            q = self.q.setdefault(key, collections.deque())
-            while q and now - q[0] > self.seconds:
-                q.popleft()
-            if len(q) >= limit:
-                return False
-            q.append(now)
-            if len(self.q) > 20000:
-                self.q = {k: v for k, v in self.q.items() if v}
-            return True
-
-
+_Window = ratelimit.Limiter   # stream/ratelimit.py
 page_limit = _Window(60)
 browse_limit = _Window(60)   # public read-only pages (Leyline, realms, modes, armory, mods, share links): 600 a minute
 gate_limit = _Window(60)
-herokey_limit = _Window(3600)   # Hero Key sign-in assertions: 60 an hour per account
+herokey_limit = _Window(3600, global_keys=("hk-all",))   # Hero Key sign-in assertions: 60 an hour per account
 armory_limit = _Window(60)   # armory searches: 30 a minute per address, on top of page_limit
 
 
@@ -2451,6 +2510,7 @@ def status_with_gamedata(body: bytes) -> bytes:
 class PageHandler(BaseHTTPRequestHandler):
     server_version = "wrath-portal"
     sys_version = ""
+    timeout = HANDLER_TIMEOUT   # a caller idle on its socket this long is dropped (slow-loris)
 
     def log_message(self, fmt, *args):
         return
@@ -2565,7 +2625,7 @@ class PageHandler(BaseHTTPRequestHandler):
             self.send(404, error_page("Playing with your own game files in the browser isn't set up here yet."))
             return
         ip = self.ip()
-        if not gate_limit.hit("play:" + ip, 30):
+        if not gate_limit.hit("play:" + rl_bucket(ip), 30):
             self.send(429, busy_page())
             return
         page, user, password, _ = self.signed_in_game_login(ip)
@@ -2611,7 +2671,7 @@ class PageHandler(BaseHTTPRequestHandler):
             self.send(200, stream_off_page())
             return
         ip = self.ip()
-        if not gate_limit.hit("play:" + ip, 30):
+        if not gate_limit.hit("play:" + rl_bucket(ip), 30):
             self.send(429, busy_page())
             return
         slug = (query.get("mini") or ["mini"])[0]
@@ -2641,7 +2701,7 @@ class PageHandler(BaseHTTPRequestHandler):
     def stream_end(self) -> None:
         """GET /wrath/play/end: end the player's sessions and clear the realm mark."""
         ip = self.ip()
-        if not gate_limit.hit("end:" + ip, 30):
+        if not gate_limit.hit("end:" + rl_bucket(ip), 30):
             self.send(429, busy_page())
             return
         page, user, _, _ = self.signed_in_game_login(ip)
@@ -2660,7 +2720,7 @@ class PageHandler(BaseHTTPRequestHandler):
 
     def stream_gate(self, query: dict) -> None:
         """GET /__gate?code= on the stream site."""
-        if not gate_limit.hit("gate:" + self.ip(), 60):
+        if not gate_limit.hit("gate:" + rl_bucket(self.ip()), 60):
             self.send(429, busy_page())
             return
         code = (query.get("code") or [""])[0][:64]
@@ -2720,7 +2780,7 @@ class PageHandler(BaseHTTPRequestHandler):
         if op not in ("on", "off", "beat"):
             self.json_reply(400, {"ok": False, "state": "unknown", "why": "layer=on|off|beat"})
             return
-        if not gate_limit.hit("layer:" + self.ip(), 40):
+        if not gate_limit.hit("layer:" + rl_bucket(self.ip()), 40):
             self.json_reply(429, {"ok": False, "state": "unknown", "why": "too many requests"})
             return
         if self.headers.get("Origin", "") != f"https://{STREAM_HOST}":
@@ -2787,7 +2847,7 @@ class PageHandler(BaseHTTPRequestHandler):
 
     def stream_env(self) -> None:
         """GET /__env.js on the stream site: the session's game login for the client."""
-        if not gate_limit.hit("env:" + self.ip(), 90):
+        if not gate_limit.hit("env:" + rl_bucket(self.ip()), 90):
             self.send(429, b"/* too many requests */\n", "application/javascript")
             return
         sess = self.stream_session()
@@ -2803,7 +2863,7 @@ class PageHandler(BaseHTTPRequestHandler):
     def demo(self, path: str) -> None:
         """GET /wrath?demo=1 (a guest pass) and /wrath/demo (the "Try it" section): stream/demo.py."""
         ip = self.ip()
-        if not page_limit.hit(ip, 120) or not gate_limit.hit("demo:" + ip, 20):
+        if not page_limit.hit(rl_bucket(ip), 120) or not gate_limit.hit("demo:" + rl_bucket(ip), 20):
             self.send(429, busy_page())
             return
         if not guest:
@@ -2854,6 +2914,7 @@ class PageHandler(BaseHTTPRequestHandler):
             return
         if admin is not None and admin.match(path):   # POST /wrath/admin/act: the Admin Console (stream/admin.py)
             admin.post(self, path)
+            return
         if network is not None and network.match(path):   # POST /wrath/realms/report (stream/network.py)
             network.post(self, path)
             return
@@ -2863,7 +2924,7 @@ class PageHandler(BaseHTTPRequestHandler):
         if workshop is None or not workshop_mod.match(path):
             self.send(405, b"method not allowed\n", "text/plain")
             return
-        if not browse_limit.hit(self.ip() + "|post", 30):
+        if not browse_limit.hit(rl_bucket(self.ip()) + "|post", 30):
             self.send(429, busy_page(back="/wrath/mods"))
             return
         try:
@@ -2947,6 +3008,7 @@ class PageHandler(BaseHTTPRequestHandler):
                 return
         if admin is not None and admin.match(path):   # /wrath/admin and the /wrath/leyline/*.json feeds (stream/admin.py)
             admin.get(self, path, query)
+            return
         if hub_rank is not None and hub_rank.match(path):   # /wrath/leyline/mods.json, /wrath/api/hub/me (stream/hub_rank.py)
             hub_rank.get(self, path, query)
             return
@@ -2954,21 +3016,21 @@ class PageHandler(BaseHTTPRequestHandler):
             hub_mod.get(self, path, query)
             return
         if path == "/wrath/leyline":
-            if not browse_limit.hit(self.ip(), 600):
+            if not browse_limit.hit(rl_bucket(self.ip()), 600):
                 self.send(429, busy_page(back=path))
                 return
             self.send(200, leyline_page())
             return
         if armory is not None and armory.match(path):   # the web armory (stream/armory.py): files only, no database
             ip = self.ip()
-            if not browse_limit.hit(ip, 600) or (armory.search_query(path, query) and not armory_limit.hit(ip, 30)):
+            if not browse_limit.hit(rl_bucket(ip), 600) or (armory.search_query(path, query) and not armory_limit.hit(rl_bucket(ip), 30)):
                 self.send(429, busy_page(back=path))
                 return
             status, body = armory.page(path, query, leyline_css(), card_meta, REALM_NAME, PUBLIC_HOST)
             self.send(status, site_chrome(body, path))
             return
         if links is not None and links.match(path):   # share links (stream/links.py), same limit as /wrath/leyline
-            if not browse_limit.hit(self.ip(), 600):
+            if not browse_limit.hit(rl_bucket(self.ip()), 600):
                 self.send(429, busy_page(back=path))
                 return
             key = nav_key(path)
@@ -2979,7 +3041,7 @@ class PageHandler(BaseHTTPRequestHandler):
                                             made=creations.card_item if creations is not None else None))
             return
         if path == "/wrath/modes" and modes is not None:
-            if not browse_limit.hit(self.ip(), 600):
+            if not browse_limit.hit(rl_bucket(self.ip()), 600):
                 self.send(429, busy_page(back=path))
                 return
             self.send(200, site_chrome(modes.page(leyline_css(), art_url, art_present, card_meta, REALM_NAME,
@@ -2987,32 +3049,34 @@ class PageHandler(BaseHTTPRequestHandler):
                                                   games=playmodes.section() if playmodes is not None else ""), path))
             return
         if path == "/wrath/modes.json" and playmodes is not None:   # the game modes catalog (stream/playmodes.py)
-            if not browse_limit.hit(self.ip(), 600):
+            if not browse_limit.hit(rl_bucket(self.ip()), 600):
                 self.send(429, b'{"error":"busy"}', "application/json; charset=utf-8")
                 return
             self.send(200, playmodes.json_bytes(), "application/json; charset=utf-8", public=True)
             return
         if workshop is not None and workshop_mod.match(path):   # the mods Workshop (stream/workshop.py)
             dl = "/download" in path
-            if not browse_limit.hit(self.ip() + ("|dl" if dl else ""), 30 if dl else 600):
+            if not browse_limit.hit(rl_bucket(self.ip()) + ("|dl" if dl else ""), 30 if dl else 600):
                 self.send(429, busy_page(back=path))
                 return
             status, body, ctype, extra = workshop.serve(path, query, self.mods_req("GET"))
             if path == "/wrath/mods/all.json" and status == 200 and leyline_net is not None:
                 body = leyline_net.add_hostpack(body)   # the Host pack as a "tools" project (stream/leyline_net.py)
+            if path == "/wrath/mods/all.json" and status == 200 and upstream_addons is not None:
+                body = upstream_addons.add_upstream(body)   # curated addons from their authors (tools/addon-curate)
             if ctype.startswith("text/html"):
                 body = site_chrome(body, path)
             self.send(status, body, ctype, headers=extra)
             return
         if creations is not None and creations.match(path):   # the Workshop of player creations (stream/creations.py)
-            if not browse_limit.hit(self.ip(), 600):
+            if not browse_limit.hit(rl_bucket(self.ip()), 600):
                 self.send(429, busy_page(back=path))
                 return
             status, body = creations.page(path, query, leyline_css(), card_meta, REALM_NAME, PUBLIC_HOST)
             self.send(status, site_chrome(body, path))
             return
         if docs is not None and docs.match(path):   # the Leyline docs (stream/docs.py)
-            if not browse_limit.hit(self.ip(), 600):
+            if not browse_limit.hit(rl_bucket(self.ip()), 600):
                 self.send(429, busy_page(back=path))
                 return
             status, body = docs.page(path, leyline_css(), card_meta, REALM_NAME)
@@ -3028,7 +3092,7 @@ class PageHandler(BaseHTTPRequestHandler):
             network.get(self, path, query)
             return
         if path == "/wrath/realms":
-            if not browse_limit.hit(self.ip(), 600):
+            if not browse_limit.hit(rl_bucket(self.ip()), 600):
                 self.send(429, busy_page(back=path))
                 return
             self.send(200, realms_page(query))
@@ -3043,7 +3107,7 @@ class PageHandler(BaseHTTPRequestHandler):
         # /wrath/account is the page with the game login and the other ways to play.
         straight_in = path == "/wrath" and stream_on() and slice_info("mini") and query.get("list") is None
         ip = self.ip()
-        if not page_limit.hit(ip, 120):
+        if not page_limit.hit(rl_bucket(ip), 120):
             self.send(429, busy_page())
             return
         cookie = self.headers.get("Cookie", "")
@@ -3092,9 +3156,23 @@ def soap_reply(ok: bool, text: str) -> bytes:
             f"<SOAP-ENV:Body>{inner}</SOAP-ENV:Body></SOAP-ENV:Envelope>").encode("utf-8")
 
 
+def bridge_auth_ok(header: str) -> bool:
+    """The bridge's Basic auth: a login in BRIDGE_USERS and, when BRIDGE_PASS is set, that password (constant time)."""
+    if not header.startswith("Basic "):
+        return False
+    try:
+        user, _, pw = base64.b64decode(header[6:].strip(), validate=True).decode("utf-8", "replace").partition(":")
+    except ValueError:
+        return False
+    ok_user = user.upper() in BRIDGE_USERS
+    ok_pass = hmac.compare_digest(pw.encode(), BRIDGE_PASS.encode()) if BRIDGE_PASS else True
+    return ok_user and ok_pass
+
+
 class BridgeHandler(BaseHTTPRequestHandler):
     server_version = "wrath-bridge"
     sys_version = ""
+    timeout = HANDLER_TIMEOUT
 
     def log_message(self, fmt, *args):
         return
@@ -3115,14 +3193,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             log.warning("bridge refused a caller that is not %s", BRIDGE_HOST)
             self.reply(403, soap_reply(False, "not allowed"))
             return
-        auth = self.headers.get("Authorization", "")
-        user = ""
-        if auth.startswith("Basic "):
-            try:
-                user = base64.b64decode(auth[6:]).decode("utf-8", "replace").split(":", 1)[0].upper()
-            except ValueError:
-                user = ""
-        if user not in BRIDGE_USERS:
+        if not bridge_auth_ok(self.headers.get("Authorization", "")):
             self.reply(401, soap_reply(False, "not allowed"))
             return
         try:
@@ -3174,6 +3245,37 @@ class Server(ThreadingHTTPServer):
     the time a streamed load spent waiting on game files."""
     request_queue_size = 1024
     daemon_threads = True
+    BUSY = (b"HTTP/1.0 503 Service Unavailable\r\nContent-Type: text/plain; charset=utf-8\r\nRetry-After: 5\r\n"
+            b"Cache-Control: no-store\r\nContent-Length: 29\r\nConnection: close\r\n\r\nBusy. Try again in a moment.\n")
+
+    def __init__(self, addr, handler, max_conn: int | None = None):
+        super().__init__(addr, handler)
+        self.max_conn = max_conn or MAX_CONN
+        self.slots = threading.BoundedSemaphore(self.max_conn)
+        self.busy_count = 0
+
+    def process_request(self, request, client_address):
+        """At most max_conn at once: one more gets 503 at once, written without blocking the accept loop."""
+        if not self.slots.acquire(blocking=False):
+            self.busy_count += 1
+            try:
+                request.setblocking(False)
+                request.send(self.BUSY)
+            except OSError:
+                pass
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self.slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.slots.release()
 
 
 def main() -> int:
@@ -3181,6 +3283,8 @@ def main() -> int:
     if not SOAP_USER or not SOAP_PASS:
         log.error("SOAP_USER and SOAP_PASS must be set (/srv/wrath/portal.env)")
         return 2
+    if not BRIDGE_PASS:
+        log.warning("BRIDGE_PASS is not set: the bridge checks the login name only (set it to the realm service's SOAP password)")
     bridge = Server(("0.0.0.0", BRIDGE_PORT), BridgeHandler)
     bridge.daemon_threads = True
     threading.Thread(target=bridge.serve_forever, daemon=True).start()

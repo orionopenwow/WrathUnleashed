@@ -17,7 +17,7 @@ Either way the realm talks out to the Leyline relay over one connection. You ope
 ### Five steps
 
 1. **Install Docker.** Windows or macOS: [Docker Desktop](https://www.docker.com/products/docker-desktop/). Linux: `curl -fsSL https://get.docker.com | sh`.
-2. **Get the host kit.** Download [the host kit zip](https://github.com/orionopenwow/Leyline/releases/download/host-kit/WrathUnleashed-host-kit.zip) and unzip it. On a Linux server:
+2. **Get the Host pack.** Download [the Host pack zip](https://github.com/orionopenwow/Leyline/releases/download/host-kit/WrathUnleashed-host-kit.zip) and unzip it. On a Linux server:
 
 ```
 curl -fsSLO https://github.com/orionopenwow/Leyline/releases/download/host-kit/WrathUnleashed-host-kit.zip
@@ -59,7 +59,7 @@ Vanilla+ plays on the Wrath client, so anyone with the launcher or a browser can
 
 For a server you already run on any core (AzerothCore, TrinityCore, CMaNGOS, VMaNGOS and the rest), on this PC, a server or your own network. Only a small helper runs next to it. It lists your server and passes the relay's players on to your login server. **It never changes your server**: not its realm list, accounts, GM rights or files. It has no database login at all.
 
-1. **Install Docker** and **get the host kit** (steps 1 and 2 above).
+1. **Install Docker** and **get the Host pack** (steps 1 and 2 above).
 2. **Run the link command.** Linux or macOS: `bash leyline link`. Windows: double-click `Link my server.bat`.
 3. **Answer four questions:**
    1. its name on the realm list;

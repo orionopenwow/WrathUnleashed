@@ -1,20 +1,30 @@
 # Hosting
 
-Anyone can host a 3.3.5a realm (on AzerothCore) from their own PC. On Leyline a hosted realm is called a Beacon. The host kit and the relay are built and tested. Going live on the public relay needs the owner's deploy steps.
+Anyone can host a Wrath realm (on AzerothCore) from their own PC. On Leyline a hosted realm is called a Beacon. The relay is live: a public realm shows on the realm list about a minute after your PC connects. New to all this? Read [How the Leyline network works](network.md) first.
+
+**Before you start:** you need Docker, your own game folder and about 10 GB free. The first start takes 5 to 20 minutes. Your PC must stay on for others to play.
+
+| You need | |
+|---|---|
+| Docker | Docker Desktop, or Docker Engine on Linux |
+| Your own game folder | the 3.3.5a client |
+| Free disk | about 10 GB |
+| First start | 5 to 20 minutes |
+| While people play | your PC stays on |
 
 Want a realm that stays up for good (a Vanilla+ realm on a spare PC or a small server), or already run a server and want it on the realm list? See [Always-on realms](always-on.md): one command either way.
 
 ## What you need
 
 - Docker: [Docker Desktop](https://www.docker.com/products/docker-desktop/) on Windows and macOS, Docker Engine on Linux. Every helper runs in containers, so you need no Python on the host.
-- Your own 3.3.5a install. The kit extracts the game data a server needs (dbc and maps) from it, on your PC. Nothing is downloaded from us and nothing leaves your PC.
+- Your own game folder (the client in the table above). The Host pack extracts the game data a server needs (dbc and maps) from it, on your PC. Nothing is downloaded from us and nothing leaves your PC.
 - No open ports. The realm talks out to the relay over one connection on port 443.
 - About 10 GB of free disk (the realm images and the database), or about 25 GB if you build the images yourself (below).
 
-## Get the host kit
+## Get the Host pack
 
-1. Download the host kit: [the host kit zip](https://github.com/orionopenwow/Leyline/releases/download/host-kit/WrathUnleashed-host-kit.zip). The same link is on the site's host page, [play.openvanilla.app/wrath/host](https://play.openvanilla.app/wrath/host).
-2. Unzip it anywhere you keep things. You get the host kit's folder.
+1. Download the Host pack: [the Host pack zip](https://github.com/orionopenwow/Leyline/releases/download/host-kit/WrathUnleashed-host-kit.zip). The same link is on the site's host page, [play.openvanilla.app/wrath/host](https://play.openvanilla.app/wrath/host).
+2. Unzip it anywhere you keep things. You get the Host pack's folder.
 3. Start Docker and wait until it says it is running.
 4. Windows: double-click `Host a Wrath realm.bat` in that folder. macOS or Linux: open a terminal in it and run `bash leyline host`. Made a realm on the site's host page first? Put its file (`leyline-<id>.bat` or `.sh`) in the folder and run that instead.
 
@@ -31,7 +41,7 @@ To answer without the question, set `WU_BUILD=1` (build) or `WU_BUILD=0` (stock)
 
 ## leyline host
 
-On macOS or Linux, from the host kit folder:
+On macOS or Linux, from the Host pack folder:
 
 ```
 bash leyline host
@@ -149,8 +159,9 @@ In the game, Esc, then Mods & Workshop, then Leyline realms (or `/leyline`) show
 The listing's rules:
 
 - The listing builds each record itself from the host's text. Hosts can't set "official", order or badges.
-- Order is live first, then by name. No paid placement, no votes.
-- A record goes offline after 3 missed heartbeats and leaves the list 24 hours after the last one.
+- Order is live first, then by a fair score: players now (bots counted apart and worth little), uptime, and a small boost while a realm is new. No paid placement, no votes.
+- A record goes offline after 3 missed heartbeats and leaves the list 6 hours after the last one.
+- Names and text go through a word filter: the game's and publisher's names are taken out, and a name with a slur is refused.
 - It is readable by anyone at `/api/listing/realms.json`. The schema is in [Other servers](cross-server.md#the-realm-record-and-listing-schema).
 
 ## From the game
@@ -175,6 +186,8 @@ The listing's rules:
 The bridge links the realm's World chat channel with one Discord channel, both ways, and feeds `.bug` reports to a second channel. It is built but off until the owner fills in the bot's settings and turns it on. Players see `[Discord] Name: text`. `.discord off` hides those lines for you.
 
 The daemon talks to the realm only over SOAP and to Discord over its REST API.
+
+It can also post "New realm listed" lines for claimed public realms, but that is off: people share Discord links themselves, and an automated post only happens if the owner turns it on.
 
 ## More detail
 

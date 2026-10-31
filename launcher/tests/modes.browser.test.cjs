@@ -72,18 +72,18 @@ test('Modes page: no menu item, Realms › MODES opens it, cards, credit, Coming
   assert.deepEqual(names, CATALOG.modes.map((m) => m.title));
   assert.equal(await page.textContent('#md-net'), '5 to play · 2 coming soon');
   const golf = await card(page, 'minigolf').textContent();
-  assert.match(golf, /1-8 players/); assert.match(golf, /On our realm/); assert.match(golf, /PLAY/);
+  assert.match(golf, /1-8 players/); assert.match(golf, /On our realm/); assert.match(golf, /Play/);
   assert.doesNotMatch(golf, /Coming soon/);
   const surv = await card(page, 'azeroth-survivors').textContent();
   assert.match(surv, /Coming soon/); assert.match(surv, /By Aethus · Open rebuild by OutThisLife · MIT or Apache-2.0/);
   assert.match(surv, /No server/); assert.match(surv, /1 player/); assert.match(surv, /Community made/);
   assert.equal(await card(page, 'azeroth-survivors').locator('.md-play').count(), 0, 'no PLAY while coming');
-  assert.equal(await card(page, 'azeroth-survivors').locator('.md-soon[disabled]').textContent(), 'COMING SOON', 'a disabled COMING SOON where PLAY would be');
+  assert.equal(await card(page, 'azeroth-survivors').locator('.md-soon[disabled]').textContent(), 'Coming soon', 'a disabled COMING SOON where PLAY would be');
   assert.equal(await card(page, 'minigolf').locator('.md-soon').count(), 0, 'no COMING SOON on a live mode');
   const hordes = await card(page, 'hordes-of-azeroth').textContent();
   assert.match(hordes, /By jonhaldors · GPL-3.0 \(client\), GPL-2.0 \(server\)/); assert.match(hordes, /Its own realm type/);
   assert.match(hordes, /Any number of players/);
-  assert.equal(await card(page, 'hordes-of-azeroth').locator('button:has-text("HOST IT")').count(), 0, 'no Host it while coming');
+  assert.equal(await card(page, 'hordes-of-azeroth').locator('button:has-text("Host it")').count(), 0, 'no Host it while coming');
   await card(page, 'hordes-of-azeroth').locator('button:has-text("More source")').click();
   await card(page, 'azeroth-survivors').locator('button:has-text("Source")').click();
   assert.deepEqual(await calls(page, 'mode_open_credit'), [{ id: 'hordes-of-azeroth', n: 1 }, { id: 'azeroth-survivors', n: 0 }]);
@@ -105,10 +105,10 @@ test('PLAY on the desktop: the pick, then play on the official realm', async () 
   // another build's client: refused before anything is written
   await page.selectOption('#page-modes .client-pick', 'c1121-1');
   await card(page, 'coin-dash').locator('.md-play').click();
-  await page.waitForFunction(() => /3.3.5a realm/.test(document.getElementById('md-status').textContent));
+  await page.waitForFunction(() => /plays with your Wrath game folder/.test(document.getElementById('md-status').textContent));
   assert.equal((await calls(page, 'mode_prepare_desktop')).length, 1);
   // a realm type: HOST IT goes to the Host page
-  await card(page, 'brawl').locator('button:has-text("HOST IT")').click();
+  await card(page, 'brawl').locator('button:has-text("Host it")').click();
   assert.ok(await page.isVisible('#page-host'));
   assert.deepEqual(errors, []);
   await page.close();
