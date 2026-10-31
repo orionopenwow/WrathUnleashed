@@ -9,9 +9,9 @@ and runs without it.
                                               on the network (one-click Play in browser, the desktop address, a hover
                                               preview), how it works, the numbers, one feature section per part of
                                               Leyline (launcher, hosting, realms, modes, mods, community, agents) on a
-                                              ley line, Hosted by the community (posters), Mod of the week, Hero Key,
-                                              Creator spotlight, News, Platform Status, Community Spotlight,
-                                              categories, creators, Host a Beacon. Every hub page has the same header:
+                                              ley line, Hosted by the community (posters), the Hero Key line, Community
+                                              (Hot right now, Top creators, News), Mods in play, the Platform status
+                                              bar. Every hub page has the same header:
                                               the launcher's pages (Play, Realms, Mods, Addons, Modes, Host, Community,
                                               More) with Download and Sign In (or the account chip).
                                               No client build number or game name on any hub page
@@ -912,19 +912,22 @@ class Hub:
                 '@media print{body.hb::before{display:none}}')
 
     def status_cards(self) -> str:
-        """Platform Status: live values only, read when the page is made (no script). A source this portal doesn't
-        have is left out; one that fails says so in red."""
+        """Platform status, as one slim bar of pills near the foot (owner 2026-10-30: "this entire area at the bottom is a
+        mess, consolidate"): live values only, read when the page is made (no script). Each pill has a dot (green OK, red
+        down, blue for a count); a source this portal doesn't have is left out, one that fails says so in red. A pill links
+        to where its details are (the realm list, the catalog) when there is such a page."""
         e = html.escape
-        cards, oks = [], []
+        pills, oks = [], []
 
-        def card(name, line, ok, href="", tail=""):
+        def pill(name, line, ok, href="", tail=""):
             if ok is not None:
                 oks.append(bool(ok))
             word = "OK" if ok is True else ("Offline" if ok is False else "")
-            cls = "ok" if ok is True else "bad" if ok is False else ""
-            tag = f'a href="{e(href)}"' if href else "div"
-            cards.append(f'<{tag} class="hb-stat"><b>{e(name)}</b><span>{e(line)}'
-                         + (f' <em class="{cls}">{word}</em>' if word else "") + e(tail) + f"</span></{tag.split()[0]}>")
+            cls = "ok" if ok is True else "bad" if ok is False else "info"
+            body = (f'<i class="hb-pdot" aria-hidden="true"></i><b>{e(name)}</b><span>{e(line)}'
+                    + (f'{" " if line else ""}<em class="{cls}">{word}</em>' if word else "") + e(tail) + "</span>")
+            pills.append(f'<li><a class="hb-pill {cls}" href="{e(href)}">{body}</a></li>' if href
+                         else f'<li><span class="hb-pill {cls}">{body}</span></li>')
         rs = self.portal("realm_status")
         try:
             st = rs() if rs else None
@@ -940,69 +943,28 @@ class Hub:
                 pass
             on = bool(st.get("online"))
             pl = st.get("players")
-            card(neutral(name) or "Main realm", "Server:", on, "/wrath/realms", f" · {int(pl)} playing" if on and isinstance(pl, int) and pl >= 0 else "")
+            pill(neutral(name) or "Main realm", "", on, "/wrath/realms", f" · {int(pl)} playing" if on and isinstance(pl, int) and pl >= 0 else "")
         health = self.portal("health")
         if health is not None:
             try:
                 ok = bool(health()[0])
             except Exception:   # noqa: BLE001
                 ok = False
-            card("Sign-in", "Game logins:", ok)
+            pill("Sign-in", "", ok)
         got = self._network()
         if got is not None:
             net, realms, ok, st2 = got
             t = net.totals(net.order(realms), st2)
-            card("Realm network", net.network_line(t), None, BASE + "/realms")
-            card("Relay", "Realm list:", bool(ok))
+            pill("Realm network", net.network_line(t), None, BASE + "/realms")
+            pill("Relay", "", bool(ok))
         items = self.items()
-        n_ws = sum(1 for i in items if i["source"] == "workshop")
-        card("Mod catalog", f"{len(items)} items · {n_ws} in the Workshop", None, BASE + "/catalog")
+        pill("Mod catalog", f"{len(items)} items", None, BASE + "/catalog")
         state = ("ok" if all(oks) else "bad" if not any(oks) else "warn") if oks else ""
         self._health = (time.monotonic(), state)
-        return ('<section class="hb-sec" id="status" aria-labelledby="hb-st"><h2 id="hb-st">Platform Status</h2>'
-                f'<div class="hb-stats">{"".join(cards)}</div></section>')
-
-    def spotlight(self) -> str:
-        """Community Spotlight: the top Hot and New items from the hub rankings (stream/hub_rank.py), else the index's
-        best scores. Real items only: name, author, their own short line, a Workshop screenshot when there is one."""
-        e = html.escape
-        items = [i for i in self.items() if i["source"] != "theme"]
-        if not items:
-            return ""
-        picks, labels = [], {}
-        rk = self.portal("hub_rank")
-        store = getattr(rk, "store", None) if rk is not None else None
-        if store is not None:
-            for sort, label in (("hot", "Hot"), ("new", "New")):
-                try:
-                    ranked = store.ranked(items, sort)
-                except Exception:   # noqa: BLE001
-                    ranked = []
-                for i, _m in ranked:
-                    if i["id"] not in labels:
-                        picks.append(i); labels[i["id"]] = label
-                        if sum(1 for v in labels.values() if v == label) >= 2:
-                            break
-        if not picks:
-            for i in sorted(items, key=lambda i: (-float(i.get("score") or 0), i["name"].lower()))[:4]:
-                picks.append(i); labels[i["id"]] = "Top"
-        cards = []
-        for i in picks[:4]:
-            shot = ""
-            if self.shot_count(i):
-                shot = f'<img src="/wrath/mods/{e(i["id"][4:])}/shot/0" alt="" loading="lazy" width="160" height="100">'
-            elif self.thumb_of(i):
-                shot = (f'<img src="{e(self.thumb_of(i))}" alt="" loading="lazy" width="160" height="80" '
-                        f'title="{e(THUMB_CREDIT)}">')
-            name = neutral(i["name"]) or "Untitled"
-            pic = shot or f'<span class="hb-initial" aria-hidden="true">{e(name[:1].upper())}</span>'
-            line = neutral(i.get("summary") or i.get("description") or "")
-            cards.append(f'<a class="hb-spot" href="{BASE}/p/{_slug(i["id"])}"><span class="hb-pic">{pic}</span>'
-                         f'<span class="hb-spot-t"><small>{e(labels[i["id"]])}</small><b>{e(name)}</b>'
-                         f'<i>by {e(neutral(i["author"]) or "unknown")}</i><span>{e(line)}</span></span></a>')
-        return ('<section class="hb-sec" id="community" aria-labelledby="hb-cs"><h2 id="hb-cs">Community Spotlight</h2>'
-                f'<div class="hb-spots">{"".join(cards)}</div>'
-                f'<p class="hb-more"><a href="{BASE}/catalog">Browse the whole catalog</a></p></section>')
+        sum_word = {"ok": "All systems normal", "warn": "Some systems are down", "bad": "Systems are down"}.get(state, "Live now")
+        return (f'<section class="hb-sbar hb-rv" id="status" aria-labelledby="hb-st"><h2 id="hb-st" class="hb-sbar-h">'
+                f'<i class="hb-pdot {state or "info"}" aria-hidden="true"></i>Platform status</h2><p class="hb-sbar-s">{e(sum_word)}</p>'
+                f'<ul class="hb-pills">{"".join(pills)}</ul></section>')
 
     # ---------------------------------------------------------------- the realm list (the sub hero and /realms)
     def realm_rows(self, query: dict | None = None):
@@ -1351,7 +1313,7 @@ class Hub:
             ("community", "Community hub", "What players make, together",
              "The people behind the realms and mods, what they made this week and where they meet. Every project "
              "belongs to its authors, under the licence they chose.",
-             ["Community Spotlight, from real rankings", "News from the launcher and the realms"]
+             ["What's hot and who made it, from real rankings", "News from the launcher and the realms"]
              + (["The Discord, linked from everywhere"] if discord else []),
              [(BASE + "/catalog", "Explore", False), (BASE + "/news", "News", False)], community_art),
         ]
@@ -1490,34 +1452,6 @@ class Hub:
                 pass
         return sorted(items, key=lambda i: (-float(i.get("score") or 0), i["name"].lower(), i["id"])), {}
 
-    def mod_of_week(self, items: list) -> str:
-        """The top Hot item (best score without rankings): its Workshop screenshot if any, author, one line, Install with
-        Leyline (the launcher's leyline://install/<id>) and View."""
-        e = html.escape
-        pool = [i for i in items if i["source"] != "theme"]
-        if not pool:
-            return ""
-        order, _m = self._ranked(pool)
-        i = order[0]
-        rk = self.portal("hub_rank")
-        inst = rk.installable(i) if rk is not None and hasattr(rk, "installable") else bool(i.get("packaged"))
-        name = neutral(i["name"]) or "Untitled"
-        credit = ""
-        if self.shot_count(i):
-            pic = f'<img src="/wrath/mods/{e(i["id"][4:])}/shot/0" alt="A screenshot of {e(name)}" loading="lazy" width="320" height="200">'
-        elif self.thumb_of(i):
-            pic = f'<img src="{e(self.thumb_of(i))}" alt="The preview image of {e(name)}" loading="lazy" width="640" height="320">'
-            credit = f'<p class="hb-th-cr">{e(THUMB_CREDIT)}</p>'
-        else:
-            pic = self.gen_art(i, name, KIND_WORDS[self._kind(i)][2])
-        line = neutral(i.get("summary") or i.get("description") or "", 160)
-        return ('<section class="hb-motw hb-rv" id="mod-week" aria-labelledby="hb-motw-h">'
-                f'<div class="hb-motw-pic">{pic}</div><div class="hb-motw-t"><p class="hb-kick">Mod of the week</p>'
-                f'<h2 id="hb-motw-h">{e(name)}</h2><p class="hb-by">by {e(neutral(i["author"]) or "unknown")}</p>'
-                f'<p class="hb-motw-l">{e(line)}</p><p class="hb-fs-a">'
-                f'<a class="hb-cta sm" href="leyline://install/{e(i["id"])}">{"Install with Leyline" if inst else "Open in Leyline"}</a>'
-                f'<a class="hb-ghost" href="{BASE}/p/{_slug(i["id"])}">View</a></p>{credit}</div></section>')
-
     def posters(self, got) -> str:
         """Hosted by the community: up to three live community realms as posters, each with its own backdrop made from
         its realm id (the same id, the same poster). TODO(owner): hosts uploading their own poster image comes later."""
@@ -1554,36 +1488,31 @@ class Hub:
                 f'<div class="hb-posters">{"".join(cards)}</div>'
                 f'<p class="hb-more"><a href="{BASE}/realms">Every realm</a> · <a href="/wrath/host">Host your own</a></p></section>')
 
-    def herokey_teaser(self, got) -> str:
-        """One key, every realm: the Hero Key sign-on (flag herokey_sso). Off: "Coming soon"; on: available now."""
+    def herokey_teaser(self, got=None) -> str:
+        """One key, every realm: the Hero Key sign-on (flag herokey_sso) as one slim line under the community realms.
+        Off: "Coming soon"; on: available now, with Pick a realm."""
         e = html.escape
         hk = self.portal("herokey_on")
         try:
             on = bool(hk()) if hk is not None else False
         except Exception:   # noqa: BLE001
             on = False
-        names = [neutral(r.get("name")) for r in (got[0] if got else []) if r.get("live")]
-        names = [n for n in names if n][:3]
-        names += ["Your realm", "A friend's realm", "Tonight's realm"][len(names):]
-        cards = "".join(f'<span class="hb-hk-c"><i aria-hidden="true"></i>{e(n)}</span>' for n in names[:3])
         badge = '<span class="hb-bdg v">Available now</span>' if on else '<span class="hb-bdg f">Coming soon</span>'
-        line = ("Sign in once with your Hero Key and play on any realm on the network: no new account for each server."
-                if on else "Soon you'll sign in once with your Hero Key and play on any realm on the network: no new "
-                           "account for each server.")
-        act = (f'<p class="hb-fs-a"><a class="hb-cta sm" href="{BASE}/realms">Pick a realm</a></p>' if on else "")
-        return ('<section class="hb-hk hb-rv" id="herokey" aria-labelledby="hb-hk-h">'
-                f'<div class="hb-hk-t"><p class="hb-kick">Hero Key {badge}</p><h2 id="hb-hk-h">One key, every realm</h2>'
-                f'<p>{e(line)}</p>{act}</div>'
-                f'<div class="hb-hk-art" aria-hidden="true">{cards}<span class="hb-hk-key"><svg viewBox="0 0 24 24">'
-                f'{NAV_ICONS["key"]}</svg></span></div></section>')
+        line = ("Sign in once and play on any realm on the network, no new account for each server." if on
+                else "Soon: sign in once and play on any realm on the network, no new account for each server.")
+        act = f'<a class="hb-ghost" href="{BASE}/realms">Pick a realm</a>' if on else ""
+        return ('<!-- TODO(owner): the Hero Key line -->'
+                '<section class="hb-hkb hb-rv" id="herokey" aria-labelledby="hb-hk-h">'
+                f'<span class="hb-ico" aria-hidden="true"><svg viewBox="0 0 24 24">{NAV_ICONS["key"]}</svg></span>'
+                f'<p class="hb-hkb-t"><span class="hb-hkb-h"><b id="hb-hk-h">One key, every realm</b>{badge}</span>'
+                f'<span class="hb-hkb-l">{e(line)}</span></p>{act}</section>')
 
-    def creator_spotlight(self, items: list) -> str:
+    def top_creators(self, items: list) -> list[dict]:
         """Who made the top mods this month: the authors of the Hot list (installs in the last 30 days with rankings,
-        the index's scores without), up to 4, with counts; each links to the catalog searched by their name."""
-        e = html.escape
+        the index's scores without), up to 4: {q (catalog search), name, n (mods in the top list), inst, top (item)}."""
         pool = [i for i in items if i["source"] != "theme" and clean_line(i.get("author"), 60)]
         if not pool:
-            return ""
+            return []
         order, metrics = self._ranked(pool)
         by: dict[str, dict] = {}
         for rank, i in enumerate(order[:40]):
@@ -1594,33 +1523,67 @@ class Hub:
             d = by.setdefault(a.lower(), {"q": a, "name": shown, "n": 0, "inst": 0, "best": rank, "top": i})
             d["n"] += 1
             d["inst"] += ((metrics.get(i["id"]) or {}).get("installs") or {}).get("d30", 0)
-        people = sorted(by.values(), key=lambda d: (-d["inst"], -d["n"], d["best"]))[:4]
-        if not people:
-            return ""
-        cards = []
-        for d in people:
-            q = urllib.parse.urlencode({"q": d["q"][:60]})
-            bits = [f'{d["n"]} mod{"" if d["n"] == 1 else "s"} in the top list']
-            if d["inst"] > 0:
-                bits.append(f'{d["inst"]} install{"" if d["inst"] == 1 else "s"} this month')
-            cards.append(f'<a class="hb-cr" href="{BASE}/catalog?{e(q)}"><span class="hb-av" aria-hidden="true">{e(d["name"][:1].upper())}</span>'
-                         f'<span><b>{e(d["name"])}</b><small>{e(" · ".join(bits))}</small>'
-                         f'<i>Top: {e(neutral(d["top"]["name"]) or "Untitled")}</i></span></a>')
-        return ('<section class="hb-sec hb-rv" id="creators-top" aria-labelledby="hb-cr-h"><h2 id="hb-cr-h">Creator spotlight</h2>'
-                f'<div class="hb-crs">{"".join(cards)}</div></section>')
+        return sorted(by.values(), key=lambda d: (-d["inst"], -d["n"], d["best"]))[:4]
 
-    def news_strip(self) -> str:
-        """The latest three posts from the admin console's news (read-only), linking to the news page."""
+    def community(self, items: list) -> str:
+        """Community, one section (owner 2026-10-30: "this entire area at the bottom is a mess, consolidate"): Hot right
+        now (the top five of the hub rankings' Hot list, the index's best scores without: rank, a small picture, name,
+        author and kind, each linking to its page), Top creators (a compact avatar row, each searching the catalog for
+        their work) and the latest news. The big featured slider above shows the pictures; this is the list."""
         e = html.escape
+        pool = [i for i in items if i["source"] != "theme"]
+        hot = ""
+        if pool:
+            order, metrics = self._ranked(pool)
+            rows = []
+            for n, i in enumerate(order[:5]):
+                name = neutral(i["name"]) or "Untitled"
+                kind = self._kind(i)
+                if self.shot_count(i):
+                    pic = f'<img src="/wrath/mods/{e(i["id"][4:])}/shot/0" alt="" loading="lazy" decoding="async" width="64" height="40">'
+                elif self.thumb_of(i):
+                    pic = (f'<img src="{e(self.thumb_of(i))}" alt="" loading="lazy" decoding="async" width="64" height="40" '
+                           f'title="{e(THUMB_CREDIT)}">')
+                else:
+                    pic = self.gen_art(i, name, KIND_WORDS[kind][2])
+                inst = ((metrics.get(i["id"]) or {}).get("installs") or {}).get("d30", 0)
+                rows.append(f'<li><a class="hb-hot-r" href="{BASE}/p/{_slug(i["id"])}"><span class="hb-hot-n" aria-hidden="true">{n + 1}</span>'
+                            f'<span class="hb-hot-pic">{pic}</span><span class="hb-hot-t"><b>{e(name)}</b>'
+                            f'<i>by {e(neutral(i["author"]) or "unknown")}'
+                            + (f' · {int(inst)} install{"" if inst == 1 else "s"} this month' if inst else "") + '</i></span>'
+                            f'<span class="hb-hot-k">{e(KIND_WORDS[kind][0])}</span></a></li>')
+            hot = ('<div class="hb-cm-p hb-cm-hot" aria-labelledby="hb-hot-h" role="group"><h3 id="hb-hot-h" class="hb-cm-h">Hot right now</h3>'
+                   f'<ol class="hb-hot">{"".join(rows)}</ol>'
+                   f'<p class="hb-cm-more"><a href="{BASE}/catalog{"?sort=hot" if metrics else ""}">Every mod, by what\'s hot</a></p></div>')
+        crs = ""
+        people = self.top_creators(items)
+        if people:
+            cards = []
+            for d in people:
+                q = urllib.parse.urlencode({"q": d["q"][:60]})
+                bits = [f'{d["n"]} hot mod{"" if d["n"] == 1 else "s"}']
+                if d["inst"] > 0:
+                    bits.append(f'{d["inst"]} install{"" if d["inst"] == 1 else "s"} this month')
+                top = neutral(d["top"]["name"]) or "Untitled"
+                cards.append(f'<li><a class="hb-crw-a" href="{BASE}/catalog?{e(q)}" title="{e(" · ".join(bits))} · Top: {e(top)}">'
+                             f'<span class="hb-av" style="--h:{200 + hashlib.sha256(d["q"].lower().encode()).digest()[0] % 120}" aria-hidden="true">'
+                             f'{e(d["name"][:1].upper())}</span><b>{e(d["name"])}</b>'
+                             f'<small>{e(bits[-1] if d["inst"] > 0 else bits[0])}</small></a></li>')
+            crs = ('<div class="hb-cm-p" id="creators-top" aria-labelledby="hb-cr-h" role="group"><h3 id="hb-cr-h" class="hb-cm-h">Top creators</h3>'
+                   f'<ul class="hb-crw">{"".join(cards)}</ul></div>')
+        news = ""
         posts = self.news_posts(3)
-        if not posts:
+        if posts:
+            lis = "".join(f'<li><a class="hb-nwl-a" href="{BASE}/news"><small>{e(p["tag"])}{" · " if p["tag"] and p["date"] else ""}'
+                          f'{e(p["date"])}</small><b>{e(p["title"])}</b></a></li>' for p in posts)
+            news = ('<div class="hb-cm-p" id="news" aria-labelledby="hb-nw-h" role="group"><h3 id="hb-nw-h" class="hb-cm-h">News</h3>'
+                    f'<ul class="hb-nwl">{lis}</ul><p class="hb-cm-more"><a href="{BASE}/news">All the news</a></p></div>')
+        if not (hot or crs or news):
             return ""
-        cards = "".join(f'<a class="hb-nw" href="{BASE}/news"><small>{e(p["tag"])}{" · " if p["tag"] and p["date"] else ""}'
-                        f'{e(p["date"])}</small><b>{e(p["title"])}</b>'
-                        + (f"<span>{e(next(x for x in p['items'] if x))}</span>" if any(p["items"]) else "") + "</a>"
-                        for p in posts)
-        return ('<section class="hb-sec hb-rv" id="news" aria-labelledby="hb-nw-h"><h2 id="hb-nw-h">News</h2>'
-                f'<div class="hb-nws">{cards}</div><p class="hb-more"><a href="{BASE}/news">All the news</a></p></section>')
+        side = f'<div class="hb-cm-side">{crs}{news}</div>' if (crs or news) else ""
+        return ('<section class="hb-sec hb-cm hb-rv" id="community" aria-labelledby="hb-cm-h"><div class="hb-ms-head">'
+                f'<h2 id="hb-cm-h">Community</h2><a href="{BASE}/catalog">Browse the catalog</a></div>'
+                f'<div class="hb-cm-g{"" if hot and side else " one"}">{hot}{side}</div></section>')
 
     # ---------------------------------------------------------------- the gallery (owner 2026-10-30: "in game screenshots
     # or cdn pulls or at least something and featured mods on the site in a gallery for promo and appeal")
@@ -1879,11 +1842,7 @@ class Hub:
             # no buttons under the line (owner 2026-10-30): Download and Play are in the side menu
             '<p class="hb-note">Free and open source, for Windows, macOS and Linux. Nothing to buy.</p></section>'
             + self.ticker(got) + self.realm_section(got) + self.how_strip() + self.counters(got, items) + self.featured_mod(items) + self.features(got)
-            + self.posters(got)
-            + f'<div class="hb-pair">{self.mod_of_week(items)}{self.herokey_teaser(got)}</div>'
-            + self.creator_spotlight(items) + self.news_strip()
-            + f'<div class="hb-rv">{status}</div><div class="hb-rv">{self.spotlight()}</div>'
-            + self.mod_strip(items) +
+            + self.posters(got) + self.herokey_teaser(got) + self.community(items) + self.mod_strip(items) + status +
             '<p class="hb-fine">Community projects are links: nothing of theirs is hosted here. Each belongs to its '
             'authors, under the licence they chose. Leyline is an independent open-source project.</p>')
         return self._shell("Leyline", body, path, nonce)
@@ -2559,25 +2518,6 @@ text-decoration:none;font-weight:700;font-size:17px;box-shadow:0 0 0 1px rgba(25
 .hb-note{margin:10px 0 0;color:var(--lk-muted);font-size:13px}
 /* sections */
 .hb-sec{margin:26px 0}.hb-sec h2{margin:0 0 12px;font-size:20px;font-weight:700}.hb-sec h3{margin:14px 0 8px;font-size:15px;color:var(--lk-text-2)}
-.hb-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
-.hb-stat{display:grid;gap:2px;padding:12px 14px;background:var(--lk-surface);border:1px solid var(--lk-border);border-radius:var(--lk-r-sm)}
-a.hb-stat{text-decoration:none;color:var(--lk-text)!important}a.hb-stat:hover{border-color:var(--lk-accent)}
-.hb-stat b{font-weight:650}.hb-stat span{color:var(--lk-muted);font-size:13.5px}
-.hb-stat em{font-style:normal;font-weight:700}.hb-stat em.ok{color:var(--lk-ok)}.hb-stat em.bad{color:var(--lk-bad)}
-.hb-spots{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr));gap:12px}
-.hb-spot{display:flex;gap:14px;padding:12px;background:var(--lk-surface);border:1px solid var(--lk-border);border-radius:var(--lk-r);
-text-decoration:none;color:var(--lk-text)!important}
-.hb-spot:hover{border-color:var(--lk-accent)}
-.hb-pic{flex:none;width:120px;height:84px;border-radius:var(--lk-r-sm);overflow:hidden;display:grid;place-items:center;
-background:linear-gradient(135deg,rgba(91,141,239,.35),rgba(139,108,240,.3))}
-.hb-pic img{width:100%;height:100%;object-fit:cover}
-.hb-initial{font-size:34px;font-weight:800;color:#fff}
-.hb-spot-t{display:grid;gap:1px;min-width:0;align-content:start}
-.hb-spot-t small{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--lk-accent-2)}
-.hb-spot-t b{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.hb-spot-t i{font-style:normal;font-size:12.5px;color:var(--lk-muted)}
-.hb-spot-t span{font-size:13.5px;color:var(--lk-text-2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-@media (max-width:420px){.hb-pic{width:84px;height:72px}}
 .hb-more{margin:10px 0 0;font-size:14px}
 .hb-chips{display:flex;flex-wrap:wrap;gap:6px;margin:0}
 .hb-chip{padding:7px 12px;border-radius:999px;border:1px solid var(--lk-border);background:var(--lk-surface);text-decoration:none;
@@ -2641,9 +2581,7 @@ color:#f3d29a!important;font-size:13px!important}
 .hb-ext-s{margin:28px 0 8px}.hb-ext-s h2{margin:0 0 4px;font-size:20px}.hb-ext-lede{margin:0 0 12px;color:var(--lk-text-2)}
 .hb-item-pic{margin:0 0 14px;max-width:640px;border-radius:var(--lk-r-sm);overflow:hidden;background:var(--lk-surface-2)}
 .hb-item-pic img,.hb-item-pic .hb-gt-art{display:grid;width:100%;height:auto;aspect-ratio:2/1;object-fit:cover}
-.hb-item-pic figcaption,.hb-th-cr{padding:5px 10px;font-size:12px;color:var(--lk-muted)}
-.hb-th-cr{padding:0;margin:8px 0 0!important}
-.hb-motw-pic .hb-gt-art{width:100%;height:100%}
+.hb-item-pic figcaption{padding:5px 10px;font-size:12px;color:var(--lk-muted)}
 .hb-item h1{text-align:left}.hb-sum{font-size:17px}.hb-repo{color:var(--lk-muted)}
 .hb-list li{margin:4px 0}.hb-empty{color:var(--lk-muted)}
 .hb .realm{background:var(--lk-surface)!important;border:1px solid var(--lk-border)!important;border-radius:var(--lk-r)!important;box-shadow:none!important}
@@ -2758,8 +2696,8 @@ background:linear-gradient(135deg,hsl(var(--h) 70% 62%),hsl(calc(var(--h) + 40) 
 @media (max-width:860px){.hb-fs,.hb-fs.flip{grid-template-columns:minmax(0,1fr);gap:22px;padding:40px 0}.hb-fs.flip .hb-fs-t{order:0}}
 @media (max-width:420px){.hb-people{grid-template-columns:minmax(0,1fr)}.hb-draw{padding:16px}.hb-code{font-size:12px}}
 /* lift and glow on hover, like the launcher's cards; never with reduced motion */
-.hb-stat,.hb-spot,.hb-box,.hb-card,.hb-mode{transition:transform .15s ease,border-color .15s,box-shadow .15s}
-:is(a.hb-stat,.hb-spot,.hb-box,.hb-mode):hover{transform:translateY(-2px);border-color:var(--lk-accent);
+.hb-box,.hb-card,.hb-mode{transition:transform .15s ease,border-color .15s,box-shadow .15s}
+:is(.hb-box,.hb-mode):hover{transform:translateY(-2px);border-color:var(--lk-accent);
 box-shadow:0 8px 24px rgba(0,0,0,.28),0 0 0 1px rgba(91,141,239,.35),0 0 26px rgba(91,141,239,.12)}
 /* section reveal: only sections below the fold when the page loads, only with script, only with motion */
 .hb-js .hb-wait{opacity:0;transform:translateY(10px)}
@@ -2844,39 +2782,60 @@ transform:rotate(var(--r));transform-origin:var(--x) var(--y);scale:1.2}
 .hb-poster-tags span{padding:1px 8px;border-radius:999px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);font-size:12px;color:#eef}
 .hb-poster-a{display:flex;flex-wrap:wrap;gap:8px;margin:0}
 .hb-poster .hb-ghost{background:rgba(10,12,18,.4)}
-/* mod of the week and Hero Key, side by side */
-.hb-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:14px;margin:26px 0}
-.hb-motw,.hb-hk{display:grid;gap:16px;padding:18px;border-radius:var(--lk-r);border:1px solid var(--lk-border);background:var(--lk-surface)}
-.hb-motw{grid-template-columns:minmax(0,2fr) minmax(0,3fr);align-items:center}
-.hb-motw-pic{aspect-ratio:16/10;border-radius:var(--lk-r-sm);overflow:hidden;display:grid;place-items:center;
-background:linear-gradient(135deg,rgba(91,141,239,.4),rgba(139,108,240,.35))}
-.hb-motw-pic img{width:100%;height:100%;object-fit:cover}
-.hb-kick{display:flex;align-items:center;gap:8px;margin:0 0 4px;font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--lk-accent-2)}
-.hb-motw h2,.hb-hk h2{margin:0 0 2px;font-size:22px;font-weight:800}
-.hb-motw .hb-by{margin:0 0 8px;font-size:13px}.hb-motw-l,.hb-hk p{margin:0 0 12px;color:var(--lk-text-2);font-size:14.5px}
-.hb-hk{grid-template-columns:minmax(0,1fr)}
-.hb-hk-art{position:relative;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding-top:30px}
-.hb-hk-c{display:grid;justify-items:center;gap:6px;padding:12px 6px;border-radius:var(--lk-r-sm);background:var(--lk-surface-2);
-border:1px solid var(--lk-border);font-size:12.5px;font-weight:600;color:var(--lk-text-2);text-align:center;overflow-wrap:anywhere}
-.hb-hk-c i{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--lk-accent),var(--lk-accent-2));opacity:.8}
-.hb-hk-key{position:absolute;top:0;left:calc(100% / 6 - 13px);width:26px;height:26px;color:#ffd77a;animation:hb-key 7.5s ease-in-out infinite}
-.hb-hk-key svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;filter:drop-shadow(0 0 6px rgba(255,215,122,.6))}
-@keyframes hb-key{0%,22%{left:calc(100% / 6 - 13px)}33%,55%{left:calc(50% - 13px)}66%,88%{left:calc(500% / 6 - 13px)}100%{left:calc(100% / 6 - 13px)}}
-@media (max-width:520px){.hb-motw{grid-template-columns:minmax(0,1fr)}}
-/* creator spotlight and news */
-.hb-crs{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));gap:10px}
-.hb-cr{display:flex;align-items:center;gap:12px;padding:12px;border-radius:var(--lk-r);border:1px solid var(--lk-border);background:var(--lk-surface);
-text-decoration:none;color:var(--lk-text)!important}
-.hb-cr .hb-av{width:42px;height:42px;font-size:18px}
-.hb-cr>span:last-child{display:grid;min-width:0}.hb-cr b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.hb-cr small{color:var(--lk-muted);font-size:12.5px}.hb-cr i{font-style:normal;font-size:12.5px;color:var(--lk-text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.hb-nws{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:10px}
-.hb-nw{display:grid;gap:3px;align-content:start;padding:14px;border-radius:var(--lk-r);border:1px solid var(--lk-border);background:var(--lk-surface);
-text-decoration:none;color:var(--lk-text)!important}
-.hb-nw small{color:var(--lk-accent-2);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:11px}
-.hb-nw b{font-size:16px}.hb-nw span{color:var(--lk-text-2);font-size:13.5px}
-:is(.hb-cr,.hb-nw){transition:transform .15s ease,border-color .15s,box-shadow .15s}
-:is(.hb-cr,.hb-nw):hover{transform:translateY(-2px);border-color:var(--lk-accent);box-shadow:0 8px 24px rgba(0,0,0,.28),0 0 26px rgba(91,141,239,.12)}
+/* the lower page, consolidated (owner 2026-10-30: "this entire area at the bottom is a mess, consolidate"): the Hero Key
+   line, one Community section (Hot right now, Top creators, News) and the Platform status bar */
+.hb-hkb{display:flex;align-items:center;gap:14px;margin:22px 0 0;padding:12px 16px;border-radius:var(--lk-r);border:1px solid var(--lk-border);
+background:linear-gradient(90deg,var(--lk-accent-soft),transparent 65%),var(--lk-surface)}
+.hb-hkb-t{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;flex:1;min-width:0;margin:0}
+.hb-hkb-h{display:inline-flex;align-items:center;gap:8px}.hb-hkb-h b{font-size:15.5px;font-weight:700}
+.hb-hkb-l{color:var(--lk-text-2);font-size:14px}
+.hb-hkb .hb-ghost{flex:none}
+@media (max-width:560px){.hb-hkb{align-items:flex-start;flex-wrap:wrap}.hb-hkb-t{flex-basis:calc(100% - 48px)}}
+.hb-cm{margin-top:40px}
+.hb-cm-g{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
+.hb-cm-g.one,.hb-cm-side{grid-template-columns:minmax(0,1fr)}.hb-cm-side{display:grid;gap:14px}
+@media (max-width:900px){.hb-cm-g{grid-template-columns:minmax(0,1fr)}}
+.hb-cm-p{min-width:0;padding:16px 18px;border-radius:var(--lk-r);border:1px solid var(--lk-border);background:var(--lk-surface)}
+.hb-sec .hb-cm-h{margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--lk-accent-strong)}
+.hb-cm-more{margin:10px 0 0;font-size:13.5px}.hb-cm-more a{color:var(--lk-accent-strong);font-weight:600}
+.hb-hot,.hb-crw,.hb-nwl{margin:0;padding:0;list-style:none}
+.hb-hot li+li,.hb-nwl li+li{border-top:1px solid var(--lk-border)}
+.hb-hot-r,.hb-crw-a,.hb-nwl-a{text-decoration:none;color:var(--lk-text)!important;border-radius:var(--lk-r-sm);transition:background .15s}
+.hb-hot-r:hover,.hb-crw-a:hover,.hb-nwl-a:hover{background:var(--lk-surface-2)}
+.hb-hot-r{display:grid;grid-template-columns:20px 64px minmax(0,1fr) auto;align-items:center;gap:12px;margin:0 -8px;padding:9px 8px}
+.hb-hot-n{font-size:17px;font-weight:800;color:var(--lk-muted);text-align:center;font-variant-numeric:tabular-nums}
+.hb-hot li:first-child .hb-hot-n{color:var(--lk-accent-strong)}
+.hb-hot-pic{display:block;width:64px;height:40px;border-radius:8px;overflow:hidden;background:var(--lk-surface-2)}
+.hb-hot-pic img,.hb-hot-pic .hb-gt-art{display:grid;width:100%;height:100%;object-fit:cover}
+.hb-hot-pic .hb-gt-art.gen{background-size:0 0,auto}.hb-hot-pic .hb-gt-art.gen b{font-size:18px}.hb-hot-pic .hb-gt-art svg{display:none}
+.hb-hot-t{display:grid;min-width:0}
+.hb-hot-t b,.hb-hot-t i{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hb-hot-t b{font-weight:650}.hb-hot-t i{font-style:normal;font-size:12.5px;color:var(--lk-muted)}
+.hb-hot-k{padding:0 8px;border-radius:999px;border:1px solid var(--lk-border-strong);color:var(--lk-text-2);font-size:11.5px;font-weight:600;line-height:20px;white-space:nowrap}
+@media (max-width:480px){.hb-hot-r{grid-template-columns:16px 46px minmax(0,1fr) auto;gap:10px}.hb-hot-pic{width:46px;height:34px}}
+.hb-crw{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.hb-crw-a{display:grid;justify-items:center;gap:1px;padding:10px 2px;text-align:center}
+.hb-crw .hb-av{width:44px;height:44px;margin-bottom:5px;font-size:18px;
+background:linear-gradient(135deg,hsl(var(--h,220) 62% 58%),hsl(calc(var(--h,220) + 45) 55% 46%))}
+.hb-crw-a b{max-width:100%;font-size:13px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hb-crw-a small{color:var(--lk-muted);font-size:11.5px;line-height:1.3}
+@media (max-width:520px){.hb-crw{grid-template-columns:repeat(2,minmax(0,1fr))}.hb-crw-a{grid-template-columns:auto minmax(0,1fr);justify-items:start;column-gap:10px;padding:8px;text-align:left}.hb-crw .hb-av{grid-row:span 2;width:38px;height:38px;margin:0;font-size:16px}}
+.hb-nwl-a{display:grid;gap:1px;margin:0 -8px;padding:8px}
+.hb-nwl-a small{color:var(--lk-muted);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.hb-nwl-a b{font-size:14.5px;font-weight:600}
+.hb-sbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:30px 0 10px;padding:12px 14px;border-radius:var(--lk-r);
+border:1px solid var(--lk-border);background:var(--lk-surface);scroll-margin-top:72px}
+.hb-sbar-h{display:inline-flex;align-items:center;gap:8px;margin:0;font-size:14px;font-weight:700}
+.hb-sbar-s{margin:0;color:var(--lk-muted);font-size:13px}
+.hb-pills{display:flex;flex-wrap:wrap;gap:5px;flex-basis:100%;margin:0;padding:0;list-style:none}
+.hb-pill{display:inline-flex;align-items:center;gap:5px;padding:4px 8px 4px 7px;border-radius:999px;border:1px solid var(--lk-border);
+background:var(--lk-surface-2);color:var(--lk-text-2)!important;font-size:12px;text-decoration:none;white-space:nowrap}
+a.hb-pill{transition:border-color .15s}a.hb-pill:hover{border-color:var(--lk-accent)}
+.hb-pill b{font-weight:650;color:var(--lk-text)}.hb-pill span{color:var(--lk-muted)}
+.hb-pill em{font-style:normal;font-weight:700}.hb-pill em.ok{color:var(--lk-ok)}.hb-pill em.bad{color:var(--lk-bad)}
+.hb-pdot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--lk-accent)}
+.hb-pdot.ok,.hb-pill.ok .hb-pdot{background:var(--lk-ok)}.hb-pdot.bad,.hb-pill.bad .hb-pdot{background:var(--lk-bad)}.hb-pdot.warn{background:#f0b54a}
+@media (max-width:760px){.hb-pill{display:inline-block;white-space:normal;border-radius:14px;line-height:1.45}.hb-pill .hb-pdot{display:inline-block;margin-right:6px;vertical-align:1px}.hb-pill b{margin-right:4px}}
 /* the footer's status dot */
 .hb-health{display:inline-flex;align-items:center;gap:8px;margin:0 0 12px;color:var(--lk-text-2)!important;text-decoration:none;font-size:13px;font-weight:600}
 .hb-health:hover{color:var(--lk-text)!important}
@@ -3105,7 +3064,7 @@ background:linear-gradient(0deg,rgba(6,8,12,.78),transparent);color:#fff;font-si
 margin:-16px -16px 6px;border-bottom:1px solid var(--lk-border)}
 /* reduced motion: nothing moves (the ticker stands still and wraps, the key stays put, the thread is drawn, no tilt) */
 @media (prefers-reduced-motion:reduce){.hb *{transition:none!important;animation:none!important}
-:is(a.hb-stat,.hb-spot,.hb-box,.hb-mode,.hb-cr,.hb-nw):hover{transform:none}
+:is(.hb-box,.hb-mode):hover{transform:none}
 .hb-top{border-bottom-color:var(--lk-border)}
 .hb-tick{-webkit-mask-image:none;mask-image:none}.hb-tick-run{width:auto}.hb-tick-l{flex-wrap:wrap;justify-content:center;min-width:0;width:100%}
 .hb-tick-l li{padding:6px 14px}.hb-tick-l.dup{display:none}
