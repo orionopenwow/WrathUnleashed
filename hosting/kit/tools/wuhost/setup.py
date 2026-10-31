@@ -58,11 +58,14 @@ PROFILES = {"main": "Leyline main: normal Wrath from level 1, or a one-time boos
             "brawl": "Brawl: everyone starts at 80 in Dalaran with everything unlocked",
             "progression": "Progression: blizzlike 1x, Vanilla then TBC then Wrath per character",
             "dalaran": "Dalaran hangout: light on your PC, no bots, boost to 80 straight to Dalaran",
-            "vanillaplus": "Vanilla+: the original world only (level 60 cap), 1.5x XP, made to stay up for good"}
+            "vanillaplus": "Vanilla+: the original world only (level 60 cap), 1.5x XP, made to stay up for good",
+            "den": "My Den: your own room to build in, private, for you and the friends you invite"}
 # Per-profile settings for .env (docker-compose.host.yml): a Dalaran hangout runs on a small PC.
-PROFILE_ENV = {"dalaran": {"WU_DB_BUFFER": "256M", "WU_PLAYER_LIMIT": "40"}}
-PROFILE_BOTS = {"dalaran": 0, "vanillaplus": 0}   # the bot count a new realm starts with
-NO_BOTS = ("dalaran",)                             # rulesets that never run bots (and the other cores: none yet)
+# A Den (realm/profiles/den.env, docs/DEN.md) is one room on the host's PC: the smallest of all.
+PROFILE_ENV = {"dalaran": {"WU_DB_BUFFER": "256M", "WU_PLAYER_LIMIT": "40"},
+               "den": {"WU_DB_BUFFER": "256M", "WU_PLAYER_LIMIT": "10"}}
+PROFILE_BOTS = {"dalaran": 0, "vanillaplus": 0, "den": 0}   # the bot count a new realm starts with
+NO_BOTS = ("dalaran", "den")                       # rulesets that never run bots (and the other cores: none yet)
 # The text the realm list and the join page show; the host edits these two files (then: Realm tools > rules).
 EDITABLE = ("tagline", "summary", "type", "discord", "tags", "region", "language", "max_players", "direct")
 # The realm list's filters (hosting/relay/wurelay/listing.py checks them again). Tags a profile starts with; the
@@ -71,17 +74,21 @@ TAGS = ("blizzlike", "boosted", "custom", "pvp", "rp", "hangout", "bots")
 REGIONS = ("na-east", "na-west", "sa", "eu", "africa", "me", "asia", "oce")
 LANG_RE = re.compile(r"^[a-z]{2,3}(-[A-Z]{2})?$")
 PROFILE_TAGS = {"main": ["boosted"], "brawl": ["boosted", "pvp", "custom"], "progression": ["blizzlike"],
-                "dalaran": ["hangout", "boosted"], "vanillaplus": ["blizzlike", "custom"]}
-PROFILE_MAX = {"dalaran": 40}
+                "dalaran": ["hangout", "boosted"], "vanillaplus": ["blizzlike", "custom"], "den": ["custom"]}
+PROFILE_MAX = {"dalaran": 40, "den": 10}
 CORE, BUILD = "azerothcore", 12340   # what the host kit runs
 DEFAULT_RULES = {"dalaran": [
     "Be kind: no harassment, hate speech or spam.",
     "Duel anyone who agrees; no griefing in Dalaran.",
     "No cheats, bots or exploits. Report bugs with .bug",
     "The host's word is final: the host is the GM here.",
+], "den": [
+    "This is the host's Den: look around, and build only if the host made you a builder.",
+    "Be kind: no harassment, hate speech or spam.",
 ]}
 DEFAULT_TAGLINE = {"dalaran": "A Dalaran hangout: boost to 80, duel, queue, meet.",
-                   "vanillaplus": "Vanilla+: the original world to level 60, always on."}
+                   "vanillaplus": "Vanilla+: the original world to level 60, always on.",
+                   "den": "A Den: a room to build in, for friends with the invite link."}
 # Host any client: the profiles on other cores (cores.py; their files in profiles/<id>/, steps in
 # profiles/host-profile.sh). (core, client build, the login and world services in their compose file)
 PROFILE_CORE = {k: (p["core"], p["build"], cores.LOGON, cores.WORLD) for k, p in cores.PROFILES.items()}
@@ -342,6 +349,31 @@ def write_links(cfg):
         f.write(invite_link(cfg) + "\n")
     if cfg.get("host_secret"):
         write_private("host-link.txt", host_link(cfg) + "\n")
+    write_den_invite(cfg)
+
+
+def write_den_invite(cfg):
+    """A Den's in-game "Invite a friend" (ov_den.lua, shown to the realm's GM only): its invite link, next to the
+    scripts as data only. Only for the den profile, whose owner asked for the link in game; other rulesets keep the
+    private link out of the realm's files (write_host_dat), and leaving the den profile removes the file."""
+    d = os.path.join(KIT, "realm-files", "lua_scripts")
+    if not os.path.isdir(d) or cfg.get("official") or cfg.get("linked"):
+        return
+    f = os.path.join(d, "den-invite.dat")
+    if cfg.get("profile") != "den":
+        try:
+            os.remove(f)
+        except OSError:
+            pass
+        return
+    tmp = f + ".tmp"
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="ascii", newline="\n") as out:
+            out.write("return { invite = " + lua_str(invite_link(cfg)) + " }\n")
+        os.replace(tmp, f)
+    except OSError:
+        pass
 
 
 def read_rules():
