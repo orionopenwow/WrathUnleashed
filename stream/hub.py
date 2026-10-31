@@ -71,6 +71,7 @@ import urllib.parse
 BASE = "/wrath/leyline-preview"
 FEED = "/wrath/leyline/catalog.json"
 FRONT = "/wrath/leyline"
+FORUM = FRONT + "/forum"   # the forum (stream/forum.py), always at the front door's address
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # ------------------------------------------------------------------------------------------- shared rules
@@ -805,7 +806,7 @@ class Hub:
         main = [("play", "Play", "/wrath", "play"), ("realms", "Realms", BASE + "/realms", "realms"),
                 ("mods", "Mods", BASE + "/catalog", "mods"), ("addons", "Addons", BASE + "/catalog?cat=addons", "addons"),
                 ("host", "Host", "/wrath/host", "host"),
-                ("community", "Community", home + "#community", "community")]
+                ("forum", "Forum", FORUM, "forum")]   # owner 2026-10-30: "change community to forum"
         more = [("forge", "Forge", BASE + "/forge", "forge"), ("agents", "Agents", BASE + "/agents", "agents"),
                 ("docs", "Docs", "/wrath/docs", "docs"), ("news", "News", BASE + "/news", "news"),
                 ("creators", "Creators", BASE + "/creators", "creators")]   # Modes, Gallery and Status left the menu (owner 2026-10-30)
@@ -850,9 +851,9 @@ class Hub:
                 f'<a class="hb-dl-x" href="{e(dl)}" rel="noopener noreferrer">Download the launcher</a></nav>'
                 f'<div class="hb-end">{dl_a}{acct}</div></header>')
 
-    def _shell(self, title: str, body: str, path: str, nonce: str = "", active: str | None = None) -> bytes:
+    def _shell(self, title: str, body: str, path: str, nonce: str = "", active: str | None = None, css: str = "") -> bytes:
         """The page around body. nonce: the CSP nonce for HUB_JS (the front page and the realm list); "" for no script.
-        active: the header item to highlight (default: from path)."""
+        active: the header item to highlight (default: from path). css: more styles (the forum's, stream/forum.py)."""
         e = html.escape
         front = path in (BASE, FRONT)
         home = FRONT if front_on() else BASE
@@ -867,7 +868,7 @@ class Hub:
         flag = '<p class="hb-flag">Preview: this page is hidden while it is being built.</p>' if not front_on() else ""
         repo = self.portal("LEYLINE_REPO") or "https://github.com/orionopenwow/Leyline"
         discord = self.portal("DISCORD_URL") or ""
-        foot_links = [("Docs", "/wrath/docs"), ("Download", dl), ("Community", f"{home}#community"), ("Status", f"{home}#status"),
+        foot_links = [("Docs", "/wrath/docs"), ("Download", dl), ("Forum", FORUM), ("Status", f"{home}#status"),
                       ("Catalog", f"{BASE}/catalog"), ("Creators", f"{BASE}/creators"), ("Submit a mod", f"{BASE}/submit")]
         social = [("GitHub", repo)]
         hs = self.health_state()
@@ -885,7 +886,7 @@ class Hub:
         robots = "" if front_on() else '<meta name="robots" content="noindex">'
         meta = ('<meta name="description" content="Leyline: one launcher for your own game clients and every realm, '
                 'with mods, addons, realm scripts and tools.">')
-        css = (self.portal("LOOK_VARS") or LOOK_FALLBACK) + (self.portal("SPIN_CSS") or "") + HUB_CSS + self._backdrop()
+        css = (self.portal("LOOK_VARS") or LOOK_FALLBACK) + (self.portal("SPIN_CSS") or "") + HUB_CSS + self._backdrop() + css
         return (f'<!doctype html><html lang="en" data-look="leyline"><head><meta charset="utf-8">'
                 f'<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">'
                 f'<title>{e(title)}</title>{meta}{robots}<style>{css}</style></head>'
@@ -1350,9 +1351,10 @@ class Hub:
             ("community", "Community hub", "What players make, together",
              "The people behind the realms and mods, what they made this week and where they meet. Every project "
              "belongs to its authors, under the licence they chose.",
-             ["What's hot and who made it, from real rankings", "News from the launcher and the realms"]
+             ["A forum to share your realm, your mods and your Den", "What's hot and who made it, from real rankings",
+              "News from the launcher and the realms"]
              + (["The Discord, linked from everywhere"] if discord else []),
-             [(BASE + "/catalog", "Explore", False), (BASE + "/news", "News", False)]
+             [(FORUM, "Open the forum", False), (BASE + "/catalog", "Explore", False)]
              + ([(discord, "Join the Discord", True)] if discord else []), community_art),
         ]
         out = []
@@ -1564,7 +1566,9 @@ class Hub:
         return sorted(by.values(), key=lambda d: (-d["inst"], -d["n"], d["best"]))[:4]
 
     def community(self, items: list) -> str:
-        """Community, one section (owner 2026-10-30: "this entire area at the bottom is a mess, consolidate"): Hot right
+        """Forum and Discord, one section (owner 2026-10-30: "change community to forum", the friends area out "in favor of
+        discord encouragement"; before that "this entire area at the bottom is a mess, consolidate"): a big Join the
+        Discord, then the forum's latest threads and the news on the left, and on the right Hot right
         now (the top five of the hub rankings' Hot list, the index's best scores without: rank, a small picture, name,
         author and kind, each linking to its page), Top creators (a compact avatar row, each searching the catalog for
         their work) and the latest news. The big featured slider above shows the pictures; this is the list."""
@@ -1616,17 +1620,40 @@ class Hub:
                           f'{e(p["date"])}</small><b>{e(p["title"])}</b></a></li>' for p in posts)
             news = ('<div class="hb-cm-p" id="news" aria-labelledby="hb-nw-h" role="group"><h3 id="hb-nw-h" class="hb-cm-h">News</h3>'
                     f'<ul class="hb-nwl">{lis}</ul><p class="hb-cm-more"><a href="{BASE}/news">All the news</a></p></div>')
-        dc = self.discord_btn("hb-cta sm")
-        if not (hot or crs or news or dc):
+        threads = self.forum_latest(e)
+        dc = self.discord_btn("hb-cta")
+        if not (hot or crs or news or dc or threads):
             return ""
-        side = f'<div class="hb-cm-side">{crs}{news}</div>' if (crs or news) else ""
-        # the Discord, first in the community section (launch: "the Discord is promoted everywhere")
-        meet = ('<!-- TODO(owner): the Discord line --><div class="hb-cm-dc"><p><b>Where everyone meets.</b> Find a group, show what you made, ask anything, '
-                f'hear about new realms first.</p>{dc}</div>') if dc else ""
-        grid = f'<div class="hb-cm-g{"" if hot and side else " one"}">{hot}{side}</div>' if (hot or side) else ""
-        return ('<section class="hb-sec hb-cm hb-rv" id="community" aria-labelledby="hb-cm-h"><div class="hb-ms-head">'
-                f'<h2 id="hb-cm-h">Community</h2><a href="{BASE}/catalog">Browse the catalog</a></div>'
+        # the Discord, big and first (owner 2026-10-30: "remove the friends area ... in favor of discord encouragement")
+        meet = ('<!-- TODO(owner): the Discord line --><div class="hb-cm-dc big"><p><b>Join us on the Discord.</b> Find a group, '
+                f'voice chat, show what you made, ask anything and hear about new realms first.</p>{dc}</div>') if dc else ""
+        left = f'<div class="hb-cm-side">{threads}{news}</div>' if (threads or news) else ""
+        right = f'<div class="hb-cm-side">{hot}{crs}</div>' if (hot or crs) else ""
+        grid = f'<div class="hb-cm-g{"" if left and right else " one"}">{left}{right}</div>' if (left or right) else ""
+        return ('<section class="hb-sec hb-cm hb-rv" id="forum" aria-labelledby="hb-cm-h"><div class="hb-ms-head">'
+                f'<h2 id="hb-cm-h">Forum and Discord</h2><a href="{FORUM}">Open the forum</a></div>'
                 f'{meet}{grid}</section>')
+
+    def forum_latest(self, e=html.escape, n: int = 5) -> str:
+        """The forum's latest threads (stream/forum.py) as a panel; a start-the-first-thread line when it is empty."""
+        mod = self.portal("forum")
+        st = getattr(mod, "store", None) if mod is not None else None
+        if st is None:
+            return ""
+        try:
+            ts = st.latest(n)
+        except Exception:   # noqa: BLE001: the front page never breaks on the forum
+            return ""
+        names = {c[0]: c[1] for c in getattr(mod, "CATEGORIES", ())}
+        if ts:
+            lis = "".join(f'<li><a class="hb-nwl-a" href="{FORUM}/t/{int(t["id"])}"><small>{e(names.get(t["cat"], "Forum"))} · '
+                          f'{int(t["replies"])} repl{"y" if t["replies"] == 1 else "ies"}</small><b>{e(neutral(t["title"]) or "Untitled")}</b></a></li>'
+                          for t in ts)
+            body = f'<ul class="hb-nwl">{lis}</ul>'
+        else:
+            body = '<p class="hb-cm-none">No threads yet. Share your realm, a mod or your Den and start the first one.</p>'
+        return ('<div class="hb-cm-p" id="forum-latest" aria-labelledby="hb-fl-h" role="group"><h3 id="hb-fl-h" class="hb-cm-h">Latest on the forum</h3>'
+                f'{body}<p class="hb-cm-more"><a href="{FORUM}">Every category</a> · <a href="{FORUM}/new">Start a thread</a></p></div>')
 
     # ---------------------------------------------------------------- the gallery (owner 2026-10-30: "in game screenshots
     # or cdn pulls or at least something and featured mods on the site in a gallery for promo and appeal")
@@ -2582,7 +2609,7 @@ text-decoration:none;color:var(--lk-text-2)!important}
 .hb-brand.small .ly-spin{--ly-spin-size:32px!important}.hb-brand.small .hb-word b{font-size:16px}.hb-brand.small .hb-word i{font-size:12px}
 .hb-foot-fine{margin:0;color:var(--lk-muted);font-size:13px;flex:1 1 220px}
 .hb-social{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
-/* Join the Discord (the footer, the Hangout band, the community section) */
+/* Join the Discord (the footer, the Hangout band, the Forum and Discord section) */
 .hb-dc{display:inline-flex;align-items:center;gap:8px}.hb-dc svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;
 stroke-linejoin:round}.hb-dc svg circle{fill:currentColor;stroke:none}
 .hb-social a.hb-dc{min-height:34px;padding:0 12px;border-radius:var(--lk-r-sm);border:1px solid var(--lk-border-strong);color:var(--lk-text)!important;font-weight:650}
@@ -2858,6 +2885,9 @@ background:linear-gradient(90deg,var(--lk-accent-soft),transparent 65%),var(--lk
 .hb-cm-g{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
 .hb-cm-g.one,.hb-cm-side{grid-template-columns:minmax(0,1fr)}.hb-cm-side{display:grid;gap:14px}
 @media (max-width:900px){.hb-cm-g{grid-template-columns:minmax(0,1fr)}}
+.hb-cm-dc.big{padding:20px 22px;border-color:var(--lk-border-strong);background:linear-gradient(120deg,rgba(91,141,239,.18),rgba(139,108,240,.12) 60%,rgba(20,23,31,.55))}
+.hb-cm-dc.big p{font-size:15.5px}.hb-cm-dc.big b{font-size:17px}
+.hb-cm-none{margin:4px 0 0;color:var(--lk-text-2);font-size:14px}
 .hb-cm-p{min-width:0;padding:16px 18px;border-radius:var(--lk-r);border:1px solid var(--lk-border);background:var(--lk-surface)}
 .hb-sec .hb-cm-h{margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--lk-accent-strong)}
 .hb-cm-more{margin:10px 0 0;font-size:13.5px}.hb-cm-more a{color:var(--lk-accent-strong);font-weight:600}
@@ -3412,6 +3442,8 @@ NAV_ICONS = {
     "play": '<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z"/>',
     "realms": ICONS["realms"], "mods": ICONS["mods"], "modes": ICONS["modes"], "host": ICONS["host"],
     "community": ICONS["community"], "forge": ICONS["forge"], "agents": ICONS["agents"],
+    "forum": '<path d="M4 4h11a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H9l-4 3.5V13H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/>'
+             '<path d="M16 8h4a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-1v3.5L15 17h-4a1 1 0 0 1-1-1v-1"/>',
     "addons": '<path d="M9 4h4v2.5a1.5 1.5 0 0 0 3 0V4h4v6h-2.5a1.5 1.5 0 0 0 0 3H20v7H4v-7h2.5a1.5 1.5 0 0 0 0-3H4V4z"/>',
     "more": '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
     "docs": '<path d="M5 4h9l5 5v11H5z"/><path d="M14 4v5h5M8 13h8M8 17h6"/>',
