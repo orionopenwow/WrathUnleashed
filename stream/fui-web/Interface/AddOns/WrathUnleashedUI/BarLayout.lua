@@ -9,10 +9,19 @@
 --    a stray "Fire" button.
 -- A bar the player moved in edit mode keeps its place (Layout.IsDefault). Secure frames: out of
 -- combat only.
+-- "Bars are broken sometimes" (2026-10-30):
+--  * the main bar could not be measured yet 1.5 s after the event (a slow first load in the browser): the layout
+--    gave up until the next event and the two bars stayed where Forever UI puts them, off our main bar. It now
+--    tries again every 1.5 s, up to TRIES times;
+--  * the one-row Lift replaced Forever UI's own, which keeps the last height while a vehicle bar replaces the
+--    player's bars (the client hides the bottom bars then): leaving a vehicle in combat, the stance and pet bars
+--    came back one row low. That case is Forever UI's again.
 
 local ROW_Y, ROW_STEP, COL_GAP = 70, 45 + 4, 6
 local BUTTONS, PITCH = 12, 47   -- fallback width when a bar frame can't be measured yet
 local RIGHT_X, RIGHT_GAP = -14, 5
+
+local TRIES = 8
 
 local function F() return ForeverUI end
 
@@ -49,7 +58,10 @@ local function patchLift()
     local M = F() and F().MultiBars
     if not M or M.wuLift then return end
     M.wuLift = true
+    local own = M.Lift
     M.Lift = function()
+        -- in a vehicle (or a client swap before Vehicle.lua heard of it) Forever UI keeps the last height
+        if own and (F().VehicleArt or (MainMenuBar and MainMenuBar.state == "vehicle")) then return own() end
         local L, n = F().Layout, 0
         for k = 1, 2 do
             local bar = M.bars[k]
@@ -90,17 +102,29 @@ local f = CreateFrame("Frame")
 for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "DISPLAY_SIZE_CHANGED", "UI_SCALE_CHANGED", "PLAYER_LEVEL_UP", "PLAYER_REGEN_ENABLED" }) do
     f:RegisterEvent(e)
 end
-local wait, pending = 0, false
-f:SetScript("OnEvent", function(_, event)
-    if event == "PLAYER_REGEN_ENABLED" and not pending then return end
-    pending, wait = true, 0
+local wait, pending, tries = 0, false, 0
+-- apply() is false in combat (again after the fight: PLAYER_REGEN_ENABLED), nil while the main bar can't be
+-- measured yet (again in 1.5 s, TRIES times), true once placed.
+local function schedule()
+    wait = 0
     -- a moment after Forever UI has placed its main bar
     f:SetScript("OnUpdate", function(self, elapsed)
         wait = wait + elapsed
         if wait < 1.5 then return end
         self:SetScript("OnUpdate", nil)
-        if apply() ~= false then pending = false end
+        local ok = apply()
+        if ok == true then
+            pending = false
+        elseif ok == nil then
+            tries = tries + 1
+            if tries < TRIES then schedule() else pending = false end
+        end
     end)
+end
+f:SetScript("OnEvent", function(_, event)
+    if event == "PLAYER_REGEN_ENABLED" and not pending then return end
+    pending, tries = true, 0
+    schedule()
 end)
 
 WrathUnleashedUI = WrathUnleashedUI or {}

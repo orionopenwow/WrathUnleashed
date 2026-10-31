@@ -943,13 +943,37 @@ HUB_THUMB_RE = re.compile(r"hub-thumbs/[a-z0-9][a-z0-9._-]{0,99}__[a-z0-9][a-z0-
 HUB_THUMB_MAX = 200_000
 
 
+# The launcher Home gallery's in-game screenshots (owner 2026-10-30), in ART_DIR/home/: one or more per slide id
+# (hangout.webp, browser.webp, hangout-2.webp, mode-minigolf.webp ...) and home.json, the list the launcher reads (which
+# files, their alt text and credit). Written by tools/site-art/publish_home_art.py (the Autopilot step "homeart"),
+# never part of the repo or the launcher. Allowed by pattern: a real WebP or JPEG, or a JSON object, nothing else.
+# Game pictures, so the killswitch takes them off too (410; the launcher keeps its plain gradient).
+HOME_ART_RE = re.compile(r"home/[a-z0-9][a-z0-9-]{0,40}\.(?:webp|jpg)")
+HOME_JSON = "home/home.json"
+HOME_ART_MAX = 1_500_000
+HOME_JSON_MAX = 64_000
+HOME_ART_MAX_AGE = 3600   # an hour: a new screenshot under the same name shows the same day
+HOME_JSON_MAX_AGE = 300
+
+
 def art_type(name: str) -> str:
     """The Content-Type of an allowed art name, "" for anything else (never a path from the URL)."""
     if name in ART_TYPES:
         return ART_TYPES[name]
-    if isinstance(name, str) and HUB_THUMB_RE.fullmatch(name) and ".." not in name:
+    if not isinstance(name, str) or ".." in name:
+        return ""
+    if HUB_THUMB_RE.fullmatch(name):
         return "image/webp"
+    if name == HOME_JSON:
+        return "application/json; charset=utf-8"
+    if HOME_ART_RE.fullmatch(name):
+        return "image/webp" if name.endswith(".webp") else "image/jpeg"
     return ""
+
+
+def home_art(name: str) -> bool:
+    """A Home screenshot (not the list): game pictures, behind the killswitch."""
+    return isinstance(name, str) and bool(HOME_ART_RE.fullmatch(name)) and ".." not in name
 
 
 def art_bytes(name: str) -> bytes | None:
@@ -961,7 +985,20 @@ def art_bytes(name: str) -> bytes | None:
             body = f.read(4_000_000)
     except OSError:
         return None
-    if name not in ART_TYPES and (len(body) > HUB_THUMB_MAX or body[:4] != b"RIFF" or body[8:12] != b"WEBP"):
+    if name in ART_TYPES:
+        return body
+    if name == HOME_JSON:                                   # the list: a JSON object or nothing
+        try:
+            ok = len(body) <= HOME_JSON_MAX and isinstance(json.loads(body.decode("utf-8")), dict)
+        except (ValueError, UnicodeDecodeError):
+            ok = False
+        return body if ok else None
+    webp = body[:4] == b"RIFF" and body[8:12] == b"WEBP"
+    if home_art(name):                                      # a screenshot: a real WebP or JPEG of a sane size, or nothing
+        jpeg = body[:3] == b"\xff\xd8\xff"
+        ok = len(body) <= HOME_ART_MAX and (webp if name.endswith(".webp") else jpeg)
+        return body if ok else None
+    if len(body) > HUB_THUMB_MAX or not webp:
         return None                                         # a hub thumbnail is a real WebP or nothing
     return body
 
@@ -2444,7 +2481,7 @@ class PageHandler(BaseHTTPRequestHandler):
     def art(self, name: str) -> None:
         """GET /wrath/art/<name>: the site art and theme, from the allow-list only, cached for a week.
         Readable from any site (fonts need CORS; it is our own art, nothing private)."""
-        if name in GAMEDATA_ART and gamedata_off():
+        if (name in GAMEDATA_ART or home_art(name)) and gamedata_off():
             self.send(410, GAMEDATA_GONE, "application/json; charset=utf-8")
             return
         body = art_bytes(name)
@@ -2472,7 +2509,9 @@ class PageHandler(BaseHTTPRequestHandler):
             self.send_header("Accept-Ranges", "bytes")
             if status == 206:
                 self.send_header("Content-Range", f"bytes {start}-{end}/{total}")
-        self.send_header("Cache-Control", f"public, max-age={ART_MAX_AGE if name in ART_TYPES else 86400}")
+        age = (ART_MAX_AGE if name in ART_TYPES else HOME_JSON_MAX_AGE if name == HOME_JSON
+               else HOME_ART_MAX_AGE if home_art(name) else 86400)
+        self.send_header("Cache-Control", f"public, max-age={age}")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Cross-Origin-Resource-Policy", "cross-origin")
         self.send_header("X-Content-Type-Options", "nosniff")

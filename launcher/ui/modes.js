@@ -186,6 +186,7 @@
       const c = pickedClient(state);
       if (!c) { say("Add your 3.3.5a game folder first (Clients), or switch Home to play in the browser.", "bad"); return; }
       if (c.build !== "3.3.5a") { say(`${m.title} runs on the 3.3.5a realm: pick a 3.3.5a client above.`, "bad"); return; }
+      if (window.LeylineAddons) await window.LeylineAddons.beforePlay(c);   // modes want the Leyline addons (addons.js)
       say("Starting…");
       const ready = await invoke("mode_prepare_desktop", { client: c.id, id: m.id });
       const started = await invoke("play", { client: c.id, realm: state.official_realm || OFFICIAL });

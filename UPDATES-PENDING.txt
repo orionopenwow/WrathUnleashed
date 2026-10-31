@@ -406,3 +406,8 @@
 1149b ship Save to GitHub: Forum and My Den in the launcher, friends removed (GitHub then rebuilds Leyline.exe)
 1150a signin Site: sign-in chooser (Hero Key, Google; Discord when turned on), profile step, profiles and pictures, forum avatars, admin Profiles tab
 1151a ship Save to GitHub: launcher Manage account and sign-in choices, richer Home gallery, PLAY picture button, Discord in the title bar, side panel hidden (GitHub then rebuilds Leyline.exe)
+1152a scripts Mounts in Dalaran: Celestial Steed (rides or flies where allowed) on the bars, swapped in for boosted characters; the bar fill waits for the realm's layout (live reload; a 5-minute warning if a restart is needed)
+1152b foreverui Bars: no fill race after a boost, no page flip on Shift+wheel, layout retries on slow loads, main bar back to page 1 after modes and edit mode
+1153a signin Site: /wrath/art/home serves the launcher gallery's in-game screenshots
+1153b homeart Publish the gallery screenshots from site-art\home (backup, check, roll back)
+1153c ship Save to GitHub: launcher gallery with in-game screenshots, Leyline addons setup (Game Clients, Mods, PLAY offer) (GitHub then rebuilds Leyline.exe)

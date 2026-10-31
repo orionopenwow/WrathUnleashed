@@ -85,13 +85,24 @@ let browser;
 test.before(async () => { browser = await chromium.launch(); });
 test.after(async () => { await browser.close(); });
 
+let window_requests = [];
 async function open(opts = {}, ctxOpts = {}) {
+  window_requests = [];
   const ctx = await browser.newContext(Object.assign({ colorScheme: 'dark', viewport: { width: 1400, height: 860 } }, ctxOpts));
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.route('https://play.openvanilla.app/**', (r) => r.fulfill({ path: PICTURE, contentType: 'image/webp' }));
   if (opts.noArt) await page.route('**/art/modes/**', (r) => r.abort());
+  // the site's Home screenshots: home.json as given (none: the site answers 404), a listed file missing: 404
+  await page.route('https://play.openvanilla.app/wrath/art/home/**', (r) => {
+    const name = r.request().url().split('/wrath/art/home/')[1];
+    window_requests.push(name);
+    if (name === 'home.json') return opts.homeArt ? r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify(opts.homeArt) }) : r.fulfill({ status: 404, body: 'not found', headers: { 'access-control-allow-origin': '*' } });
+    if ((opts.homeMissing || []).includes(name)) return r.fulfill({ status: 404, body: 'not found' });
+    return r.fulfill({ path: PICTURE, contentType: 'image/webp' });
+  });
   await page.addInitScript(FAKE, Object.assign({ modes: MODES }, opts));
   await page.goto(INDEX);
   await page.waitForFunction(() => window.LeylineHome && document.querySelector('#page-play.on'));
@@ -328,8 +339,8 @@ test('the launch slide is full: live counts, the lineup, three modes with pictur
   const hang = page.locator('.hero-slide[data-key="hangout"]');
   // live realms with an offered build: the Hangout 5, Busy Den 30, Old Keep 3, Quiet Glade (no count), Fifth Live 1
   assert.deepEqual(await hang.locator('.hs-chip').allTextContents(), ['5 in the Hangout now', '39 playing on 5 realms']);
-  assert.deepEqual(await hang.locator('.hs-mt').evaluateAll((b) => b.map((x) => [x.dataset.mode, x.querySelector('i').textContent, !!x.querySelector('svg')])),
-    [['minigolf', '/golf', true], ['bumper-balls', '/modes', true], ['coin-dash', '/modes', true]], 'live modes on the realm, each with its drawn picture');
+  assert.deepEqual(await hang.locator('.hs-mt').evaluateAll((b) => b.map((x) => [x.dataset.mode, x.querySelector('i').textContent, x.querySelector('.hs-mt-pic b').textContent])),
+    [['minigolf', '/golf', 'M'], ['bumper-balls', '/modes', 'B'], ['coin-dash', '/modes', 'C']], 'live modes on the realm, each with its colour and initial (no screenshots listed)');
   // forum strings are text: the title's tag is shown, not made; three at most
   const rows = await hang.locator('.hs-forum .hs-fr').evaluateAll((b) => b.map((x) => [x.querySelector('b').textContent, x.querySelector('i').textContent]));
   assert.equal(rows[0][0], 'Golf night <img src=x onerror="window.__xss=1">');
@@ -385,7 +396,6 @@ test('the realms beside browser play: kind, New, version, players and a bar of h
   assert.deepEqual(rows[rows.length - 1], { name: 'Asleep <b>zz</b>', sub: 'Offline for now', ver: '3.3.5a', p: '–', bar: '0%' });
   assert.equal(await page.locator('.hero-slide[data-key="browser"] .hs-rl-n b b').count(), 0);
   assert.deepEqual(await page.locator('.hero-slide[data-key="browser"] .hs-chip').allTextContents(), ['39 playing now', '5 realms live']);
-  assert.equal(await page.locator('.hero-slide[data-key="browser"] .hs-win svg').count(), 1, 'the drawn browser window');
   assert.deepEqual(await page.locator('.hero-slide[data-key="host"] .hs-chip').allTextContents(), ['4 community realms live', '1 new on the list', 'No ports to open']);
   assert.deepEqual(errors, []);
   await ctx.close();
@@ -394,7 +404,7 @@ test('the realms beside browser play: kind, New, version, players and a bar of h
 test('the Den slide opens the Host page with the Den picked; the Workshop slide shows site screenshots only', async () => {
   const { page, ctx, errors } = await open({ ms: 600000 });
   await page.waitForFunction(() => window.LeylineHome.slides().includes('mod'));
-  assert.equal(await page.locator('.hero-slide[data-key="den"] .hs-den-step svg').count(), 3, 'three drawn rooms');
+  assert.deepEqual(await page.locator('.hero-slide[data-key="den"] .hs-steps .hs-st-t b').allTextContents(), ['A white room', 'Edit mode', 'Invite friends']);
   await page.evaluate(() => document.addEventListener('leyline:host-ruleset', (e) => { window.__ruleset = e.detail.profile; }));
   await showKey(page, 'den');
   await page.click('.hero-slide[data-key="den"] .hs-go');
@@ -445,13 +455,71 @@ test('every slide fits at 1100 px and 1400 px: words, panel and picture apart, n
       if (r.side) { assert.ok(apart(r.side, r.body), `${k} @${viewport.width}: the panel clear of the words ${JSON.stringify(r)}`); assert.ok(inside(r.side), `${k} @${viewport.width}: the panel on the slide`); }
       if (r.ill) assert.ok(apart(r.ill, r.body), `${k} @${viewport.width}: the picture clear of the words`);
     }
-    const anim = await page.evaluate(() => { window.LeylineHome.show(0); return getComputedStyle(document.querySelector('.hero-slide.on .il-float')).animationName; });
-    assert.equal(anim, 'hs-float');
+    const anim = await page.evaluate(() => { window.LeylineHome.show(6); return getComputedStyle(document.querySelector('.hero-slide.on .hs-shot.b1')).animationName; });
+    assert.equal(anim, 'hs-drift-a');
     assert.deepEqual(errors, []);
     await ctx.close();
   }
   const { page, ctx } = await open({ ms: 600000 }, { reducedMotion: 'reduce' });
-  await page.waitForSelector('.hero-slide.on .il-float');
-  assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.hero-slide.on .il-float')).animationName), 'none', 'still under reduced motion');
+  await page.waitForFunction(() => window.LeylineHome.slides().includes('mod'));
+  assert.equal(await page.evaluate(() => { window.LeylineHome.show(window.LeylineHome.slides().indexOf('mod')); return getComputedStyle(document.querySelector('.hero-slide.on .hs-shot.b1')).animationName; }), 'none', 'still under reduced motion');
+  await ctx.close();
+});
+
+const HOME = { version: 1, slides: {
+  hangout: [{ file: 'hangout.webp', alt: 'Players <b>in</b> Dalaran', credit: 'Shot by <i>Orion</i>' }],
+  browser: [{ file: 'browser.webp', alt: 'In a tab', credit: '' }],
+  host: [{ file: 'host.webp', alt: 'A realm', credit: '' }],
+  den: [{ file: 'den.webp', alt: 'A Den', credit: '' }],
+  news: [{ file: '../news.webp', alt: 'no' }, { file: 'https://evil.example/x.webp' }],
+  'mode-minigolf': [{ file: 'mode-minigolf.webp', alt: '' }],
+  'Bad Id': [{ file: 'bad.webp' }],
+} };
+
+test('in-game screenshots: from the site\'s home.json only, filling the slide under a scrim; alt and credit as text; no drawings', async () => {
+  const { page, ctx, errors } = await open({ ms: 600000, homeArt: HOME, homeMissing: ['den.webp'] });
+  await page.waitForFunction(() => document.querySelector('.hero-slide[data-key="hangout"].has-photo') && document.querySelector('.hero-slide[data-key="host"].has-photo'));
+  const shots = await page.$$eval('#hero .hs-photo', (i) => i.map((x) => [x.closest('.hero-slide').dataset.key, x.getAttribute('src'), x.getAttribute('alt')]));
+  assert.deepEqual(shots.sort(), [
+    ['browser', 'https://play.openvanilla.app/wrath/art/home/browser.webp', 'In a tab'],
+    ['hangout', 'https://play.openvanilla.app/wrath/art/home/hangout.webp', 'Players <b>in</b> Dalaran'],
+    ['host', 'https://play.openvanilla.app/wrath/art/home/host.webp', 'A realm'],
+  ], 'den.webp is missing (404: dropped), news lists only bad names, mode and Workshop slides keep their own pictures');
+  assert.equal(await page.textContent('.hero-slide[data-key="hangout"] .hs-credit'), 'Shot by <i>Orion</i>');
+  assert.equal(await page.locator('#hero .hs-credit i, #hero .hs-photo ~ b').count(), 0, 'no element made from home.json');
+  const den = page.locator('.hero-slide[data-key="den"]');
+  assert.equal(await den.evaluate((s) => s.classList.contains('has-photo')), false, 'a missing screenshot: the plain gradient');
+  assert.match(await den.evaluate((s) => getComputedStyle(s, '::before').backgroundImage), /gradient/);
+  assert.equal(await page.locator('.hero-slide[data-key="news"] .hs-photo').count(), 0);
+  assert.equal(await page.locator('#hero-slides svg').count(), 0, 'no drawings on any slide');
+  // the words turn light over a screenshot; the image fills the slide
+  const fit = await page.evaluate(() => {
+    window.LeylineHome.show(0);
+    const s = document.querySelector('.hero-slide.on'), img = s.querySelector('.hs-photo');
+    // layout sizes (the picture eases from a 3 % zoom, the slide slides in): it covers the slide
+    return { fill: getComputedStyle(img).objectFit, w: img.offsetWidth === s.offsetWidth && img.offsetLeft === 0, h: img.offsetHeight === s.offsetHeight && img.offsetTop === 0,
+      title: getComputedStyle(s.querySelector('.hs-title')).color, dots: document.getElementById('hero').classList.contains('on-art') };
+  });
+  assert.deepEqual(fit, { fill: 'cover', w: true, h: true, title: 'rgb(255, 255, 255)', dots: true });
+  // the minigolf tile gets its listed picture
+  assert.equal(await page.getAttribute('.hs-mt[data-mode="minigolf"] .hs-mt-pic img', 'src'), 'https://play.openvanilla.app/wrath/art/home/mode-minigolf.webp');
+  assert.ok(window_requests.every((n) => /^(home\.json|[a-z0-9-]+\.webp)$/.test(n)), window_requests.join(' '));
+  assert.ok(!window_requests.includes('bad.webp') && !window_requests.some((n) => n.includes('news')), 'only listed, well-named files');
+  assert.deepEqual(await page.evaluate(() => {
+    const H = window.LeylineHome;
+    return [H.HOME_ART, Object.keys(H.readHomeArt({ slides: { a: { file: 'a.webp' }, b: [{ file: 'b.png' }], c: [{ file: 'c/d.webp' }], 'e-2': [{ file: 'e-2.jpg' }] } })),
+      H.readHomeArt(null), H.readHomeArt({ slides: { a: [{ file: 'a.webp', alt: 5, credit: 'x'.repeat(300) }] } }).a[0].credit.length];
+  }), ['https://play.openvanilla.app/wrath/art/home/', ['a', 'e-2'], {}, 120]);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('no home.json on the site: every slide keeps its gradient and no screenshot is asked for', async () => {
+  const { page, ctx, errors } = await open({ ms: 600000 });
+  await page.waitForFunction(() => window.LeylineHome.slides().includes('mod'));
+  await page.waitForTimeout(400);
+  assert.deepEqual(window_requests, ['home.json']);
+  assert.equal(await page.locator('#hero .hs-photo, #hero .has-photo').count(), 0);
+  assert.deepEqual(errors, []);
   await ctx.close();
 });

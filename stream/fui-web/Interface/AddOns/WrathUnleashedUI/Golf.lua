@@ -615,6 +615,7 @@ function G.Stop()
     G.title, G.score, G.order, G.players = "", {}, {}, {}
     if hud then hud:Hide() end
     showAimCapture(false)
+    if W.MainBarHome then W.MainBarHome() end
     G.Refresh()
 end
 

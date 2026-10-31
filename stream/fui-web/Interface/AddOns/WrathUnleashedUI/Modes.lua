@@ -764,6 +764,7 @@ function M.Stop()
     draw("clear")
     draw("cam off")
     setHud(false)
+    if W.MainBarHome then W.MainBarHome() end
     M.Refresh()
     -- The device editor's Play sets this to come back to the editor when the test ends.
     if M.onStop then local fn = M.onStop; M.onStop = nil; fn() end

@@ -1309,7 +1309,9 @@ mod tests {
         let dir = |name: &str| csp.split(';').map(str::trim).find(|d| d.starts_with(name)).unwrap_or_else(|| panic!("{name} missing")).to_string();
         assert_eq!(dir("script-src"), "script-src 'self'");
         assert_eq!(dir("default-src"), "default-src 'self'");
-        assert_eq!(dir("connect-src"), "connect-src ipc: http://ipc.localhost");
+        // Reads: the core (ipc) and exactly one file on the website, the list of Home's screenshots (ui/home.js
+        // HOME_ART); a pack's CSS can't reach it (the checker refuses every http(s) url()).
+        assert_eq!(dir("connect-src"), "connect-src ipc: http://ipc.localhost https://play.openvanilla.app/wrath/art/home/home.json");
         // Images: the app, data: (packs are inlined) and exactly one https origin, the website's backdrop picture
         // (ui/app.js BACKDROP_URL). Pack CSS still can't name it: the checker refuses every http(s) url().
         assert_eq!(dir("img-src"), "img-src 'self' data: https://play.openvanilla.app");

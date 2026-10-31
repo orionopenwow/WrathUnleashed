@@ -634,7 +634,7 @@ fn strip_colors(s: &str) -> String {
     out.trim().chars().take(64).collect()
 }
 
-fn check_addon(a: &mut AddonPlan, build: Build, warnings: &mut Vec<String>, blocked: &HashSet<PathBuf>) -> Vec<String> {
+fn check_addon(a: &mut AddonPlan, build: Build, warnings: &mut Vec<String>, blocked: &HashSet<PathBuf>, ours: bool) -> Vec<String> {
     let mut errors = Vec::new();
     let at = |p: &str| format!("{}/{p}", a.name);
     if !addon_name_ok(&a.name) {
@@ -642,7 +642,8 @@ fn check_addon(a: &mut AddonPlan, build: Build, warnings: &mut Vec<String>, bloc
         return errors;
     }
     let low = a.name.to_ascii_lowercase();
-    if RESERVED.contains(&low.as_str()) || low.starts_with("blizzard_") {
+    // `ours`: Leyline's own addon pack (addons.rs), which ships the realm's own WrathUnleashedUI / WUModCatalog.
+    if (!ours && RESERVED.contains(&low.as_str())) || low.starts_with("blizzard_") {
         errors.push(format!("{}: this name is reserved for the game's or the realm's own interface", a.name));
         return errors;
     }
@@ -797,6 +798,15 @@ pub fn has_native_code(plan: &Plan) -> bool {
 
 /// Check staged files (from `walk`) for a client of `build`.
 pub fn validate(files: &[Staged], build: Build) -> Plan {
+    validate_in(files, build, false)
+}
+
+/// `validate` for Leyline's own addon pack (addons.rs): the same checks, and the realm's own addon names allowed.
+pub fn validate_ours(files: &[Staged], build: Build) -> Plan {
+    validate_in(files, build, true)
+}
+
+fn validate_in(files: &[Staged], build: Build, ours: bool) -> Plan {
     let mut plan = Plan::default();
     let files: Vec<&Staged> = files.iter().filter(|f| !f.rel.split('/').any(ignored)).collect();
     if files.is_empty() {
@@ -1041,7 +1051,7 @@ pub fn validate(files: &[Staged], build: Build) -> Plan {
     }
     let mut total = 0;
     for mut a in by_name {
-        let errs = check_addon(&mut a, build, &mut plan.warnings, &blocked);
+        let errs = check_addon(&mut a, build, &mut plan.warnings, &blocked, ours);
         plan.errors.extend(errs);
         a.size = a.files.iter().map(|(_, p)| fs::metadata(p).map(|m| m.len()).unwrap_or(0)).sum();
         total += a.size;
@@ -1817,6 +1827,8 @@ pub struct InstalledView {
 pub fn with_updates(man: &Manifest, catalog: &[Project], build: Build) -> Vec<InstalledView> {
     man.mods
         .iter()
+        // Leyline's own addon pack has its own row (Mods › Our addons, addons.rs), not a Workshop card.
+        .filter(|m| m.key != crate::addons::KEY)
         .map(|m| {
             let p = catalog.iter().find(|p| p.id == m.key && p.installable() && p.fits(build));
             let update = p.and_then(|p| p.version.clone()).filter(|v| newer(v, &m.version));

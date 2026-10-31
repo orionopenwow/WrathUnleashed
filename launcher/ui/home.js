@@ -1,20 +1,21 @@
 // Leyline Launcher: Home's hero gallery and the rows below the fold. Loaded last: it reads the data app.js and
-// modes.js already load (window.LeylineApp, window.LeylineModes) and makes one call of its own: the latest three forum
+// modes.js already load (window.LeylineApp, window.LeylineModes) and makes two reads of its own: the latest three forum
 // threads (forum_call "latest", the Forum page's own read) for the launch slide, at most once a minute while Home is
-// shown. Every page jump goes through window.LeylineNav.show(page, noLoad, tab). Everything from a catalog, the realm
-// list or the forum is shown with textContent; the only markup set as HTML is the illustrations drawn in this file.
+// shown, and the site's list of Home screenshots (/wrath/art/home/home.json, the one address the window's CSP lets it read). Every page jump goes through window.LeylineNav.show(page, noLoad, tab). Everything from a catalog, the realm
+// list, the forum or home.json is shown with textContent; nothing here is set as HTML.
 //
 // The gallery: first, the launch slide (Join the Dalaran Hangout: Play now and Join the Discord, with the official
 // lineup, what's on and the latest forum threads beside it); then one slide per highlight (the featured mode, what's
 // new, browser play with the realms on the network, hosting, your Den, a Workshop mod with its screenshots), each a big
-// title, one short line, a row of live counts and one button, over an original illustration or beside a panel; a slide
+// title, one short line, a row of live counts and one button, over the owner's in-game screenshot (fetched from the
+// site, a plain gradient until it is in or when there is none) and beside a glass panel; a slide
 // without its data is left out. It moves on every 7 s, stops while the pointer is over it or something in it has
-// focus, and never moves by itself under prefers-reduced-motion (nor do the illustrations). Dots, the arrows, and
+// focus, and never moves by itself under prefers-reduced-motion. Dots, the arrows, and
 // Left / Right while it has focus. The rows: Popular realms, Mods to try, Game modes, News and a Host your own banner;
 // a row shows once its data is in and hides when there is nothing to show.
 //
-// No game screenshots or game art here (owner rule): the pictures are drawn below, the Workshop's are creator uploads
-// the site serves at runtime, and the featured mode's key art is the launcher's own.
+// No game screenshots or game art ship with the launcher (owner rule): the screenshots are the site's, read at runtime;
+// the Workshop's are creator uploads the site serves; the featured mode's key art is the launcher's own.
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -31,6 +32,7 @@
   const go = (page, tab) => window.LeylineNav.show(page, false, tab);
   const firstSentence = (s) => String(s || "").trim().split(/(?<=[.!?])\s+/)[0];
   const AUTO_MS = Number(window.LEYLINE_HERO_MS) || 7000;   // a test may shorten it
+  const SITE_ORIGIN = "https://play.openvanilla.app";   // the only place pictures come from (the window's CSP agrees)
   const reduced = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : { matches: false };
 
   // ---------------------------------------------------------------- the slides
@@ -58,7 +60,7 @@
     if (App.playHangout) {
       out.push({ key: "hangout", kicker: "Open now · " + App.HANGOUT.kind, title: "Join the " + App.HANGOUT.name,
         line: "Everyone meets in Dalaran. Say hello, then try /golf and /modes.",
-        chips: hangoutChips, ill: () => ill("isle", ISLE), side: hangoutSide, cta: "Play now", run: () => App.playHangout(),
+        chips: hangoutChips, photo: true, side: hangoutSide, cta: "Play now", run: () => App.playHangout(),
         cta2: "Join the Discord", run2: () => App.openLink("discord") });
     }
     // (a) the featured mode with its key art
@@ -72,21 +74,21 @@
     // (b) what's new: the newest entry, its points beside it
     const n = App.news()[0];
     if (n) out.push({ key: "news", kicker: "What's new", title: n.title, line: "",   // its points are in the panel beside it
-      ill: () => ill("notes", NOTES), side: newsSide, cta: "Read the patch notes", run: () => go("news") });
+      photo: true, side: newsSide, cta: "Read the patch notes", run: () => go("news") });
     // (c) browser play (left out when it is already on), with the realms on the network beside it
     if (App.mode() !== "browser") {
       out.push({ key: "browser", kicker: "Nothing to install", title: "Play in your browser", line: "Your game folder, straight in a browser tab.",
-        chips: networkChips, ill: browserWindow, side: realmsPanel, cta: "Use browser play",
+        chips: networkChips, photo: true, side: realmsPanel, cta: "Use browser play",
         run: (b) => { App.setMode("browser"); b.textContent = "Browser play is on"; b.disabled = true; } });
     }
     // (d) hosting
     out.push({ key: "host", kicker: "Host", title: "Host an always-on realm", line: "Vanilla+ or your own rules, on the Leyline network.",
-      chips: hostChips, ill: () => ill("relay", RELAY), side: hostSteps, cta: "Start hosting", run: () => go("host") });
+      chips: hostChips, photo: true, side: hostSteps, cta: "Start hosting", run: () => go("host") });
     // (e) your Den (docs/DEN.md): the Host page with Make my Den picked, as the play bar's My Den does when there is none
     // TODO(owner): the Den slide's kicker, title, line and chips, his words.
     out.push({ key: "den", kicker: "Your own room", title: "Make your Den", line: "A plain white room on your PC. Build it up in edit mode, then invite your friends.",
       chips: () => [{ t: "Private, invite only" }, { t: "Up to 10 friends" }, { t: "Hundreds of props" }],
-      side: denStage, cta: "Make my Den", run: makeDen });
+      photo: true, side: denSteps, cta: "Make my Den", run: makeDen });
     // (f) a Workshop mod: the first packaged one, its screenshot in front of three more
     const cat = App.catalog();
     const p = cat.projects.find((x) => x.source === "packaged");
@@ -136,163 +138,84 @@
     return row;
   }
 
-  // ---- original illustrations (drawn here, no game art): constant markup only, never anything from the network
-  function ill(kind, markup) {
-    const box = el("div", "hs-ill hs-ill-" + kind);
-    box.setAttribute("aria-hidden", "true");
-    box.innerHTML = markup;
-    return box;
+  // ---- the owner's in-game screenshots, hosted on the site and fetched while Leyline runs (owner 2026-10-30: "in game
+  // screenshots in those panes"; nothing game-made ships with the launcher). The site's home.json says which files there
+  // are, per slide id (tools/site-art/publish_home_art.py writes it): { "slides": { "hangout": [{ "file", "alt", "credit" }] } }.
+  // Only that folder, only plain file names; alt and credit are shown as text. With no manifest, or a picture that fails,
+  // the slide keeps its plain gradient. Several files for a slide take turns, one a day.
+  const HOME_ART = SITE_ORIGIN + "/wrath/art/home/";
+  let homeArt = null;      // null: not read (yet, or it failed); else { id: [{ url, alt, credit }] }
+  const ART_FILE = /^[a-z0-9][a-z0-9-]{0,40}\.(?:webp|jpg)$/;
+  const clip = (v, n) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, n) : "");
+  function readHomeArt(j) {
+    const out = {};
+    const all = j && typeof j === "object" && j.slides && typeof j.slides === "object" ? j.slides : {};
+    for (const id of Object.keys(all)) {
+      if (!/^[a-z0-9][a-z0-9-]{0,40}$/.test(id)) continue;
+      const list = (Array.isArray(all[id]) ? all[id] : [all[id]]).filter((x) => x && typeof x === "object" && ART_FILE.test(String(x.file || "")));
+      if (list.length) out[id] = list.slice(0, 12).map((x) => ({ url: HOME_ART + x.file, alt: clip(x.alt, 200), credit: clip(x.credit, 120) }));
+    }
+    return out;
   }
-  const STAR = "M0-6L1.4-1.4 6 0 1.4 1.4 0 6-1.4 1.4-6 0-1.4-1.4z";
-  const stars = (pts) => pts.map(([x, y, k]) => `<path class="il-star" d="${STAR}" transform="translate(${x} ${y}) scale(${k || 1})"/>`).join("");
-  // a floating city of spires over ley lines: the Hangout
-  const ISLE = `<svg viewBox="0 0 520 340" preserveAspectRatio="xMidYMid meet">
-<defs><radialGradient id="hsi-glow" cx=".5" cy=".55" r=".5"><stop offset="0" class="s-a2" stop-opacity=".5"/><stop offset="1" class="s-a2" stop-opacity="0"/></radialGradient>
-<linearGradient id="hsi-rock" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="s-rock1"/><stop offset="1" class="s-rock2"/></linearGradient>
-<linearGradient id="hsi-wall" x1="0" y1="0" x2="1" y2="0"><stop offset="0" class="s-wall1"/><stop offset="1" class="s-wall2"/></linearGradient>
-<linearGradient id="hsi-roof" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="s-a2"/><stop offset="1" class="s-a"/></linearGradient></defs>
-<ellipse cx="260" cy="180" rx="255" ry="160" fill="url(#hsi-glow)"/>
-<g class="il-ley"><path d="M-10 272C120 200 270 330 530 196"/><path d="M-10 118C150 176 330 34 530 112"/></g>
-<g class="il-float">
-<path fill="url(#hsi-rock)" d="M128 218Q150 254 200 270Q236 300 258 334Q282 298 322 274Q372 252 392 218Z"/>
-<path fill="url(#hsi-rock)" opacity=".7" d="M180 262l14 30 10-26zM330 258l-8 34-14-24z"/>
-<ellipse class="il-top" cx="260" cy="218" rx="132" ry="22"/>
-<g fill="url(#hsi-wall)"><rect x="246" y="96" width="28" height="122"/><rect x="212" y="132" width="22" height="86"/><rect x="286" y="124" width="22" height="94"/>
-<rect x="184" y="166" width="16" height="52"/><rect x="320" y="160" width="16" height="58"/><rect x="168" y="196" width="184" height="24" rx="3"/></g>
-<g fill="url(#hsi-roof)"><path d="M240 98L260 26 280 98z"/><path d="M207 134L223 82 239 134z"/><path d="M281 126L297 72 313 126z"/><path d="M180 168L192 134 204 168z"/><path d="M316 162L328 126 340 162z"/></g>
-<g class="il-win"><rect x="256" y="118" width="8" height="12" rx="4"/><rect x="256" y="148" width="8" height="12" rx="4"/><rect x="220" y="158" width="6" height="10" rx="3"/>
-<rect x="294" y="148" width="6" height="10" rx="3"/><rect x="294" y="178" width="6" height="10" rx="3"/><rect x="189" y="184" width="6" height="9" rx="3"/><rect x="325" y="178" width="6" height="9" rx="3"/></g>
-<g class="il-gold"><circle cx="260" cy="24" r="3.5"/><circle cx="223" cy="80" r="2.5"/><circle cx="297" cy="70" r="2.5"/></g>
-<ellipse class="il-ring" cx="260" cy="112" rx="48" ry="9"/>
-</g>
-<g class="il-bob"><path fill="url(#hsi-roof)" d="M84 126l12 24-12 28-12-28z"/><path fill="url(#hsi-roof)" opacity=".8" d="M446 186l8 16-8 18-8-18z"/></g>
-<g class="il-bob2"><path fill="url(#hsi-roof)" opacity=".9" d="M424 70l9 18-9 20-9-20z"/></g>
-${stars([[52, 60], [150, 40, 0.7], [380, 40], [470, 140, 0.8], [110, 250, 0.6], [410, 280, 0.7]])}
-</svg>`;
-  // a stack of notes with a tick: what's new
-  const NOTES = `<svg viewBox="0 0 440 300" preserveAspectRatio="xMidYMid meet">
-<defs><radialGradient id="hsn-glow" cx=".5" cy=".5" r=".5"><stop offset="0" class="s-a" stop-opacity=".35"/><stop offset="1" class="s-a" stop-opacity="0"/></radialGradient></defs>
-<ellipse cx="220" cy="150" rx="210" ry="140" fill="url(#hsn-glow)"/>
-<g class="il-ley"><path d="M-10 240C110 180 250 290 450 200"/></g>
-<g class="il-sheet" transform="rotate(-9 200 150)"><rect x="110" y="62" width="190" height="170" rx="14"/></g>
-<g class="il-sheet" transform="rotate(5 240 150)"><rect x="150" y="56" width="190" height="170" rx="14"/></g>
-<g class="il-float"><g class="il-sheet front"><rect x="126" y="44" width="200" height="190" rx="16"/>
-<rect class="il-bar a" x="150" y="70" width="96" height="12" rx="6"/>
-<g class="il-lines"><rect x="176" y="104" width="120" height="8" rx="4"/><rect x="176" y="134" width="104" height="8" rx="4"/><rect x="176" y="164" width="124" height="8" rx="4"/><rect x="176" y="194" width="84" height="8" rx="4"/></g>
-<g class="il-dots"><circle cx="160" cy="108" r="6"/><circle cx="160" cy="138" r="6"/><circle cx="160" cy="168" r="6"/><circle cx="160" cy="198" r="6"/></g></g>
-<g transform="translate(318 214)"><circle class="il-badge" r="30"/><path class="il-tick" d="M-13 1l8 9 18-20"/></g></g>
-${stars([[80, 70], [380, 60, 0.8], [400, 250, 0.7], [60, 210, 0.6]])}
-</svg>`;
-  // your PC, the relay and the realm list, joined by moving dashes: hosting
-  const RELAY = `<svg viewBox="0 0 520 250" preserveAspectRatio="xMidYMid meet">
-<defs><linearGradient id="hsr-roof" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="s-a2"/><stop offset="1" class="s-a"/></linearGradient>
-<radialGradient id="hsr-glow" cx=".5" cy=".5" r=".5"><stop offset="0" class="s-a2" stop-opacity=".45"/><stop offset="1" class="s-a2" stop-opacity="0"/></radialGradient></defs>
-<g class="il-flow"><path d="M134 104H206"/><path d="M314 104H386"/></g>
-<g transform="translate(80 104)"><circle class="il-node" r="52"/><rect class="il-screen" x="-26" y="-22" width="52" height="34" rx="4"/><path class="il-stroke" d="M-8 20h16M0 12v8"/>
-<path class="il-tri" d="M-6-12l14 7-14 7z"/></g>
-<g transform="translate(260 104)"><circle r="80" fill="url(#hsr-glow)"/><circle class="il-node" r="56"/><g class="il-bob"><path fill="url(#hsr-roof)" d="M0-40l24 38L0 44-24-2z"/><path class="il-facet" d="M0-40v84M-24-2h48"/></g></g>
-<g transform="translate(440 104)"><circle class="il-node" r="52"/><circle class="il-globe" r="28"/><ellipse class="il-globe" rx="12" ry="28"/><path class="il-globe" d="M-28 0h56M-24-14h48M-24 14h48"/>
-<g class="il-orbit"><circle cx="-34" cy="-22" r="5" class="d1"/><circle cx="36" cy="-16" r="4" class="d2"/><circle cx="30" cy="26" r="5" class="d3"/><circle cx="-30" cy="24" r="3.5" class="d1"/></g></g>
-<g class="il-label"><text x="80" y="186">Your PC</text><text x="260" y="192">The relay</text><text x="440" y="186">The realm list</text></g>
-<g class="il-sub"><text x="80" y="206">runs your realm</text><text x="260" y="212">hides your address</text><text x="440" y="206">players find you</text></g>
-</svg>`;
-
-  // the browser slide's picture: a browser window with an original night landscape in it (fixed colours: it is a screen)
-  function browserWindow() {
-    const box = el("div", "hs-ill hs-ill-browser");
-    box.setAttribute("aria-hidden", "true");
-    const win = el("div", "hs-win");
-    const bar = el("div", "hs-win-bar");
-    bar.append(el("i"), el("i"), el("i"), el("span", "hs-win-url", "Leyline · in a browser tab"));
-    const pic = el("div", "hs-win-pic");
-    pic.innerHTML = `<svg viewBox="0 0 480 250" preserveAspectRatio="xMidYMid slice">
-<defs><linearGradient id="hsb-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#151a3c"/><stop offset=".62" stop-color="#4a3a8e"/><stop offset="1" stop-color="#d4886e"/></linearGradient></defs>
-<rect width="480" height="250" fill="url(#hsb-sky)"/><circle cx="372" cy="66" r="26" fill="#fde9c4"/><circle cx="372" cy="66" r="40" fill="#fde9c4" opacity=".12"/>
-<g fill="#fff" opacity=".8"><circle cx="40" cy="30" r="1.4"/><circle cx="120" cy="56" r="1"/><circle cx="210" cy="24" r="1.3"/><circle cx="300" cy="40" r=".9"/><circle cx="440" cy="30" r="1.2"/><circle cx="90" cy="100" r=".8"/></g>
-<path fill="#2d2a62" d="M0 180L56 124 104 160 168 102 236 166 296 118 356 162 418 112 480 150V250H0z"/>
-<path fill="#221f4c" d="M0 206Q84 160 164 192T324 188T480 180V250H0z"/>
-<g fill="#1a1838"><rect x="122" y="132" width="16" height="50"/><path d="M118 134l12-26 12 26z"/></g><rect x="127" y="146" width="5" height="8" rx="2.5" fill="#f6c76b"/>
-<path class="il-river" d="M-10 236C110 196 220 252 490 206"/>
-<path fill="#141230" d="M0 250V230Q120 216 240 232T480 226V250z"/>
-<g fill="#0f0d26"><path d="M30 232l10-30 10 30z"/><path d="M48 234l8-22 8 22z"/><path d="M400 228l10-32 10 32z"/><path d="M420 230l8-22 8 22z"/></g>
-</svg>`;
-    const tag = el("span", "hs-win-tag", "Nothing to install");   // TODO(owner): the window's badge
-    win.append(bar, pic, tag);
-    box.append(win);
-    return box;
+  function artFor(id) {
+    const list = homeArt && homeArt[id];
+    return list && list.length ? list[Math.floor(Date.now() / 86400000) % list.length] : null;
   }
-
-  // the Den slide's right side: three isometric rooms, a white room, edit mode, friends in
-  const P = (u, v, h) => `${(100 + 80 * u - 80 * v).toFixed(1)},${(80 + 40 * u + 40 * v - (h || 0)).toFixed(1)}`;
-  const XY = (u, v, h) => P(u, v, h).split(",").map(Number);
-  const poly = (cls, pts) => `<polygon class="${cls}" points="${pts.join(" ")}"/>`;
-  function cube(u0, v0, u1, v1, h, color) {
-    return `<g class="iso" style="--c:${color}">` +
-      poly("f-l", [P(u0, v1), P(u1, v1), P(u1, v1, h), P(u0, v1, h)]) +
-      poly("f-r", [P(u1, v0), P(u1, v1), P(u1, v1, h), P(u1, v0, h)]) +
-      poly("f-t", [P(u0, v0, h), P(u1, v0, h), P(u1, v1, h), P(u0, v1, h)]) + "</g>";
+  async function loadHomeArt() {
+    try {
+      const r = await fetch(HOME_ART + "home.json", { credentials: "omit", referrerPolicy: "no-referrer" });
+      if (!r.ok) return;
+      homeArt = readHomeArt(await r.json());
+    } catch (_) { return; }
+    build();
   }
-  function figure(u, v, color) {
-    const [x, y] = XY(u, v);
-    return `<g class="fig" style="--c:${color}"><ellipse class="fig-sh" cx="${x}" cy="${y}" rx="9" ry="3.5"/>` +
-      `<rect x="${x - 6}" y="${y - 22}" width="12" height="21" rx="6"/><circle cx="${x}" cy="${y - 28}" r="6"/></g>`;
-  }
-  function room(inside) {
-    return `<svg viewBox="0 6 200 164" preserveAspectRatio="xMidYMid meet">` +
-      poly("rm-wl", [P(0, 1), P(0, 0), P(0, 0, 64), P(0, 1, 64)]) + poly("rm-wr", [P(0, 0), P(1, 0), P(1, 0, 64), P(0, 0, 64)]) +
-      poly("rm-fl", [P(0, 0), P(1, 0), P(1, 1), P(0, 1)]) +
-      `<circle class="rm-lt" cx="${XY(0, 0.5, 50)[0]}" cy="${XY(0, 0.5, 50)[1]}" r="4"/><circle class="rm-lt" cx="${XY(0.5, 0, 50)[0]}" cy="${XY(0.5, 0, 50)[1]}" r="4"/>` +
-      inside + "</svg>";
-  }
-  function denRooms() {
-    const grid = [0.25, 0.5, 0.75].map((t) => `<path class="rm-grid" d="M${P(t, 0)}L${P(t, 1)}M${P(0, t)}L${P(1, t)}"/>`).join("");
-    const [gx, gy] = XY(0.42, 0.58, 22);
-    const gizmo = `<g class="gizmo"><path class="gz-y" d="M${gx} ${gy}v-30"/><path class="gz-x" d="M${gx} ${gy}l26 13"/><path class="gz-z" d="M${gx} ${gy}l-26 13"/>` +
-      `<circle cx="${gx}" cy="${gy}" r="3"/></g>`;
-    const ghost = `<g class="ghost">${poly("", [P(0.62, 0.18, 30), P(0.84, 0.18, 30), P(0.84, 0.4, 30), P(0.62, 0.4, 30)])}` +
-      `<path d="M${P(0.84, 0.4, 30)}L${P(0.84, 0.4)}M${P(0.62, 0.4, 30)}L${P(0.62, 0.4)}M${P(0.84, 0.18, 30)}L${P(0.84, 0.18)}"/></g>`;
-    const [lx, ly] = XY(0.5, 0.5, 96);
-    const link = `<g class="link-badge" transform="translate(${lx} ${ly})"><circle r="13"/><path d="M-5 3l-2 2a3.5 3.5 0 0 1-5-5l3-3a3.5 3.5 0 0 1 5 0M5-3l2-2a3.5 3.5 0 0 1 5 5l-3 3a3.5 3.5 0 0 1-5 0M-3 3l6-6"/></g>`;
-    return [
-      room(figure(0.55, 0.55, "var(--t-accent)")),
-      room(grid + cube(0.3, 0.46, 0.56, 0.72, 22, "#c9a46a") + cube(0.06, 0.08, 0.2, 0.3, 40, "#7d8db3") + ghost + gizmo + figure(0.9, 0.46, "var(--t-accent)")),
-      room(poly("rug", [P(0.2, 0.25), P(0.8, 0.25), P(0.8, 0.85), P(0.2, 0.85)]) + cube(0.06, 0.1, 0.5, 0.26, 16, "#8b6cf0") + cube(0.06, 0.1, 0.5, 0.14, 32, "#7559d8") +
-        cube(0.78, 0.06, 0.92, 0.2, 14, "#b9774b") + `<circle class="leaf" cx="${XY(0.85, 0.13, 30)[0]}" cy="${XY(0.85, 0.13, 30)[1]}" r="11"/>` +
-        figure(0.45, 0.5, "var(--t-accent)") + figure(0.66, 0.62, "#e0a93a") + figure(0.4, 0.78, "#3fbf7f") + link),
-    ];
-  }
-  function denStage() {
-    const box = el("div", "hs-side hs-den");
-    const ol = el("ol", "hs-den-steps");
-    const rooms = denRooms();
-    // TODO(owner): the three step names
-    [["A white room", "Yours, on this PC"], ["Edit mode", "Place, move and stack props"], ["Invite friends", "Send them the Den's link"]].forEach(([t, l], i) => {
-      const li = el("li", "hs-den-step");
-      const pic = el("span", "hs-den-pic");
-      pic.setAttribute("aria-hidden", "true");
-      pic.innerHTML = rooms[i];
-      const tx = el("span", "hs-den-t");
-      tx.append(el("span", "hs-st-n", String(i + 1)), el("b", "", t), el("i", "", l));
-      li.append(pic, tx);
-      ol.append(li);
+  // a screenshot that fills the slide, under a scrim; the words turn light once it is in
+  function photo(s, id) {
+    const a = artFor(id);
+    if (!a) return;
+    const img = el("img", "hs-photo");
+    img.alt = a.alt;
+    img.decoding = "async";
+    img.referrerPolicy = "no-referrer";
+    img.draggable = false;
+    img.addEventListener("load", () => {
+      if (img.naturalWidth < 2) { img.remove(); return; }
+      s.classList.add("has-photo");
+      if (slides[index] && slides[index].node === s) hero.classList.add("on-art");
     });
-    box.append(ol);
-    return box;
+    img.addEventListener("error", () => { img.remove(); s.classList.remove("has-photo"); if (slides[index] && slides[index].node === s) hero.classList.remove("on-art"); });
+    img.src = a.url;
+    s.append(img);
+    if (a.credit) s.append(el("small", "hs-credit", a.credit));
   }
 
-  // the game modes' small pictures (by mode id; any other mode gets the puzzle)
-  const MODE_PICS = {
-    minigolf: `<svg viewBox="0 0 120 64"><path class="mp-hill" d="M0 64V40Q30 26 62 34T120 26V64z"/><path class="mp-green" d="M0 64V50Q40 40 70 45T120 40V64z"/>
-<path class="mp-path" d="M27 52Q52 34 86 42"/><ellipse class="mp-hole" cx="88" cy="43" rx="6" ry="2"/><path class="mp-pole" d="M88 43V9"/><path class="mp-flag" d="M88 9l17 5-17 5z"/><circle class="mp-ball" cx="24" cy="53" r="3.8"/></svg>`,
-    "bumper-balls": `<svg viewBox="0 0 120 64"><ellipse class="mp-arena" cx="58" cy="50" rx="48" ry="11"/><ellipse class="mp-rim" cx="58" cy="47" rx="48" ry="11"/>
-<circle class="mp-b1" cx="42" cy="38" r="10"/><circle class="mp-b2" cx="68" cy="37" r="10"/><g class="mp-fly"><circle class="mp-b3" cx="102" cy="18" r="7.5"/></g>
-<path class="mp-motion" d="M86 27l-9 4M88 34l-8 2"/><circle class="mp-shine" cx="38" cy="34" r="3"/><circle class="mp-shine" cx="64" cy="33" r="3"/></svg>`,
-    "coin-dash": `<svg viewBox="0 0 120 64"><g class="mp-coin"><circle cx="30" cy="42" r="10"/><circle class="in" cx="30" cy="42" r="6"/></g><g class="mp-coin"><circle cx="54" cy="30" r="10"/><circle class="in" cx="54" cy="30" r="6"/></g>
-<g class="mp-coin"><circle cx="74" cy="46" r="9"/><circle class="in" cx="74" cy="46" r="5"/></g><path class="mp-gem" d="M98 16l11 12-11 18-11-18z"/><path class="mp-gem-f" d="M87 28h22M98 16v30"/>
-<path class="il-star" d="${STAR}" transform="translate(16 18) scale(.8)"/></svg>`,
-    _: `<svg viewBox="0 0 120 64"><path class="mp-puz" d="M42 14h12v4a4 4 0 0 0 8 0v-4h12v14h-4a4 4 0 0 0 0 8h4v14H62v-4a4 4 0 0 0-8 0v4H42V36h4a4 4 0 0 0 0-8h-4z"/></svg>`,
-  };
+  // the Den slide's right side: three steps, as the host slide's
+  function denSteps() {
+    // TODO(owner): the three step names
+    return stepsCard("Your Den in three steps", [["A white room", "Yours, on this PC"], ["Edit mode", "Place, move and stack props"],
+      ["Invite friends", "Send them the Den's link"]]);
+  }
+
   const SLASH = { minigolf: "/golf" };   // the rest start from /modes (the Hangout's line); TODO(owner): each mode's own command
+
+  // a mode tile's picture: its screenshot from the site (home.json "mode-<id>"), else its colour and initial
+  function modePic(m) {
+    const pic = el("span", "hs-mt-pic");
+    pic.setAttribute("aria-hidden", "true");
+    pic.style.setProperty("--h", String(App.nameHue(m.title)));
+    pic.append(el("b", "", ([...String(m.title).trim()][0] || "?").toUpperCase()));
+    const a = artFor("mode-" + m.id);
+    if (a) {
+      const img = el("img");
+      img.alt = "";
+      img.decoding = "async";
+      img.referrerPolicy = "no-referrer";
+      img.addEventListener("error", () => img.remove());
+      img.src = a.url;
+      pic.append(img);
+    }
+    return pic;
+  }
 
   // the launch slide's right side: the official lineup, what's on (three modes), the latest forum threads
   function hangoutSide() {
@@ -310,10 +233,7 @@ ${stars([[80, 70], [380, 60, 0.8], [400, 250, 0.7], [60, 210, 0.6]])}
         b.dataset.mode = m.id;
         b.title = `${m.title}: open Modes`;
         b.addEventListener("click", () => M.show(m.id));
-        const pic = el("span", "hs-mt-pic");
-        pic.setAttribute("aria-hidden", "true");
-        pic.innerHTML = MODE_PICS[m.id] || MODE_PICS._;   // constant markup
-        b.append(pic, el("b", "", m.title), el("i", "", SLASH[m.id] || "/modes"));
+        b.append(modePic(m), el("b", "", m.title), el("i", "", SLASH[m.id] || "/modes"));
         row.append(b);
       }
       card.append(row);
@@ -469,13 +389,15 @@ ${stars([[80, 70], [380, 60, 0.8], [400, 250, 0.7], [60, 210, 0.6]])}
 
   // the host slide's right side (owner 2026-10-30: "make this a small infographic for setup guide"): four steps
   function hostSteps() {
+    return stepsCard("Set up in four steps", [["Pick a ruleset", "Vanilla+, Dalaran hangout, a Den or your own"],
+      ["Press Start", "The host pack runs it on this PC"], ["Listed in a minute", "The relay: no ports, your address hidden"],
+      ["Invite friends", "Share the link, or go public"]]);
+  }
+  function stepsCard(title, steps) {
     const box = el("div", "hs-side hs-steps");
-    box.append(el("div", "hs-side-h", "Set up in four steps"));
+    box.append(el("div", "hs-side-h", title));
     const ol = el("ol", "hs-st");
-    [["Pick a ruleset", "Vanilla+, Dalaran hangout, a Den or your own"],
-     ["Press Start", "The host pack runs it on this PC"],
-     ["Listed in a minute", "The relay: no ports, your address hidden"],
-     ["Invite friends", "Share the link, or go public"]].forEach(([t, l], i) => {
+    steps.forEach(([t, l], i) => {
       const li = el("li", "");
       li.append(el("span", "hs-st-n", String(i + 1)));
       const tx = el("span", "hs-st-t");
@@ -489,7 +411,7 @@ ${stars([[80, 70], [380, 60, 0.8], [400, 250, 0.7], [60, 210, 0.6]])}
 
   // the Workshop slide's right side: the spotlight mod's screenshot in front of three more mods' (creator uploads the
   // site serves; the same rules as Discover's cards), a tile drawn from the name while one loads or when there is none
-  const SITE = "https://play.openvanilla.app";
+  const SITE = SITE_ORIGIN;
   function siteImage(u) {
     if (typeof u !== "string" || !u) return "";
     if (/^\/wrath\/[A-Za-z0-9._~\/-]+$/.test(u) && !u.includes("..")) return SITE + u;
@@ -583,10 +505,11 @@ ${stars([[80, 70], [380, 60, 0.8], [400, 250, 0.7], [60, 210, 0.6]])}
       s.classList.add("has-art");
       s.append(bg, img);
     } else {
+      if (d.photo) photo(s, d.key);
       const pic = d.ill ? d.ill() : null;
       if (pic) { s.classList.add("has-ill"); s.append(pic); }
       const side = d.side ? d.side() : null;
-      if (side) { s.classList.add("has-side"); s.append(side); } else if (!pic) s.append(el("span", "hs-deco"));
+      if (side) { s.classList.add("has-side"); s.append(side); } else if (!pic && !d.photo) s.append(el("span", "hs-deco"));
     }
     const body = el("div", "hs-body");
     const b = el("button", "btn primary hs-go", d.cta);
@@ -636,7 +559,7 @@ ${stars([[80, 70], [380, 60, 0.8], [400, 250, 0.7], [60, 210, 0.6]])}
       s.node.inert = !on;
       s.node.setAttribute("aria-hidden", String(!on));
     });
-    hero.classList.toggle("on-art", slides[index].node.classList.contains("has-art"));   // the dots go dark over key art
+    hero.classList.toggle("on-art", /\bhas-(?:art|photo)\b/.test(slides[index].node.className));   // the dots go dark over key art
     dotsBox.querySelectorAll(".hero-dot").forEach((b, j) => {
       if (j === index) b.setAttribute("aria-current", "true"); else b.removeAttribute("aria-current");
     });
@@ -789,11 +712,12 @@ ${stars([[80, 70], [380, 60, 0.8], [400, 250, 0.7], [60, 210, 0.6]])}
   document.addEventListener("leyline:page", (e) => { if ((e.detail || {}).page === "play") loadForum(); });
   build();
   loadForum();
+  loadHomeArt();
   renderRealms();
   renderMods();
   renderModes();
   renderNewsRow();
   if (Modes()) Modes().ensure();
 
-  window.LeylineHome = { slides: () => slides.map((s) => s.key), index: () => index, show, build, autoOn, AUTO_MS, thumbUrl };
+  window.LeylineHome = { slides: () => slides.map((s) => s.key), index: () => index, show, build, autoOn, AUTO_MS, thumbUrl, readHomeArt, HOME_ART };
 })();
