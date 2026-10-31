@@ -262,7 +262,7 @@ check("realm-overrides.json: featured and verified for the launcher", ov["featur
 
 # ---------------------------------------------------------------- the hub
 st, _, hub = req("GET", "/wrath/leyline-preview/realms")
-check("hub realms page: the same list, filters on the hub's own path", st == 200 and "Leyline Sample Hangout" in hub
+check("hub realms page: the same list, filters on the hub's own path", st == 200 and "Dalaran Hangout" in hub
       and "Busy Den" in hub and 'href="/wrath/leyline-preview/realms?tag=pvp"' in hub and 'id="host-your-own"' in hub)
 st, _, front = req("GET", "/wrath/leyline-preview")
 check("hub front page: Platform Status has the network line, linked to the hub's realm list", "Realm network" in front
@@ -273,18 +273,19 @@ check("hub front page: Platform Status has the network line, linked to the hub's
 sec = re.search(r'<section class="hb-sec hb-realms" id="realms".*?</section>', front, re.S)
 sec = sec.group(0) if sec else ""
 rows = re.findall(r'<li class="hb-rl[^"]*"( data-home="1"| data-rid="([a-z2-7]{16})") data-client="(browser|own)" data-live="(\d)"'
-                  r' data-players="(\d+)"><div class="hb-rl-n"><b>([^<]+)</b>', sec)
+                  r' data-players="(\d+)">(?:<span class="hb-rl-ic.*?</span>)?<div class="hb-rl-n"><b>([^<]+)</b>', sec)
 names = [r[5] for r in rows]
 check("hub realm list: right under the hero, before the products and Platform Status", sec
       and front.index('class="hb-hero"') < front.index('id="realms"') < front.index('id="features"') < front.index('id="status"'))
+# launch (owner 2026-10-30): the Hangout and the Wrath realm are the same realm, one name everywhere (sampler or not)
 check("hub realm list: the home realm first, as Official, played with a plain /wrath", rows and rows[0][0] == ' data-home="1"'
-      and names[0] == "Leyline Sample Hangout" and 'href="/wrath" aria-label="Play Leyline Sample Hangout in your browser"' in sec
-      and '<span class="hb-bdg o">Official</span>' in sec and "<b>Dalaran Hangout</b>" not in sec, names)
+      and names[0] == "Dalaran Hangout" and 'href="/wrath" aria-label="Play Dalaran Hangout in your browser"' in sec
+      and '<span class="hb-bdg o">Official</span>' in sec and "Leyline Sample Hangout" not in sec and sec.count("<b>Dalaran Hangout</b>") == 1, names)
 check("hub realm list: featured next, offline last, hidden realms never", set(names[1:3]) == {"Picked One", "Plain Field"}
       and names[-1] == "Sleepy Hollow" and rows[-1][3] == "0" and "Hidden Away" not in sec and "Busy Den" in names, names)
 check("hub realm list: Play in browser is the hop link, only for live realms the browser plays", f'href="/wrath?go=r:{BUSY}"' in sec
       and f'go=r:{FEAT}' not in sec and f'go=r:{SLEEPY}' not in sec and "Bring your own game client" in sec
-      and "Needs a" not in sec and "1.12.1" not in sec)
+      and "Needs a" not in sec and "1.12.1" not in re.sub(r'<span class="hb-ver"[^>]*>[^<]*</span>', "", sec))   # the version chip only
 check("hub realm list: the desktop address for each realm with a port, ours by the site's host", "relay.example:40002" in sec
       and f'title="The realm address for a desktop client">{wp.PUBLIC_HOST}</code>' in sec)
 check("hub realm list: badges, how it plays (never a build), core, region, uptime", all(x in sec for x in ('class="hb-bdg f">Featured', 'class="hb-bdg v"',
@@ -296,7 +297,7 @@ check("hub realm list: Open in launcher on every row (the home realm as official
       and sec.count(">Open in launcher</a>") == sec.count('class="hb-addr"') or sec.count(">Open in launcher</a>") >= 2, sec[:300])
 st, _, only = req("GET", "/wrath/leyline-preview/realms?client=own&now=1")
 check("hub realms page: the form's filters on the server", st == 200 and "<b>Picked One</b>" in only and "<b>Busy Den</b>" not in only
-      and "Leyline Sample Hangout" not in only)
+      and "<b>Dalaran Hangout</b>" not in only)
 st, _, none = req("GET", "/wrath/leyline-preview/realms?client=own&tag=bots")
 check("hub realms page: no match says so", "No realms match these filters" in none)
 st, _, beacon = req("GET", "/wrath/leyline-preview/beacon")
