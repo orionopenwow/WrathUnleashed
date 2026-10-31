@@ -107,3 +107,7 @@ desktop.ini
 .idea/
 # the launcher Open Leyline Launcher.bat keeps (fetched from GitHub; never committed)
 /.launcher/
+
+# the owner's in-game screenshots for the launcher's Home gallery: published to the site by tools/site-art (the
+# Autopilot step "homeart"), never kept in the repo (owner rule: no game-made pictures in the repo or downloads)
+/site-art/

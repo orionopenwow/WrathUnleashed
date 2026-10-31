@@ -140,6 +140,9 @@ STEPS = {
     "brand-off": ("realm/Leyline brand - off.bat", "Leyline brand off: every name back as it was", False),
     # The hub's preview thumbnails (tools/hub-index, docs/HUB-INDEX.md): top 30 and new entries, then ship + signin.
     "thumbs": ("tools/hub-index/Refresh hub thumbnails.bat", "Hub thumbnails: preview images for the top 30 and new catalog entries (then ship)", False),
+    # The launcher Home gallery's in-game screenshots (owner 2026-10-30): from site-art\home\ on this PC to the website's
+    # art dir (/wrath/art/home/, with home.json), backup first; never into the repo. tools/site-art/publish_home_art.py.
+    "homeart": ("tools/site-art/Publish home screenshots.bat", "Home gallery screenshots: site-art\\home to the website (the launcher reads them)", False),
     "builds-why": ("tools/github-builds/Why did the build fail.bat", "Why the last GitHub build failed (read-only)", False),
     "remove-files": ("tools/cleanup/Remove listed files.bat", "Remove the files a change took out (tools/cleanup/REMOVE.txt)", False),
     "fresh-check": ("tools/fresh-history/Fresh history - dry run.bat", "Fresh Leyline history: what it would do (read-only)", False),
