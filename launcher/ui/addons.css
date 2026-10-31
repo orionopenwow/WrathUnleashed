@@ -1,0 +1,51 @@
+/* The Leyline addons (addons.js): the row on each 3.3.5a client card, Mods › Our addons, the dialog, Settings.
+   Colours, corners and fonts read the --t-* theme tokens only, so Dark, Light and theme packs all fit. */
+
+.ad-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 14px; row-gap: 4px; align-items: center;
+  padding: 10px 12px; border-radius: var(--t-radius-xs);
+  background: color-mix(in srgb, var(--t-accent) 7%, var(--t-surface-2));
+  border: var(--t-border-w) solid color-mix(in srgb, var(--t-accent) 26%, var(--t-border));
+}
+.ad-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ad-mark {
+  flex: none; width: 30px; height: 30px; border-radius: 8px;
+  background: url("art/brand/leyline-crystal-128.png") center / 22px no-repeat, color-mix(in srgb, var(--t-accent-2) 22%, var(--t-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--t-accent-2) 40%, transparent);
+}
+.ad-txt { display: grid; gap: 1px; min-width: 0; }
+.ad-txt b { display: flex; align-items: center; gap: 6px; font: 600 13.5px var(--t-font); color: var(--t-text); }
+.ad-pitch { font-size: 12px; color: var(--t-text-2); }
+.ad-ver { font-weight: 600; }
+.ad-head { grid-column: 1; }
+.ad-state, .ad-note { grid-column: 1; margin: 0 0 0 40px; font-size: 12px; color: var(--t-muted); word-break: normal; }
+.ad-note { grid-column: 1 / -1; }
+.ad-state.ok, .ad-note.ok { color: var(--t-ok); }
+.ad-state.warn, .ad-note.warn { color: var(--t-warn); }
+.ad-state.gold { color: var(--t-gold); }
+.ad-note.bad { color: var(--t-bad); }
+.ad-state::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: currentColor; opacity: 0.85; vertical-align: 1px; }
+.cards .ad-acts, .ad-acts { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+/* inside Mods › Our addons the section is the card: the row sits flat in it */
+.ad-mods .ad-row { padding: 0; background: none; border: 0; }
+
+/* Mods › Installed: Our addons, above the Workshop mods */
+.ad-mods { margin: 10px 0 4px; padding: 12px 14px 10px; border-radius: var(--t-radius-sm); background: var(--t-card); border: var(--t-border-w) solid var(--t-card-border); }
+.ad-mods[hidden] { display: none; }
+.ad-mods-head { margin: 0 0 10px; }
+.ad-mods-body { display: grid; gap: 10px; }
+.ad-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.ad-list li { display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 9px; border-radius: 999px; background: var(--t-surface); border: var(--t-border-w) solid var(--t-border); font-size: 12px; color: var(--t-text-2); }
+.ad-list li span { font: 10.5px ui-monospace, Consolas, monospace; color: var(--t-muted); }
+.ad-safe { margin: 0; }
+
+/* the dialog: the setup step, the PLAY offer, "you already have some of these" */
+.ad-dlg { max-width: 480px; }
+.ad-dlg-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.ad-dlg-head h3 { margin: 0; }
+.ad-dlg-head .ad-mark { width: 38px; height: 38px; border-radius: 10px; background-size: 28px, auto; }
+.ad-dlg .ad-dlg-list { font-size: 12px; }
+.ad-dlg .ad-dlg-ask { display: flex; gap: 8px; align-items: center; margin: 2px 0 12px; font-size: 12.5px; color: var(--t-text-2); }
+.ad-dlg .row { gap: 8px; }
+
+.ad-settings h3 { margin-top: 18px; }

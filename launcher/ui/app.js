@@ -742,8 +742,9 @@ $("play-form").addEventListener("submit", async (ev) => {
   const realm = chosenRealm();
   if (!realm) { show("realms"); $("play-custom").focus(); return say("play-status", "Type a realm address.", "bad"); }
   $("play-go").disabled = true;
-  say("play-status", "Starting…");
   try {
+    if (window.LeylineAddons && isOfficial()) await window.LeylineAddons.beforePlay(c);   // offers the Leyline addons (addons.js)
+    say("play-status", "Starting…");
     say("play-status", await invoke("play", { client: c.id, realm }), "ok");
     state = await invoke("get_state");
   } catch (e) {
@@ -781,6 +782,8 @@ function renderClients() {
     const bRemove = el("button", "btn small danger", "REMOVE");
     acts.append(bCheck, bRename, bRemove);
     card.append(top, tags, meta, acts);
+    card.dataset.client = c.id;
+    if (window.LeylineAddons) window.LeylineAddons.clientCard(card, c);   // the Leyline addons row (addons.js)
     list.append(card);
 
     const runCheck = async () => {
@@ -848,6 +851,7 @@ async function addClient(path) {
     await refresh();
     say("cl-status", msg, d.complete ? "ok" : "warn");
     $("cl-path").value = "";
+    if (window.LeylineAddons) window.LeylineAddons.offer(r.profile);   // a 3.3.5a client: the Leyline addons step (addons.js)
   } catch (e) {
     say("cl-status", String(e), "bad");
   }
@@ -1479,6 +1483,7 @@ async function updateMod(c, m) {
 
 function renderInstalled() {
   const c = pickedClient();
+  if (window.LeylineAddons) window.LeylineAddons.renderMods(c);   // Our addons, above the Workshop mods (addons.js)
   $("mods-client-note").textContent = c ? `${buildLabel(c.build)} · ${c.path}` : "";
   const list = $("mods-list");
   list.replaceChildren();
@@ -1892,6 +1897,7 @@ async function playRealm(r, btn) {
   btn.disabled = true;
   say("rl-status", `Starting ${c.name} on ${r.name}…`);
   try {
+    if (window.LeylineAddons && r.official) await window.LeylineAddons.beforePlay(c);   // offers the Leyline addons (addons.js)
     const msg = await invoke("play_realm", { client: picked.id, slug: r.slug });
     say("rl-status", msg + (r.official ? "" : " First time here? Make your account with Make an account."), "ok");
     await refresh();
@@ -2114,6 +2120,7 @@ function playHangout() {
 window.LeylineApp = {
   news: () => NEWS, realms: () => realmsCache, catalog: () => catalog, mode: () => mode, setMode, openLink, playHangout, HANGOUT,
   realmIcon, realmVersion, hiddenBuild, nameHue,
+  state: () => state,   // addons.js: the clients
 };
 
 // ------------------------------------------------------------------ start

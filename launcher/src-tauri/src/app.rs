@@ -24,13 +24,14 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_updater::UpdaterExt;
 
-struct Core {
-    dir: PathBuf,
+/// pub(crate): the Leyline addons commands (addons.rs) share the settings, the folder and the mod lock.
+pub(crate) struct Core {
+    pub(crate) dir: PathBuf,
     settings: Mutex<Settings>,
     /// Addresses the core gave the UI, which `open_url` may open.
     known_urls: Mutex<HashSet<String>>,
     /// One mod operation at a time.
-    mods_lock: Arc<Mutex<()>>,
+    pub(crate) mods_lock: Arc<Mutex<()>>,
     /// Games Leyline started: a launcher update never restarts while one of them runs.
     games: Mutex<Vec<Child>>,
     /// The launcher's own update: what the last check said, and a downloaded update waiting for "Restart".
@@ -46,10 +47,10 @@ impl Core {
         settings::save(&self.dir, &s).map_err(|e| format!("Could not save settings: {e}"))?;
         Ok(out)
     }
-    fn snapshot(&self) -> Settings {
+    pub(crate) fn snapshot(&self) -> Settings {
         self.settings.lock().map(|s| s.clone()).unwrap_or_default()
     }
-    fn client(&self, id: &str) -> Result<ClientProfile, String> {
+    pub(crate) fn client(&self, id: &str) -> Result<ClientProfile, String> {
         self.snapshot().client(id).cloned().ok_or_else(|| "Pick a game client first.".into())
     }
     fn allow(&self, urls: impl IntoIterator<Item = String>) {
@@ -931,7 +932,14 @@ pub fn run() {
             crate::modes::commands::modes_list,
             crate::modes::commands::mode_open_browser,
             crate::modes::commands::mode_open_credit,
-            crate::modes::commands::mode_prepare_desktop
+            crate::modes::commands::mode_prepare_desktop,
+            // the Leyline addons: our own in-game addons in a 3.3.5a client (addons.rs, ui/addons.js)
+            crate::addons::commands::addons_status,
+            crate::addons::commands::addons_install,
+            crate::addons::commands::addons_remove,
+            crate::addons::commands::addons_auto_update,
+            crate::addons::commands::addons_set_prefs,
+            crate::addons::commands::addons_should_offer
         ])
         .run(tauri::generate_context!())
         .expect("error while running Leyline");

@@ -7,10 +7,11 @@
 //! Leyline never downloads game files: a client is the player's own folder. It sends no telemetry: the one count
 //! it sends is an anonymous "this mod was installed" (a mod id, a build and a fresh random id per install, never
 //! an account or machine id; Settings turns it off: `rankings`). Its network
-//! calls: the Workshop catalog and mod zips (`catalog`, `mods`), the hub's rankings (`rankings`), the relay's realm list, realm lookup and
+//! calls: the Workshop catalog and mod zips (`catalog`, `mods`), the Leyline addons listing and zip on the public release (`addons`), the hub's rankings (`rankings`), the relay's realm list, realm lookup and
 //! invite knock (`realms`, `host`), the official realm's status file (`status`), the website's forum, read only
 //! (`forum`), and GitHub's release list (`update`). Each has an 8 second timeout; the listings fall back to a cached copy.
 
+pub mod addons; // the Leyline addons: our own in-game addons for a 3.3.5a client (ui/addons.js)
 pub mod catalog;
 pub mod clients;
 pub mod deeplink; // leyline://install/<id> (hub rankings agent)
