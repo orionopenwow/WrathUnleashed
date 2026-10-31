@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="themes/themes.css"><script src="themes.js"></script>
 <link rel="stylesheet" href="social.css">
 <link rel="stylesheet" href="modes.css">
+<link rel="stylesheet" href="home.css"><!-- Home: the hero gallery and the rows below it (home.js) -->
 </head>
 <body class="ly">
 <div class="frame">
@@ -66,11 +67,14 @@
   <!-- HOME -->
   <section class="page" id="page-play">
     <div class="home">
-      <article class="news">
-        <div class="news-top"><span id="news-tag"></span></div>
-        <h1 id="news-title"></h1>
-        <ul id="news-items"></ul>
-        <button type="button" class="news-more" data-page-go="news">Read the patch notes ›</button>
+      <!-- the hero gallery (home.js): the featured mode, what's new, browser play, hosting, a Workshop mod -->
+      <article class="news hero" id="hero" aria-roledescription="carousel" aria-label="Highlights">
+        <div class="hero-slides" id="hero-slides" aria-live="off"></div>
+        <div class="hero-ctl" id="hero-ctl" hidden>
+          <button type="button" class="hero-arrow" id="hero-prev" aria-label="Previous slide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <div class="hero-dots" id="hero-dots" role="group" aria-label="Choose a slide"></div>
+          <button type="button" class="hero-arrow" id="hero-next" aria-label="Next slide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+        </div>
       </article>
 
       <div class="cards-col">
@@ -95,6 +99,36 @@
           <div class="hf-list" id="hf-list" role="list"></div>
         </section>
       </div>
+      <button type="button" class="home-cue" id="home-cue" hidden>More below<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>
+
+    <!-- below the fold (home.js): one row each, shown once its data is in, hidden when empty -->
+    <div class="home-more" id="home-more">
+      <section class="hm-sec" id="hm-realms" aria-labelledby="hm-realms-h" hidden>
+        <div class="card-head hm-head"><span id="hm-realms-h">POPULAR REALMS</span><button type="button" class="link" data-hm-go="realms">See all ›</button></div>
+        <div class="hm-row" id="hm-realms-row"></div>
+      </section>
+      <section class="hm-sec" id="hm-mods" aria-labelledby="hm-mods-h" hidden>
+        <div class="card-head hm-head"><span id="hm-mods-h">MODS TO TRY</span><button type="button" class="link" data-hm-go="discover">See all ›</button></div>
+        <div class="hm-row" id="hm-mods-row"></div>
+      </section>
+      <section class="hm-sec" id="hm-modes" aria-labelledby="hm-modes-h" hidden>
+        <div class="card-head hm-head"><span id="hm-modes-h">GAME MODES</span><button type="button" class="link" data-hm-go="modes">See all ›</button></div>
+        <div class="hm-row" id="hm-modes-row"></div>
+      </section>
+      <section class="hm-sec" id="hm-news" aria-labelledby="hm-news-h" hidden>
+        <div class="card-head hm-head"><span id="hm-news-h">NEWS</span><button type="button" class="link" data-hm-go="news">See all ›</button></div>
+        <div class="hm-row two" id="hm-news-row"></div>
+      </section>
+      <section class="hm-sec hm-host" id="hm-host" aria-label="Host your own">
+        <span class="hm-host-ic" aria-hidden="true"><img src="art/brand/leyline-crystal-256.webp" alt="" decoding="async"></span>
+        <div class="hm-host-txt"><b>Host your own</b><span>Your realm on the Leyline network. No port forwarding.</span></div>
+        <div class="hm-host-acts">
+          <button type="button" class="btn small primary" id="hm-host-start">START A REALM</button>
+          <button type="button" class="btn small" id="hm-host-link">LINK MY SERVER</button>
+          <button type="button" class="link-s" id="hm-host-docs">Docs ›</button>
+        </div>
+      </section>
     </div>
   </section>
 
@@ -102,7 +136,7 @@
   <section class="page" id="page-clients">
     <div class="panel">
       <h2>Game Clients</h2>
-      <p class="lede">Point Leyline at a game folder you already have; it reads the build itself. Leyline never downloads a game client.</p>
+      <p class="lede">Point Leyline at a game folder you already have; it reads the build itself. Leyline never downloads a game client. <button type="button" class="link" data-page-go="findfiles">Can't find yours? ›</button></p>
       <div class="row">
         <button class="btn" id="cl-pick">CHOOSE A FOLDER…</button>
         <input id="cl-path" placeholder="or paste a folder path" autocomplete="off" spellcheck="false">
@@ -282,6 +316,39 @@
     </div>
   </section>
 
+  <!-- FIND YOUR GAME FILES (the play bar's greyed clients, Clients). Leyline never hosts, links to or recommends a game download. -->
+  <section class="page" id="page-findfiles">
+    <div class="panel ff">
+      <h2>Find your game files</h2>
+      <p class="lede"><span id="ff-want" hidden></span>Leyline plays with a game folder you already have. Leyline can't download the game for you.</p>
+      <div class="ff-grid">
+        <section class="card ff-card">
+          <div class="card-head"><span>LOOK IN THE USUAL PLACES</span></div>
+          <ul class="ff-list">
+            <li><b>Windows</b> <code>C:\Program Files (x86)</code>, <code>C:\Games</code>, your Desktop or Downloads</li>
+            <li><b>Mac</b> <code>Applications</code> or your home folder</li>
+            <li><b>Linux</b> <code>~/Games</code>, or a Wine, Lutris or Bottles prefix under <code>drive_c</code></li>
+          </ul>
+          <p class="hint">The right folder holds the game's program and a <code>Data</code> folder.</p>
+          <div class="row"><button type="button" class="btn primary small" id="ff-pick">CHOOSE A FOLDER…</button></div>
+        </section>
+        <section class="card ff-card">
+          <div class="card-head"><span>RESTORE A COPY</span></div>
+          <p>An old drive or PC, a backup, or a cloud copy: put the whole folder back on this PC, then choose it.</p>
+        </section>
+        <section class="card ff-card">
+          <div class="card-head"><span>ASK A FRIEND</span></div>
+          <p>A friend with the same version can copy their game folder to you, on a USB drive for example.</p>
+        </section>
+        <section class="card ff-card ff-browser">
+          <div class="card-head"><span>NO FILES?</span></div>
+          <p>Play in your browser: Wrath realms stream there, with nothing to install.</p>
+          <div class="row"><button type="button" class="btn small" id="ff-browser">PLAY IN YOUR BROWSER</button></div>
+        </section>
+      </div>
+    </div>
+  </section>
+
   <!-- HELP -->
   <section class="page" id="page-help">
     <div class="panel">
@@ -340,7 +407,7 @@
         It helps good mods rise in Hot and Most installed.</label>
       <p class="status" id="count-status" role="status"></p>
       <h3>Your data</h3>
-      <p class="lede">Settings and caches live in <code id="data-dir"></code>.</p>
+      <p class="lede"><span id="ver"></span>. Settings and caches live in <code id="data-dir"></code>.</p>
     </div>
   </section>
 </main>
@@ -358,25 +425,30 @@
   </div>
 </dialog>
 
-<!-- The play bar, on every page -->
+<!-- The play bar, on every page: the client picker (a drop-up list, app.js renderClientMenu), the realm and one status
+     line, the play mode and PLAY. #play-client stays the model the rest of app.js reads; the list sets it. -->
 <form id="play-form" class="playbar">
   <div class="pb-left">
+    <span class="pb-label" id="pb-client-label">GAME CLIENT</span>
+    <div class="pb-pick">
+      <button type="button" class="pb-client" id="pb-client" aria-haspopup="listbox" aria-expanded="false" aria-controls="pb-menu" aria-labelledby="pb-client-label pb-client">
+        <span class="pb-client-name" id="pb-client-name">No game client</span><span class="rl-ver sm" id="pb-client-ver" hidden></span>
+        <svg class="pb-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
+      </button>
+      <ul class="pb-menu" id="pb-menu" role="listbox" aria-label="Game clients" hidden></ul>
+    </div>
+    <select id="play-client" class="sr" tabindex="-1" aria-hidden="true"></select>
+  </div>
+  <div class="pb-mid">
+    <button type="button" class="pb-realm" id="pb-realm-btn" title="Choose a realm"><span class="rl-ic sm crystal" id="pb-realm-ic" aria-hidden="true"></span><span class="client-realm" id="pb-realm">Official realm</span><span class="rl-ver sm" id="pb-realm-ver" hidden></span><svg class="pb-go" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+    <div class="pb-status bar"><span class="dot" aria-hidden="true"></span><span id="play-headline">READY TO PLAY</span><span id="pb-detail"></span><span id="play-status" class="status" role="status"></span></div>
+  </div>
+  <div class="pb-right">
     <div class="modes" role="radiogroup" aria-label="Play mode">
       <button type="button" class="mode" role="radio" data-mode="online">ONLINE</button>
       <button type="button" class="mode" role="radio" data-mode="solo" aria-disabled="true" title="Solo play on this PC arrives in a later Leyline release">SOLO</button>
       <button type="button" class="mode" role="radio" data-mode="browser">BROWSER</button>
     </div>
-    <label class="client-line">
-      <span class="sr">Client</span>
-      <select id="play-client"></select>
-      <span class="client-realm" id="pb-realm">Official realm</span>
-    </label>
-  </div>
-  <div class="pb-mid">
-    <div class="detail"><span id="pb-detail"></span><span id="play-status" class="status" role="status"></span><span class="ver" id="ver"></span></div>
-    <div class="bar"><span id="play-headline">READY TO PLAY</span></div>
-  </div>
-  <div class="pb-right">
     <button type="submit" class="play" id="play-go"><span class="sr">Play</span></button>
     <span class="caption" id="play-caption">ONLINE</span>
   </div>
@@ -388,5 +460,6 @@
 <script src="modes.js"></script>
 <script src="app.js"></script>
 <script src="host.js"></script>
+<script src="home.js"></script>
 </body>
 </html>

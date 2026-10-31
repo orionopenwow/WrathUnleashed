@@ -366,3 +366,5 @@
 1126b signin Always-on guide wording; the new host pack
 1126c ship Save to GitHub: launcher Friends card on Home, shorter text (GitHub then rebuilds Leyline.exe)
 1127a ship Save to GitHub: friends lists with avatars and status colours (GitHub then rebuilds Leyline.exe)
+1128a signin Site: the featured row slides through the best latest mods
+1128b ship Save to GitHub: launcher Home gallery and rows, play bar with client drop-up, Find your game files, darker colours (GitHub then rebuilds Leyline.exe)

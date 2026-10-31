@@ -3,41 +3,10 @@
 .md-card .md-play { min-width: 76px; }
 .md-how { color: var(--muted); font-size: 12px; }
 
-/* key art: on a mode's card (top, full bleed) and the featured mode's banner in Home's hero card */
+/* key art: on a mode's card (top, full bleed); Home's gallery and Game modes row show it too (home.css) */
 .md-card.has-art { overflow: hidden; padding-top: 0; }
 .md-card .md-art { display: block; width: calc(100% + 2 * var(--md-pad, 16px)); max-width: none; height: auto; aspect-ratio: 483 / 298; object-fit: cover;
   margin: 0 calc(-1 * var(--md-pad, 16px)) 10px; border-bottom: var(--t-border-w, 1px) solid var(--t-border); }
 .md-card.md-flash { animation: md-flash 1.6s ease; }
 @keyframes md-flash { 0%, 40% { box-shadow: 0 0 0 2px var(--t-accent), 0 0 30px color-mix(in srgb, var(--t-accent) 40%, transparent); } 100% { box-shadow: none; } }
-.feat-mode {
-  position: relative; display: block; width: 100%; margin: 0 0 18px; padding: 0; overflow: hidden; cursor: pointer; text-align: left;
-  height: clamp(120px, 26vh, 200px); border-radius: calc(var(--t-radius) - 4px); border: var(--t-border-w, 1px) solid color-mix(in srgb, var(--t-accent) 35%, var(--t-border));
-  background: var(--t-surface-2, #11131a); box-shadow: 0 10px 30px rgba(0, 0, 0, .35); color: #fff; font: inherit;
-}
-.feat-mode .fm-art { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; transition: transform .4s ease; }
-.feat-mode::after { content: ""; position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(0deg, rgba(5, 7, 14, .82) 0%, rgba(5, 7, 14, 0) 46%), radial-gradient(120% 100% at 50% 40%, transparent 55%, rgba(5, 7, 14, .45) 100%); }
-.feat-mode .fm-txt { position: absolute; z-index: 1; left: 14px; right: 14px; bottom: 10px; display: flex; align-items: baseline; gap: 10px; }
-.feat-mode small { font: 700 10.5px var(--t-font); letter-spacing: .12em; color: color-mix(in srgb, var(--t-accent) 70%, #fff); }
-.feat-mode b { font: 700 15px var(--t-font); }
-.feat-mode i { margin-left: auto; font: 600 12.5px var(--t-font); font-style: normal; color: rgba(255, 255, 255, .85); }
-.feat-mode:hover .fm-art, .feat-mode:focus-visible .fm-art { transform: scale(1.04); }
-.feat-mode:hover, .feat-mode:focus-visible { border-color: var(--t-accent); }
-@media (prefers-reduced-motion: reduce) { .feat-mode .fm-art { transition: none; } .feat-mode:hover .fm-art { transform: none; } .md-card.md-flash { animation: none; } }
-
-/* the featured mode's art fills Home's whole hero card (owner 2026-10-30): the banner is the card's backdrop, the
-   card's own words (tag line, title, patch notes) sit above it on a dark gradient; anywhere else on the card opens the mode */
-.news.has-feat::before { display: none; }
-.news.has-feat .feat-mode { position: absolute; inset: 0; z-index: 0; height: auto; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
-.news.has-feat .feat-mode .fm-art { object-position: 22% 38%; }
-.news.has-feat h1 { font-size: 32px; max-width: 70%; }
-.news.has-feat .feat-mode::after {
-  background: linear-gradient(0deg, rgba(5, 7, 14, .92) 0%, rgba(5, 7, 14, .55) 34%, rgba(5, 7, 14, 0) 62%),
-              linear-gradient(180deg, rgba(5, 7, 14, .55) 0%, rgba(5, 7, 14, 0) 22%); }
-.news.has-feat > :not(.feat-mode) { position: relative; z-index: 1; }
-.news.has-feat .news-top { position: absolute; color: rgba(255, 255, 255, .78); }
-.news.has-feat h1, .news.has-feat ul { color: #fff; text-shadow: 0 2px 12px rgba(0, 0, 0, .6); }
-.news.has-feat ul { color: rgba(255, 255, 255, .86); }
-.news.has-feat .fm-txt { top: 44px; bottom: auto; left: auto; right: 30px; padding: 6px 12px; border-radius: 999px;
-  background: rgba(5, 7, 14, .55); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, .14); }
-.news.has-feat .fm-txt b { font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { .md-card.md-flash { animation: none; } }

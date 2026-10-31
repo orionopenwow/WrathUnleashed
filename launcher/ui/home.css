@@ -1,0 +1,153 @@
+/* Leyline Launcher: Home's hero gallery and the rows below the fold (home.js). Only style.css's --t-* tokens and its
+   panel look; the slides with key art keep light words on a dark gradient in both themes. */
+
+/* ---------------------------------------------------------------- the gallery, in the hero card's box */
+.news.hero { padding: 0; justify-content: stretch; }
+.news.hero:focus-visible { outline: 2px solid var(--t-accent); outline-offset: 2px; }
+.hero-slides { position: absolute; inset: 0; }
+.hero-slide {
+  position: absolute; inset: 0; isolation: isolate; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden;
+  padding: 30px 30px 26px; opacity: 0; visibility: hidden; transform: translateX(14px);
+  transition: opacity .45s ease, transform .45s ease, visibility 0s linear .45s;
+}
+.hero-slide.on { opacity: 1; visibility: visible; transform: none; transition: opacity .45s ease, transform .45s ease, visibility 0s; }
+
+/* slides without art: a soft wash in their own hue over the panel, with one of the brand marks as a watermark */
+.hero-slide::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: var(--hs-wash, none); }
+.hs-news { --hs-wash: radial-gradient(90% 80% at 85% 10%, color-mix(in srgb, var(--t-accent-2) 22%, transparent), transparent 62%),
+  radial-gradient(80% 70% at 5% 100%, color-mix(in srgb, var(--t-accent) 16%, transparent), transparent 60%); }
+.hs-browser { --hs-wash: radial-gradient(90% 85% at 88% 20%, color-mix(in srgb, var(--t-accent) 26%, transparent), transparent 62%),
+  radial-gradient(70% 70% at 0% 100%, color-mix(in srgb, var(--t-ok) 10%, transparent), transparent 60%); }
+.hs-host { --hs-wash: radial-gradient(90% 85% at 85% 15%, color-mix(in srgb, var(--t-gold) 16%, transparent), transparent 62%),
+  radial-gradient(80% 70% at 5% 100%, color-mix(in srgb, var(--t-accent-2) 14%, transparent), transparent 60%); }
+.hs-mod { --hs-wash: radial-gradient(90% 85% at 85% 15%, color-mix(in srgb, var(--t-accent-2) 24%, transparent), transparent 62%),
+  radial-gradient(80% 70% at 5% 100%, color-mix(in srgb, var(--t-ok) 12%, transparent), transparent 60%); }
+.hs-deco { position: absolute; z-index: -1; pointer-events: none; right: -70px; top: 50%; width: 460px; height: 460px; transform: translateY(-52%);
+  background: url("art/brand/leyline-mark-512.png") center / contain no-repeat; opacity: calc(var(--t-mark-opacity) * 1.4); }
+.hs-browser .hs-deco { background-image: url("art/brand/leyline-swirl-256.webp"); width: 380px; height: 380px; right: -30px; }
+.hs-host .hs-deco { background-image: url("art/brand/leyline-crystal-256.webp"); width: 340px; height: 340px; right: 4%; opacity: calc(var(--t-mark-opacity) * 3); }
+
+.hs-body { display: grid; justify-items: start; gap: 10px; max-width: min(560px, 74%); }
+.hs-kick { font: 600 11px var(--t-font); letter-spacing: .1em; text-transform: uppercase; color: var(--t-accent-strong); }
+.hs-title { margin: 0; font: 700 38px/1.08 var(--t-font-display); letter-spacing: -0.025em; color: var(--t-text); overflow-wrap: anywhere; }
+.hs-line { margin: 0; font-size: 14.5px; color: var(--t-text-2); max-width: 46ch; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.hs-go { margin-top: 6px; }
+
+/* the featured mode: its key art fills the slide, the words sit on a dark gradient */
+.hero-slide.has-art { color: #fff; }
+.hero-slide .hs-art { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; object-position: 22% 38%; transition: transform 7s ease; }
+.hero-slide.on .hs-art { transform: scale(1.04); }
+.hero-slide.has-art::before {
+  background: linear-gradient(0deg, rgba(5, 7, 14, .92) 0%, rgba(5, 7, 14, .55) 36%, rgba(5, 7, 14, 0) 64%),
+              linear-gradient(90deg, rgba(5, 7, 14, .45) 0%, rgba(5, 7, 14, 0) 55%);
+}
+.hero-slide.has-art .hs-kick { color: color-mix(in srgb, var(--t-accent) 55%, #fff); }
+.hero-slide.has-art .hs-title { color: #fff; text-shadow: 0 2px 14px rgba(0, 0, 0, .6); }
+.hero-slide.has-art .hs-line { color: rgba(255, 255, 255, .86); text-shadow: 0 1px 8px rgba(0, 0, 0, .6); }
+.news.hero::before { display: none; }   /* each slide brings its own watermark */
+
+/* dots and arrows, bottom right */
+.hero-ctl { position: absolute; z-index: 2; right: 18px; bottom: 18px; display: flex; align-items: center; gap: 6px;
+  padding: 4px; border-radius: 999px; background: color-mix(in srgb, var(--t-bg) 55%, transparent);
+  border: var(--t-border-w) solid color-mix(in srgb, var(--t-panel-border) 70%, transparent);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.hero-ctl[hidden] { display: none; }
+.hero.on-art .hero-ctl { background: rgba(5, 7, 14, .55); border-color: rgba(255, 255, 255, .14); }
+.hero.on-art .hero-arrow { color: rgba(255, 255, 255, .85); }
+.hero.on-art .hero-dot::before { background: rgba(255, 255, 255, .7); }
+.hero.on-art .hero-dot[aria-current="true"]::before { background: var(--t-accent); }
+.hero-arrow { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
+  background: none; color: var(--t-text-2); }
+.hero-arrow svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.hero-arrow:hover, .hero-arrow:focus-visible { background: var(--t-accent-soft); color: var(--t-text); }
+.hero-dots { display: flex; align-items: center; gap: 2px; }
+.hero-dot { width: 18px; height: 18px; padding: 0; border: 0; background: none; cursor: pointer; display: grid; place-items: center; }
+.hero-dot::before { content: ""; width: 7px; height: 7px; border-radius: 999px; background: var(--t-muted); opacity: .55; transition: width .25s ease, background .25s ease, opacity .25s ease; }
+.hero-dot:hover::before { opacity: 1; }
+.hero-dot[aria-current="true"]::before { width: 18px; background: var(--t-accent); opacity: 1; }
+.hero-dot[aria-current="true"] { width: 26px; }
+.hero-dot:focus-visible, .hero-arrow:focus-visible { outline: 2px solid var(--t-accent); outline-offset: 1px; }
+
+@media (max-width: 1150px) { .hs-title { font-size: 32px; } .hs-body { max-width: 82%; } }
+@media (prefers-reduced-motion: reduce) {
+  .hero-slide, .hero-slide.on { transition: none; transform: none; }
+  .hero-slide .hs-art, .hero-slide.on .hs-art { transition: none; transform: none; }
+  .hero-dot::before { transition: none; }
+}
+
+/* ---------------------------------------------------------------- the cue at the fold, in main's bottom padding */
+.home { position: relative; }
+.home-cue {
+  position: absolute; left: 50%; bottom: -18px; transform: translateX(-50%); height: 18px; padding: 0 8px;
+  display: flex; align-items: center; gap: 4px; border: 0; background: none; cursor: pointer;
+  font: 600 10.5px var(--t-font); letter-spacing: .08em; text-transform: uppercase; color: var(--t-muted);
+}
+.home-cue[hidden] { display: none; }
+.home-cue svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.home-cue:hover, .home-cue:focus-visible { color: var(--t-text); }
+
+/* ---------------------------------------------------------------- the rows below the fold */
+.home-more { display: grid; gap: 22px; padding: 40px 0 6px; }
+.hm-sec[hidden] { display: none; }
+.hm-head { margin-bottom: 10px; padding: 0 2px; color: var(--t-text-2); }
+.hm-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.hm-row.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 1000px) { .hm-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.hm-card {
+  display: flex; align-items: center; gap: 12px; min-width: 0; padding: 12px 14px; text-align: left; cursor: pointer;
+  font: inherit; color: var(--t-text); border-radius: var(--t-radius-sm);
+  background-color: var(--t-panel); border: var(--t-border-w) solid var(--t-panel-border); box-shadow: var(--t-panel-shadow);
+  -webkit-backdrop-filter: blur(var(--t-panel-blur)) saturate(1.15); backdrop-filter: blur(var(--t-panel-blur)) saturate(1.15);
+  transition: border-color .15s ease, transform .15s ease;
+}
+.hm-card:hover, .hm-card:focus-visible { border-color: var(--t-accent); transform: translateY(-1px); }
+.hm-card:focus-visible { outline: 2px solid var(--t-accent); outline-offset: 1px; }
+.hm-txt { display: grid; gap: 2px; min-width: 0; }
+.hm-name-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.hm-name { font: 600 14px var(--t-font); color: var(--t-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.hm-line { font-size: 12.5px; color: var(--t-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hm-live::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--t-ok); vertical-align: 1px; }
+.hm-kick { font: 600 10.5px var(--t-font); letter-spacing: .08em; text-transform: uppercase; color: var(--t-muted); }
+.hm-card .rl-ic { width: 36px; height: 36px; border-radius: 10px; font-size: 15px; }
+.hm-ic {
+  width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 10px;
+  font: 700 15px var(--t-font); color: hsl(var(--h, 220) 70% 72%);
+  background: color-mix(in srgb, hsl(var(--h, 220) 60% 50%) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, hsl(var(--h, 220) 60% 60%) 35%, transparent);
+}
+html[data-base="light"] .hm-ic { color: hsl(var(--h, 220) 60% 36%); }
+
+/* a game mode: its art (or a gradient in its hue) above the name */
+.hm-card.hm-mode { flex-direction: column; align-items: stretch; gap: 10px; padding: 0 0 12px; overflow: hidden; }
+.hm-mode .hm-txt { padding: 0 14px; }
+.hm-pic { position: relative; display: grid; place-items: center; height: 92px; overflow: hidden;
+  background: radial-gradient(120% 120% at 20% 0%, hsl(var(--h, 220) 38% 38%), hsl(calc(var(--h, 220) + 30) 34% 18%));
+  border-bottom: var(--t-border-w) solid var(--t-panel-border); }
+.hm-pic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 30% 35%; }
+.hm-pic i { font: 800 34px var(--t-font-display); font-style: normal; color: rgba(255, 255, 255, .82); text-shadow: 0 2px 10px rgba(0, 0, 0, .35); }
+
+/* a news entry: its tag, title and first line */
+.hm-card.hm-news { align-items: flex-start; }
+.hm-news .hm-name { white-space: normal; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
+
+/* Host your own: one slim banner */
+.hm-sec.hm-host {
+  display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: var(--t-radius);
+  background:
+    radial-gradient(70% 140% at 100% 0%, color-mix(in srgb, var(--t-accent-2) 16%, transparent), transparent 60%),
+    radial-gradient(60% 140% at 0% 100%, color-mix(in srgb, var(--t-gold) 10%, transparent), transparent 60%),
+    var(--t-panel);
+  border: var(--t-border-w) solid var(--t-panel-border); box-shadow: var(--t-panel-shadow);
+  -webkit-backdrop-filter: blur(var(--t-panel-blur)) saturate(1.15); backdrop-filter: blur(var(--t-panel-blur)) saturate(1.15);
+}
+.hm-host-ic { width: 48px; height: 48px; flex: none; margin: -6px 0; }
+.hm-host-ic img { transform: scale(1.35); }
+.hm-host-ic img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.hm-host-txt { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.hm-host-txt b { font: 700 15px var(--t-font); color: var(--t-text); }
+.hm-host-txt span { font-size: 12.5px; color: var(--t-muted); }
+.hm-host-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; justify-content: flex-end; }
+.hm-host-acts .link-s { margin-left: 4px; }
+@media (max-width: 900px) { .hm-sec.hm-host { flex-wrap: wrap; } .hm-host-acts { justify-content: flex-start; } }
+@media (prefers-reduced-motion: reduce) { .hm-card { transition: none; } .hm-card:hover, .hm-card:focus-visible { transform: none; } }
