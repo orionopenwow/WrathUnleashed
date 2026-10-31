@@ -60,6 +60,31 @@ BUILD_OF = {v: k for k, v in BUILDS.items()}
 MAX_OFFERED_BUILD = 12340
 
 
+# Vanilla Remastered: the second official realm (hosting/vanilla-remastered/vr-beacon-up.sh writes its relay realm id
+# to /srv/wrath/portal/vr-realm.id, mounted at /app). Read like the Hangout's id file; until it exists the realm lists
+# like any community realm. Pinned right after the Dalaran Hangout, marked official, optional.
+VR_REALM = os.environ.get("WU_VR_REALM", "").strip()
+VR_FILE = os.environ.get("WU_VR_FILE", "/app/vr-realm.id")
+VR_LINE = "An optional second realm, hosted by Leyline for now."
+_vr = {"at": -1e9, "id": None}
+
+
+def vr_id() -> str | None:
+    """Vanilla Remastered's relay realm id, or None. Re-read once a minute."""
+    if VR_REALM:
+        return VR_REALM if REALM_ID_RE.match(VR_REALM) else None
+    now = time.monotonic()
+    if now - _vr["at"] > 60:
+        _vr["at"] = now
+        try:
+            with open(VR_FILE, encoding="utf-8") as f:
+                v = f.read(64).strip()
+            _vr["id"] = v if REALM_ID_RE.match(v) else None
+        except OSError:
+            _vr["id"] = None
+    return _vr["id"]
+
+
 def offered(build, env=None) -> bool:
     v = (os.environ if env is None else env).get("LEYLINE_ALL_CLIENTS", "").strip().lower()
     return v in ("1", "true", "yes", "on") or (build or 12340) <= MAX_OFFERED_BUILD
@@ -157,12 +182,17 @@ def region_of(r: dict):
 def order(realms: list[dict]) -> list[dict]:
     """Sets r["group"] (featured, sample, community, offline) and sorts; see the module docstring."""
     out = []
+    vr = vr_id()
     for r in realms:
         if not offered(r.get("build")):   # 4.3.4 / 5.4.8: not offered for now (MAX_OFFERED_BUILD)
             continue
         r = dict(r)
         r["sample"] = bool(r.get("hangout"))
-        if not r.get("live"):
+        r["vr"] = bool(vr) and r.get("id") == vr and not r["sample"]
+        if r["vr"]:   # the second official realm: pinned right after the Hangout, live or not
+            r["official"] = True
+            r["group"] = "official"
+        elif not r.get("live"):
             r["group"] = "offline" if not r["sample"] else "sample"
         elif r["sample"]:
             r["group"] = "sample"
@@ -171,7 +201,7 @@ def order(realms: list[dict]) -> list[dict]:
         else:
             r["group"] = "community"
         out.append(r)
-    rank = {"featured": 0, "sample": 1, "community": 2, "offline": 3}
+    rank = {"featured": 0, "sample": 1, "official": 1.5, "community": 2, "offline": 3}
     live = lambda r: r["group"] != "offline"   # noqa: E731
     out.sort(key=lambda r: (rank[r["group"]], -(r.get("score") or 0) if live(r) else 0,
                             -(r.get("players") or 0) if live(r) else 0, str(r.get("name", "")).lower(), r.get("id", "")))
@@ -263,6 +293,8 @@ def record_of(r: dict, sample: dict | None = None) -> dict:
             "score": r.get("score", 0.0), "regionEstimate": r.get("region_est"),
             "directConnect": bool(r.get("direct")),
             "featured": bool(r.get("featured")), "verified": bool(r.get("verified")), "official": bool(r.get("official")),
+            "pinned": bool(r.get("vr") or r.get("sample")), "optional": bool(r.get("vr")),
+            "note": VR_LINE if r.get("vr") else None,
             "sample": bool(r.get("sample")), "group": r.get("group", "community"),
             "sampleName": ((sample or {}).get("name") or SAMPLE_NAME) if r.get("sample") else None,
         },
@@ -322,7 +354,9 @@ def tags_html(r: dict, ruleset_labels: dict) -> str:
         out.append('<span class="badge good" title="Checked by Leyline staff">Verified host</span>')
     if r.get("new"):
         out.append('<span class="badge">New</span>')
-    out.append(f'<span class="tag">{e(BUILDS.get(r.get("build", 12340), "3.3.5a"))} · {e(CORES.get(r.get("core"), "AzerothCore"))}</span>')
+    # the client version only in its own chip (no version numbers anywhere else on the site); the tag is the core
+    out.append(f'<span class="tag ver" title="The game client this realm needs">{e(BUILDS.get(r.get("build", 12340), "3.3.5a"))}</span>')
+    out.append(f'<span class="tag">{e(CORES.get(r.get("core"), "AzerothCore"))}</span>')
     out.append(f'<span class="tag">{e(ruleset_labels.get(r.get("ruleset"), "Custom rules"))}</span>')
     out.append(f'<span class="tag">{e(r.get("type") or "PvE")}</span>')
     out += [f'<span class="tag">{e(TAG_LABEL[t])}</span>' for t in r.get("tags") or [] if t in TAG_LABEL]
@@ -399,6 +433,7 @@ def card(r: dict, join_base: str, ruleset_labels: dict, share_box=None) -> str:
     return (f'<div class="{cls.strip()}" id="r-{e(r["id"])}"><h2>{e(r["name"])}</h2>'
             f'<div class="tags">{tags_html(r, ruleset_labels)}</div>'
             + (f'<p>{e(r["tagline"])}</p>' if r.get("tagline") else '')
+            + (f'<p class="fine">{e(VR_LINE)}</p>' if r.get("vr") else '')
             + ('<details><summary>House rules</summary><ol>'
                + "".join(f'<li>{e(x)}</li>' for x in r["rules"]) + '</ol></details>' if r.get("rules") else '')
             + f'<p>{button} <a class="report" href="/wrath/realms/report?realm={e(r["id"])}" rel="nofollow">Report</a></p>'
@@ -424,7 +459,7 @@ def sample_card(st: dict, rec: dict | None, share_box=None, sample: dict | None 
     return (f'<div class="realm sample" id="sample"><h2>{e(name)}</h2>'
             '<div class="tags"><span class="tag">Official</span>'
             + ('<span class="badge warn">Temporary</span>' if temporary else '')
-            + f'<span class="tag">Run by Leyline</span><span class="tag">3.3.5a</span>{_players(r)}</div>'
+            + f'<span class="tag">Run by Leyline</span><span class="tag ver">3.3.5a</span>{_players(r)}</div>'
             + blurb
             # its relay record is there: the go intent lands players straight in Dalaran (stream/links.py)
             + ('<p><a class="btn primary" href="/wrath?go=h:dalaran">Play in Dalaran</a></p>' if rec else

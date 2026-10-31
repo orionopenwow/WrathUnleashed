@@ -13,6 +13,10 @@ small Lua data file next to the realm scripts, atomically:
     OV_LEYLINE_OUT       file to write    default /srv/wrath/custom/lua_scripts/leyline-realms.dat
     OV_LEYLINE_HOME      the Dalaran Hangout's realm id (this realm through the relay), listed first; default:
                          the id in /srv/wrath/hangout-realm.id (OV_LEYLINE_HOME_FILE; written by the hangout step)
+    OV_LEYLINE_VR        Vanilla Remastered's realm id, the second official realm: pinned right after the Hangout
+                         (marked verified: the window has no "official" word yet); default: the id in
+                         /srv/wrath/vr-realm.id (OV_LEYLINE_VR_FILE; written by the vr-beacon step). Until it exists
+                         the realm lists like any other.
     --from FILE          read a listing from a local JSON file instead (tests)
 
 On any failure the old file is left as it is (the window shows its age) and the exit code is 1.
@@ -29,6 +33,7 @@ LISTING = os.environ.get("OV_LEYLINE_LISTING", "https://relay.openvanilla.app/ap
 NETWORK = os.environ.get("OV_LEYLINE_NETWORK", "https://play.openvanilla.app/wrath/realms.json")
 OUT = os.environ.get("OV_LEYLINE_OUT", "/srv/wrath/custom/lua_scripts/leyline-realms.dat")
 HOME_FILE = os.environ.get("OV_LEYLINE_HOME_FILE", "/srv/wrath/hangout-realm.id")
+VR_FILE = os.environ.get("OV_LEYLINE_VR_FILE", "/srv/wrath/vr-realm.id")
 MAX_BYTES, MAX_REALMS, TIMEOUT = 2_000_000, 60, 10
 REALM_ID = re.compile(r"^[a-z2-7]{16}$")
 RULESETS = {"main", "brawl", "progression", "casual", "dalaran", "vanillaplus", "custom"}
@@ -87,18 +92,26 @@ def clean(rec):
             "sample": com.get("sample") is True}
 
 
-def home_id():
-    v = os.environ.get("OV_LEYLINE_HOME", "").strip()
+def id_from(env, path):
+    v = os.environ.get(env, "").strip()
     if not v:
         try:
-            with open(HOME_FILE, encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 v = f.read(64).strip()
         except OSError:
             v = ""
     return v if REALM_ID.match(v) else None
 
 
-def render(doc, now, home=None) -> str:
+def home_id():
+    return id_from("OV_LEYLINE_HOME", HOME_FILE)
+
+
+def vr_id():
+    return id_from("OV_LEYLINE_VR", VR_FILE)
+
+
+def render(doc, now, home=None, vr=None) -> str:
     recs = doc.get("realms") if isinstance(doc, dict) else None
     if not isinstance(recs, list):
         raise ValueError("not a listing")
@@ -110,11 +123,14 @@ def render(doc, now, home=None) -> str:
             out.append(c)
     for r in out:
         r["sample"] = r["sample"] or r["id"] == home
+        r["vr"] = bool(vr) and r["id"] == vr and not r["sample"]
+        if r["vr"]:
+            r["verified"] = True   # official (staff run); ov_leyline.lua reads no "official" word yet
 
     # featured live realms, then the sample hangout (this realm through the relay), then live realms by the fair
     # score (busiest first when the listing has no score), then offline ones
-    def rank(r):
-        return 1 if r["sample"] else 3 if not r["live"] else 0 if r["featured"] else 2
+    def rank(r):   # Vanilla Remastered (vr-realm.id): pinned right after the Hangout, live or not
+        return 1 if r["sample"] else 1.5 if r["vr"] else 3 if not r["live"] else 0 if r["featured"] else 2
     out.sort(key=lambda r: (rank(r), -r["score"], -(r["players"] or 0), r["name"].lower()))
     lines = []
     for r in out[:MAX_REALMS]:
@@ -149,7 +165,7 @@ def main(argv):
             raise last or ValueError("no listing")
     if len(raw) > MAX_BYTES:
         raise ValueError("listing too large")
-    text = render(json.loads(raw.decode("utf-8")), time.time(), home_id())
+    text = render(json.loads(raw.decode("utf-8")), time.time(), home_id(), vr_id())
     d = os.path.dirname(os.path.abspath(OUT))
     fd, tmp = tempfile.mkstemp(dir=d, prefix=".leyline-")
     try:

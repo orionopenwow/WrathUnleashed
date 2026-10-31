@@ -32,8 +32,10 @@ with open(listing, "w") as f:
 
 def run(**env):
     out = os.path.join(tmp, "out.dat")
-    e = dict(os.environ, OV_LEYLINE_OUT=out, OV_LEYLINE_HOME_FILE=os.path.join(tmp, "none.id"))
+    e = dict(os.environ, OV_LEYLINE_OUT=out, OV_LEYLINE_HOME_FILE=os.path.join(tmp, "none.id"),
+             OV_LEYLINE_VR_FILE=os.path.join(tmp, "none-vr.id"))
     e.pop("OV_LEYLINE_HOME", None)
+    e.pop("OV_LEYLINE_VR", None)
     e.update(env)
     p = subprocess.run([sys.executable, "-I", FETCH, "--from", listing], env=e, capture_output=True, text=True)
     return p.returncode, re.findall(r'id = "([a-z2-7]{16})"', open(out).read()) if p.returncode == 0 else p.stderr
@@ -48,6 +50,16 @@ with open(idf, "w") as f:
     f.write(HANG + "\n")
 rc, ids = run(OV_LEYLINE_HOME_FILE=idf)
 check("hangout first (the hangout step's id file)", rc == 0 and ids[0] == HANG, ids)
+# Vanilla Remastered (the vr-beacon step's vr-realm.id): pinned right after the Hangout, even offline, marked verified
+vrf = os.path.join(tmp, "vr-realm.id")
+with open(vrf, "w") as f:
+    f.write("qrstuvwxyz234567\n")
+rc, ids = run(OV_LEYLINE_HOME_FILE=idf, OV_LEYLINE_VR_FILE=vrf)
+_dat = open(os.path.join(tmp, "out.dat")).read()
+check("vr: right after the Hangout (offline too), verified", rc == 0 and ids == [HANG, "qrstuvwxyz234567", "abcdefghijklmnop"]
+      and re.search(r'id = "qrstuvwxyz234567"[^}]*verified = true', _dat), ids)
+rc, ids = run(OV_LEYLINE_HOME_FILE=idf)
+check("vr: without its id file it lists like any realm", rc == 0 and ids[-1] == "qrstuvwxyz234567", ids)
 rc, ids = run(OV_LEYLINE_HOME="../../etc")
 check("a junk hangout id changes nothing", rc == 0 and ids[0] == "abcdefghijklmnop", ids)
 # the network listing (2026-10-29): featured live realms first, then the sample hangout, then the fair score
