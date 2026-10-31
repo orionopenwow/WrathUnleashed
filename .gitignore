@@ -77,6 +77,10 @@ labs/leyline-client-112/*.bundle
 /control/autopilot.json
 /control/claude-status.json
 /control/last-run.json
+/control/last-check.json
+# Leyline HQ (tools/hq/hq_sync.py): Claude's notes for HQ and the owner's notes to Claude stay on the PC
+/control/hq-notes.json
+/control/notes-from-owner.json
 tools/github-cleanup/PLAN.json
 tools/discord-leyline/token.txt
 tools/discord-leyline/.leyline-state.json

@@ -18,11 +18,13 @@ Only this PC can open it: it listens on 127.0.0.1, and every action needs the se
 Standard library only.
 """
 import hashlib
+import hmac
 import html
 import http.server
 import json
 import os
 import queue
+import re
 import secrets
 import subprocess
 import sys
@@ -41,6 +43,8 @@ STATUS = ROOT / "control" / "claude-status.json"
 PORT = int(os.environ.get("WU_CONTROL_PORT", "8097"))
 AUTO = ROOT / "control" / "autopilot.json"
 LAST = ROOT / "control" / "last-run.json"
+LAST_CHECK = ROOT / "control" / "last-check.json"    # the last server check: {at, id, ok} (Leyline HQ shows it)
+HQ_URL = "https://play.openvanilla.app/wrath/admin"   # Leyline HQ: the one place online (stream/hq.py)
 QUIET = "--quiet" in sys.argv                         # started at Windows sign-in: no browser tab
 TOKEN_FILE = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "WrathUnleashed" / "control-token"
 # The shared look (stream/www-files/art: wu-theme.css, the starfield, corners, dragons, divider, Cinzel), the same
@@ -152,7 +156,36 @@ STEPS = {
     # The game data killswitch (docs/GAME-DATA-ON-OUR-SERVER.md): only when the owner asks for it.
     "gamedata-off": ("stream/Game data killswitch ON.bat", "Game data OFF: our server serves no game data (players use their own game folder)", False),
     "gamedata-on": ("stream/Game data killswitch OFF.bat", "Game data back ON: stream the slim sampler again", False),
+    # Leyline HQ (docs/ADMIN-CONSOLE.md, "What the PC sends"): one bat, three names. It uploads the last deploys
+    # (step names and outcomes only) and Claude's notes (control/hq-notes.json), and downloads the owner's notes to
+    # Claude into control/notes-from-owner.json. This window also runs it by itself after every run and with the
+    # 3-hourly server check.
+    "hq-sync": ("tools/hq/HQ sync.bat", "Leyline HQ: send the recent changes and Claude's notes, fetch the owner's notes", False),
+    "hqnote": ("tools/hq/HQ sync.bat", "Leyline HQ: publish Claude's notes (and sync)", False),
+    "hq-inbox": ("tools/hq/HQ sync.bat", "Leyline HQ: fetch the owner's notes to Claude (and sync)", False),
 }
+# Steps that change nothing in production. With "Ask before deploys" on (control/autopilot.json "confirm"),
+# Autopilot runs only these by itself; anything else waits for "Launch all".
+READ_ONLY = {"check", "ov112-check", "ov112-realm-check", "ghclean-check", "sampler-check", "brand-check", "builds-why",
+             "fresh-check", "hq-sync", "hqnote", "hq-inbox"}
+HQ_STEPS = {"hq-sync", "hqnote", "hq-inbox"}
+
+# Never in a log or on the page: passwords, tokens, keys, connection strings (scrub() on every line a step prints).
+SECRET_RES = [
+    (re.compile(r"(?i)\b([A-Z0-9_]*(?:PASSWORD|PASSWD|PASS|TOKEN|SECRET|API_?KEY|PRIVATE_?KEY)(?:_[A-Z0-9_]*)?\s*[=:]\s*)(\"[^\"]*\"|'[^']*'|\S+)"), r"\1[hidden]"),
+    (re.compile(r"\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}"), "[hidden]"),
+    (re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}"), "[hidden]"),
+    (re.compile(r"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{12,}"), r"\1 [hidden]"),
+    (re.compile(r"(?i)\b((?:mysql|postgres(?:ql)?|mongodb|redis|amqp|https?)://[^:/\s@]+:)[^@\s]+@"), r"\1[hidden]@"),
+    (re.compile(r"(?i)(DatabaseInfo\s*=\s*\"?[^;\"]*;[^;\"]*;[^;\"]*;)[^;\"]*"), r"\1[hidden]"),
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*"), "[hidden private key]"),
+]
+
+
+def scrub(line: str) -> str:
+    for rx, rep in SECRET_RES:
+        line = rx.sub(rep, line)
+    return line
 CHECKS = [
     ("Play page", "https://play.openvanilla.app/wrath"),
     ("Game files", "https://wrath.openvanilla.app/data/__tier/index.json"),
@@ -209,16 +242,33 @@ def claude_status() -> dict:
         return {"updated": "", "now": [], "waiting_on_you": [], "done": [], "note": "No status from Claude yet."}
 
 
-def autopilot_on() -> bool:
+def _auto_doc() -> dict:
     try:
-        return bool(json.loads(AUTO.read_text(encoding="utf-8-sig")).get("on"))
+        d = json.loads(AUTO.read_text(encoding="utf-8-sig"))
+        return d if isinstance(d, dict) else {}
     except Exception:
-        return False
+        return {}
 
 
-def set_autopilot(on: bool) -> None:
+def autopilot_on() -> bool:
+    return bool(_auto_doc().get("on"))
+
+
+def confirm_on() -> bool:
+    """"Ask before deploys" (default off): Autopilot runs read-only steps by itself, the rest wait for Launch all."""
+    return bool(_auto_doc().get("confirm"))
+
+
+def set_autopilot(on: bool | None = None, confirm: bool | None = None) -> None:
+    d = _auto_doc()
+    if on is not None:
+        d["on"] = bool(on)
+    if confirm is not None:
+        d["confirm"] = bool(confirm)
+    d["changed"] = time.strftime("%Y-%m-%d %H:%M:%S")
     AUTO.parent.mkdir(exist_ok=True)
-    AUTO.write_text(json.dumps({"on": bool(on), "changed": time.strftime("%Y-%m-%d %H:%M:%S")}), encoding="utf-8")
+    AUTO.write_text(json.dumps({"on": bool(d.get("on")), "confirm": bool(d.get("confirm")), "changed": d["changed"]}),
+                    encoding="utf-8")
 
 
 def pending_stamp() -> float:
@@ -279,8 +329,18 @@ def autopilot_loop() -> None:
         try:
             items = pending()
             failed = state.get("auto_failed")
+            if confirm_on():   # "Ask before deploys": only the read-only steps at the front run by themselves
+                safe = []
+                for it in items:
+                    if it["step"] not in READ_ONLY:
+                        break
+                    safe.append(it)
+                if items and not safe and state.get("asked") != pending_stamp():
+                    state["asked"] = pending_stamp()
+                    emit("line", "== Ask before deploys is on: the next step waits for you (Launch all).")
+                items = safe
             if items and not (failed and failed == pending_stamp()):
-                start_run("", title="Autopilot")
+                start_run("", items, title="Autopilot")
             elif time.time() >= next_check:
                 next_check = time.time() + 3 * 3600
                 item = {"id": "check-auto-" + time.strftime("%Y%m%d-%H%M%S"), "step": "check",
@@ -301,7 +361,7 @@ def emit(kind: str, data) -> None:
 
 
 def run_all(ship_message: str, items=None, record=True) -> None:
-    ran = []
+    ran, started = [], []
     try:
         LOGS.mkdir(exist_ok=True)
         queue = list(items if items is not None else pending())
@@ -318,6 +378,7 @@ def run_all(ship_message: str, items=None, record=True) -> None:
             bat, title, interactive = STEPS[item["step"]]
             with lock:
                 state["running"] = item
+            started.append(item["step"])
             emit("step", item)
             emit("line", f"===== {title} ({item['id']}) =====")
             # The step's own "press any key" lines get an empty answer. Nothing is answered through stdin (git can
@@ -344,12 +405,14 @@ def run_all(ship_message: str, items=None, record=True) -> None:
                 except OSError:
                     pass
                 for raw in iter(p.stdout.readline, b""):
-                    line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+                    line = scrub(raw.decode("utf-8", errors="replace").rstrip("\r\n"))
                     if line.strip().lower().startswith("press any key"):
                         continue
                     lf.write(line + "\n")
                     emit("line", line)
                 rc = p.wait()
+            if item["step"] == "check":
+                write_last_check(item["id"], rc == 0)
             if rc != 0:
                 emit("line", f"!! {title} failed (exit {rc}). Send Claude a screenshot, or the log: logs/{log.name}")
                 emit("result", {"ok": False, "step": item["step"]})
@@ -373,9 +436,39 @@ def run_all(ship_message: str, items=None, record=True) -> None:
         if ran:
             write_last(ran, True)
     finally:
+        if started and not set(started) <= HQ_STEPS:
+            hq_sync_quiet()
         with lock:
             state["running"] = None
         emit("state", {})
+
+
+def write_last_check(sid: str, ok: bool) -> None:
+    try:
+        LAST_CHECK.parent.mkdir(exist_ok=True)
+        LAST_CHECK.write_text(json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "id": sid, "ok": bool(ok)}),
+                              encoding="utf-8")
+    except OSError:
+        pass
+
+
+def hq_sync_quiet() -> None:
+    """After a run: tell Leyline HQ what changed (tools/hq/HQ sync.bat). Never fails the run; its output goes to
+    logs/hq-sync-auto.log only."""
+    bat = ROOT / STEPS["hq-sync"][0]
+    if not bat.exists() or os.name != "nt":
+        return
+    try:
+        LOGS.mkdir(exist_ok=True)
+        with open(LOGS / "hq-sync-auto.log", "w", encoding="utf-8") as lf:
+            p = subprocess.run(["cmd", "/c", "call", str(bat)], cwd=str(ROOT), stdin=subprocess.DEVNULL,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=180,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            for line in p.stdout.decode("utf-8", errors="replace").splitlines():
+                lf.write(scrub(line) + "\n")
+        emit("line", "== Leyline HQ updated" if p.returncode == 0 else "== Leyline HQ sync did not finish (logs/hq-sync-auto.log)")
+    except Exception as e:   # noqa: BLE001
+        emit("line", f"== Leyline HQ sync skipped: {type(e).__name__}")
 
 
 def check_health() -> None:
@@ -398,13 +491,32 @@ def check_health() -> None:
         time.sleep(30)
 
 
+def token_ok(t: str) -> bool:
+    return bool(t) and hmac.compare_digest(t.encode(), TOKEN.encode())
+
+
+def cookie_token(cookie: str) -> str:
+    for part in (cookie or "").split(";"):
+        k, _, v = part.strip().partition("=")
+        if k == "lc_token":
+            return v
+    return ""
+
+
+def url_token(path: str) -> str:
+    q = urllib.parse.parse_qs(path.split("?", 1)[1]) if "?" in path else {}
+    return (q.get("t") or [""])[0]
+
+
 class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
-    def _send(self, code, body, ctype="application/json"):
+    def _send(self, code, body, ctype="application/json", cookie=""):
         b = body if isinstance(body, bytes) else body.encode("utf-8")
         self.send_response(code)
+        if cookie:
+            self.send_header("Set-Cookie", cookie)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(b)))
         self.send_header("Cache-Control", "no-store")
@@ -421,7 +533,8 @@ class H(http.server.BaseHTTPRequestHandler):
             return False
         if origin and origin not in (f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"):
             return False
-        return self.headers.get("X-Token") == TOKEN or f"t={TOKEN}" in self.path
+        return token_ok(self.headers.get("X-Token", "")) or token_ok(cookie_token(self.headers.get("Cookie", ""))) \
+            or token_ok(url_token(self.path))
 
     def _art(self, name: str):
         if self.headers.get("Host", "") not in (f"127.0.0.1:{PORT}", f"localhost:{PORT}"):
@@ -443,11 +556,11 @@ class H(http.server.BaseHTTPRequestHandler):
         if path.startswith("/art/"):
             return self._art(path[len("/art/"):])
         if path == "/":
-            if f"t={TOKEN}" not in self.path:
+            if not (token_ok(url_token(self.path)) or token_ok(cookie_token(self.headers.get("Cookie", "")))):
                 return self._send(403, "This link is old. Close this tab and double-click 'Leyline Control.bat'.",
                                   "text/plain")
             return self._send(200, PAGE.replace("__TOKEN__", TOKEN).replace("__THEMEV__", theme_version()),
-                              "text/html; charset=utf-8")
+                              "text/html; charset=utf-8", cookie=f"lc_token={TOKEN}; HttpOnly; SameSite=Strict; Path=/")
         if not self._authed():
             return self._send(403, '{"error":"forbidden"}')
         if path == "/api/state":
@@ -458,7 +571,7 @@ class H(http.server.BaseHTTPRequestHandler):
             return self._send(200, json.dumps({"pending": pending(), "history": history(),
                                                "claude": claude_status(), "running": running,
                                                "health": health, "health_at": at, "lines": lines,
-                                               "autopilot": autopilot_on()}))
+                                               "autopilot": autopilot_on(), "confirm": confirm_on()}))
         if path == "/api/log":
             name = self.path.split("name=", 1)[-1]
             f = (LOGS / os.path.basename(urllib.request.unquote(name)))
@@ -500,6 +613,13 @@ class H(http.server.BaseHTTPRequestHandler):
             state["auto_failed"] = None
             if not start_run(msg):
                 return self._send(409, '{"error":"already running"}')
+            return self._send(200, '{"ok":true}')
+        if self.path == "/api/confirm":
+            set_autopilot(confirm=bool(body.get("on")))
+            emit("state", {})
+            return self._send(200, json.dumps({"ok": True, "confirm": confirm_on()}))
+        if self.path == "/api/open-hq":
+            webbrowser.open(HQ_URL)
             return self._send(200, '{"ok":true}')
         if self.path == "/api/autopilot":
             set_autopilot(bool(body.get("on")))
@@ -588,6 +708,8 @@ main{padding:16px;gap:16px}.stack{gap:16px}.card{padding:16px}h1{font-size:16px;
 <div class="health" id="health"></div>
 <div class="actions"><button id="auto" title="While this window is open, Claude's updates run on their own">Autopilot: …</button>
 <button id="gmc" title="Opens the GM console (bug reports, players, health, logs) in your browser">GM console</button>
+<button id="ask" title="On: deploys wait for Launch all; read-only checks still run by themselves">Ask before deploys: …</button>
+<button id="hq" class="primary" title="Leyline HQ: status, what needs you, releases, notes (play.openvanilla.app/wrath/admin)">Open HQ</button>
 <button id="check">Check server</button><button id="game">Open the game</button></div></header>
 <main>
 <div class="stack">
@@ -619,6 +741,7 @@ list($("now"),c.now,"now",c.note||"Idle.");list($("fin"),c.done,"fin","Nothing y
 $("cupd").textContent=c.updated?`Updated ${c.updated}`:"";
 list($("pending"),(s.pending||[]).map(p=>({tag:p.step,text:p.title,detail:p.note})),"","Nothing to launch. You're up to date.");
 const a=$("auto");a.textContent=s.autopilot?"Autopilot: ON":"Autopilot: OFF";a.className=s.autopilot?"primary":"";a.dataset.on=s.autopilot?"1":"";
+const q=$("ask");q.textContent=s.confirm?"Ask before deploys: ON":"Ask before deploys: OFF";q.dataset.on=s.confirm?"1":"";
 $("go").disabled=!!s.running||!(s.pending||[]).length;
 $("run").innerHTML=s.running?`<span class="spinner"></span>${esc(s.running.title||"Running")}…`:'<span class="sub">Idle</span>';
 $("hist").innerHTML=(s.history||[]).map(x=>`<div class="item fin"><span class="tag">${esc(x.step)}</span><div>${esc(x.note||x.id)} ${x.log?`<a href="/api/log?t=${T}&name=${encodeURIComponent(x.log)}" target="_blank">log</a>`:""}</div></div>`).join("")||'<div class="empty">No runs yet.</div>';
@@ -628,6 +751,8 @@ $("check").onclick=async()=>{$("con").innerHTML="";const r=await fetch("/api/che
 $("auto").onclick=async()=>{await fetch("/api/autopilot",{method:"POST",headers:{...H,"Content-Type":"application/json"},body:JSON.stringify({on:!$("auto").dataset.on})});refresh()};
 $("gmc").onclick=async()=>{const r=await fetch("/api/gm-console",{method:"POST",headers:H});if(!r.ok)alert("Couldn't open it: "+(await r.text()))};
 $("game").onclick=()=>fetch("/api/open-game",{method:"POST",headers:H});
+$("hq").onclick=()=>fetch("/api/open-hq",{method:"POST",headers:H});
+$("ask").onclick=async()=>{await fetch("/api/confirm",{method:"POST",headers:{...H,"Content-Type":"application/json"},body:JSON.stringify({on:!$("ask").dataset.on})});refresh()};
 const es=new EventSource(`/api/events?t=${T}`);
 es.onmessage=e=>{const m=JSON.parse(e.data);if(m.kind==="line")line(m.data);else refresh()};
 refresh();setInterval(refresh,10000);
