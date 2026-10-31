@@ -1637,6 +1637,7 @@ function renderHost() {
     $("host-name").textContent = (kit.realm && kit.realm.name) || "Your realm";
     hostStatus();
   }
+  document.dispatchEvent(new CustomEvent("leyline:kit", { detail: kit }));   // hostconsole.js: the console or the setup start
 }
 
 async function hostStart(seed) {
