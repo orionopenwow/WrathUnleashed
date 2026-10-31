@@ -9,6 +9,7 @@
 <!-- themes (themes agent): Dark (style.css) or Light; the Themes section; themes.js applies the theme before paint -->
 <link rel="stylesheet" href="themes/themes.css"><script src="themes.js"></script>
 <link rel="stylesheet" href="social.css"><!-- Home's profile panel (social.js) and the Forum page (forum.js) -->
+<link rel="stylesheet" href="account.css"><!-- the sign-in chooser (social.js) and Manage account (account.js) -->
 <link rel="stylesheet" href="modes.css">
 <link rel="stylesheet" href="hostconsole.css"><!-- Host: the host console (hostconsole.js) -->
 <link rel="stylesheet" href="home.css"><!-- Home: the hero gallery and the rows below it (home.js) -->
@@ -316,6 +317,15 @@
     </div>
   </section>
 
+  <!-- MANAGE ACCOUNT (account.js): signed out, the sign-in in steps; signed in, your picture, name and bio, the ways to
+       sign in and Sign out. Opened from the title bar's profile chip; no menu item. -->
+  <section class="page" id="page-account">
+    <div class="panel wide ac">
+      <div class="panel-head"><h2>Manage account</h2></div>
+      <div id="ac-view" class="ac-view"></div>
+    </div>
+  </section>
+
   <!-- NEWS -->
   <section class="page" id="page-news">
     <div class="panel">
@@ -481,6 +491,7 @@
 </div>
 <script src="spin.js"></script>
 <script src="social.js"></script>
+<script src="account.js"></script>
 <script src="forum.js"></script>
 <script src="modes.js"></script>
 <script src="app.js"></script>

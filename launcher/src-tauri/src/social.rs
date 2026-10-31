@@ -32,7 +32,8 @@ pub const ACTIONS: &[(&str, &str, &str, &[&str])] = &[
     ("state", "GET", "state", &[]),
     ("events", "GET", "events", &["since"]),
     ("thread", "GET", "thread", &["with", "before"]),
-    ("profile", "POST", "profile", &["name", "main", "show_main", "offline"]),
+    // the profile (Manage account, ui/account.js): name, picture, bio and the first-time step (stream/profiles.py)
+    ("profile", "POST", "profile", &["name", "main", "show_main", "offline", "bio", "avatar", "setup"]),
     ("request", "POST", "request", &["to"]),
     ("accept", "POST", "accept", &["pid"]),
     ("decline", "POST", "decline", &["pid"]),
@@ -137,6 +138,33 @@ pub struct Pending {
     pub verify_url: String,
     pub interval: u64,
     pub until: Instant,
+    /// What the browser opens: verify_url, plus `&via=<way>` when the player picked a way (`open_url`).
+    pub open: String,
+}
+
+/// The sign-in ways the launcher offers (the website's own: stream/profiles.py WAYS).
+pub const WAYS: &[&str] = &["herokey", "google", "discord"];
+
+/// The approval page with the way the player picked (the page goes straight to it); an unknown way is left off.
+pub fn open_url(verify_url: &str, via: Option<&str>) -> String {
+    match via {
+        Some(v) if WAYS.contains(&v) => format!("{verify_url}&via={v}"),
+        _ => verify_url.to_string(),
+    }
+}
+
+/// Which ways the website offers right now ({herokey, google, discord}: booleans only), no sign-in needed.
+pub fn ways() -> Result<Value, String> {
+    let v = read_json(agent(TIMEOUT).get(&format!("{}/ways", base())).call().map_err(failure)?)?;
+    Ok(sanitize_ways(&v))
+}
+
+fn sanitize_ways(v: &Value) -> Value {
+    let mut out = Map::new();
+    for w in WAYS {
+        out.insert((*w).to_string(), Value::Bool(*w == "herokey" || v.get(*w).and_then(Value::as_bool).unwrap_or(false)));
+    }
+    Value::Object(out)
 }
 
 /// What the UI sees of a sign-in in progress.
@@ -170,6 +198,7 @@ pub fn start() -> Result<Pending, String> {
         verify_url: s("verify_url"),
         interval: v.get("interval").and_then(Value::as_u64).unwrap_or(5).clamp(2, 30),
         until: Instant::now() + Duration::from_secs(v.get("expires_in").and_then(Value::as_u64).unwrap_or(600).min(1800)),
+        open: String::new(),
     };
     if !token_ok(&p.device_code) || !verify_url_ok(&p.verify_url, &p.user_code) {
         return Err("The server's answer didn't look right.".into());
@@ -277,11 +306,13 @@ pub mod commands {
         load_token(&dir()).is_some()
     }
 
-    /// Start a sign-in: get a code and open the approval page in the player's browser.
+    /// Start a sign-in: get a code and open the approval page in the player's browser (with the way they picked:
+    /// herokey, google or discord, which the page goes straight to).
     #[tauri::command]
-    pub async fn social_signin_start(app: AppHandle) -> Result<SignIn, String> {
-        let p = blocking(start).await?;
-        app.opener().open_url(p.verify_url.clone(), None::<&str>).map_err(|e| e.to_string())?;
+    pub async fn social_signin_start(app: AppHandle, via: Option<String>) -> Result<SignIn, String> {
+        let mut p = blocking(start).await?;
+        p.open = open_url(&p.verify_url, via.as_deref());
+        app.opener().open_url(p.open.clone(), None::<&str>).map_err(|e| e.to_string())?;
         let out = SignIn { state: "pending".into(), user_code: p.user_code.clone(), verify_url: p.verify_url.clone() };
         *PENDING.lock().map_err(|_| "lock")? = Some(p);
         Ok(out)
@@ -290,7 +321,7 @@ pub mod commands {
     /// Open the approval page again (the same code).
     #[tauri::command]
     pub fn social_signin_reopen(app: AppHandle) -> Result<(), String> {
-        let url = PENDING.lock().map_err(|_| "lock")?.as_ref().map(|p| p.verify_url.clone()).ok_or("No sign-in in progress.")?;
+        let url = PENDING.lock().map_err(|_| "lock")?.as_ref().map(|p| p.open.clone()).ok_or("No sign-in in progress.")?;
         app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
     }
 
@@ -320,6 +351,12 @@ pub mod commands {
     #[tauri::command]
     pub async fn social_call(action: String, args: Option<Value>) -> Result<Value, String> {
         blocking(move || call(&dir(), &action, &args.unwrap_or(Value::Null))).await
+    }
+
+    /// The sign-in ways the website offers (Manage account's buttons): no sign-in needed.
+    #[tauri::command]
+    pub async fn social_ways() -> Result<Value, String> {
+        blocking(ways).await
     }
 
     #[tauri::command]
@@ -384,6 +421,30 @@ mod tests {
         assert!(!verify_url_ok("https://evil.example/wrath/link?code=BCDF-GHJK", "BCDF-GHJK"));
         assert!(!verify_url_ok("https://play.openvanilla.app/wrath/link?code=BCDF-GHJK&x=1", "BCDF-GHJK"));
         assert!(!verify_url_ok("https://play.openvanilla.app/wrath/link?code=ABCD-EFGH", "ABCD-EFGH"));
+    }
+
+    #[test]
+    fn profile_sends_only_its_fields() {
+        let (m, p, b) = request_for("profile", &json!({"bio": "hi", "avatar": "moon", "setup": true, "name": "A1", "token": "x", "url": "y"})).unwrap();
+        assert_eq!((m, p.as_str()), ("POST", "profile"));
+        assert_eq!(b.unwrap(), json!({"bio": "hi", "avatar": "moon", "setup": true, "name": "A1"}));
+    }
+
+    #[test]
+    fn the_way_rides_on_the_approval_page_only_when_known() {
+        let u = "https://play.openvanilla.app/wrath/link?code=BCDF-GHJK";
+        assert_eq!(open_url(u, Some("google")), format!("{u}&via=google"));
+        assert_eq!(open_url(u, Some("discord")), format!("{u}&via=discord"));
+        assert_eq!(open_url(u, Some("herokey")), format!("{u}&via=herokey"));
+        assert_eq!(open_url(u, Some("https://evil.example")), u);
+        assert_eq!(open_url(u, Some("google&x=1")), u);
+        assert_eq!(open_url(u, None), u);
+    }
+
+    #[test]
+    fn ways_are_booleans_and_the_hero_key_is_always_there() {
+        assert_eq!(sanitize_ways(&json!({"google": true, "discord": "yes", "evil": true})), json!({"herokey": true, "google": true, "discord": false}));
+        assert_eq!(sanitize_ways(&Value::Null), json!({"herokey": true, "google": false, "discord": false}));
     }
 
     #[test]

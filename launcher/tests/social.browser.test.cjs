@@ -31,6 +31,7 @@ const FAKE = (opts) => {
         wine: { enabled: true, command: 'wine', prefix: '' } }, official_realm: 'play.openvanilla.app',
         browser_url: 'https://play.openvanilla.app/wrath', windows: false, data_dir: '/tmp' };
       case 'social_status': return signed;
+      case 'social_ways': return { herokey: true, google: true, discord: false };
       case 'social_signin_start': return { state: 'pending', user_code: 'BCDF-GHJK', verify_url: 'https://play.openvanilla.app/wrath/link?code=BCDF-GHJK' };
       case 'social_signin_poll': polls++; signed = true; return { state: 'signed_in', user_code: 'BCDF-GHJK', verify_url: '' };
       case 'social_signout': signed = false; return null;
@@ -91,7 +92,9 @@ test('signed in: the profile sits in the title bar, top right, with Manage accou
   await page.click('#hf-me-btn');
   assert.deepEqual(await page.$$eval('#hf-me [role="menuitem"]', (b) => b.map((x) => x.textContent)), ['Manage account', 'Sign out']);
   await page.click('#hf-me [role="menuitem"]:has-text("Manage account")');
-  assert.ok(await page.evaluate(() => window.__calls.some(([c, a]) => c === 'open_link' && a.name === 'account')));
+  // Manage account is a page in the launcher now (account.js), not the website
+  await page.waitForSelector('#page-account.on');
+  assert.ok(!(await page.evaluate(() => window.__calls.some(([c, a]) => c === 'open_link' && a.name === 'account'))));
   await page.click('#hf-me-btn');
   await page.click('#hf-me [role="menuitem"]:has-text("Sign out")');
   await page.waitForSelector('#hf-signin');
@@ -101,12 +104,14 @@ test('signed in: the profile sits in the title bar, top right, with Manage accou
   await page.close();
 });
 
-test('signed out: Sign in shows the code in the panel, then your name', async () => {
+test('signed out: Sign in, pick a way, the code under the chip, then your name', async () => {
   const { page, errors } = await open();
   await page.waitForSelector('#hf-signin');
   assert.equal(await page.textContent('#hf-me .hf-me-st'), 'Signed out');
   await page.click('#hf-signin');
-  await page.waitForSelector('#hf-code:not([hidden])');
+  await page.waitForSelector('#hf-code:not([hidden]) .sf-way');
+  await page.click('#hf-code .sf-way[data-via="herokey"]');
+  await page.waitForSelector('#hf-code .sx-code');
   assert.match(await page.textContent('#hf-code'), /BCDF-GHJK/);
   await page.waitForFunction(() => document.querySelector('#hf-me .hf-me-name') && document.querySelector('#hf-me .hf-me-name').textContent === 'Alice', null, { timeout: 9000 });
   assert.ok(await page.isHidden('#hf-code'));

@@ -45,6 +45,12 @@ pub const BROWSER_PLAY_URL: &str = "https://play.openvanilla.app/wrath";
 pub const LINKS: &[(&str, &str)] = &[
     ("play", BROWSER_PLAY_URL),
     ("account", "https://play.openvanilla.app/wrath"),
+    // Manage account (ui/account.js): the website's profile page, the Hero Key page, linking another way, linked launchers
+    ("profile", "https://play.openvanilla.app/wrath/profile"),
+    ("herokey", "https://play.openvanilla.app/account/key"),
+    ("linkgoogle", "https://play.openvanilla.app/auth/google/start?link=1"),
+    ("linkdiscord", "https://play.openvanilla.app/auth/discord/start?link=1"),
+    ("linkedlaunchers", "https://play.openvanilla.app/wrath/link"),
     ("news", "https://play.openvanilla.app/wrath/leyline"),
     ("docs", "https://play.openvanilla.app/wrath/docs"),
     ("mods", "https://play.openvanilla.app/wrath/mods"),
@@ -82,6 +88,15 @@ mod link_tests {
     fn the_forum_links_to_the_site() {
         assert_eq!(super::link("forum"), Some("https://play.openvanilla.app/wrath/leyline/forum"));
         assert_eq!(super::link("forumnew"), Some("https://play.openvanilla.app/wrath/leyline/forum/new"));
+    }
+
+    #[test]
+    fn manage_account_links_to_the_site() {
+        assert_eq!(super::link("profile"), Some("https://play.openvanilla.app/wrath/profile"));
+        assert_eq!(super::link("herokey"), Some("https://play.openvanilla.app/account/key"));
+        assert_eq!(super::link("linkgoogle"), Some("https://play.openvanilla.app/auth/google/start?link=1"));
+        assert_eq!(super::link("linkdiscord"), Some("https://play.openvanilla.app/auth/discord/start?link=1"));
+        assert_eq!(super::link("linkedlaunchers"), Some("https://play.openvanilla.app/wrath/link"));
     }
 
     #[test]
