@@ -163,7 +163,7 @@ test("Home's friends panel: your row, the groups and their counts, folding, sear
   assert.ok(await page.isHidden('#hf-list .hf-group[data-group="fav"] .hf-rows'), 'still folded after a reload');
   // your menu: Appear offline
   await page.click('#hf-me-btn');
-  assert.deepEqual(await page.$$eval('#hf-me [role="menuitem"]', (b) => b.map((x) => x.textContent)), ['Appear online', 'Appear offline', 'Sign out']);
+  assert.deepEqual(await page.$$eval('#hf-me [role="menuitem"]', (b) => b.map((x) => x.textContent)), ['Appear online', 'Appear offline', 'Manage account', 'Sign out']);
   await page.click('#hf-me [role="menuitem"]:has-text("Appear offline")');
   await page.waitForFunction(() => window.__calls.some(([c, a]) => c === 'social_call' && a.action === 'profile'));
   assert.ok(await page.evaluate(() => window.__calls.some(([c, a]) => c === 'social_call' && a.action === 'profile' && a.args.offline === true)));

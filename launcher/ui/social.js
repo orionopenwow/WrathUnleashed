@@ -164,6 +164,7 @@
       const item = (label, fn) => { const b = el("button", "", label); b.type = "button"; b.setAttribute("role", "menuitem"); b.onclick = () => { closeMeMenu(); fn(); }; meMenu.append(b); return b; };
       item("Appear online", () => act("profile", { offline: false }, "Your friends can see you again.")).classList.toggle("on", !me.offline);
       item("Appear offline", () => act("profile", { offline: true }, "You appear offline to your friends.")).classList.toggle("on", !!me.offline);
+      item("Manage account", () => { if (window.LeylineApp && window.LeylineApp.openLink) window.LeylineApp.openLink("account"); });
       item("Sign out", () => $("sx-signout").click());
       meMenu.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeMeMenu(); btn.focus(); } });
       pick.append(meMenu);
