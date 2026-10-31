@@ -17,6 +17,8 @@
 #   leyline public | private     listed on the Leyline realm list, or friends-only (invite link)
 #   leyline check | stop | logs [service] | new-invite | claim TOKEN | signup invite|open|off
 #   leyline herokey on | off     Hero Key sign-in: players from the Leyline website, no join page (off by default)
+#   leyline browser on | off     browser players: on (default) turns Warden off so the browser client can join
+#   leyline max-players N        the most players at once: the server's cap and the realm list's (0 = default)
 #
 # Questions can be answered from the environment (no prompts): LEYLINE_NAME, LEYLINE_RULESET
 # (dalaran | main | brawl | progression, or a profile for another client in profiles/: cmangos-1.12.1, cmangos-2.4.3;
@@ -328,7 +330,7 @@ case "${1:-help}" in
     else docker run --rm --user "$(id -u):$(id -g)" -v "$KIT:/kit" -e WU_KIT=/kit "${WU_TOOLS_IMAGE:-wu-host-tools:1}" python -m wuhost.setup gm "$2" >/dev/null; fi
     say "GM account: $(printf '%s' "$2" | tr '[:lower:]' '[:upper:]'). Make it on your join page if you haven't; it gets GM rights by itself." ;;
   rules) shift; [ "${1:-}" = "--edit" ] && { LEYLINE_RULES_FILE="" house_rules; exit 0; }; host_sh rules ;;
-  public|private|check|stop|logs|new-invite|claim|signup|herokey|options) host_sh "$@" ;;
+  public|private|check|stop|logs|new-invite|claim|signup|herokey|options|browser|max-players) host_sh "$@" ;;
   friend) die "leyline doesn't make accounts. Friends make their own on your join page (leyline status shows the link)." ;;
   -h|--help|help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//' ;;
   *) die "Unknown command '$1'. Try: leyline help" ;;

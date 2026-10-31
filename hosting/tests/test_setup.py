@@ -54,12 +54,19 @@ class Setup(unittest.TestCase):
         cfg2 = json.load(open(os.path.join(st, "host.json")))
         for k in ("realm_id", "db_password", "invite_secret", "gm"):
             self.assertEqual(cfg[k], cfg2[k])
-        self.assertEqual((cfg2["profile"], cfg2["visibility"], cfg2["warden"], cfg2["name"]),
-                         ("brawl", "public", True, "Frost Haven"))
+        # browser players stay on (Warden off) when it goes public: the default on AzerothCore, kept on a re-run
+        self.assertEqual((cfg2["profile"], cfg2["visibility"], cfg2["warden"], cfg2["name"], cfg2["browser"]),
+                         ("brawl", "public", False, "Frost Haven", True))
         self.assertEqual(json.loads(out2)["invite"], f"https://relay.openvanilla.app/join/{cfg['realm_id']}")
         rec = json.load(open(os.path.join(st, "beacon.json")))
-        self.assertEqual((rec["name"], rec["ruleset"], rec["warden"]), ("Frost Haven", "brawl", True))
+        self.assertEqual((rec["name"], rec["ruleset"], rec["warden"]), ("Frost Haven", "brawl", False))
         self.assertIn("WU_IMAGE=ov/ac-wotlk", open(os.path.join(self.kit, ".env")).read())
+        # --warden on is the stock-clients-only choice, kept on the next re-run
+        self.run_cmd("init", "--warden", "on")
+        self.run_cmd("init")
+        cfg3 = json.load(open(os.path.join(st, "host.json")))
+        self.assertEqual((cfg3["warden"], cfg3["browser"]), (True, False))
+        self.assertIn("WU_WARDEN=1", open(os.path.join(self.kit, ".env")).read())
 
     def test_admin_commands(self):
         self.run_cmd("init", "--name", "R", "--profile", "progression", "--visibility", "private")
@@ -186,6 +193,83 @@ class Setup(unittest.TestCase):
             f.write("not base64 !!!")
         with self.assertRaises(SystemExit):
             self.run_cmd("init", "--seed", "state/seed.b64")
+
+
+class BrowserAndCap(unittest.TestCase):
+    """Fix 2026-10-30: the "Browser players" switch (Warden off) and Max players as the server's real cap."""
+    def setUp(self):
+        self.kit = tempfile.mkdtemp(prefix="wu-kit-")
+        os.environ["WU_KIT"] = self.kit
+        import importlib
+        from wuhost import setup
+        self.setup = importlib.reload(setup)
+
+    def run_cmd(self, *argv):
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            self.setup.main(list(argv))
+        return out.getvalue(), err.getvalue()
+
+    def env(self):
+        return dict(ln.strip().split("=", 1) for ln in open(os.path.join(self.kit, ".env")) if "=" in ln and not ln.startswith("#"))
+
+    def cfg(self):
+        return json.load(open(os.path.join(self.kit, "state", "host.json")))
+
+    def test_public_realm_defaults_to_browser_players(self):
+        self.run_cmd("init", "--name", "Open Sky", "--profile", "main", "--visibility", "public")
+        self.assertEqual((self.cfg()["browser"], self.cfg()["warden"], self.env()["WU_WARDEN"]), (True, False, "0"))
+        _, err = self.run_cmd("browser", "off")
+        self.assertEqual((self.cfg()["browser"], self.cfg()["warden"], self.env()["WU_WARDEN"]), (False, True, "1"))
+        self.assertIn("Restart your realm", err)
+        self.assertTrue(json.load(open(os.path.join(self.kit, "state", "beacon.json")))["warden"])
+        self.run_cmd("browser", "on")
+        self.assertEqual((self.cfg()["warden"], self.env()["WU_WARDEN"]), (False, "0"))
+        self.assertEqual(stat.S_IMODE(os.stat(os.path.join(self.kit, ".env")).st_mode), 0o600)
+        self.assertIn("DB_ROOT_PASSWORD", self.env())   # the rest of .env kept
+
+    def test_browser_not_on_other_cores_or_linked(self):
+        self.run_cmd("init", "--name", "Old World", "--profile", "cmangos-1.12.1", "--visibility", "public")
+        self.assertNotIn("browser", self.cfg())
+        with self.assertRaises(SystemExit):
+            self.run_cmd("browser", "on")
+
+    def test_max_players_caps_the_server(self):
+        self.run_cmd("init", "--name", "Small", "--profile", "main", "--visibility", "private", "--max-players", "12")
+        self.assertEqual(self.env()["WU_PLAYER_LIMIT"], "12")
+        self.assertEqual(json.load(open(os.path.join(self.kit, "state", "beacon.json")))["max_players"], 12)
+        _, err = self.run_cmd("listing", "--max-players", "30")
+        self.assertEqual(self.env()["WU_PLAYER_LIMIT"], "30")
+        self.assertIn("next start", err)
+        self.run_cmd("listing", "--max-players", "0")   # back to the compose file's default
+        self.assertNotIn("WU_PLAYER_LIMIT", self.env())
+        self.run_cmd("init")
+        self.assertNotIn("WU_PLAYER_LIMIT", self.env())
+
+    def test_max_players_on_dalaran_and_hand_edits(self):
+        self.run_cmd("init", "--name", "Hang", "--profile", "dalaran", "--visibility", "public")
+        self.assertEqual(self.env()["WU_PLAYER_LIMIT"], "40")   # the ruleset's own
+        self.run_cmd("listing", "--max-players", "25")
+        self.assertEqual(self.env()["WU_PLAYER_LIMIT"], "25")
+        self.run_cmd("listing", "--max-players", "0")
+        self.assertEqual(self.env()["WU_PLAYER_LIMIT"], "40")   # the ruleset's own again
+
+    def test_seed_options_browser_and_max(self):
+        import base64
+        doc = {"v": 2, "invite_secret": "A" * 20, "host_secret": "B" * 24, "claim": "c" * 24, "name": "Seeded",
+               "profile": "main", "visibility": "public", "gm_name": "HOSTGM",
+               "options": {"browser": "off", "max": 15}}
+        os.makedirs(os.path.join(self.kit, "state"), exist_ok=True)
+        with open(os.path.join(self.kit, "state", "seed.b64"), "w") as f:
+            f.write(base64.b64encode(json.dumps(doc).encode()).decode())
+        self.run_cmd("init", "--seed", "state/seed.b64")
+        self.assertEqual((self.cfg()["browser"], self.env()["WU_WARDEN"], self.env()["WU_PLAYER_LIMIT"]), (False, "1", "15"))
+        self.assertIsNone(self.setup.check_options({"browser": "on"}, "cmangos-1.12.1"))
+        self.assertEqual(self.setup.check_options({"browser": "on"}, "main"), {"browser": "on"})
+
+    def test_signup_in_the_record(self):
+        self.run_cmd("init", "--name", "Signs", "--profile", "main", "--visibility", "public", "--signup", "off")
+        self.assertEqual(json.load(open(os.path.join(self.kit, "state", "beacon.json")))["signup"], "off")
 
 
 if __name__ == "__main__":
