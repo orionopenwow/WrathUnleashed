@@ -299,15 +299,18 @@ function OnTick(dt)
         local d = math.sqrt(r.x * r.x + r.z * r.z)
         if d > R - 0.6 then r.x, r.z = r.x / d * (R - 0.6), r.z / d * (R - 0.6) end
         Ent.Move(r.id, r.x, 0.6, r.z)
+        local got = 0
         for id, c in pairs(coins) do
             local dx, dz = c.x - r.x, c.z - r.z
             if dx * dx + dz * dz < 1.0 then
                 Ent.Remove(id)
                 coins[id] = nil
                 Score.Add(p, c.value)
-                spawnCoin()
+                got = got + 1
             end
         end
+        -- new coins after the walk: adding to a table while pairs() walks it is an error
+        for i = 1, got do spawnCoin() end
     end
     if tick % 4 == 0 then
         for id, c in pairs(coins) do c.spin = (c.spin + 30) % 360; Ent.Move(id, c.x, 0.8, c.z, c.spin) end
