@@ -1784,6 +1784,9 @@ pub fn install_project(
             "This is a community link: get it from its page, then drop the zip on My Mods.".into()
         });
     }
+    if p.source == "upstream" {
+        return crate::upstream::install(client, build, p, catalog_origin, scratch); // from the author's repo (upstream.rs)
+    }
     if !p.fits(build) {
         return Err(format!("{} is made for the {} client, not this {} one.", p.name, p.builds.join(" / "), build.catalog_tag()));
     }
@@ -1868,8 +1871,14 @@ pub fn with_updates(man: &Manifest, catalog: &[Project], build: Build) -> Vec<In
         .filter(|m| m.key != crate::addons::KEY)
         .map(|m| {
             let p = catalog.iter().find(|p| p.id == m.key && p.installable() && p.fits(build));
-            let update = p.and_then(|p| p.version.clone()).filter(|v| newer(v, &m.version));
-            InstalledView { mod_: m.clone(), update, in_catalog: p.is_some() }
+            let update = match p {
+                Some(p) if p.source == "upstream" => crate::upstream::update_for(m, p), // by rev (r736, 3x05...)
+                _ => p.and_then(|p| p.version.clone()).filter(|v| newer(v, &m.version)),
+            };
+            // TOC titles can carry colour codes and the game's brand words: My Mods shows them cleaned.
+            let name = crate::upstream::clean_title(&m.name);
+            let mod_ = Installed { name: if name.is_empty() { m.name.clone() } else { name }, ..m.clone() };
+            InstalledView { mod_, update, in_catalog: p.is_some() }
         })
         .collect()
 }

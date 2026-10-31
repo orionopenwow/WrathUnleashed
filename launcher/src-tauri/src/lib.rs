@@ -32,6 +32,7 @@ pub mod social;
 pub mod status;
 pub mod themes; // theme packs (themes agent)
 pub mod update;
+pub mod upstream; // upstream addons: curated third-party addons installed from the author's repo (ui/market.js)
 
 #[cfg(feature = "app")]
 mod app;

@@ -1094,6 +1094,7 @@ function renderCatalog() {
   renderSorts();
   renderShowMenu(catalog.projects.filter((p) => !fitOnly || !c || fitsClient(p, c)));
   const grid = $("cat-grid");
+  if (window.LeylineMarket) window.LeylineMarket.bar(catFilter.cat);   // sub-category chips above the grid (market.js)
   grid.replaceChildren();
   let ordered = catalog.projects;
   if (ranked && ranked.ids) {
@@ -1105,7 +1106,8 @@ function renderCatalog() {
   const list = ordered.filter((p) => {
     if (catFilter.cat && p.category !== catFilter.cat) return false;
     if (fitOnly && c && !fitsClient(p, c)) return false;
-    if (q && !(`${p.name} ${p.description} ${p.author} ${p.category}`.toLowerCase().includes(q))) return false;
+    if (window.LeylineMarket && !window.LeylineMarket.keep(p)) return false;   // the addon chips (market.js)
+    if (q && !(`${p.name} ${p.description} ${p.author} ${p.category} ${window.LeylineMarket ? window.LeylineMarket.words(p) : ""}`.toLowerCase().includes(q))) return false;
     return true;
   });
   if (!list.length) {
@@ -1229,6 +1231,7 @@ function firstLine(text) {
 const shortNum = (n) => (n >= 10000 ? Math.round(n / 1000) + "k" : n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(n));
 
 function projectCard(p, c) {
+  if (p.source === "upstream" && window.LeylineMarket) return window.LeylineMarket.card(p, c);   // from the author (market.js)
   const card = el("article", "mod-card dc-card" + (p.id === linkedId ? " linked" : ""));
   card.dataset.id = p.id;
   const fits = fitsClient(p, c);
