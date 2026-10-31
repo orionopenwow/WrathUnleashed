@@ -162,6 +162,7 @@ STEPS = {
     # 3-hourly server check.
     "firewall-check": ("tools/security/Firewall limits - dry run.bat", "Firewall limits: what would be added (read-only)", False),
     "firewall": ("tools/security/Firewall limits - apply.bat", "Firewall limits on game, relay and web ports + fail2ban for wrong passwords", False),
+    "addons-curate": ("tools/addon-curate/Curate addons.bat", "Addon marketplace: curate upstream addons from their authors (new ones wait for review; then ship + signin)", False),
     "caddy-check": ("tools/security/Caddy check.bat", "Caddy and compose check: live config to the PC, secrets removed (read-only)", False),
     "hq-sync": ("tools/hq/HQ sync.bat", "Leyline HQ: send the recent changes and Claude's notes, fetch the owner's notes", False),
     "hqnote": ("tools/hq/HQ sync.bat", "Leyline HQ: publish Claude's notes (and sync)", False),
