@@ -31,11 +31,12 @@ class Names(unittest.TestCase):
     def test_find(self):
         d = tempfile.mkdtemp()
         for n in ("hangout.png", "hangout-2.JPG", "browser.jpeg", "mode-minigolf.png", "mode-nope.png", "castle.png",
-                  "notes.txt", "den.png", "den.webp", "captions.json"):
+                  "notes.txt", "den.png", "den.webp", "captions.json", "street.jpg"):
             open(os.path.join(d, n), "wb").close()
         items, skipped = P.find(d)
         self.assertEqual([(i[0], i[1]) for i in items], [("browser", "browser.webp"), ("den", "den.webp"),
-                         ("hangout", "hangout-2.webp"), ("hangout", "hangout.webp"), ("mode-minigolf", "mode-minigolf.webp")])
+                         ("hangout", "hangout-2.webp"), ("hangout", "hangout.webp"), ("mode-minigolf", "mode-minigolf.webp"),
+                         ("street", "street.webp")])
         self.assertEqual(sorted(s[0] for s in skipped), ["castle.png", "den.webp", "mode-nope.png", "notes.txt"])
 
     def test_manifest(self):
