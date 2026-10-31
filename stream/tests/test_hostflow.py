@@ -504,6 +504,19 @@ check("fast path: listed from the relay, with the time it took", stt == ("listed
 check("fast path: the time is kept", hf.load(fast["pending_id"]).get("listed_in_s") == 0.3)
 check("listed-in format", (hf.fmt_secs(0.31), hf.fmt_secs(42.4), hf.fmt_secs(125)) == ("0.3 s", "42 s", "2 min 5 s"))
 
+# --- My Den: a recipe and a preset (private, invite only, no bots)
+dv, dd = hf.prefill("recipe=den")
+check("den recipe: private, invite, no bots", (dv.get("preset"), dv.get("visibility"), dv.get("signup"), dv.get("bots"))
+      == ("den", "private", "invite", "0") and not dd, (dv, dd))
+check("den: no bots allowed", "bots" in hf.options({"bots": "5"}, "den")[1])
+st, h, b = req("GET", "/wrath/host", "carol")
+check("host page: a My Den card, a private room to build in", b'href="/wrath/host?recipe=den"' in b and b"<b>My Den</b>" in b
+      and b"private room to build in with friends" in b)
+st, h, b = req("POST", "/wrath/host", "carol", form("carol", name="Carols Den", preset="den", visibility="private",
+                                                    signup="invite", bots="0"))
+dm = re.match(r"^/wrath/host/([a-z2-7]{16})$", h.get("location", ""))
+check("den: made from the website", st == 303 and dm and hf.load(dm.group(1))["preset"] == "den", (st, b[:300]))
+
 # --- Browser players (Warden off) and Max players as the server's cap
 check("browser players: on/off on AzerothCore", hf.options({"browser": "off"}, "main") == ({"browser": "off"}, {})
       and hf.options({"browser": "on"}, "dalaran") == ({"browser": "on"}, {}))

@@ -29,8 +29,11 @@ starts: the mode's own OVMOD message), run the tests. The test fails if the two 
 2. The portal signs the player in as usual. `remember_go` (stream/wrath_portal.py) sees `mode:`, checks the id
    against the catalog's live realm modes, and sends one SOAP console command for that game account:
    `ovplay go <ACCOUNT> <id>` (at most 20 a minute per account, the same as other go intents).
-3. `ov_playmode.lua` keeps it in `ov_playmode_intents` (auth DB) for 30 minutes, checks the id against its own
-   table again, and acts 7 s after that account's next login (or at once if a character is online). It is used once.
+3. `ov_playmode.lua` keeps it in `ov_playmode_intents` (auth DB) for 10 minutes, checks the id against its own
+   table again, and acts at once if a character is online, else 7 s after the account's first login after the click,
+   but only if that login comes within 5 minutes of it. It is used once. Any other login (a reconnect after a
+   disconnect, another character, an older click) never starts a round: it says "Waiting for you: ... type
+   `.playmode <id>`", and `.playmode` starts it.
 4. Starting goes through the mode's own script, exactly as its own window's button (`OVMod.Dispatch`):
    * Minigolf: `wugolf start` (first course). Alone it tees off at once; in a party the party nearby is invited and
      the Golf window opens for Tee off.
@@ -79,4 +82,4 @@ curl -s https://play.openvanilla.app/wrath/modes | grep -c 'id="mode-'          
 
 In the owner's browser, signed in: open `https://play.openvanilla.app/wrath?go=mode:coin-dash`, pick a character,
 enter the world. About 7 s later chat says `[Play] Starting Coin Dash.` and Coin Dash runs. On the realm console:
-`ovplay go <ACCOUNT> minigolf` answers `ovplay ok: ... (30 min)`. In game: `.playmode` lists the modes.
+`ovplay go <ACCOUNT> minigolf` answers `ovplay ok: ... (10 min)`. In game: `.playmode` lists the modes.

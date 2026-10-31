@@ -6,7 +6,7 @@ rem No port forwarding: the realm talks out to the relay, players connect to the
 rem sees your home IP address. Safe to run again: it keeps your realm, characters and invite link.
 rem
 rem It asks three things the first time: the realm's name, its profile, private or public.
-rem Answers can also come from the environment: WU_NAME, WU_PROFILE (main, brawl, progression, dalaran, vanillaplus, or a
+rem Answers can also come from the environment: WU_NAME, WU_PROFILE (main, brawl, progression, dalaran, vanillaplus, den, or a
 rem profile for another client in profiles\: cmangos-1.12.1, cmangos-2.4.3; WU_CLIENT_DIR is its game folder),
 rem WU_VISIBILITY, WU_WOW_DIR, WU_BUILD (1: build the realm images here if they are not published, 0: stock).
 cd /d "%~dp0"
@@ -55,6 +55,7 @@ if not defined WU_PROFILE (
   echo   progression  blizzlike, Vanilla then TBC then Wrath per character
   echo   dalaran      a light Dalaran hangout: no bots, boost to 80 straight to Dalaran, your own rules
   echo   vanillaplus  Vanilla+: the original world only, level 60, 1.5x XP, made to stay up for good
+  echo   den          My Den: a private room to build in with friends ^(no bots, invite link only^)
   for /d %%P in ("%~dp0profiles\*") do if exist "%%P\profile.lock" (
     set "PB=99999"
     for /f "usebackq tokens=2 delims==" %%B in (`findstr /b "LL_BUILD=" "%%P\profile.lock"`) do set "PB=%%B"
@@ -66,11 +67,11 @@ if not defined WU_PROFILE (
 )
 set "OTHER=0"
 if exist "%~dp0profiles\%WU_PROFILE%\profile.lock" set "OTHER=1"
-if "%OTHER%"=="0" if /i not "%WU_PROFILE%"=="main" if /i not "%WU_PROFILE%"=="brawl" if /i not "%WU_PROFILE%"=="progression" if /i not "%WU_PROFILE%"=="dalaran" if /i not "%WU_PROFILE%"=="vanillaplus" (echo Please type main, brawl, progression, dalaran, vanillaplus or one of the profiles listed. & set "WU_PROFILE=" & goto askprofile)
+if "%OTHER%"=="0" if /i not "%WU_PROFILE%"=="main" if /i not "%WU_PROFILE%"=="brawl" if /i not "%WU_PROFILE%"=="progression" if /i not "%WU_PROFILE%"=="dalaran" if /i not "%WU_PROFILE%"=="vanillaplus" if /i not "%WU_PROFILE%"=="den" (echo Please type main, brawl, progression, dalaran, vanillaplus, den or one of the profiles listed. & set "WU_PROFILE=" & goto askprofile)
 :askvis
 if not defined WU_VISIBILITY (
   set "D=private"
-  if defined WU_OLD_VIS set "D=!WU_OLD_VIS!"
+  if defined WU_OLD_VIS if /i not "%WU_PROFILE%"=="den" set "D=!WU_OLD_VIS!"
   echo   private  only friends with your invite link can join
   echo   public   listed in Beacons on openvanilla.app for everyone
   set "WU_VISIBILITY=!D!"

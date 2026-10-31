@@ -174,7 +174,7 @@ soap("ovplay go WR000002 coin-dash")
 tick(PM.TTL + 1)
 clear(bob)
 login(bob)
-check("expired after 30 minutes", #bob.timers == 0 and intentRows[2] == nil)
+check("expired after " .. (PM.TTL / 60) .. " minutes (10)", PM.TTL == 600 and #bob.timers == 0 and intentRows[2] == nil)
 
 -- online now
 clear(ann)
@@ -198,6 +198,40 @@ clear(ann)
 check(".playmode with nothing named: the waiting one", command(ann, ".playmode") == false and #ann.timers == 1)
 runTimers(ann)
 check("then it starts and is used", has(inbox(ann, "wumodes"), "script") ~= nil and intentRows[1] == nil)
+
+-- a click from more than 5 minutes ago never starts a round at login: it waits for .playmode (smoke 2026-10-30)
+tick(10)
+soap("ovplay go WR000002 bumper-balls")
+bob.away = true
+tick(PM.LOGIN_FRESH + 1)
+clear(bob)
+login(bob)
+runTimers(bob)
+check("stale click: no round at login", has(inbox(bob, "wumodes"), "script") == nil)
+check("stale click: says it's waiting and how", said(bob, "Waiting for you: Bumper Balls") and said(bob, ".playmode bumper-balls") and intentRows[2] ~= nil)
+tick(10)
+clear(bob)
+command(bob, ".playmode")
+runTimers(bob)
+check("stale click: .playmode then starts it", has(inbox(bob, "wumodes"), "script") ~= nil and intentRows[2] == nil)
+
+-- a reconnect never starts a round by itself: only the first login after the click has its turn
+tick(10)
+soap("ovplay go WR000002 coin-dash")
+bob.combat = true
+clear(bob)
+login(bob)
+runTimers(bob)
+check("first login in combat: says how, keeps it", said(bob, "not in combat") and intentRows[2] ~= nil)
+bob.combat = false
+tick(20)
+clear(bob)
+login(bob)   -- a reconnect after a disconnect
+runTimers(bob)
+check("reconnect: no round by itself", has(inbox(bob, "wumodes"), "script") == nil and intentRows[2] ~= nil)
+check("reconnect: the reminder instead", said(bob, "Waiting for you: Coin Dash"))
+PM.pending[2] = nil; intentRows[2] = nil
+bob.away = false
 
 -- first login waits
 tick(10)

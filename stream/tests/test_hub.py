@@ -1236,6 +1236,27 @@ check("launch lineup: a record marked official or pinned joins the lineup", HB.l
 lfp = req("/wrath/leyline-preview")[2].decode()
 check("launch lineup: Vanilla Remastered shows Official, its client version only in the hb-ver chip",
       re.search(r'<b>Vanilla Remastered</b><span class="hb-ver"[^>]*>[^<]+</span><span class="hb-bdg o">Official</span>', lfp))
+# Warden (a host's Browser players off): no Play in browser; the header counts players and bots apart, from the rows
+ward = wp.clean_listing_record({"schema": 1, "name": "Warded Keep", "state": "live", "tags": [],
+    "profile": {"build": 12340, "core": "azerothcore", "port": 40208, "address": "relay.example", "warden": True},
+    "community": {"realmId": "wardwardwardward", "relay": "relay.example", "claimed": True, "score": 5,
+                  "lastHeartbeat": {"online": True, "players": 0, "bots": 1}}})
+with wp._listing_lock:
+    wp._listing["realms"] = wp._listing["realms"] + [ward]
+lfp = req("/wrath/leyline-preview")[2].decode()
+wrow = re.search(r'<li class="hb-rl[^"]*" data-rid="wardwardwardward"[^>]*>.*?</li>', lfp, re.S)
+check("Warden on (Browser players off): Bring your own client, no Play in browser, still Open in launcher",
+      ward and ward.get("warden") is True and wrow and 'data-client="own"' in wrow.group(0) and "Play in browser" not in wrow.group(0)
+      and "Open in launcher" in wrow.group(0) and HB.client_of({"build": 12340, "warden": True}) == "own"
+      and HB.client_of({"build": 12340}) == "browser" and HB.client_of({"build": 12340, "warden": False}) == "browser"
+      and HB.client_of({"home": True, "build": 12340, "warden": True}) == "browser")
+# ours from realm_status (3 players, 10 bots) + Busy Den 30 + Vanilla Remastered 0 + Staff Pick 1 + Warded Keep 0 and 1 bot
+check("the realm list's header: players and bots apart, from the same numbers as the rows",
+      '<p class="hb-netline" data-net>5 realms · 34 players online · 11 bots</p>' in lfp
+      and HB.hub_totals([{"live": True, "players": 0, "bots": 1}, {"live": False, "players": 5}]) == {"realms": 1, "players": 0, "bots": 1},
+      re.findall(r'data-net>[^<]*', lfp))
+check("the header's live update: our sample record left out (its count can include bots), ours from status.json",
+      "if(c.sample||h.online!==true)return;" in HB.HUB_JS and "homeS=s;netLine();" in HB.HUB_JS and "j.network" not in HB.HUB_JS)
 with wp._listing_lock:
     wp._listing.clear(); wp._listing.update(keep_listing)
 

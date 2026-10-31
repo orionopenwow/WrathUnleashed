@@ -209,12 +209,23 @@ def order(realms: list[dict]) -> list[dict]:
 
 
 def totals(realms: list[dict], sample_status: dict | None = None) -> dict:
-    """{"realms", "players", "bots"} online on the network (the sample's own numbers when its record is missing)."""
+    """{"realms", "players", "bots"} online on the network. Players and bots are counted apart and never mixed: our own
+    realm's numbers come from its own status (sample_status: players and bots measured on the realm itself) rather than
+    its relay record (the agent's last heartbeat, which can lag a bot in or out); a count that is not a plain number is
+    left out rather than guessed."""
     live = [r for r in realms if r.get("live")]
-    n, p, b = len(live), sum(r.get("players") or 0 for r in live), sum(r.get("bots") or 0 for r in live)
     st = sample_status or {}
-    if st.get("online") and not any(r.get("sample") or r.get("hangout") for r in live):
+    own_ok = bool(st.get("online")) and _nonneg(st.get("players")) is not None
+    n = p = b = 0
+    for r in live:
         n += 1
+        if (r.get("sample") or r.get("hangout")) and own_ok:
+            continue   # counted once below, from its own status
+        p += _nonneg(r.get("players")) or 0
+        b += _nonneg(r.get("bots")) or 0
+    if own_ok:
+        if not any(r.get("sample") or r.get("hangout") for r in live):
+            n += 1
         p += _nonneg(st.get("players")) or 0
         b += _nonneg(st.get("bots")) or 0
     return {"realms": n, "players": p, "bots": b}

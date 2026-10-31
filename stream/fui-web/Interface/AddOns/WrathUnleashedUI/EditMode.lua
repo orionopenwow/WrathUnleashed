@@ -4,7 +4,11 @@
 --   * a banner with the controls, and a line under it saying what the tool is doing (and what the realm answered);
 --   * a selection card: the selected prop (or how many), your props and build points, the plot or area;
 --   * a tool bar: Props, Duplicate, Undo, Delete, Snap (grid), Turn (angle step), Keys, Done;
---   * a second bar: Spawn menu (Q), Select mine, Box select, Copy, Paste, Clear, Properties.
+--   * a second bar: Spawn menu (Q), Select mine, Box select, Copy, Paste, Clear, Properties;
+--   * a third bar: Group, Ungroup, Put away (into storage), Storage, Floor, Redo's count, and in a Den the Den button;
+--   * in a Den (the realm's ov_den.lua), the Den panel: Invite a friend (the link to copy, the owner only), who
+--     builds (Can build / View only), the whole Den as a layout (Save, Load, Load replacing) and the room's look.
+--     /den opens it outside edit mode too.
 -- Your character stays where it stood; the realm checks every change, exactly as for the .build commands.
 --
 -- Keys (the browser client reads them and calls back here):
@@ -16,7 +20,7 @@
 --   Copy / Paste       Paste, then click the ground: the copied props go there, around the point
 --   G                  carry the selection on the cursor; wheel lifts it, Q / E or Shift+wheel turn it,
 --                      a click or G drops it (".build placeat x y z turn"), Backspace puts it back
---   V                  duplicate the selection          Delete  remove it          Ctrl+Z  undo
+--   V                  duplicate the selection          Delete  remove it          Ctrl+Z  undo   Ctrl+Y  redo
 --   the handles        drag an arrow (move along it) or the ring (turn): the prop moves on your screen while
 --                      the button is held, and one change goes to the realm when you let go
 --   WASD / Space / C   fly; Ctrl faster; hold the right mouse button to look; F7 back to your character
@@ -30,6 +34,8 @@
 --   E.GizmoStart(kind)                   a handle drag began: "x", "y", "z" or "ring"
 --   E.SpawnMenu(down)                    Q pressed (true) or released (false) while nothing is carried
 --   E.BoxSelect(x1, y1, x2, y2, add)     a drag box's two ground corners, if the client draws one
+--   E.Cmd("redo")                        Ctrl+Y (or Ctrl+Shift+Z): redo, as the Redo button (also "store", "group",
+--                                        "ungroup", "floor" for the client's own keys, if it binds any)
 
 local W = WrathUnleashedUI
 local CVAR, GRID, ANGLE = "leylineEditMode", "leylineEditGrid", "leylineEditAngle"
@@ -54,7 +60,8 @@ local function builder() return W.Builder end
 local function cmd(text) local B = builder(); if B and B.Command then return B.Command(text) end end
 
 -- From the client's hotkeys (V, Delete, Ctrl+Z) and the tool bar.
-local ALLOWED = { dup = true, delete = true, undo = true, near = true, copy = true, selall = true, selclear = true }
+local ALLOWED = { dup = true, delete = true, undo = true, near = true, copy = true, selall = true, selclear = true,
+    redo = true, store = true, group = true, ungroup = true, floor = true }
 function E.Cmd(name)
     if not ALLOWED[name] then return end
     cmd(name)
@@ -103,7 +110,7 @@ function E.SpawnMenu(down)
     if down then B.ShowMenu(true) elseif not E.menuPinned then B.ShowMenu(false) end
 end
 
--- The client: a click in the world, with the ground point under the cursor (WoW coordinates, already on the
+-- The client: a click in the world, with the ground point under the cursor (game coordinates, already on the
 -- grid when Snap is on) and the clicked object's id; either may be nil.
 function E.Clicked(x, y, z, objectId, shift)
     local p = E.pending
@@ -232,7 +239,8 @@ local KEYS = {
     "Drag an arrow to move it along, the ring to turn it; it is placed when you let go",
     "G: carry the selection (the whole group). Mouse moves it, wheel lifts it,",
     "     Q / E or Shift+wheel turn it, click or G drops it, Backspace puts it back",
-    "V: duplicate     Delete: remove     Ctrl+Z: undo",
+    "V: duplicate     Delete: remove     Ctrl+Z: undo     Ctrl+Y: redo",
+    "Group: a click on one selects them all.  Put away: into your storage.  Floor: down onto it",
     "Snap: grid for placing and carrying     Turn: the angle step",
     "WASD fly, Space / C up and down, Ctrl faster, hold right mouse to look",
     "F7 or Done: back to your character",
@@ -278,14 +286,15 @@ local function build()
     hud.budget:SetWidth(276); hud.budget:SetJustifyH("LEFT")
 
     -- tool bar
-    local tools = panel(hud, 840, 40)
+    local tools = panel(hud, 900, 40)
     tools:SetScale(scale)
     tools:SetPoint("BOTTOM", hud, "BOTTOM", 0, 18)
     local x = 10
     local function add(text, w, fn) local b = bar(tools, text, w, fn, "LEFT", x, 0); x = x + w + 4; return b end
     add("Props", 74, function() moveBuilder(true, true) end)
     add("Duplicate", 90, function() E.Cmd("dup") end)
-    add("Undo", 70, function() E.Cmd("undo") end)
+    add("Undo", 64, function() E.Cmd("undo") end)
+    hud.redo = add("Redo", 64, function() E.Cmd("redo") end)
     add("Delete", 76, function() E.Cmd("delete") end)
     hud.snap = add(snapText(), 110, function(self)
         local g = cycle(GRIDS, cvarNum(GRID, 0))
@@ -304,7 +313,7 @@ local function build()
     bar(tools, "Done (F7)", 96, function() E.Set(false) end, "RIGHT", -10, 0)
 
     -- second bar: selection and the spawn menu
-    local tools2 = panel(hud, 840, 40)
+    local tools2 = panel(hud, 900, 40)
     tools2:SetScale(scale)
     tools2:SetPoint("BOTTOM", tools, "TOP", 0, 4)
     x = 10
@@ -323,10 +332,31 @@ local function build()
     add2("Properties", 96, function() local B = builder(); if B then B.ToggleProps() end end)
     add2("Save prefab", 100, function() moveBuilder(true, true) E.Note("Type a name in the Builder's Prefab box and press Save.") end)
 
+    -- third bar: groups, storage, the floor, the Den
+    local tools3 = panel(hud, 900, 40)
+    tools3:SetScale(scale)
+    tools3:SetPoint("BOTTOM", tools2, "TOP", 0, 4)
+    x = 10
+    local function add3(text, w, fn) local b = bar(tools3, text, w, fn, "LEFT", x, 0); x = x + w + 4; return b end
+    add3("Group", 70, function() E.Cmd("group") end)
+    add3("Ungroup", 80, function() E.Cmd("ungroup") end)
+    add3("Put away", 84, function() E.Cmd("store") end)
+    add3("Storage", 80, function()
+        local B = builder()
+        if not B then return end
+        B.menuTab, B.menuOffset = "storage", 0
+        E.menuPinned = true
+        B.ShowMenu(true)
+        B.MenuRefresh()
+    end)
+    add3("Floor", 64, function() E.Cmd("floor") end)
+    hud.den = bar(tools3, "Den", 80, function() E.ToggleDen() end, "RIGHT", -10, 0)
+    hud.den:Hide()
+
     -- keys card
-    hud.keys = panel(hud, 520, 22 + #KEYS * 16)
+    hud.keys = panel(hud, 560, 22 + #KEYS * 16)
     hud.keys:SetScale(scale)
-    hud.keys:SetPoint("BOTTOM", tools2, "TOP", 0, 8)
+    hud.keys:SetPoint("BOTTOM", tools3, "TOP", 0, 8)
     for i, line in ipairs(KEYS) do
         local fs = hud.keys:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         fs:SetPoint("TOPLEFT", 14, -10 - (i - 1) * 16)
@@ -337,6 +367,8 @@ local function build()
 
     hud:Hide()
 end
+
+local DEN_ROLE = { owner = "your Den", builder = "you build here", visitor = "visiting" }
 
 local function refreshCard()
     if not hud or not hud.sel then return end
@@ -353,7 +385,18 @@ local function refreshCard()
     else
         hud.info:SetText((s.area and s.area ~= "-") and s.area or "Not in a build area")
     end
-    hud.budget:SetText(B and B.Meter and (B.Meter()) or "")
+    local meter = B and B.Meter and (B.Meter()) or ""
+    if s.den then
+        -- a Den: your role and its two decor budgets (the room and the yard)
+        meter = string.format("Room %s  Yard %s  (%s)", s.room or "?", s.yard or "?", DEN_ROLE[s.den] or s.den)
+    end
+    hud.budget:SetText(meter)
+    if hud.redo then hud.redo:SetText((tonumber(s.redo or "") or 0) > 0 and ("Redo (" .. s.redo .. ")") or "Redo") end
+    if hud.den then if s.den then hud.den:Show() else hud.den:Hide() end end
+    if s.den == "visitor" and not E.toldVisitor then
+        E.toldVisitor = true
+        E.Note("You're visiting this Den: look around as you like. Its owner can make you a builder.")
+    end
 end
 
 local function apply(nowOn)
@@ -382,6 +425,140 @@ local function apply(nowOn)
     end
 end
 
+-- ---------------------------------------------------------------- the Den (ov_den.lua, mod "wuden")
+local DEN_MOD = "wuden"
+E.denInfo = {}
+
+function E.DenCmd(text)
+    text = tostring(text or ""):gsub("[^%w%s%-_]", ""):sub(1, 60)
+    if not SendAddonMessage or not UnitName then return false end
+    pcall(SendAddonMessage, "OVMOD", DEN_MOD .. "\t" .. "cmd" .. "\t1/1\t" .. text, "WHISPER", UnitName("player"))
+    return true
+end
+
+local den   -- the Den panel
+
+local function nameIn(box)
+    local t = (box and box:GetText() or ""):gsub("%s+", "")
+    if t == "" or not t:match("^[%w_%-]+$") or #t > 24 then return nil end
+    return t
+end
+
+local function denRefresh()
+    if not den then return end
+    local d = E.denInfo
+    local owner = d.role == "owner"
+    den.role:SetText(d.role == "owner" and "Your Den. Friends join with your invite link."
+        or d.role == "builder" and "You build in this Den." or "You're visiting this Den.")
+    den.builders:SetText("Builders: " .. ((d.builders and d.builders ~= "-") and d.builders:gsub(" ", ", ") or "only the owner"))
+    den.look:SetText("Room: " .. (d.theme or "white"))
+    for _, b in ipairs(den.ownerOnly) do if owner then b:Enable() else b:Disable() end end
+end
+
+local function edit(parent, w, ...)
+    local e = (W.Style and W.Style.Input and W.Style.Input(parent)) or CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    e:SetWidth(w); e:SetHeight(20)
+    e:SetPoint(...)
+    e:SetAutoFocus(false)
+    e:SetMaxLetters(24)
+    e:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    return e
+end
+
+local function text(parent, t, ...)
+    local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    fs:SetPoint(...)
+    fs:SetJustifyH("LEFT")
+    fs:SetText(t)
+    return fs
+end
+
+local function buildDen()
+    den = panel(UIParent, 420, 250, { 0.78, 0.64, 1, 1 })
+    den:SetPoint("LEFT", UIParent, "LEFT", 24, 0)
+    den:SetFrameStrata("DIALOG")
+    den:EnableMouse(true)
+    local title = den:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("TOPLEFT", 14, -12)
+    title:SetText("Den")
+    den.role = text(den, "", "TOPLEFT", 14, -32)
+    den.ownerOnly = {}
+    local function own(b) den.ownerOnly[#den.ownerOnly + 1] = b; return b end
+    -- Invite a friend: the realm sends the link (the owner only); it lands in a box to copy (Ctrl+C)
+    own(bar(den, "Invite a friend", 130, function() E.DenCmd("invite") end, "TOPLEFT", 12, -52))
+    den.link = CreateFrame("EditBox", nil, den, "InputBoxTemplate")
+    den.link:SetWidth(250); den.link:SetHeight(20)
+    den.link:SetPoint("TOPLEFT", 152, -54)
+    den.link:SetAutoFocus(false)
+    den.link:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    den.link:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+    den.link:SetScript("OnTextChanged", function(self) if E.inviteLink and self:GetText() ~= E.inviteLink then self:SetText(E.inviteLink) end end)
+    -- builders
+    den.builders = text(den, "", "TOPLEFT", 14, -84)
+    den.name = edit(den, 120, "TOPLEFT", 16, -100)
+    own(bar(den, "Can build", 90, function() local n = nameIn(den.name); if n then E.DenCmd("allow " .. n .. " build") end end, "TOPLEFT", 142, -98))
+    own(bar(den, "View only", 90, function() local n = nameIn(den.name); if n then E.DenCmd("allow " .. n .. " view") end end, "TOPLEFT", 236, -98))
+    -- the whole Den as a layout
+    text(den, "Layout (the whole Den):", "TOPLEFT", 14, -132)
+    den.layout = edit(den, 120, "TOPLEFT", 16, -148)
+    bar(den, "Save", 60, function() local n = nameIn(den.layout); if n then E.DenCmd("save " .. n) end end, "TOPLEFT", 142, -146)
+    bar(den, "Load", 60, function() local n = nameIn(den.layout); if n then E.DenCmd("load " .. n) end end, "TOPLEFT", 206, -146)
+    own(bar(den, "Load, replacing", 120, function() local n = nameIn(den.layout); if n then E.DenCmd("load " .. n .. " replace") end end,
+        "TOPLEFT", 270, -146))
+    -- the room's look
+    den.look = text(den, "", "TOPLEFT", 14, -180)
+    local lx = 14
+    for _, look in ipairs({ "white", "stone", "wood" }) do
+        own(bar(den, look:sub(1, 1):upper() .. look:sub(2), 70, function() E.DenCmd("room " .. look) end, "TOPLEFT", lx, -196))
+        lx = lx + 74
+    end
+    bar(den, "Budget", 70, function() E.DenCmd("budget") end, "TOPLEFT", lx + 20, -196)
+    bar(den, "Close", 70, function() den:Hide() end, "BOTTOMRIGHT", -12, 10)
+    if UISpecialFrames then tinsert(UISpecialFrames, "LeylineDenPanel") end
+    _G.LeylineDenPanel = den
+    den:Hide()
+end
+
+function E.ShowDen(show)
+    if not den then buildDen() end
+    local B = builder()
+    if B and B.Dock then B.Dock(den, on() and true or false) end
+    if show then
+        den:ClearAllPoints()
+        den:SetPoint("LEFT", (on() and WorldFrame) or UIParent, "LEFT", 24, 0)
+        denRefresh()
+        den:Show()
+        if SendAddonMessage and UnitName then   -- asks the realm for the Den's info
+            pcall(SendAddonMessage, "OVMOD", DEN_MOD .. "\tinfo\t1/1\t", "WHISPER", UnitName("player"))
+        end
+    else
+        den:Hide()
+    end
+end
+function E.ToggleDen() E.ShowDen(not (den and den:IsShown())) end
+function E.DenPanel() return den end
+
+-- The Den's answers: info (role, look, builders) and the invite link, whispered to ourselves by the realm.
+function E.OnDenMessage(prefix, msg, channel, sender)
+    if prefix ~= "OVMOD" or type(msg) ~= "string" or channel ~= "WHISPER" then return end
+    if UnitName and sender ~= UnitName("player") then return end
+    local mod, name, data = msg:match("^([^\t]+)\t([^\t]+)\t1/1\t(.*)$")
+    if mod ~= DEN_MOD then return end
+    if name == "info" then
+        local d = {}
+        for k, v in data:gmatch("(%a+)=([^;]*)") do d[k] = v:gsub("|", "") end
+        E.denInfo = d
+        denRefresh()
+    elseif name == "invite" and data:match("^https://[%w%.%-]+/join/[a-z2-7]+#[A-Z2-9]+$") then
+        E.inviteLink = data
+        if not den then buildDen() end
+        den.link:SetText(data)
+        den.link:SetFocus()
+        den.link:HighlightText()
+        E.Note("Your invite link is in the Den panel: Ctrl+C copies it. Give it only to friends.")
+    end
+end
+
 -- The watcher lives on the world frame, so it keeps running while UIParent is hidden; it also shows the
 -- realm's Builder answers (normally in chat, which is hidden while editing) on the note line.
 local watcher = CreateFrame("Frame", nil, WorldFrame or UIParent)
@@ -404,5 +581,11 @@ end)
 
 SLASH_LEYLINEEDIT1 = "/edit"
 SlashCmdList["LEYLINEEDIT"] = function() E.Toggle() end
+SLASH_LEYLINEDEN1 = "/den"
+SlashCmdList["LEYLINEDEN"] = function() E.ToggleDen() end
+
+local denListener = CreateFrame("Frame")
+denListener:RegisterEvent("CHAT_MSG_ADDON")
+denListener:SetScript("OnEvent", function(_, _, prefix, msg, channel, sender) E.OnDenMessage(prefix, msg, channel, sender) end)
 
 W.EditMode = E

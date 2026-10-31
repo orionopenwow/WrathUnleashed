@@ -594,6 +594,7 @@ function G.Begin(text, where)
         return
     end
     if not hud then buildHud() end
+    if W.Modes and W.Modes.HideStartChoice then W.Modes.HideStartChoice() end   -- the new-character menu (Modes.lua)
     G.playing, G.hole, G.turn, G.rolling = true, 0, nil, nil
     G.holeCount, G.coursePar = 0, 0
     for par in text:gmatch("\nhole%s+(%d)") do G.holeCount = G.holeCount + 1; G.coursePar = G.coursePar + tonumber(par) end

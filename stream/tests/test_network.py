@@ -154,7 +154,7 @@ check("the sample: labelled Temporary, its own numbers, Play", ">Temporary</span
       and 'href="/wrath?go=h:dalaran">Play in Dalaran</a>' in page[i_sample:i_busy])
 check("the hangout's relay record is the sample, not listed twice", "<h2>Dalaran Hangout</h2>" not in page)
 check("hidden by staff: not on the page", "Hidden Away" not in page and HIDDEN not in page)
-check("network line: live community realms + the sample", "5 realms · 36 players online · 70 bots" in page,
+check("network line: live community realms + the sample", "5 realms · 39 players online · 50 bots" in page,   # the hangout from its own status (4 players, 10 bots), not its record
       re.findall(r'net-line">([^<]*)', page))
 check("featured and verified badges", ">Featured</span>" in page[i_feat:i_sample] and "Verified host" in page[i_feat:i_sample]
       and "Verified host" in page[i_busy:i_plain] and "Featured" not in page[i_busy:i_plain])
@@ -190,7 +190,7 @@ doc = json.loads(raw)
 ids = [r["community"]["realmId"] for r in doc["realms"]]
 check("realms.json: 200, CORS, network kind", st == 200 and h.get("access-control-allow-origin") == "*" and doc["kind"] == "network")
 check("realms.json: display order, hidden left out", ids == [FEAT, HANG, BUSY, PLAIN, OLD, SLEEPY], ids)
-check("realms.json: network totals", doc["network"] == {"realms": 5, "players": 36, "bots": 70}, doc["network"])
+check("realms.json: network totals", doc["network"] == {"realms": 5, "players": 39, "bots": 50}, doc["network"])
 c = {r["community"]["realmId"]: r for r in doc["realms"]}
 check("realms.json: featured, verified, sample, group", c[FEAT]["community"]["featured"] and c[FEAT]["community"]["verified"]
       and c[HANG]["community"]["sample"] and c[HANG]["community"]["sampleName"] == "Leyline Sample Hangout"
@@ -262,7 +262,7 @@ check("realm-overrides.json: featured and verified for the launcher", ov["featur
 
 # ---------------------------------------------------------------- the hub
 st, _, hub = req("GET", "/wrath/leyline-preview/realms")
-check("hub realms page: the same list, filters on the hub's own path", st == 200 and "Leyline Sample Hangout" in hub
+check("hub realms page: the same list, filters on the hub's own path", st == 200 and "Dalaran Hangout" in hub
       and "Busy Den" in hub and 'href="/wrath/leyline-preview/realms?tag=pvp"' in hub and 'id="host-your-own"' in hub)
 st, _, front = req("GET", "/wrath/leyline-preview")
 check("hub front page: Platform Status has the network line, linked to the hub's realm list", "Realm network" in front
@@ -273,18 +273,19 @@ check("hub front page: Platform Status has the network line, linked to the hub's
 sec = re.search(r'<section class="hb-sec hb-realms" id="realms".*?</section>', front, re.S)
 sec = sec.group(0) if sec else ""
 rows = re.findall(r'<li class="hb-rl[^"]*"( data-home="1"| data-rid="([a-z2-7]{16})") data-client="(browser|own)" data-live="(\d)"'
-                  r' data-players="(\d+)"><div class="hb-rl-n"><b>([^<]+)</b>', sec)
+                  r' data-players="(\d+)">(?:<span class="hb-rl-ic.*?</span>)?<div class="hb-rl-n"><b>([^<]+)</b>', sec)
 names = [r[5] for r in rows]
 check("hub realm list: right under the hero, before the products and Platform Status", sec
       and front.index('class="hb-hero"') < front.index('id="realms"') < front.index('id="features"') < front.index('id="status"'))
+# launch (owner 2026-10-30): the Hangout and the Wrath realm are the same realm, one name everywhere (sampler or not)
 check("hub realm list: the home realm first, as Official, played with a plain /wrath", rows and rows[0][0] == ' data-home="1"'
-      and names[0] == "Leyline Sample Hangout" and 'href="/wrath" aria-label="Play Leyline Sample Hangout in your browser"' in sec
-      and '<span class="hb-bdg o">Official</span>' in sec and "<b>Dalaran Hangout</b>" not in sec, names)
+      and names[0] == "Dalaran Hangout" and 'href="/wrath" aria-label="Play Dalaran Hangout in your browser"' in sec
+      and '<span class="hb-bdg o">Official</span>' in sec and "Leyline Sample Hangout" not in sec and sec.count("<b>Dalaran Hangout</b>") == 1, names)
 check("hub realm list: featured next, offline last, hidden realms never", set(names[1:3]) == {"Picked One", "Plain Field"}
       and names[-1] == "Sleepy Hollow" and rows[-1][3] == "0" and "Hidden Away" not in sec and "Busy Den" in names, names)
 check("hub realm list: Play in browser is the hop link, only for live realms the browser plays", f'href="/wrath?go=r:{BUSY}"' in sec
       and f'go=r:{FEAT}' not in sec and f'go=r:{SLEEPY}' not in sec and "Bring your own game client" in sec
-      and "Needs a" not in sec and "1.12.1" not in sec)
+      and "Needs a" not in sec and "1.12.1" not in re.sub(r'<span class="hb-ver"[^>]*>[^<]*</span>', "", sec))   # the version chip only
 check("hub realm list: the desktop address for each realm with a port, ours by the site's host", "relay.example:40002" in sec
       and f'title="The realm address for a desktop client">{wp.PUBLIC_HOST}</code>' in sec)
 check("hub realm list: badges, how it plays (never a build), core, region, uptime", all(x in sec for x in ('class="hb-bdg f">Featured', 'class="hb-bdg v"',
@@ -296,7 +297,7 @@ check("hub realm list: Open in launcher on every row (the home realm as official
       and sec.count(">Open in launcher</a>") == sec.count('class="hb-addr"') or sec.count(">Open in launcher</a>") >= 2, sec[:300])
 st, _, only = req("GET", "/wrath/leyline-preview/realms?client=own&now=1")
 check("hub realms page: the form's filters on the server", st == 200 and "<b>Picked One</b>" in only and "<b>Busy Den</b>" not in only
-      and "Leyline Sample Hangout" not in only)
+      and "<b>Dalaran Hangout</b>" not in only)
 st, _, none = req("GET", "/wrath/leyline-preview/realms?client=own&tag=bots")
 check("hub realms page: no match says so", "No realms match these filters" in none)
 st, _, beacon = req("GET", "/wrath/leyline-preview/beacon")
@@ -307,6 +308,15 @@ check("hub Host a Beacon: the launcher's Host page and the website", 'href="/wra
 check("warden carried from the relay record (Play in browser only without it)",
       net.extra({"profile": {"warden": True}})["warden"] is True and net.extra({"profile": {"warden": "yes"}})["warden"] is None
       and net.extra({})["warden"] is None)
+
+# ---------------------------------------------------------------- totals: players and bots apart, our own realm from its own status
+_t = net.totals([{"id": "h" * 16, "live": True, "hangout": True, "players": 1, "bots": 0},
+                 {"id": "c" * 16, "live": True, "players": 3, "bots": 7}], {"online": True, "players": 0, "bots": 1})
+check("totals: bots never counted as players (our realm from its own status)", _t == {"realms": 2, "players": 3, "bots": 8}, _t)
+_t = net.totals([{"id": "h" * 16, "live": True, "hangout": True, "players": 2, "bots": 5}], {})
+check("totals: without its own status, the record's numbers", _t == {"realms": 1, "players": 2, "bots": 5}, _t)
+_t = net.totals([], {"online": True, "players": 4, "bots": 2})
+check("totals: our realm with no record yet", _t == {"realms": 1, "players": 4, "bots": 2}, _t)
 
 # ---------------------------------------------------------------- Vanilla Remastered: the second official realm (vr-realm.id)
 VRID = "vrvrvrvrvrvrvrvr"

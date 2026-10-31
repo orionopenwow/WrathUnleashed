@@ -4,7 +4,8 @@
 -- the catalog over OVMOD, search and categories, Spawn, the nudges and turns, Undo, Delete, Save / Share / Load
 -- with the code box, "isn't on this realm" without the script, and no game-brand names on screen. M3: the budget
 -- meter and blocked spawns, the spawn menu (tabs, search, recent, favourites, prefabs), the properties panel,
--- the group / prefab / plot rows, and edit mode's paste, box select, Shift-click, prefab and hold-Q hooks.
+-- the group / prefab / plot rows, and edit mode's paste, box select, Shift-click, prefab and hold-Q hooks. 2026-10-30:
+-- redo, put away and the Storage tab, and the Den panel (info, the invite link to copy, builders, layouts).
 local dir = arg[1] or "stream/fui-web/Interface/AddOns/WrathUnleashedUI"
 local server = arg[2] or "realm/custom/lua_scripts/ov_build.lua"
 local modapi = arg[3] or server:gsub("ov_build%.lua$", "ov_modapi.lua")
@@ -266,8 +267,8 @@ local function cellsShown() local n = 0; for _, c in ipairs(menu.cells) do if c:
 check("All props: a page of the realm's catalog", B.menuTab == "all" and cellsShown() == #menu.cells and menu.cells[1].item == B.catalog[1])
 local tabOf = {}
 for _, t in ipairs(menu.tabs) do tabOf[t.tab] = t end
-check("tabs: favourites, recent, prefabs, all and every category", tabOf.favourites and tabOf.recent and tabOf.prefabs and tabOf.all
-    and tabOf.seating and tabOf.decor and #menu.tabs == 4 + #B.CATS - 1)
+check("tabs: favourites, recent, prefabs, storage, all and every category", tabOf.favourites and tabOf.recent and tabOf.prefabs
+    and tabOf.storage and tabOf.all and tabOf.seating and tabOf.decor and tabOf.structure and #menu.tabs == 5 + #B.CATS - 1)
 tabOf.lights:Fire("OnClick")
 check("a category tab", cellsShown() > 0 and (function() for _, c in ipairs(menu.cells) do if c.item and c.item.cat ~= "lights" then return false end end; return true end)())
 menu.search:SetText("brazier"); menu.search:Fire("OnTextChanged")
@@ -497,6 +498,67 @@ do
     check("gizmo with the module: the handles aren't re-put on the same object", not reselect)
     B.ShowProps(false)
     Sandbox, LeylineEdit = nil, nil
+end
+
+-- 2026-10-30: redo, put away and the Storage tab, groups, the Den panel ------------------------------------------------
+do
+    local E = W.EditMode
+    serverClock = serverClock + 5
+    B.pick = B.catalog[1]
+    B.Command("spawn " .. B.catalog[1].id)
+    local pid = T.selected[7]
+    E.Cmd("undo")
+    check("edit mode Undo, then Redo (Ctrl+Y): the prop back", T.props[pid] == nil and (E.Cmd("redo") or true) and T.props[pid] ~= nil
+        and sent[#sent][2] == "wubuild\tcmd\t1/1\tredo")
+    check("the state counts undo and redo", B.state.undo and B.state.redo == "0")
+    E.Cmd("store")
+    check("Put away: into storage, and the Storage tab knows", T.props[pid] == nil and B.storage[B.catalog[1].id] == 1)
+    local menu = B.Menu()
+    B.menuTab = "storage"; B.ShowMenu(true); B.MenuRefresh()
+    check("the Storage tab lists it with its count", menu.cells[1].item == B.catalog[1] and menu.cells[1]:GetText():find(" x1$"))
+    serverClock = serverClock + 5
+    menu.cells[1]:Fire("OnClick", "LeftButton")
+    check("placing it from the Storage tab takes it out", (B.storage[B.catalog[1].id] or 0) == 0)
+    B.MenuRefresh()
+    check("and the tab is empty again", not menu.cells[1]:IsShown() and menu.empty:GetText():find("Nothing put away"))
+    B.ShowMenu(false); B.menuTab = "all"
+    E.Cmd("rm -rf")
+    check("edit mode sends only its own commands", not sent[#sent][2]:find("rm"))
+
+    -- the Den panel: the realm's info, the invite link to copy
+    local nSent = #sent
+    E.ShowDen(true)
+    local den = E.DenPanel()
+    check("/den opens the Den panel and asks for the info", den and den:IsShown() and SlashCmdList.LEYLINEDEN
+        and sent[nSent + 1] and sent[nSent + 1][2] == "wuden\tinfo\t1/1\t")
+    fireClient("OVMOD", "wuden\tinfo\t1/1\trole=owner;theme=stone;builders=Bea Cy;invite=1", "WHISPER", "Tester")
+    check("info: role, builders, look", den.role:GetText():find("Your Den") and den.builders:GetText() == "Builders: Bea, Cy"
+        and den.look:GetText() == "Room: stone" and den.ownerOnly[1].enabled ~= false)
+    fireClient("OVMOD", "wuden\tinfo\t1/1\trole=visitor;theme=white;builders=-;invite=0", "WHISPER", "Someone")
+    check("info from anyone else is ignored", den.role:GetText():find("Your Den"))
+    fireClient("OVMOD", "wuden\tinfo\t1/1\trole=visitor;theme=white;builders=-;invite=0", "WHISPER", "Tester")
+    check("a visitor: the owner's buttons are off", den.role:GetText():find("visiting") and den.ownerOnly[1].enabled == false
+        and den.builders:GetText() == "Builders: only the owner")
+    local link = "https://relay.example.app/join/abcdefghij234567#ABCDEFGH23456789XYZQ"
+    fireClient("OVMOD", "wuden\tinvite\t1/1\t" .. link, "WHISPER", "Tester")
+    check("Invite a friend: the link in a box to copy", den.link:GetText() == link and E.note:find("Ctrl%+C"))
+    den.link:SetText("typed over"); den.link:Fire("OnTextChanged")
+    check("the link box can't be typed over", den.link:GetText() == link)
+    fireClient("OVMOD", "wuden\tinvite\t1/1\tjavascript:alert(1)", "WHISPER", "Tester")
+    check("only a join link is shown", den.link:GetText() == link)
+    den.name:SetText("Bea")
+    nSent = #sent
+    for _, f in ipairs(created) do if f.parent == den and f.text == "Can build" then f:Fire("OnClick") end end
+    check("Can build sends .den allow <name> build", sent[nSent + 1] and sent[nSent + 1][2] == "wuden\tcmd\t1/1\tallow Bea build")
+    den.layout:SetText("my room!")
+    nSent = #sent
+    for _, f in ipairs(created) do if f.parent == den and f.text == "Save" then f:Fire("OnClick") end end
+    check("a bad layout name never leaves the panel", #sent == nSent)
+    den.layout:SetText("cosy")
+    for _, f in ipairs(created) do if f.parent == den and f.text == "Load, replacing" then f:Fire("OnClick") end end
+    check("Load, replacing", sent[#sent][2] == "wuden\tcmd\t1/1\tload cosy replace")
+    E.ShowDen(false)
+    check("closes", not den:IsShown())
 end
 
 -- the client ignores messages that aren't the realm's answer to us

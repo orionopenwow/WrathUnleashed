@@ -14,7 +14,7 @@ small Lua data file next to the realm scripts, atomically:
     OV_LEYLINE_HOME      the Dalaran Hangout's realm id (this realm through the relay), listed first; default:
                          the id in /srv/wrath/hangout-realm.id (OV_LEYLINE_HOME_FILE; written by the hangout step)
     OV_LEYLINE_VR        Vanilla Remastered's realm id, the second official realm: pinned right after the Hangout
-                         (marked verified: the window has no "official" word yet); default: the id in
+                         (official = true: the in-game list labels it Official); default: the id in
                          /srv/wrath/vr-realm.id (OV_LEYLINE_VR_FILE; written by the vr-beacon step). Until it exists
                          the realm lists like any other.
     --from FILE          read a listing from a local JSON file instead (tests)
@@ -124,8 +124,7 @@ def render(doc, now, home=None, vr=None) -> str:
     for r in out:
         r["sample"] = r["sample"] or r["id"] == home
         r["vr"] = bool(vr) and r["id"] == vr and not r["sample"]
-        if r["vr"]:
-            r["verified"] = True   # official (staff run); ov_leyline.lua reads no "official" word yet
+        r["official"] = r["vr"]   # staff run: ov_leyline.lua labels it Official
 
     # featured live realms, then the sample hangout (this realm through the relay), then live realms by the fair
     # score (busiest first when the listing has no score), then offline ones
@@ -139,7 +138,7 @@ def render(doc, now, home=None, vr=None) -> str:
         f += [f"{k} = {r[k]}" for k in ("players", "bots") if r[k] is not None]
         f += [f"{k} = {r[k]}" for k in ("score", "up", "build", "maxp") if r[k] is not None]
         f += [f"{k} = {lua_str(r[k])}" for k in ("region", "lang", "tags") if r[k]]
-        f += [f"{k} = true" for k in ("est", "featured", "verified", "new", "sample") if r[k]]
+        f += [f"{k} = true" for k in ("est", "featured", "verified", "new", "sample", "official") if r.get(k)]
         lines.append("  { " + ", ".join(f) + " },")
     return f"return {{ updated = {int(now)}, realms = {{\n" + "\n".join(lines) + "\n} }\n"
 

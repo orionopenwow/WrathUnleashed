@@ -1158,6 +1158,7 @@ end
 ------------------------------------------------------------------------------------------------ events
 -- guid -> true once the player has touched the menu this session (any selection): the retries stop then.
 local touched = {}
+local chosen = {}   -- guid -> true once this session picked something in the menu (".boost later" then ignored)
 
 local function onSelect(event, player, object, sender, intid, code, menuId)
     -- mod-ale calls player-menu selects as (event, player, object, sender, intid, code): no menu id
@@ -1165,6 +1166,7 @@ local function onSelect(event, player, object, sender, intid, code, menuId)
     if not on() or not player or (menuId ~= nil and menuId ~= MENU_ID) then return end
     local guid = player:GetGUIDLow()
     touched[guid] = true
+    chosen[guid] = true
     if not canBoost(player) then return player:GossipComplete() end
 
     if intid == 1 then
@@ -1449,6 +1451,16 @@ local function onCommand(event, player, command)
     if not player then return end
     touched[player:GetGUIDLow()] = true
     local cmd = (command or ""):gsub("^[%.!]", ""):lower():gsub("%s+$", "")
+    -- WrathUnleashedUI (Modes.lua, "the start-choice window") answers the choice menu, which a client closes without
+    -- telling the realm: "boost seen" = it arrived (no more resends this session: touched, above); "boost later" =
+    -- closed with Goodbye without a pick: kept for the character (choice "later"), so no login opens it again.
+    -- .boost still opens it while the character may boost.
+    if cmd == "boost seen" or cmd == "boost later" then
+        if not on() then return end
+        local guid = player:GetGUIDLow()
+        if cmd == "boost later" and not chosen[guid] and choiceOf(guid) == "pending" then setChoice(player, "later", "") end
+        return false
+    end
     if cmd ~= "boost" then return end
     if not on() then return end   -- other realms: let the core answer
     local ok, why = canBoost(player)

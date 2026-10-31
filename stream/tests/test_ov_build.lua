@@ -1149,6 +1149,107 @@ do
     Sandbox = nil
 end
 
+-- 2026-10-30: redo, storage, groups, floor, layouts -----------------------------------------------------------
+do
+    local hal = player({ guid = 90, name = "Hank", x = AREA.x - 20, y = AREA.y + 20 })
+    cmd(gm, "build grant Hank")
+    local function spawnOne(what) clock = clock + 2; cmd(hal, "build spawn " .. what); return T.props[T.selected[90]] end
+    local a = spawnOne("chair")
+    local z0 = a.z
+    cmd(hal, "build move z 1")
+    check("redo: nothing to redo before an undo", (cmd(hal, "build redo") or true) and last(hal):find("Nothing to redo"))
+    cmd(hal, "build undo")
+    check("undo the move", math.abs(a.z - z0) < 1e-6 and #T.X.redo[90] == 1)
+    cmd(hal, "build redo")
+    check("redo does the move again", math.abs(a.z - z0 - 1) < 1e-6 and last(hal):find("^.*Redone:"))
+    cmd(hal, "build undo")
+    check("and undo takes the redo back", math.abs(a.z - z0) < 1e-6)
+    cmd(hal, "build turn 15")
+    check("a new change clears the redo stack", T.X.redo[90] == nil)
+    -- undo / redo of a spawn and a delete
+    local b = spawnOne("table")
+    local bid = b.id
+    cmd(hal, "build undo")
+    check("undo a spawn", T.props[bid] == nil)
+    cmd(hal, "build redo")
+    check("redo a spawn: the same prop back", T.props[bid] and liveOf(T.props[bid]) and last(hal):find("Redone: 1 prop back"))
+    cmd(hal, "build delete")
+    cmd(hal, "build undo"); cmd(hal, "build redo")
+    check("redo a delete: gone again", T.props[bid] == nil and last(hal):find("gone again"))
+    cmd(hal, "build undo")
+    check("undo the redone delete: back", T.props[bid] ~= nil)
+
+    -- storage
+    T.selected[90] = bid
+    cmd(hal, "build store")
+    check("store: the prop leaves the world, into storage", T.props[bid] == nil and T.X.storage[90][181075] == 1
+        and sqlHas("^REPLACE INTO mod_builder_storage %(guid, entry, count%) VALUES %(90, 181075, 1%)") and last(hal):find("put away"))
+    check("store: the window hears the storage", (function()
+        for _, m in ipairs(hal.addon) do if m[2]:find("^wubuild\tstorage\t1/1\t181075,1$") then return true end end end)())
+    cmd(hal, "build undo")
+    check("undo a store: back out, storage empty", T.props[bid] ~= nil and (T.X.storage[90] or {})[181075] == nil)
+    cmd(hal, "build redo")
+    check("redo a store: put away again", T.props[bid] == nil and T.X.storage[90][181075] == 1)
+    cmd(hal, "build storage")
+    check(".build storage lists it", last(hal):find("In your storage: Table x1"))
+    local c = spawnOne("table")
+    check("placing a stored prop takes it out of storage", c.entry == 181075 and T.X.storage[90][181075] == nil and last(hal):find("out of your storage"))
+    cmd(hal, "build undo")
+    check("undoing that placement puts it back in storage", T.X.storage[90][181075] == 1)
+    clock = clock + 2
+
+    -- groups: a click on one member selects them all
+    local g1, g2 = spawnOne("barrel"), spawnOne("crate")
+    T.selected[90] = nil
+    cmd(hal, "build pick " .. T.live[g1.id]); cmd(hal, "build pick " .. T.live[g2.id] .. " add")
+    cmd(hal, "build group")
+    check("group: stored", T.X.groupOf[g1.id] and T.X.groupOf[g1.id] == T.X.groupOf[g2.id]
+        and sqlHas("^REPLACE INTO mod_builder_groups %(prop, grp%) VALUES %(" .. g1.id))
+    cmd(hal, "build selclear")
+    cmd(hal, "build pick " .. T.live[g2.id])
+    check("a click on one member selects the group", #T.group[90] == 2 and T.selected[90] == g2.id and last(hal):find("with its group"))
+    check("state: grp=1", (function() for _, m in ipairs(hal.addon) do if m[2]:find("grp=1") then return true end end end)())
+    cmd(hal, "build ungroup")
+    cmd(hal, "build pick " .. T.live[g2.id])
+    check("ungroup: one click, one prop", T.X.groupOf[g1.id] == nil and T.group[90] == nil and T.selected[90] == g2.id)
+
+    -- floor: down onto the ground (Map:GetHeight)
+    maps[0].GetHeight = function(self, x, y) return AREA.z - 0.5 end
+    cmd(hal, "build move z 2")
+    cmd(hal, "build floor")
+    check("floor: down onto the ground below", math.abs(g2.z - (AREA.z - 0.5)) < 1e-6 and last(hal):find("on the floor"))
+    cmd(hal, "build floor")
+    check("floor: already there", last(hal):find("on the floor already"))
+
+    -- layouts: relative to the area's centre, with size, kept and loaded back
+    T.selected[90] = g2.id
+    clock = clock + 2
+    cmd(hal, "build setscale 1.5")
+    cmd(hal, "build layout save yard")
+    local text = T.X.layouts[90].yard
+    check("layout save: every one of your props here, relative to the centre, with size",
+        text and select(2, text:gsub("|", "|")) + 1 == propsOf(90) and text:find(",1%.50,") and last(hal):find("Layout 'yard' saved"))
+    check("layout decode reads it back", #T.X.layoutDecode(text) == propsOf(90) and T.X.layoutDecode(text)[1].entry)
+    cmd(hal, "build layout list")
+    check("layout list", last(hal):find("Your layouts: yard"))
+    local before = propsOf(90)
+    clock = clock + 10
+    cmd(hal, "build layout load yard replace")
+    check("replace is the owner's (GM) only", last(hal):find("Only the owner") and propsOf(90) == before)
+    cmd(hal, "build clear")
+    clock = clock + 10
+    cmd(hal, "build layout load yard")
+    check("layout load: everything back where it was", propsOf(90) == before and last(hal):find("Pasted 'layout yard'"))
+    check("layout load: the size came back", (function()
+        for _, p in pairs(T.props) do if p.owner == 90 and p.entry == g2.entry and p.s == 1.5 then return true end end end)())
+    cmd(hal, "build layout load nothing")
+    check("layout load: unknown name", last(hal):find("No layout 'nothing'"))
+    cmd(hal, "build layout delete yard")
+    check("layout delete", T.X.layouts[90].yard == nil and sqlHas("^DELETE FROM mod_builder_layouts WHERE owner = 90 AND name = 'yard'"))
+    check("not a Den: no den= in the state", (function() for _, m in ipairs(hal.addon) do if m[2]:find(";den=") then return false end end; return true end)())
+    cmd(hal, "build clear")
+end
+
 -- switch off ------------------------------------------------------------------------------------------------
 env.OV_BUILD = "0"
 clock = clock + 1

@@ -392,3 +392,11 @@
 1144d scripts Hangout: Discord welcome line, mode keys let go, Coin Dash fix (live reload; a 5-minute warning if a restart is needed)
 1144e foreverui Mode keys let go (addon)
 1144f ship Save to GitHub: all of the above, launcher Hangout slide, realm picker lineup, host console switches (GitHub then rebuilds Leyline.exe)
+1145a ov112-on Vanilla Remastered: the 1.12 realm's login and world servers on (backup, self-check, roll back on failure; Wrath untouched)
+1146a vr-beacon Vanilla Remastered on Leyline (an official Beacon through the relay; health check, roll back on failure)
+1147a hostkit Host kit: My Den profile (den), WU_GAME_DIR, official Vanilla Remastered pin
+1147b signin Site: My Den recipe, Hangout band, featured slider fixes, network official field, host flow den
+1147b2 check Server check (read-only): why SOAP gave an empty reply
+1147c scripts Realm scripts: Den room and build tools, Leyline official field, mode intent rules (live reload; a 5-minute warning if a restart is needed)
+1147d foreverui Den edit mode, Builder, Coin Dash and mode fixes (addon)
+1147e ship Save to GitHub: all of the above

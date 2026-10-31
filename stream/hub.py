@@ -954,7 +954,8 @@ class Hub:
         got = self._network()
         if got is not None:
             net, realms, ok, st2 = got
-            t = net.totals(net.order(realms), st2)
+            rr = self.realm_rows()
+            t = rr[1] if rr else hub_totals([])
             pill("Realm network", net.network_line(t), None, BASE + "/realms")
             pill("Relay", "", bool(ok))
         items = self.items()
@@ -977,7 +978,6 @@ class Hub:
             return None
         net, realms, ok, st = got
         shown = net.order(realms)
-        t = net.totals(shown, st)
         si = self.portal("sample_info")
         try:
             sample = si() if si else {}
@@ -997,14 +997,15 @@ class Hub:
                 "temporary": bool(sample.get("temporary")), "featured": False, "new": False, "group": "home",
                 "address": self.portal("PUBLIC_HOST") or "play.openvanilla.app"}
         fits = lambda r: net.matches(r, f) and f.get("client") in (None, client_of(r))   # noqa: E731
-        rows = [home] if fits(home) else []
         rest = []
         for r in shown:
-            if r["sample"] or not fits(r):
+            if r["sample"]:
                 continue
             port, relay = r.get("port"), r.get("relay") or "relay.openvanilla.app"
             rest.append({**r, "home": False, "address": f"{relay}:{port}" if port else ""})
-        rows += sorted(rest, key=lineup_rank)   # stable: the network's order inside each group
+        rest.sort(key=lineup_rank)   # stable: the network's order inside each group
+        t = hub_totals([home] + rest)   # every realm, before the filters; bots apart from players
+        rows = [r for r in [home] + rest if fits(r)]
         return rows, t, ok, f, net.facets([r for r in shown if not r["sample"]])
 
     def realm_row(self, r: dict) -> str:
@@ -3324,6 +3325,11 @@ function set(li,on,p,bots){var el=li.querySelector(".hb-n");if(!el||li.getAttrib
   if(String(p)!==el.textContent){el.textContent=String(p);li.setAttribute("data-players",String(p));
     if(!still){el.classList.remove("bump");void el.offsetWidth;el.classList.add("bump");}}
   var s=li.querySelector(".hb-bots");if(s&&typeof bots==="number")s.textContent=bots?bots+" bots":"";}
+// the header line from the same numbers as the rows: the relay's realms (not our own sample record, whose count can
+// include bots) plus our realm from its own status; bots never counted as players
+var relayT=null,homeS=null;function nz(v){return typeof v==="number"&&v>=0?v:0;}
+function netLine(){var nl=d.querySelector("[data-net]");if(!nl||!relayT||!homeS)return;var on=homeS.online===true;
+  nl.textContent=line({realms:relayT.realms+(on?1:0),players:relayT.players+(on?nz(homeS.players):0),bots:relayT.bots+(on?nz(homeS.bots):0)});}
 function line(t){return t.realms+" realm"+(t.realms===1?"":"s")+" · "+t.players+" player"+(t.players===1?"":"s")+" online"+(t.bots?" · "+t.bots+" bots":"");}
 function json(u){return fetch(u,{cache:"no-store",credentials:"omit"}).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;});}
 function tick(){if(d.hidden)return;
@@ -3332,9 +3338,11 @@ function tick(){if(d.hidden)return;
       if(!/^[a-z2-7]{16}$/.test(c.realmId||""))return;
       var li=d.querySelector('.hb-rl[data-rid="'+c.realmId+'"]');if(li)set(li,h.online,h.players,h.bots);
       if(h.online!==false)tk(c.realmId,h.players);});
-    var nl=d.querySelector("[data-net]");if(nl&&j.network&&typeof j.network.players==="number")nl.textContent=line(j.network);});
+    var o={realms:0,players:0,bots:0};j.realms.forEach(function(r){var c=r.community||{},h=c.lastHeartbeat||{};
+      if(c.sample||h.online!==true)return;o.realms++;o.players+=nz(h.players);o.bots+=nz(h.bots);});relayT=o;netLine();});
   var home=d.querySelector(".hb-rl[data-home]");
   if(home||d.querySelector('[data-tick="home"]'))json("/wrath/status.json").then(function(s){if(!s)return;
+    homeS=s;netLine();
     if(home)set(home,s.online===true?true:s.online===false?false:undefined,s.players,s.bots);if(s.online!==false)tk("home",s.players);});}
 setInterval(tick,30000);d.addEventListener("visibilitychange",function(){if(!d.hidden)tick();});
 })();"""
@@ -3351,7 +3359,20 @@ TAG_WORDS = {"blizzlike": "Original rules"}   # the network's tag labels the hub
 
 
 def client_of(r: dict) -> str:
-    return "browser" if r.get("build", 12340) == BROWSER_BUILD else "own"
+    """browser when the browser game can join it: our own realm, or a 3.3.5a realm without Warden (network.py carries
+    the host's profile.warden; a host that turns Browser players off runs Warden). Unknown (an older record): browser."""
+    if r.get("home"):
+        return "browser"
+    return "browser" if r.get("build", 12340) == BROWSER_BUILD and r.get("warden") is not True else "own"
+
+
+def hub_totals(rows: list[dict]) -> dict:
+    """{"realms", "players", "bots"} online, from the hub's own rows (ours from its status, the rest from the relay):
+    bots are never counted as players, and the header agrees with the rows under it."""
+    live = [r for r in rows if r.get("live")]
+    num = lambda v: v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else 0   # noqa: E731
+    return {"realms": len(live), "players": sum(num(r.get("players")) for r in live),
+            "bots": sum(num(r.get("bots")) for r in live)}
 FRONT_REALMS = 60       # rows sent on the front page (8 show until a filter is used; the rest are on the realm list)
 # The launch lineup (owner 2026-10-30): the Dalaran Hangout is our own realm, the Wrath realm where everyone meets in
 # Dalaran, pinned first everywhere; then the official records the staff mark (Vanilla Remastered, when its record
@@ -3366,7 +3387,7 @@ def lineup_rank(r: dict) -> int:
     """0 for an official lineup record (staff official, pinned, or a lineup name), else 1: the hub sorts these first
     after the Hangout, keeping the network's order inside each group."""
     nm = str(r.get("name") or "").strip().lower()
-    return 0 if r.get("official") or r.get("pinned") or nm in OFFICIAL_NAMES else 1
+    return 0 if r.get("official") or r.get("pinned") or r.get("vr") or nm in OFFICIAL_NAMES else 1
 
 # Icons for the products (24x24 strokes, the launcher's nav style).
 ICONS = {
