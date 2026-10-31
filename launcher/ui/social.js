@@ -113,31 +113,119 @@
     return b;
   }
 
-  // Home's Friends card (owner 2026-10-30): who is on, in game first; a click opens the chat on Community › Friends.
+  // Home's right column (owner 2026-10-30, after a game launcher's friends list): your own row (avatar with a status
+  // dot, name with a small menu: Appear online / offline, Sign out; Community › Friends on the right), add a friend,
+  // friend settings and a search box, then collapsible groups, Favorites and Friends, with online / total counts.
+  // A row opens the chat on Community › Friends. Signed out: the same panel with one line and Sign in.
   const RANK = { game: 0, launcher: 1, offline: 2 };
   function goFriends(pid) {
     if (window.LeylineNav) window.LeylineNav.show("community", false, "friends");
     if (pid) openChat(pid);
   }
+  const FOLD_KEY = "leyline.friends.folded";
+  let folded = { fav: false, friends: false };
+  try { folded = Object.assign(folded, JSON.parse(localStorage.getItem(FOLD_KEY) || "{}")); } catch (_) { /* storage off */ }
+  let meMenu = null;
+  function closeMeMenu() { if (meMenu) { meMenu.remove(); meMenu = null; const b = $("hf-me-btn"); if (b) b.setAttribute("aria-expanded", "false"); } }
+  document.addEventListener("pointerdown", (e) => { if (meMenu && !e.target.closest(".hf-me-pick")) closeMeMenu(); });
+  function avatar(name, status, cls) {
+    const av = el("span", "sx-av" + (cls ? " " + cls : "")); av.style.setProperty("--h", hue(name));
+    av.append(el("b", "", (String(name).match(/[A-Za-z0-9]/) || ["?"])[0].toUpperCase()), el("span", "sx-dot " + status));
+    return av;
+  }
+  function renderMe() {
+    const box = $("hf-me");
+    box.textContent = "";
+    const open = el("button", "icon-btn hf-open");
+    open.type = "button"; open.title = "Open Community › Friends"; open.setAttribute("aria-label", "Open Community › Friends");
+    open.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M16 3.5a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6.3"/></svg>';
+    open.onclick = () => goFriends();
+    if (!signedIn || !state) {
+      const t = el("div", "hf-me-t");
+      t.append(el("b", "hf-me-name", "Friends"), el("span", "hf-me-st", "Not signed in"));
+      box.append(avatar("?", "offline", "hf-me-av hf-anon"), t, open);
+      return;
+    }
+    const me = state.me;
+    const st = me.offline ? "offline" : (me.status === "game" ? "game" : "launcher");
+    const pick = el("div", "hf-me-pick");
+    const btn = el("button", "hf-me-btn");
+    btn.type = "button"; btn.id = "hf-me-btn";
+    btn.setAttribute("aria-haspopup", "menu"); btn.setAttribute("aria-expanded", "false");
+    btn.append(el("b", "hf-me-name", me.name));
+    const car = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    car.setAttribute("viewBox", "0 0 24 24"); car.setAttribute("aria-hidden", "true"); car.classList.add("hf-caret");
+    car.innerHTML = '<path d="M6 9l6 6 6-6"/>';
+    btn.append(car);
+    btn.title = `${me.name}#${me.tag}`;
+    btn.onclick = () => {
+      if (meMenu) { closeMeMenu(); return; }
+      meMenu = el("div", "hf-me-menu"); meMenu.setAttribute("role", "menu");
+      const item = (label, fn) => { const b = el("button", "", label); b.type = "button"; b.setAttribute("role", "menuitem"); b.onclick = () => { closeMeMenu(); fn(); }; meMenu.append(b); return b; };
+      item("Appear online", () => act("profile", { offline: false }, "Your friends can see you again.")).classList.toggle("on", !me.offline);
+      item("Appear offline", () => act("profile", { offline: true }, "You appear offline to your friends.")).classList.toggle("on", !!me.offline);
+      item("Sign out", () => $("sx-signout").click());
+      meMenu.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeMeMenu(); btn.focus(); } });
+      pick.append(meMenu);
+      btn.setAttribute("aria-expanded", "true");
+      meMenu.querySelector("button").focus();
+    };
+    pick.append(btn, el("span", "hf-me-st st-" + st, me.offline ? "Appearing offline" : STATUS[st]));
+    box.append(avatar(me.name, st, "hf-me-av"), pick, open);
+  }
   function renderHome() {
     const box = $("hf-list");
     if (!box) return;
+    closeMeMenu();
+    renderMe();
     box.textContent = "";
+    const tools = $("hf-tools");
     if (!signedIn || !state) {
-      box.appendChild(el("p", "hint", "Sign in to see who's on."));
-      const b = el("button", "btn wide", "SIGN IN"); b.type = "button"; b.onclick = () => goFriends();
-      box.appendChild(b);
+      if (tools) tools.hidden = true;
+      const out = el("div", "hf-out");
+      out.append(el("p", "", "Sign in to see who's on, in game or in the launcher, and message your friends."));
+      const b = el("button", "btn primary", "SIGN IN"); b.type = "button";
+      b.onclick = () => { goFriends(); $("sx-signin").click(); };
+      out.append(b);
+      box.appendChild(out);
       return;
     }
-    const fs = state.friends.slice().sort((a, b) => (RANK[a.status] ?? 3) - (RANK[b.status] ?? 3) || a.name.localeCompare(b.name));
-    if (!fs.length) { box.appendChild(el("p", "hint", `No friends yet. You are ${state.me.name}#${state.me.tag}`)); return; }
-    for (const f of fs) {
-      const b = friendRow(f, false);
-      b.onclick = () => goFriends(f.pid);
-      box.appendChild(b);
-    }
+    if (tools) tools.hidden = false;
+    const q = ($("hf-q") ? $("hf-q").value : "").trim().toLowerCase();
+    const all = state.friends.slice().sort((a, b) => (RANK[a.status] ?? 3) - (RANK[b.status] ?? 3) || a.name.localeCompare(b.name));
+    const match = (f) => !q || `${f.name} ${f.char || ""} ${f.realm || ""}`.toLowerCase().includes(q);
+    const on = (fs) => fs.filter((f) => f.status !== "offline").length;
+    const group = (key, title, fs, empty) => {
+      const g = el("section", "hf-group" + (folded[key] ? " folded" : ""));
+      g.dataset.group = key;
+      const head = el("button", "hf-ghead");
+      head.type = "button";
+      head.setAttribute("aria-expanded", String(!folded[key]));
+      const tri = el("span", "hf-tri"); tri.setAttribute("aria-hidden", "true");
+      head.append(tri, el("span", "hf-gname", title), el("span", "hf-gcount", ` – ${on(fs)}/${fs.length}`));
+      head.onclick = () => {
+        folded[key] = !folded[key];
+        try { localStorage.setItem(FOLD_KEY, JSON.stringify(folded)); } catch (_) { /* fine */ }
+        renderHome();
+      };
+      const list = el("div", "hf-rows"); list.setAttribute("role", "list"); list.setAttribute("aria-label", title);
+      list.hidden = !!folded[key];
+      const shownRows = fs.filter(match);
+      for (const f of shownRows) {
+        const b = friendRow(f, false);
+        b.onclick = () => goFriends(f.pid);
+        list.appendChild(b);
+      }
+      if (!shownRows.length && empty) list.appendChild(el("p", "hint hf-none", q && fs.length ? "No one by that name." : empty));
+      g.append(head, list);
+      box.appendChild(g);
+    };
+    group("fav", "Favorites", all.filter((f) => f.favorite), "");
+    group("friends", "Friends", all, `No friends yet. Add someone with their Name#1234, or ask them to add you: ${state.me.name}#${state.me.tag}`);
   }
-  if ($("hf-all")) $("hf-all").addEventListener("click", () => goFriends());
+  if ($("hf-q")) $("hf-q").addEventListener("input", renderHome);
+  if ($("hf-add")) $("hf-add").addEventListener("click", () => { goFriends(); setTimeout(() => $("sx-add").focus(), 0); });
+  if ($("hf-settings")) $("hf-settings").addEventListener("click", () => { goFriends(); const d = page.querySelector(".sx-more"); if (d) d.open = true; });
   function where(f) { return f.status === "game" ? `In game: ${f.char} on ${f.realm}` : STATUS[f.status] || ""; }
 
   function render() {

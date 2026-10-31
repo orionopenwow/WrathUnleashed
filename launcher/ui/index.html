@@ -78,28 +78,19 @@
         </div>
       </article>
 
-      <div class="cards-col">
-        <section class="card" aria-label="Server">
-          <div class="card-head"><span>SERVER</span><button type="button" class="link" data-page-go="realms">Change ›</button></div>
-          <div class="srv-top"><span class="rl-ic crystal" id="srv-ic" aria-hidden="true"></span>
-            <div class="srv-id"><div class="srv-name" id="srv-name">Official realm</div><span class="rl-ver" id="srv-ver" title="Game client version" hidden></span></div></div>
-          <div class="srv-state" id="srv-state"><span class="dot"></span><span id="srv-state-text">CHECKING…</span></div>
-          <div class="srv-detail" id="srv-detail"></div>
-          <span class="rl-bar srv-bar" id="srv-bar" aria-hidden="true" hidden><i></i></span>
-        </section>
-
-        <section class="card" aria-label="Game client">
-          <div class="card-head"><span>GAME CLIENT</span></div>
-          <div id="play-empty" class="empty" hidden>Add your game client first. Leyline uses the client already on your PC; it never downloads game files.</div>
-          <div class="client-now" id="client-now"></div>
-          <button type="button" class="btn wide" id="client-change" data-page-go="clients">CHANGE GAME FOLDER</button>
-        </section>
-
-        <section class="card home-friends" aria-label="Friends">
-          <div class="card-head"><span>FRIENDS</span><button type="button" class="link" id="hf-all">All ›</button></div>
-          <div class="hf-list" id="hf-list" role="list"></div>
-        </section>
-      </div>
+      <!-- the right column: your friends, like a game launcher's friends list (social.js renderHome). The realm and the
+           client are on the play bar. -->
+      <section class="cards-col card home-friends" id="home-friends" aria-label="Friends">
+        <div class="hf-me" id="hf-me"></div>
+        <div class="hf-tools" id="hf-tools">
+          <button type="button" class="icon-btn" id="hf-add" aria-label="Add a friend" title="Add a friend">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M19 8v6M16 11h6"/></svg></button>
+          <button type="button" class="icon-btn" id="hf-settings" aria-label="Friend settings" title="Friend settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg></button>
+          <input type="search" id="hf-q" placeholder="Search friends" aria-label="Search friends" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="hf-list" id="hf-list"></div>
+      </section>
       <button type="button" class="home-cue" id="home-cue" hidden>More below<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
     </div>
 

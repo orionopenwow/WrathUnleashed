@@ -254,8 +254,10 @@ function renderRealmRows() {
   }
 }
 
-// Home's SERVER card: the chosen realm's icon, name and client version (the players bar comes with its status).
+// Home's SERVER card: the chosen realm's icon, name and client version (the players bar comes with its status). Home has
+// no SERVER or GAME CLIENT card since the play bar shows both (owner 2026-10-30): these do nothing without them.
 function renderSrvHead() {
+  if (!$("srv-name")) return;
   const name = realmLabel();
   $("srv-name").textContent = name;
   const r = isOfficial() ? null : realmAt(chosenRealm());
@@ -266,6 +268,7 @@ function renderSrvHead() {
 }
 function renderSrvBar(players) {
   const bar = $("srv-bar");
+  if (!bar) return;
   if (players == null) { bar.hidden = true; return; }
   const o = isOfficial() ? (realmsCache || []).find((x) => x.official) : realmAt(chosenRealm());
   bar.hidden = false;
@@ -282,9 +285,11 @@ async function refreshStatus() {
     lastStatusClass = cls;
     $("tb-status").className = "pill " + cls;
     $("tb-status-text").textContent = pill;
-    $("srv-state").className = "srv-state " + cls;
-    $("srv-state-text").textContent = line;
-    $("srv-detail").textContent = detail;
+    if ($("srv-state")) {
+      $("srv-state").className = "srv-state " + cls;
+      $("srv-state-text").textContent = line;
+      $("srv-detail").textContent = detail;
+    }
     document.querySelectorAll(".realm-row.on").forEach((r) => {
       r.classList.remove("is-online", "is-partial", "is-offline");
       if (cls) r.classList.add(cls);
@@ -342,8 +347,8 @@ function renderPlay() {
   if (s.selected_client) sel.value = s.selected_client;
   sel.disabled = s.clients.length === 0;
   renderClientMenu();
-  $("play-empty").hidden = s.clients.length !== 0;
-  $("client-change").textContent = s.clients.length ? "CHANGE GAME FOLDER" : "ADD YOUR GAME FOLDER";
+  if ($("play-empty")) $("play-empty").hidden = s.clients.length !== 0;
+  if ($("client-change")) $("client-change").textContent = s.clients.length ? "CHANGE GAME FOLDER" : "ADD YOUR GAME FOLDER";
   const official = !s.selected_realm || s.selected_realm === state.official_realm;
   $("play-realm").value = official ? "official" : "custom";
   $("play-custom").value = official ? "" : s.selected_realm;
@@ -352,6 +357,7 @@ function renderPlay() {
 
 function renderClientCard() {
   const box = $("client-now");
+  if (!box) return;
   box.replaceChildren();
   const c = currentClient();
   if (!c) return;
