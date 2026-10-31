@@ -20,7 +20,7 @@
 #
 # Answers can come from the environment (no questions): WU_NAME, WU_PROFILE (main|brawl|progression|dalaran|vanillaplus, or a
 # profile for another client: profiles/<id>/, e.g. cmangos-1.12.1, cmangos-2.4.3), WU_VISIBILITY
-# (private|public), WU_WOW_DIR (your 3.3.5a folder), WU_CLIENT_DIR (your game folder for another client's profile). Images: WU_IMAGE / WU_TAG
+# (private|public), WU_GAME_DIR (your 3.3.5a folder; WU_WOW_DIR still works), WU_CLIENT_DIR (your game folder for another client's profile). Images: WU_IMAGE / WU_TAG
 # (prebuilt, default below), falling back to the locally built ov/ac-wotlk-*:custom. Not published yet and
 # not built here: it asks "build or stock" (WU_BUILD=1 builds, WU_BUILD=0 takes AzerothCore's stock images).
 set -euo pipefail
@@ -169,7 +169,7 @@ ensure_tools() {
 
 find_wow() {
   local d
-  for d in "${WU_WOW_DIR:-}" "$HOME/World of Warcraft 3.3.5a" "$HOME/Games/World of Warcraft 3.3.5a" \
+  for d in "${WU_GAME_DIR:-${WU_WOW_DIR:-}}" "$HOME/World of Warcraft 3.3.5a" "$HOME/Games/World of Warcraft 3.3.5a" \
            "$HOME/Downloads/World of Warcraft 3.3.5a" "/Applications/World of Warcraft 3.3.5a" \
            "$HOME/.wine/drive_c/World of Warcraft 3.3.5a" "$HOME/Games/wow335"; do
     [ -n "$d" ] && [ -f "$d/Data/lichking.MPQ" -o -f "$d/Data/lichking.mpq" ] && { printf '%s' "$d"; return; }
@@ -188,7 +188,7 @@ client_data() {
     say "  Already extracted."
   else
     local wow
-    wow="$(find_wow)" || die "No 3.3.5a game folder found. Run again with WU_WOW_DIR=/path/to/your/3.3.5a/game/folder."
+    wow="$(find_wow)" || die "No 3.3.5a game folder found. Run again with WU_GAME_DIR=/path/to/your/3.3.5a/game/folder."
     say "  Extracting dbc + maps from $wow (a few minutes)..."
     run docker run --rm --user root -v "$wow:/wow:ro" -v ov-client-data:/out -w /out "$WU_EXTRACT_IMAGE" \
       /azerothcore/env/dist/bin/map_extractor -i /wow -o /out || die "Extracting the game data failed."

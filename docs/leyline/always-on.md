@@ -24,7 +24,7 @@ curl -fsSLO https://github.com/orionopenwow/Leyline/releases/download/host-kit/W
 unzip WrathUnleashed-host-kit.zip && cd "Leyline host"
 ```
 
-3. **Tell it where your game folder is** (only if it doesn't find it by itself): `export WU_WOW_DIR=/path/to/your/game`.
+3. **Tell it where your game folder is** (only if it doesn't find it by itself): `export WU_GAME_DIR=/path/to/your/game`.
 4. **Start it, always on:**
 
 ```
