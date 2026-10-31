@@ -365,3 +365,4 @@
 1126a hostkit Host kit: WU_GAME_DIR for the game folder
 1126b signin Always-on guide wording; the new host pack
 1126c ship Save to GitHub: launcher Friends card on Home, shorter text (GitHub then rebuilds Leyline.exe)
+1127a ship Save to GitHub: friends lists with avatars and status colours (GitHub then rebuilds Leyline.exe)
