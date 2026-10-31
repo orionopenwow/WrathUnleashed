@@ -41,6 +41,8 @@ rem the Leyline Admin Console (admin.py, /wrath/admin) and the mod checker it ca
 if exist admin.py if exist ..\mods\wu-mod.py copy /y "..\mods\wu-mod.py" wu-mod.py >nul
 if exist admin.py set "LINKS=%LINKS% admin.py"
 if exist admin.py if exist wu-mod.py set "LINKS=%LINKS% wu-mod.py"
+rem Leyline HQ, the home of the console (hq.py beside admin.py: /wrath/admin, docs\ADMIN-CONSOLE.md)
+if exist admin.py if exist hq.py set "LINKS=%LINKS% hq.py"
 rem the hidden Leyline hub (/wrath/leyline-preview): hub.py and its index (hub\community-index.json), always as a pair
 if exist hub.py if exist hub\community-index.json set "LINKS=%LINKS% hub.py hub"
 rem the hub rankings (hub_rank.py: /wrath/leyline/mods.json, installs and ratings; its store is /data/hub_rank.sqlite3)
@@ -62,7 +64,7 @@ echo [1/2] Uploading...
 scp %OPTS% "%T%" %HOST%:/tmp/wu-fastloop.tgz || (echo Upload failed. If it says "timed out", wait 2 minutes and run this again. & pause & exit /b 1)
 
 echo [2/2] Applying it on the server (under a minute)...
-ssh %OPTS% %HOST% "mkdir -p /srv/wrath/fastloop && rm -rf /srv/wrath/fastloop/www-files /srv/wrath/fastloop/docs /srv/wrath/fastloop/hub && tar -xzf /tmp/wu-fastloop.tgz -C /srv/wrath/fastloop && rm -f /tmp/wu-fastloop.tgz && cd /srv/wrath/fastloop && sed -i 's/\r$//' fastloop.sh wrath_portal.py $(ls links.py demo.py armory.py modes.py modes_data.py playmodes.py workshop.py creations.py hostflow.py ed25519_pure.py herokey_sso.py projects.py social.py forum.py profiles.py network.py docs.py leyline_net.py admin.py wu-mod.py hub.py hub_rank.py 2>/dev/null) && bash fastloop.sh 2>&1 | tee fastloop.log; grep -q '^FASTLOOP OK' fastloop.log"
+ssh %OPTS% %HOST% "mkdir -p /srv/wrath/fastloop && rm -rf /srv/wrath/fastloop/www-files /srv/wrath/fastloop/docs /srv/wrath/fastloop/hub && tar -xzf /tmp/wu-fastloop.tgz -C /srv/wrath/fastloop && rm -f /tmp/wu-fastloop.tgz && cd /srv/wrath/fastloop && sed -i 's/\r$//' fastloop.sh wrath_portal.py $(ls links.py demo.py armory.py modes.py modes_data.py playmodes.py workshop.py creations.py hostflow.py ed25519_pure.py herokey_sso.py projects.py social.py forum.py profiles.py network.py docs.py leyline_net.py admin.py wu-mod.py hq.py hub.py hub_rank.py 2>/dev/null) && bash fastloop.sh 2>&1 | tee fastloop.log; grep -q '^FASTLOOP OK' fastloop.log"
 if errorlevel 1 (
   echo.
   echo It did not report success; see the lines above. Anything it changed was put back.

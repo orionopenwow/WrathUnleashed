@@ -431,3 +431,6 @@
 1157f hangout Leyline listing: Wrath Unleashed (relay hop-ins reconnect)
 1157g addons Republish the addons with the new name
 1157h ship Save to GitHub: the rename, profile card, logo spacing, featured art (GitHub then rebuilds Leyline.exe)
+1158a signin Site: Leyline HQ (one console: status, Needs you, releases, notes, players, sanctions, game tools)
+1158b hqnote Fill HQ: recent changes and the first notes from Claude
+1158c ship Save to GitHub: Leyline HQ

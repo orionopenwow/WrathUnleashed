@@ -1198,6 +1198,22 @@ def get(h, path: str, query: dict) -> None:
     _json(h, 404, {"error": "Unknown call."})
 
 
+SANCTION_ACTIVITY = {"send": "message", "request": "message", "accept": "message", "profile": "profile",
+                     "herokey": "realm", "report": "staff"}   # "staff": only a suspension stops it
+
+
+def _sanctioned(acct: str, sub: str) -> str:
+    """The refusal text when a sanction stops this call (reading, declining, removing and blocking always work)."""
+    try:
+        adm = P("admin")
+    except Exception:   # noqa: BLE001: a portal without the admin console
+        adm = None
+    act = SANCTION_ACTIVITY.get(sub)
+    if adm is None or act is None or not hasattr(adm, "blocked"):
+        return ""
+    return adm.blocked(act, acct=acct)
+
+
 def post(h, path: str) -> None:
     if store is None:
         _json(h, 404, {"error": "Leyline friends are off here."}) if path != LINK_PAGE else h.send(404, b"not found\n", "text/plain")
@@ -1235,6 +1251,9 @@ def post(h, path: str) -> None:
     if how == "token":
         store.mark_seen(acct)
     via = "launcher" if how == "token" else "web"
+    blk = _sanctioned(acct, sub)
+    if blk:   # a site-wide sanction (Leyline HQ, stream/admin.py blocked())
+        return _json(h, 403, {"error": blk})
     pid = lambda: store.by_pid(doc.get("pid"))   # noqa: E731
     try:
         if sub == "profile":

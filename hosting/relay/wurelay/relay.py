@@ -88,6 +88,13 @@ class Config:
         self.trusted_proxies = e("RELAY_TRUSTED_PROXIES", "127.0.0.1/32,::1/128")
         self.allow_file = e("RELAY_ALLOW_FILE", "")             # realm ids; empty = open registration
         self.block_file = e("RELAY_BLOCK_FILE", "")             # realm ids refused and delisted (re-read every minute)
+        # Leyline HQ's block feed (https://play.openvanilla.app/wrath/leyline/relay-block.json, stream/admin.py): polled
+        # every minute when set. RELAY_BLOCK_FEED_KEY: the HMAC key (WU_RELAY_FEED_KEY on the portal); when set, an
+        # unsigned or wrongly signed feed is ignored. At most RELAY_BLOCK_FEED_MAX_NEW new ids are taken per update (the
+        # rest on the next ones), at most 500 in all; the block file's lines still block, and its "allow <id>" lines win.
+        self.block_feed = e("RELAY_BLOCK_FEED", "")
+        self.block_feed_key = e("RELAY_BLOCK_FEED_KEY", "")
+        self.block_feed_max_new = _env_int("RELAY_BLOCK_FEED_MAX_NEW", 10)
         self.site_origins = [o for o in e("RELAY_SITE_ORIGINS", domains.SITE).split(",") if o]
         self.site_url = e("RELAY_SITE_URL", domains.SITE)
         # Join pages: the relay serves /join/<id> itself, so links work without the website.
@@ -386,6 +393,10 @@ class Relay:
         self.allow = None
         self.blocked = set()
         self.block_mtime = None
+        self.block_file_ids = set()
+        self.block_allow = set()
+        self.feed_ids = set()          # the ids taken from the HQ feed so far (kept across restarts next to the state)
+        self.feed_fetching = False
         self.listing = listing.Listing(self.cfg, self) if self.cfg.listing else None
         self.mesh = meshnode.MeshNode(self.cfg, self) if self.cfg.mesh else None
         self._load()
@@ -414,25 +425,99 @@ class Relay:
                 self.allow = set()
 
     def load_blocklist(self):
-        """RELAY_BLOCK_FILE: one realm id per line (# comments). Blocked realms are cut off at once,
-        refused at login and left out of the listing."""
-        if not self.cfg.block_file:
+        """RELAY_BLOCK_FILE: one realm id per line (# comments; "allow <id>" lets a realm through whatever the feed
+        says). With the HQ feed's ids (RELAY_BLOCK_FEED): blocked realms are cut off at once, refused at login and left
+        out of the listing."""
+        if self.cfg.block_file:
+            try:
+                m = os.stat(self.cfg.block_file).st_mtime
+            except OSError:
+                m = None
+            if m != self.block_mtime:
+                self.block_mtime = m
+                ids, allow = set(), set()
+                if m is not None:
+                    with open(self.cfg.block_file, encoding="utf-8") as f:
+                        for ln in f:
+                            parts = ln.split()
+                            if not parts or parts[0].startswith("#"):
+                                continue
+                            if parts[0].lower() == "allow" and len(parts) > 1:
+                                allow.add(parts[1])
+                            else:
+                                ids.add(parts[0])
+                self.block_file_ids, self.block_allow = ids, allow
+        self.apply_blocks()
+
+    def apply_blocks(self):
+        ids = (self.block_file_ids | self.feed_ids) - self.block_allow
+        if ids == self.blocked:
             return
-        try:
-            m = os.stat(self.cfg.block_file).st_mtime
-        except OSError:
-            m = None
-        if m == self.block_mtime:
-            return
-        self.block_mtime = m
-        ids = set()
-        if m is not None:
-            with open(self.cfg.block_file, encoding="utf-8") as f:
-                ids = {ln.split()[0] for ln in f if ln.strip() and not ln.lstrip().startswith("#")}
         self.blocked = ids
         for rid in ids & set(self.sessions):
             self.sessions[rid].shutdown("blocked by the relay operator")
         log.info("blocklist: %d realms", len(ids))
+
+    def _feed_cache(self):
+        return os.path.join(os.path.dirname(os.path.abspath(self.cfg.state_file)), "block-feed.json")
+
+    def take_feed(self, doc):
+        """One fetched feed document: checked, capped, applied. Returns how many ids it added (or None: ignored)."""
+        if not isinstance(doc, dict) or doc.get("format") != 1 or not isinstance(doc.get("blocked"), list):
+            log.warning("block feed: not a feed, ignored")
+            return None
+        if self.cfg.block_feed_key:
+            body = {k: v for k, v in doc.items() if k != "sig"}
+            want = hmac.new(self.cfg.block_feed_key.encode(), json.dumps(body, sort_keys=True, separators=(",", ":"),
+                            ensure_ascii=False).encode(), hashlib.sha256).hexdigest()
+            if not isinstance(doc.get("sig"), str) or not hmac.compare_digest(doc["sig"], want):
+                log.warning("block feed: bad signature, ignored")
+                return None
+        rows = [r for r in doc["blocked"] if isinstance(r, dict) and isinstance(r.get("id"), str)
+                and re.fullmatch(r"[a-z2-7]{16}", r["id"])]
+        rows.sort(key=lambda r: str(r.get("at", "")))
+        want = [r["id"] for r in rows][:500]
+        kept = self.feed_ids & set(want)                       # removals take effect at once
+        new = [i for i in want if i not in kept][:max(0, self.cfg.block_feed_max_new)]
+        if len(want) - len(kept) > len(new):
+            log.warning("block feed: %d new ids, taking %d now (RELAY_BLOCK_FEED_MAX_NEW)", len(want) - len(kept), len(new))
+        self.feed_ids = kept | set(new)
+        try:
+            os.makedirs(os.path.dirname(self._feed_cache()), exist_ok=True)
+            with open(self._feed_cache() + ".tmp", "w", encoding="utf-8") as f:
+                json.dump(sorted(self.feed_ids), f)
+            os.replace(self._feed_cache() + ".tmp", self._feed_cache())
+        except OSError:
+            pass
+        self.apply_blocks()
+        return len(new)
+
+    def load_feed_cache(self):
+        try:
+            with open(self._feed_cache(), encoding="utf-8") as f:
+                ids = json.load(f)
+            self.feed_ids = {i for i in ids if isinstance(i, str) and re.fullmatch(r"[a-z2-7]{16}", i)}
+        except (OSError, ValueError, TypeError):
+            pass
+
+    def _fetch_feed(self):
+        import urllib.request
+        req = urllib.request.Request(self.cfg.block_feed, headers={"User-Agent": "wu-relay"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read(400_000).decode("utf-8"))
+
+    async def poll_feed(self):
+        """Fetch the HQ feed once (in a thread: the loop never waits on the network). A failure keeps the last ids."""
+        if not self.cfg.block_feed or self.feed_fetching:
+            return
+        self.feed_fetching = True
+        try:
+            doc = await asyncio.to_thread(self._fetch_feed)
+            self.take_feed(doc)
+        except Exception as e:   # noqa: BLE001: the relay keeps its last list
+            log.warning("block feed: %s", type(e).__name__)
+        finally:
+            self.feed_fetching = False
 
     def save(self):
         if not self.dirty:
@@ -1197,6 +1282,7 @@ class Relay:
                 self._spawn(self.mesh.gossip_round())
             if n % 12 == 0:
                 self.load_blocklist()
+                self._spawn(self.poll_feed())
                 for w in (self.conn_rate, self.ws_rate, self.reg_rate, self.acct_ip, self.acct_realm, self.knock_rate,
                           self.pair_rate, self.hk_ip, self.hk_realm):
                     w.sweep()
@@ -1210,7 +1296,9 @@ class Relay:
                                                       host, int(port), limit=1 << 16)
         if self.cfg.shared_auth_port:
             await self.ensure_listener(self.cfg.shared_auth_port)
+        self.load_feed_cache()
         self.load_blocklist()
+        self._spawn(self.poll_feed())
         self._spawn(self.sweeper())
         if self.mesh:
             self._spawn(self.mesh.bootstrap_once())

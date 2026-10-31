@@ -1025,6 +1025,15 @@ def read_form(h) -> dict | None:
     return {k: (",".join(x for x in v if x) if k == "tags" else v[0]) for k, v in q.items()}
 
 
+def _sanctioned(owner: str) -> str:
+    """The refusal text when a sanction stops new realms for this game account, else ""."""
+    try:
+        adm = P("admin")
+        return adm.blocked("submit", acct=owner) if adm is not None and hasattr(adm, "blocked") else ""
+    except Exception:   # noqa: BLE001
+        return ""
+
+
 def post(h, path: str) -> None:
     if path != "/wrath/host":
         h.send(405, b"method not allowed\n", "text/plain")
@@ -1045,6 +1054,10 @@ def post(h, path: str) -> None:
     if acct is None:
         return
     owner, display = acct
+    blk = _sanctioned(owner)
+    if blk:   # a site-wide sanction (Leyline HQ, stream/admin.py blocked())
+        h.send(403, P("error_page")(blk))
+        return
     if not hmac.compare_digest(form.get("csrf", ""), csrf(owner)):
         vals, _ = validate(form)
         h.send(400, form_page(owner, display, vals, {"_": "The form timed out. Check your answers and press Start server again."}))

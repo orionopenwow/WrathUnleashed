@@ -50,7 +50,7 @@ if [ -f "$WU/portal/profiles.py" ]; then cp -p "$WU/portal/profiles.py" "$BK/pro
 had_network=""
 if [ -f "$WU/portal/network.py" ]; then cp -p "$WU/portal/network.py" "$BK/network.py"; had_network=1; fi
 had_admin=""
-if [ -f "$WU/portal/admin.py" ]; then cp -p "$WU/portal/admin.py" "$BK/"; [ ! -f "$WU/portal/wu-mod.py" ] || cp -p "$WU/portal/wu-mod.py" "$BK/"; had_admin=1; fi
+if [ -f "$WU/portal/admin.py" ]; then cp -p "$WU/portal/admin.py" "$BK/"; [ ! -f "$WU/portal/wu-mod.py" ] || cp -p "$WU/portal/wu-mod.py" "$BK/"; [ ! -f "$WU/portal/hq.py" ] || cp -p "$WU/portal/hq.py" "$BK/"; had_admin=1; fi
 had_hub=""
 rm -rf "$BK/hub"
 if [ -f "$WU/portal/hub.py" ]; then cp -p "$WU/portal/hub.py" "$BK/hub.py"; [ ! -d "$WU/portal/hub" ] || cp -a "$WU/portal/hub" "$BK/hub"; had_hub=1; fi
@@ -82,7 +82,8 @@ put_back() {
   if [ -n "$had_profiles" ]; then cp -p "$BK/profiles.py" "$WU/portal/profiles.py"; else rm -f "$WU/portal/profiles.py"; fi
   if [ -n "$had_network" ]; then cp -p "$BK/network.py" "$WU/portal/network.py"; else rm -f "$WU/portal/network.py"; fi
   if [ -n "$had_admin" ]; then cp -p "$BK/admin.py" "$WU/portal/admin.py"; [ ! -f "$BK/wu-mod.py" ] || cp -p "$BK/wu-mod.py" "$WU/portal/"
-  else rm -f "$WU/portal/admin.py" "$WU/portal/wu-mod.py"; fi
+    if [ -f "$BK/hq.py" ]; then cp -p "$BK/hq.py" "$WU/portal/hq.py"; else rm -f "$WU/portal/hq.py"; fi
+  else rm -f "$WU/portal/admin.py" "$WU/portal/wu-mod.py" "$WU/portal/hq.py"; fi
   rm -rf "$WU/portal/hub"
   if [ -n "$had_hub" ]; then cp -p "$BK/hub.py" "$WU/portal/hub.py"; [ ! -d "$BK/hub" ] || cp -a "$BK/hub" "$WU/portal/hub"
   else rm -f "$WU/portal/hub.py"; fi
@@ -158,6 +159,10 @@ if [ -f network.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv
 if [ -f admin.py ]; then
   python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' admin.py && install -m 644 admin.py "$WU/portal/admin.py"
   if [ -f wu-mod.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' wu-mod.py && install -m 644 wu-mod.py "$WU/portal/wu-mod.py"; fi
+  # Leyline HQ (hq.py: the home page, Needs you, Players, Game, notes, the JSON API); its files live in
+  # $WU/portal-data/hq (the HQ sync step from the owner's PC fills it)
+  if [ -f hq.py ]; then python3 -I -c 'import ast,sys;ast.parse(open(sys.argv[1]).read())' hq.py && install -m 644 hq.py "$WU/portal/hq.py"
+    install -d -m 755 "$WU/portal-data/hq"; fi
 fi
 # the hidden Leyline hub (/wrath/leyline-preview, stream/hub.py) and its index (hub/*.json): optional, always as a pair.
 # Its submissions queue lives in $WU/portal-data/hub (the writable /data mount).
