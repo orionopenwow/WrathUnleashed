@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="themes/themes.css"><script src="themes.js"></script>
 <link rel="stylesheet" href="social.css">
 <link rel="stylesheet" href="modes.css">
+<link rel="stylesheet" href="hostconsole.css"><!-- Host: the host console (hostconsole.js) -->
 <link rel="stylesheet" href="home.css"><!-- Home: the hero gallery and the rows below it (home.js) -->
 </head>
 <body class="ly">
@@ -256,14 +257,24 @@
 
   <!-- HOST -->
   <section class="page" id="page-host">
-    <div class="panel wide">
-      <h2>Host</h2>
-      <p class="lede">Run a realm on this PC for friends or everyone. It uses your own game files and reaches players through the Leyline relay: no port forwarding, your address stays hidden. It runs while your PC does.</p>
+    <!-- Host: the host console once a realm is set up on this PC, the setup start before that (hostconsole.js, after the
+         website's "Your realm console"), the guide, and the kit and its settings (app.js, host.js). -->
+    <div class="panel wide hc-panel">
+      <div class="panel-head"><h2>Host</h2>
+        <div class="page-tabs" role="tablist" aria-label="Host">
+          <button type="button" class="page-tab" role="tab" id="hc-tab-main" data-hc="main" aria-controls="hc-pane-main" aria-selected="false" tabindex="-1">Console</button>
+          <button type="button" class="page-tab" role="tab" id="hc-tab-guide" data-hc="guide" aria-controls="hc-pane-guide" aria-selected="false" tabindex="-1">Guide</button>
+          <button type="button" class="page-tab" role="tab" id="hc-tab-kit" data-hc="kit" aria-controls="hc-pane-kit" aria-selected="true">Kit &amp; settings</button>
+        </div></div>
       <section class="card" id="host-from-game" hidden>
         <div class="card-head"><span id="host-from-game-title">FROM THE GAME</span></div>
         <ul class="hint" id="host-from-game-list"></ul>
         <div class="row"><button type="button" class="btn" id="host-from-game-go" hidden>MAKE IT ON THE WEBSITE</button></div>
       </section>
+      <div class="hc-pane" id="hc-pane-main" role="tabpanel" aria-labelledby="hc-tab-main"></div>
+      <div class="hc-pane" id="hc-pane-guide" role="tabpanel" aria-labelledby="hc-tab-guide"></div>
+      <div class="hc-pane on" id="hc-pane-kit" role="tabpanel" aria-labelledby="hc-tab-kit">
+      <p class="lede">Run a realm on this PC for friends or everyone. It uses your own game files and reaches players through the Leyline relay: no port forwarding, your address stays hidden. It runs while your PC does.</p>
       <ol class="steps">
         <li><b>Make your realm on the website.</b> Sign in, pick a name, a ruleset and your house rules, then download your realm file.
           <div class="row"><button type="button" class="btn" data-link="host">HOST A REALM</button></div></li>
@@ -282,6 +293,7 @@
         <div class="srv-state" id="host-state"><span class="dot"></span><span id="host-state-text">CHECKING…</span></div>
         <div class="hint" id="host-detail"></div>
       </section>
+      </div>
     </div>
   </section>
 
@@ -425,6 +437,16 @@
   </div>
 </dialog>
 
+<!-- The host console's confirm, for what can't be taken back at once (kick, ban, restart, stop, a new invite link) -->
+<dialog class="dlg hc-dlg" id="hc-confirm" aria-labelledby="hc-confirm-title">
+  <h3 id="hc-confirm-title"></h3>
+  <p id="hc-confirm-body"></p>
+  <div class="row">
+    <button type="button" class="btn danger" id="hc-confirm-yes"></button>
+    <button type="button" class="btn" id="hc-confirm-no">Cancel</button>
+  </div>
+</dialog>
+
 <!-- The play bar, on every page: the client picker (a drop-up list, app.js renderClientMenu), the realm and one status
      line, the play mode and PLAY. #play-client stays the model the rest of app.js reads; the list sets it. -->
 <form id="play-form" class="playbar">
@@ -460,6 +482,7 @@
 <script src="modes.js"></script>
 <script src="app.js"></script>
 <script src="host.js"></script>
+<script src="hostconsole.js"></script>
 <script src="home.js"></script>
 </body>
 </html>

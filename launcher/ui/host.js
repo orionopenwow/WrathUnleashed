@@ -18,7 +18,8 @@
 
   // ---------------------------------------------------------------- Host page: the pack and Docker
   const page = byId("page-host");
-  const panel = page && page.querySelector(".panel");
+  // the Host page's "Kit & settings" tab (hostconsole.js has the console and the guide)
+  const panel = page && (byId("hc-pane-kit") || page.querySelector(".panel"));
   if (!panel) return;
   const packCard = mk("section", "card");
   packCard.id = "hp-card";

@@ -11,8 +11,11 @@
 //! * show the realm's status from the relay's public lookup;
 //! * stop it, show its logs and its invite link, make a new invite link (`docker`);
 //! * the Host pack (`pack`): the kit as a download inside Leyline, installed into app data and updated from
-//!   the catalog. A kit the player unzipped themselves keeps working as before.
+//!   the catalog. A kit the player unzipped themselves keeps working as before;
+//! * the host console (`console`): the realm's health, GM controls, Check my realm and the realm tools, once a
+//!   realm is set up on this PC; and `leyline link` (a server the player already runs) in a window of its own.
 
+pub mod console;
 pub mod docker;
 pub mod pack;
 pub mod profiles;
@@ -28,6 +31,7 @@ pub const HOST_PAGE: &str = "https://play.openvanilla.app/wrath/host";
 pub const WINDOWS_SCRIPT: &str = "Host a Wrath realm.bat";
 pub const UNIX_SCRIPT: &str = "host-wrath-realm.sh";
 pub const LEYLINE_SCRIPT: &str = "leyline";
+pub const LINK_SCRIPT: &str = "Link my server.bat";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Seed {
@@ -223,6 +227,10 @@ pub fn plan(kit: &Path, seed: Option<&str>, os: HostOs, has: impl Fn(&str) -> bo
                 Some(s) => vec!["bash".into(), s.into()],
                 None => vec!["bash".into(), LEYLINE_SCRIPT.into(), "host".into()],
             };
+            // Vanilla+ is made to stay up: Docker (and so the realm) comes back after a reboot (docs/leyline/always-on.md).
+            if seed.is_none() && profiles::read_choice(kit).is_some_and(|c| c.profile == "vanillaplus") {
+                cmd.push("--always-on".into());
+            }
             if !env.is_empty() {
                 let mut e: Vec<String> = vec!["env".into()];
                 e.extend(env.iter().map(|(k, v)| format!("{k}={v}")));
@@ -230,50 +238,79 @@ pub fn plan(kit: &Path, seed: Option<&str>, os: HostOs, has: impl Fn(&str) -> bo
                 cmd = e;
             }
             let note = "Started in a terminal window. The first start imports the databases and can take 5 to 20 minutes.".to_string();
-            if os == HostOs::Mac {
-                let line = format!("cd {} && {}", sh_quote(&kit.display().to_string()), cmd.iter().map(|c| sh_quote(c)).collect::<Vec<_>>().join(" "));
-                let esc = line.replace('\\', "\\\\").replace('"', "\\\"");
-                return Ok(HostPlan {
-                    program: "osascript".into(),
-                    args: vec!["-e".into(), format!("tell application \"Terminal\" to do script \"{esc}\""), "-e".into(), "tell application \"Terminal\" to activate".into()],
-                    cwd,
-                    new_console: false,
-                    log: None,
-                    env: Vec::new(),
-                    note,
-                });
-            }
-            // Keep the window open at the end so the last lines can be read.
-            let mut wrapped: Vec<String> =
-                vec!["bash".into(), "-c".into(), "\"$@\"; echo; read -r -p 'Press Enter to close this window. ' _".into(), "leyline".into()];
-            wrapped.extend(cmd.iter().cloned());
-            let terminals: &[(&str, &[&str])] = &[
-                ("x-terminal-emulator", &["-e"]),
-                ("gnome-terminal", &["--"]),
-                ("konsole", &["-e"]),
-                ("xfce4-terminal", &["-x"]),
-                ("kitty", &[]),
-                ("alacritty", &["-e"]),
-                ("xterm", &["-e"]),
-            ];
-            for (t, pre) in terminals {
-                if has(t) {
-                    let mut args: Vec<String> = pre.iter().map(|s| s.to_string()).collect();
-                    args.extend(wrapped.iter().cloned());
-                    return Ok(HostPlan { program: t.to_string(), args, cwd, new_console: false, log: None, env: Vec::new(), note });
-                }
-            }
-            let log = kit.join("state").join("leyline-launcher.log");
-            Ok(HostPlan {
-                program: cmd[0].clone(),
-                args: cmd[1..].to_vec(),
-                cwd,
-                new_console: false,
-                env: Vec::new(),
-                note: format!("No terminal window found, so it runs in the background; its output is in {}.", log.display()),
-                log: Some(log),
-            })
+            Ok(in_terminal(kit, os, has, cmd, note))
         }
+    }
+}
+
+/// `leyline link` (a server the player already runs, on the Leyline list; only the relay agent runs here) in a window
+/// of its own: it asks its four questions there.
+pub fn plan_link(kit: &Path, os: HostOs, has: impl Fn(&str) -> bool) -> Result<HostPlan, String> {
+    let note = "Started in its own window: answer its four questions. Your server is on the realm list within a minute.".to_string();
+    if os == HostOs::Windows {
+        if !kit.join(LINK_SCRIPT).is_file() {
+            return Err(format!("\"{LINK_SCRIPT}\" is not in this folder: update the Host pack."));
+        }
+        return Ok(HostPlan { program: "cmd.exe".into(), args: vec!["/K".into(), LINK_SCRIPT.into()], cwd: kit.to_path_buf(),
+            new_console: true, log: None, env: Vec::new(), note });
+    }
+    if !kit.join(LEYLINE_SCRIPT).is_file() {
+        return Err("The `leyline` script is not in this folder: pick your host kit folder.".into());
+    }
+    let cmd = vec!["bash".to_string(), LEYLINE_SCRIPT.into(), "link".into()];
+    let p = in_terminal(kit, os, has, cmd, note);
+    if p.log.is_some() {
+        return Err("Linking asks four questions, and no terminal window was found: run `bash leyline link` in the kit folder.".into());
+    }
+    Ok(p)
+}
+
+/// A Mac or Linux command in a terminal window (Terminal on a Mac; the first terminal found on Linux, else in the
+/// background with its output in the kit's state folder).
+fn in_terminal(kit: &Path, os: HostOs, has: impl Fn(&str) -> bool, cmd: Vec<String>, note: String) -> HostPlan {
+    let cwd = kit.to_path_buf();
+    if os == HostOs::Mac {
+        let line = format!("cd {} && {}", sh_quote(&kit.display().to_string()), cmd.iter().map(|c| sh_quote(c)).collect::<Vec<_>>().join(" "));
+        let esc = line.replace('\\', "\\\\").replace('"', "\\\"");
+        return HostPlan {
+            program: "osascript".into(),
+            args: vec!["-e".into(), format!("tell application \"Terminal\" to do script \"{esc}\""), "-e".into(), "tell application \"Terminal\" to activate".into()],
+            cwd,
+            new_console: false,
+            log: None,
+            env: Vec::new(),
+            note,
+        };
+    }
+    // Keep the window open at the end so the last lines can be read.
+    let mut wrapped: Vec<String> =
+        vec!["bash".into(), "-c".into(), "\"$@\"; echo; read -r -p 'Press Enter to close this window. ' _".into(), "leyline".into()];
+    wrapped.extend(cmd.iter().cloned());
+    let terminals: &[(&str, &[&str])] = &[
+        ("x-terminal-emulator", &["-e"]),
+        ("gnome-terminal", &["--"]),
+        ("konsole", &["-e"]),
+        ("xfce4-terminal", &["-x"]),
+        ("kitty", &[]),
+        ("alacritty", &["-e"]),
+        ("xterm", &["-e"]),
+    ];
+    for (t, pre) in terminals {
+        if has(t) {
+            let mut args: Vec<String> = pre.iter().map(|s| s.to_string()).collect();
+            args.extend(wrapped.iter().cloned());
+            return HostPlan { program: t.to_string(), args, cwd, new_console: false, log: None, env: Vec::new(), note };
+        }
+    }
+    let log = kit.join("state").join("leyline-launcher.log");
+    HostPlan {
+        program: cmd[0].clone(),
+        args: cmd[1..].to_vec(),
+        cwd,
+        new_console: false,
+        env: Vec::new(),
+        note: format!("No terminal window found, so it runs in the background; its output is in {}.", log.display()),
+        log: Some(log),
     }
 }
 
@@ -597,6 +634,28 @@ mod tests {
         assert_eq!((bg.program.as_str(), bg.args.last().map(String::as_str)), ("env", Some("host")));
         let m = plan(k.path(), None, HostOs::Mac, |_| false).unwrap();
         assert!(m.args[1].contains("'env' 'WU_PROFILE=cmangos-2.4.3'"), "{}", m.args[1]);
+    }
+
+    #[test]
+    fn vanilla_plus_starts_always_on_and_link_opens_a_window() {
+        let k = kit();
+        profiles::choose(k.path(), "vanillaplus", None).unwrap();
+        let l = plan(k.path(), None, HostOs::Linux, |t| t == "konsole").unwrap();
+        assert_eq!(&l.args[l.args.len() - 4..], &["bash", "leyline", "host", "--always-on"]);
+        let seed = format!("leyline-{RID}.sh");
+        touch(k.path(), &seed, b"#!/bin/bash");
+        assert!(!plan(k.path(), Some(&seed), HostOs::Linux, |t| t == "konsole").unwrap().args.contains(&"--always-on".to_string()), "a seed has its own answers");
+        profiles::choose(k.path(), "main", None).unwrap();
+        assert!(!plan(k.path(), None, HostOs::Linux, |t| t == "konsole").unwrap().args.contains(&"--always-on".to_string()));
+
+        assert!(plan_link(k.path(), HostOs::Windows, |_| false).unwrap_err().contains(LINK_SCRIPT));
+        touch(k.path(), LINK_SCRIPT, b"@echo off");
+        let w = plan_link(k.path(), HostOs::Windows, |_| false).unwrap();
+        assert_eq!((w.program.as_str(), w.args.clone(), w.new_console), ("cmd.exe", vec!["/K".to_string(), LINK_SCRIPT.to_string()], true));
+        let x = plan_link(k.path(), HostOs::Linux, |t| t == "xterm").unwrap();
+        assert_eq!((x.program.as_str(), &x.args[x.args.len() - 3..]), ("xterm", &["bash".to_string(), "leyline".into(), "link".into()][..]));
+        assert!(plan_link(k.path(), HostOs::Linux, |_| false).unwrap_err().contains("bash leyline link"), "its questions need a window");
+        assert!(plan_link(k.path(), HostOs::Mac, |_| false).unwrap().args[1].contains("'leyline' 'link'"));
     }
 
     #[cfg(unix)]

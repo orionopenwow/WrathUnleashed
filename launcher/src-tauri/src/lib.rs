@@ -52,6 +52,8 @@ pub const LINKS: &[(&str, &str)] = &[
     ("github", "https://github.com/orionopenwow/Leyline"),
     ("host", host::HOST_PAGE),
     ("hostguide", "https://github.com/orionopenwow/Leyline/blob/main/hosting/INSTALL-OPERATE.md"),
+    ("hostdocs", "https://play.openvanilla.app/wrath/docs/hosting"), // the host console's guide (host/console.rs)
+    ("alwayson", "https://play.openvanilla.app/wrath/docs/always-on"),
     ("themes", "https://github.com/orionopenwow/WrathUnleashed/blob/main/docs/THEMES.md"), // themes agent
     ("modders", "https://github.com/orionopenwow/WrathUnleashed/blob/main/mods/README-modders.md"),
     ("releases", update::RELEASES_PAGE),
@@ -71,5 +73,15 @@ mod link_tests {
         assert_eq!(super::link("discord"), Some("https://discord.gg/hVeUxYwbkr"));
         assert!(super::link("https://example.com").is_none());
         assert!(super::LINKS.iter().all(|(_, u)| u.starts_with("https://")));
+    }
+
+    #[test]
+    fn the_host_guide_links_to_the_site_docs() {
+        assert_eq!(super::link("hostdocs"), Some("https://play.openvanilla.app/wrath/docs/hosting"));
+        assert_eq!(super::link("alwayson"), Some("https://play.openvanilla.app/wrath/docs/always-on"));
+        let mut names: Vec<&str> = super::LINKS.iter().map(|(n, _)| *n).collect();
+        names.sort();
+        names.dedup();
+        assert_eq!(names.len(), super::LINKS.len(), "every name once");
     }
 }

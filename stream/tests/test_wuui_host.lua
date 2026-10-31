@@ -140,6 +140,8 @@ function CharDBExecute(q) sql[#sql + 1] = q end
 function CharDBQuery() return nil end
 function AuthDBQuery(q) if q:find("uptime") then return { GetString = function() return tostring(serverClock - 3725) end } end end
 function GetRealmID() return 1 end
+local luaEvents = {}
+function CreateLuaEvent(fn, ms, times) luaEvents[#luaEvents + 1] = { fn = fn, ms = ms, times = times } end
 package.preload["ov_modapi"] = function() return dofile(scripts .. "/ov_modapi.lua") end
 dofile(scripts .. "/ov_modapi.lua")
 dofile(scripts .. "/ov_hostctl.lua")
@@ -406,6 +408,60 @@ act(hwin.control.cancel)
 check("cancel", commands[#commands] == "server restart cancel" and HC._restart.at == nil)
 act(function() H.Send("restart") end)
 check("then one restart per 10 minutes", H.lastReply.text:find("^One restart every 10 minutes"))
+
+-- the launcher's host console: rows in ov_host_queue, run as the console, answered once, never late
+check("the console queue: made and looked at every 3 s on a host kit's realm", #luaEvents == 1 and luaEvents[1].ms == 3000
+    and luaEvents[1].times == 0 and (function() for _, q in ipairs(sql) do if q:find("CREATE TABLE IF NOT EXISTS ov_host_queue") then return true end end end)())
+local function hx(t) return (t:gsub(".", function(c) return string.format("%02X", c:byte()) end)) end
+local function unhx(h) return (h:gsub("%x%x", function(x) return string.char(tonumber(x, 16)) end)) end
+local queue = {}
+local realCharQuery = CharDBQuery
+CharDBQuery = function(q)
+    if not q:find("FROM ov_host_queue") then return realCharQuery(q) end
+    local rows = {}
+    for _, r in ipairs(queue) do if not r.done then rows[#rows + 1] = r end end
+    if #rows == 0 then return nil end
+    local i = 1
+    return { GetString = function(_, c) local r = rows[i]; return ({ tostring(r.id), r.action, hx(r.data), tostring(r.at) })[c + 1] end,
+             NextRow = function() i = i + 1; return i <= #rows end }
+end
+local function answers()
+    for _, q in ipairs(sql) do
+        local h, id = q:match("^UPDATE ov_host_queue SET done = 1, result = UNHEX%('(%x*)'%) WHERE id = (%d+)$")
+        if h then for _, r in ipairs(queue) do if r.id == tonumber(id) and not r.done then r.done = unhx(h) end end end
+    end
+end
+local function console(action, data, age)
+    serverClock = serverClock + 3
+    local r = { id = #queue + 1, action = action, data = data or "", at = serverClock - (age or 0) }
+    queue[#queue + 1] = r
+    luaEvents[1].fn(); answers()
+    return r.done
+end
+serverClock = serverClock + 700   -- past the in-game restart's cooldown
+other.kicked = false
+check("console: announce to everyone", console("announce", "From the launcher") == "ok:Announced to everyone online."
+    and worldMsgs[#worldMsgs] == "|cff5b8def[Realm]|r From the launcher")
+check("console: kick (it outranks every GM)", console("kick", "Grumpy") == "ok:Grumpy was kicked." and other.kicked)
+check("console: ban and unban, the same checks", console("ban", "Grumpy\t24") == "ok:Grumpy is banned for 24 hours."
+    and commands[#commands] == "ban character Grumpy 24h Banned by the realm's GM" and console("ban", "Grumpy\t9999") == "err:Ban for 1 to 720 hours.")
+local nc = #commands
+check("console: a restart is always five minutes, whatever it sends", console("restart", "1") == "ok:Restart in 5 minutes. Everyone online was told."
+    and commands[nc + 1] == "server restart 300" and HC._restart.at == serverClock + 300)
+check("console: cancel", console("cancel") == "ok:Restart cancelled." and commands[#commands] == "server restart cancel")
+local st = console("status")
+check("console: status lines", st:find("^status:gm=1\n") and st:find("\nplayers=%d") and st:find("\nrestart=0"))
+check("console: an unknown control is refused", console("shutdown") == "err:The realm doesn't know that control.")
+local before = #commands
+check("console: a row that waited too long is never run", console("restart", "", HC.QUEUE_MAX_AGE + 1):find("^err:That waited too long")
+    and #commands == before and HC._restart.at == nil)
+local runs = 0
+for _, q in ipairs(sql) do if q:find("WHERE id = 1$") then runs = runs + 1 end end
+luaEvents[1].fn()
+local again = 0
+for _, q in ipairs(sql) do if q:find("WHERE id = 1$") then again = again + 1 end end
+check("console: each row answered once", runs == 1 and again == 1)
+CharDBQuery = realCharQuery
 
 -- the host kit's facts are data only
 write(hostFile, 'return { realm_id = "abcdefghijklmnop" } os.execute("x")')

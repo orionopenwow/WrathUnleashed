@@ -16,6 +16,12 @@ copies it.
 - **Realms like on the website.** Each realm is a card with its icon, the client version in gold, Official,
   Featured, Verified and New, its server, region, rules and uptime, and how many are playing on a small bar.
   Offline realms are dimmed. The Your realms list shows the icon and version too.
+- **A console for your realm.** Once a realm runs on your PC, the Host page is its console: Online and listed at a
+  glance, the database, login server, world server and relay agent, players online and uptime. Announce, set the
+  message of the day, kick, ban or unban, keep an allow-list, or restart with five minutes' warning for everyone
+  online (kick, ban and restart ask first). Run the health check, copy or renew your invite link, go public or
+  private, choose who may sign up, read the server logs and edit your house rules. Before that: pick a ruleset
+  (Vanilla+ starts always on) or link a server you already run. A short guide sits beside it.
 
 ## 0.3.1 (2026-10-29)
 
