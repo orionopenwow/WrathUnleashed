@@ -178,27 +178,20 @@
         <p class="hint">No review, no signing: only add mods from people you trust. Downloads must match their checksum, and anything holding game data or secrets is refused. Native mods (.dll, .asi) need a one-time OK. Removing a mod takes out exactly what Leyline put in.</p>
       </div>
       <div class="tabpane" id="pane-discover" role="tabpanel" aria-labelledby="tab-mods-discover">
-        <div class="toolbar">
-          <label class="inline">Install into <select class="client-pick" data-for="discover"></select></label>
-          <input id="cat-q" type="search" placeholder="Search the Workshop" autocomplete="off" spellcheck="false">
-          <label class="check"><input type="checkbox" id="cat-fit" checked> Only mods for this client</label>
+        <div class="toolbar dc-bar">
+          <input id="cat-q" type="search" placeholder="Search mods" aria-label="Search the Workshop" autocomplete="off" spellcheck="false">
+          <label class="dc-pick"><span>Sort</span><select id="cat-sort" aria-label="Sort">
+            <option value="hot">Hot</option><option value="rising">Rising</option><option value="top">Top rated</option>
+            <option value="installs">Most installed</option><option value="installs30">This month</option>
+            <option value="new">New</option><option value="updated">Updated</option></select></label>
+          <label class="dc-pick"><span>Show</span><select id="cat-cat" aria-label="Category"><option value="">All</option></select></label>
+          <span class="toolbar-fill"></span>
+          <label class="dc-fit" title="Only show mods made for the picked client"><input type="checkbox" id="cat-fit" checked><span>Only for</span></label>
+          <select class="client-pick dc-client" data-for="discover" aria-label="Install into"></select>
         </div>
-        <div class="chips cat-sorts" id="cat-sorts" role="tablist" aria-label="Sort">
-          <button type="button" class="chip-btn" role="tab" data-sort="hot">Hot</button>
-          <button type="button" class="chip-btn" role="tab" data-sort="rising">Rising</button>
-          <button type="button" class="chip-btn" role="tab" data-sort="top">Top rated</button>
-          <button type="button" class="chip-btn" role="tab" data-sort="installs">Most installed</button>
-          <button type="button" class="chip-btn" role="tab" data-sort="installs30">This month</button>
-          <button type="button" class="chip-btn" role="tab" data-sort="new">New</button>
-          <button type="button" class="chip-btn" role="tab" data-sort="updated">Updated</button>
-          <label class="inline cat-kind">Kind <select id="cat-kind">
-            <option value="">everything</option><option value="addon">Addons</option><option value="mod">Realm mods and tools</option>
-            <option value="mode">Game modes</option><option value="theme">Themes</option></select></label>
-        </div>
-        <div class="chips" id="cat-chips" role="group" aria-label="Categories"></div>
         <p class="status" id="cat-status" role="status"></p>
-        <div class="mod-grid" id="cat-grid"></div>
-        <div class="row"><button type="button" class="btn" data-link="mods">OPEN THE WORKSHOP</button><button type="button" class="btn" data-link="modders">MAKE A MOD</button></div>
+        <div class="mod-grid dc-grid" id="cat-grid"></div>
+        <div class="row dc-more"><button type="button" class="btn small" data-link="mods">OPEN THE WORKSHOP</button><button type="button" class="btn small" data-link="modders">MAKE A MOD</button></div>
       </div>
     </div>
   </section>

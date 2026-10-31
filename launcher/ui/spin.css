@@ -31,5 +31,11 @@
 /* a server pill that is checking: the spinner takes the dot's place */
 .srv-state:has(.busy) > .dot, .pill:has(.busy) > .dot { display: none; }
 /* the header mark: just the cut mark, spinning (calmer, class slow); no ring or disc behind it (owner 2026-10-30) */
-.brand .ly-spin { width: 46px; height: 46px; flex: none; background: none; box-shadow: none; filter: drop-shadow(0 0 10px rgba(91, 141, 239, 0.35)); }
+.brand .ly-spin { width: 54px; height: 54px; flex: none; background: none; box-shadow: none;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.55)) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.4)); }
+/* the wordmark (owner 2026-10-30: "lengthen the text"): a bigger name, LAUNCHER spread to the name's full width */
+.titlebar .brand { gap: 12px; padding-left: 12px; }
+.titlebar .brand span { display: inline-grid; justify-items: stretch; }
+.titlebar .brand b { font-size: 27px; line-height: 1; letter-spacing: -0.015em; }
+.titlebar .brand i { margin-top: 4px; margin-right: -0.36em; font-size: 11px; letter-spacing: 0.36em; }
 .brand .ly-spin::before, .brand .ly-spin::after { inset: 0; }
