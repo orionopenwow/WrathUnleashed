@@ -1,8 +1,9 @@
 // The launcher's play bar (ui/index.html #play-form, ui/app.js renderClientMenu / renderPlayBar) in Chromium with a fake
 // Tauri core: the client picker opens a drop-up list (actions on top, the families with no folder greyed "Not found",
 // your folders nearest the button with the picked one marked), a greyed row opens Find your game files, picking a
-// row changes the client, the keyboard (Up / Down / Home / End / Enter / Esc) and a click outside, the realm button,
-// the mode switch, no version text in the bar, and the guide: plain words, no download links, browser play.
+// row changes the client, the keyboard (Up / Down / Home / End / Enter / Esc) and a click outside, the realm picker (a
+// drop-up list of realms, browser play, Solo, Make a realm, Find more; picking selects and saves), no mode switch, no
+// version text in the bar, and the guide: plain words, no download links, browser play.
 //
 //   NODE_PATH=$(npm root -g) node --test launcher/tests/playbar.browser.test.cjs
 'use strict';
@@ -146,8 +147,8 @@ test('no clients: every family greyed; a greyed row opens Find your game files; 
   await page.evaluate(() => window.LeylineNav.show('findfiles'));
   await page.click('#ff-browser');
   assert.equal(await pageOn(page), 'page-play');
-  assert.equal(await page.getAttribute('.mode[data-mode="browser"]', 'aria-checked'), 'true', 'No files? Play in your browser');
-  assert.equal(await page.textContent('#pb-realm'), 'Plays in your browser');
+  assert.equal(await page.evaluate(() => localStorage.getItem('leyline.mode')), 'browser', 'No files? Play in your browser');
+  assert.equal(await page.textContent('#pb-realm'), 'In your browser');
   await page.click('#pb-client');
   await page.click('#pb-menu >> text=Add a game folder…');
   assert.equal(await pageOn(page), 'page-clients');
@@ -158,24 +159,134 @@ test('no clients: every family greyed; a greyed row opens Find your game files; 
   await ctx.close();
 });
 
-test('the middle and right: the realm with its version (to Realms), one status line, the mode switch; no version text in the bar', async () => {
+test('the middle and right: the realm picker with its version and one status line, PLAY; no mode switch, no version text', async () => {
   const { page, ctx, errors } = await open({ clients: TWO });
   await page.waitForFunction(() => document.getElementById('pb-realm').textContent === 'Dalaran Hangout');
   assert.equal(await page.textContent('#pb-realm-ver'), '3.3.5a');
   assert.equal(await page.textContent('#play-headline'), 'READY TO PLAY');
+  assert.ok(await page.evaluate(() => document.getElementById('play-headline').closest('#pb-realm-btn')), 'the status line under the realm name');
   assert.equal(await page.isVisible('#pb-detail'), false, 'nothing repeated under it');
   assert.doesNotMatch(await page.textContent('#play-form'), /Leyline v/);
   assert.equal(await page.textContent('#ver'), 'Leyline vtest');
   assert.ok(await page.evaluate(() => document.getElementById('ver').closest('#page-settings')), 'the version lives in Settings');
-  // the bar's three blocks sit left to right on one row
+  // the bar's three blocks sit left to right on one row; no ONLINE / SOLO / BROWSER switch
   const x = await page.evaluate(() => ['.pb-left', '.pb-mid', '.pb-right'].map((s) => document.querySelector(s).getBoundingClientRect().left));
   assert.ok(x[0] < x[1] && x[1] < x[2]);
-  assert.ok(await page.evaluate(() => document.querySelector('.pb-right .modes') && document.querySelector('.pb-right .play')), 'the mode switch beside PLAY');
-  await page.click('.mode[data-mode="browser"]');
-  assert.equal(await page.textContent('#play-headline'), 'READY · NOTHING TO INSTALL');
-  await page.click('.mode[data-mode="online"]');
+  assert.equal(await page.locator('#play-form .modes, #play-form .mode').count(), 0);
+  assert.ok(await page.evaluate(() => document.querySelector('.pb-right .play').getBoundingClientRect().width >= 280), 'PLAY is bigger');
+  assert.equal(await page.getAttribute('#pb-realm-btn', 'aria-haspopup'), 'listbox');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+const NET = [
+  { slug: 'official', name: 'Dalaran Hangout', official: true, state: 'live', build: '3.3.5a', version: '3.3.5a', core: 'azerothcore', tags: [], players: 5, bots: 0, address: 'play.openvanilla.app' },
+  { slug: 'c-a', realm_id: 'a', name: 'Small Den', state: 'live', build: '3.3.5a', version: '3.3.5a', core: 'azerothcore', tags: [], players: 3, bots: 0, address: 'relay.openvanilla.app:40001' },
+  { slug: 'c-b', realm_id: 'b', name: 'Busy Den', state: 'live', build: '3.3.5a', version: '3.3.5a', core: 'azerothcore', tags: [], players: 30, bots: 0, address: 'relay.openvanilla.app:40002' },
+  { slug: 'c-c', realm_id: 'c', name: 'Asleep', state: 'offline', build: '3.3.5a', version: '3.3.5a', core: 'azerothcore', tags: [], players: 0, bots: 0, address: 'relay.openvanilla.app:40004' },
+];
+async function openNet() {
+  const ctx = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1400, height: 860 } });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.route('https://play.openvanilla.app/**', (r) => r.fulfill({ path: PICTURE, contentType: 'image/webp' }));
+  await page.addInitScript(FAKE, { clients: TWO });
+  await page.addInitScript((net) => {
+    const inner = window.__TAURI__.core.invoke;
+    window.__TAURI__.core.invoke = async (cmd, args) => {
+      const r = await inner(cmd, args);
+      if (cmd === 'realms_list') r.realms = net;
+      return r;
+    };
+  }, NET);
+  await page.goto(INDEX);
+  await page.waitForFunction(() => window.LeylineNav && document.querySelector('#page-play.on') && window.__calls.some(([c]) => c === 'realms_list'));
+  await page.waitForFunction(() => document.getElementById('pb-realm').textContent === 'Dalaran Hangout');
+  return { page, ctx, errors };
+}
+const rrows = (page) => page.$$eval('#pb-rmenu > li', (l) => l.map((x) => (x.classList.contains('pb-sep') ? '---' : x.classList.contains('pb-head') ? '# ' + x.textContent
+  : [x.querySelector('.pb-opt-name').textContent, (x.querySelector('.rl-ver') || {}).textContent || '', (x.querySelector('.pb-opt-sub') || {}).textContent || '',
+    x.getAttribute('aria-selected'), x.getAttribute('aria-disabled') || ''].join('|'))));
+
+test('the realm picker: a drop-up list of your realms, live realms, browser play, Solo, Make a realm and Find more', async () => {
+  const { page, ctx, errors } = await openNet();
+  assert.equal(await page.isVisible('#pb-rmenu'), false);
   await page.click('#pb-realm-btn');
+  assert.equal(await page.getAttribute('#pb-realm-btn', 'aria-expanded'), 'true');
+  assert.equal(await page.getAttribute('#pb-rmenu', 'role'), 'listbox');
+  assert.deepEqual(await rrows(page), [
+    '# Your realms', 'Dalaran Hangout|3.3.5a|5 playing|true|', '---',
+    '# On the network', 'Busy Den|3.3.5a|30 playing|false|', 'Small Den|3.3.5a|3 playing|false|', '---',
+    'Play in your browser||Nothing to install|false|', 'Solo||Coming soon|false|true', '---',
+    '+ Make a realm|||false|', 'Find more realms…|||false|',
+  ], 'live realms by players; offline ones left out');
+  assert.equal(await page.evaluate(() => document.activeElement.querySelector('.pb-opt-name').textContent), 'Dalaran Hangout', 'the picked row has the focus');
+  const r = await page.evaluate(() => [document.getElementById('pb-rmenu').getBoundingClientRect(), document.getElementById('pb-realm-btn').getBoundingClientRect()].map((b) => [b.top, b.bottom]));
+  assert.ok(r[0][1] <= r[1][0] && r[0][0] >= 0, 'a drop-up');
+  // pick Busy Den: selected like the side bar's Your realms does, and saved
+  await page.click('#pb-rmenu >> text=Busy Den');
+  assert.equal(await page.isVisible('#pb-rmenu'), false);
+  assert.equal(await page.inputValue('#play-realm'), 'custom');
+  assert.equal(await page.inputValue('#play-custom'), 'relay.openvanilla.app:40002');
+  assert.equal(await page.textContent('#pb-realm'), 'Busy Den');
+  assert.ok(await page.evaluate(() => window.__calls.some(([c, a]) => c === 'select' && a.realm === 'relay.openvanilla.app:40002')), 'saved');
+  await page.click('#pb-realm-btn');
+  const now = await rrows(page);
+  assert.ok(now.includes('Busy Den|3.3.5a|30 playing|true|'), 'now under Your realms, marked');
+  assert.ok(!now.slice(now.indexOf('# On the network')).some((x) => x.startsWith('Busy Den')), 'not twice');
+  // browser play is a row; the picker says so; a realm row turns it back off
+  await page.click('#pb-rmenu >> text=Play in your browser');
+  assert.equal(await page.textContent('#pb-realm'), 'In your browser');
+  assert.equal(await page.textContent('#play-headline'), 'READY · NOTHING TO INSTALL');
+  assert.equal(await page.evaluate(() => localStorage.getItem('leyline.mode')), 'browser');
+  assert.equal(await page.evaluate(() => window.LeylineApp.mode()), 'browser');
+  await page.click('#pb-realm-btn');
+  assert.equal(await page.getAttribute('#pb-rmenu .pb-browser', 'aria-selected'), 'true');
+  await page.click('#pb-rmenu .pb-solo', { force: true });
+  assert.ok(await page.isVisible('#pb-rmenu'), 'Solo is disabled: nothing happens');
+  await page.click('#pb-rmenu >> text=Dalaran Hangout');
+  assert.equal(await page.evaluate(() => window.LeylineApp.mode()), 'online');
+  assert.equal(await page.inputValue('#play-realm'), 'official');
+  assert.equal(await page.textContent('#pb-realm'), 'Dalaran Hangout');
+  // the bottom rows
+  await page.click('#pb-realm-btn');
+  await page.click('#pb-rmenu >> text=+ Make a realm');
+  assert.equal(await pageOn(page), 'page-host');
+  await page.click('#pb-realm-btn');
+  await page.click('#pb-rmenu >> text=Find more realms…');
   assert.equal(await pageOn(page), 'page-realms');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('the realm picker by keyboard: Up opens, arrows and Home / End, Enter picks, Esc closes; only one list open', async () => {
+  const { page, ctx, errors } = await openNet();
+  await page.focus('#pb-realm-btn');
+  await page.keyboard.press('ArrowUp');
+  assert.ok(await page.isVisible('#pb-rmenu'));
+  await page.keyboard.press('ArrowDown');
+  assert.equal(await page.evaluate(() => document.activeElement.querySelector('.pb-opt-name').textContent), 'Busy Den');
+  await page.keyboard.press('End');
+  assert.equal(await page.evaluate(() => document.activeElement.querySelector('.pb-opt-name').textContent), 'Find more realms…');
+  await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  assert.equal(await page.textContent('#pb-realm'), 'Small Den');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'pb-realm-btn', 'the focus back on the button');
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.isVisible('#pb-rmenu'), false);
+  assert.equal(await page.getAttribute('#pb-realm-btn', 'aria-expanded'), 'false');
+  await page.click('#pb-realm-btn');
+  await page.click('#pb-client');
+  assert.equal(await page.isVisible('#pb-rmenu'), false, 'opening the client list closes the realm list');
+  assert.ok(await page.isVisible('#pb-menu'));
+  await page.click('#pb-realm-btn');
+  assert.equal(await page.isVisible('#pb-menu'), false, 'and the other way round');
+  await page.mouse.click(700, 300);
+  assert.equal(await page.isVisible('#pb-rmenu'), false, 'a click outside closes it');
   assert.deepEqual(errors, []);
   await ctx.close();
 });

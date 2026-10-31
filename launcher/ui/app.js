@@ -320,12 +320,10 @@ try { mode = localStorage.getItem("leyline.mode") === "browser" ? "browser" : "o
 function setMode(m) {
   if (m === "solo") { say("play-status", "Solo play on this PC arrives in a later Leyline release.", "warn"); return; }
   mode = m;
-  document.querySelectorAll(".mode").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.mode === m)));
   try { localStorage.setItem("leyline.mode", m); } catch (_) { /* fine */ }
   renderPlayBar();
   document.dispatchEvent(new CustomEvent("leyline:mode", { detail: { mode: m } }));
 }
-document.querySelectorAll(".mode").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
 
 function currentClient() {
   return state.settings.clients.find((x) => x.id === $("play-client").value);
@@ -433,6 +431,7 @@ function renderClientMenu() {
 function menuRows() { return [...$("pb-menu").querySelectorAll(".pb-opt")]; }
 function openClientMenu() {
   if (menuOpen) return;
+  if (typeof closeRealmMenu === "function") closeRealmMenu(false);
   renderClientMenu();
   menuOpen = true;
   $("pb-menu").hidden = false;
@@ -468,7 +467,7 @@ $("pb-menu").addEventListener("keydown", (e) => {
   rows[j].focus();
 });
 document.addEventListener("pointerdown", (e) => {
-  if (menuOpen && !e.target.closest(".pb-pick")) closeClientMenu(false);
+  if (menuOpen && !e.target.closest(".pb-left .pb-pick")) closeClientMenu(false);
 });
 
 // The Find your game files guide (page-findfiles), with the family asked for when a greyed row opened it.
@@ -488,12 +487,114 @@ $("ff-pick").addEventListener("click", async () => {
   try { addClient(await invoke("pick_folder")); } catch (e) { say("cl-status", String(e), "bad"); }
 });
 $("ff-browser").addEventListener("click", () => { setMode("browser"); show("play"); });
-$("pb-realm-btn").addEventListener("click", () => show("realms"));
+
+// ------------------------------------------------------------------ the play bar's realm picker: a drop-up list
+// (owner 2026-10-30: the ONLINE / SOLO / BROWSER switch gave way to it.) Your realms first (the official one and the
+// one you picked before), then the live realms on the network by players, then Play in your browser and Solo (coming
+// soon), and at the bottom + Make a realm and Find more realms…. Picking a realm selects it the way the side bar's
+// Your realms does; browser play is a row. The same keys as the client list.
+let rmenuOpen = false;
+const realmRowsOf = (m) => [...m.querySelectorAll(".pb-opt")];
+function pickRealm(r) {
+  $("play-realm").value = r.official ? "official" : "custom";
+  if (!r.official) $("play-custom").value = r.address || "";
+  if (mode === "browser") setMode("online");
+  realmChanged();
+  saveSelection();
+}
+function renderRealmMenu() {
+  const menu = $("pb-rmenu");
+  const rows = [];
+  const row = (cls, label, opts) => {
+    const li = el("li", "pb-opt " + cls);
+    li.setAttribute("role", "option");
+    li.tabIndex = -1;
+    li.id = "pb-ropt-" + rows.length;
+    if (opts.icon) li.append(opts.icon);
+    li.append(el("span", "pb-opt-name", label));
+    if (opts.ver) li.append(el("span", "rl-ver sm", opts.ver));
+    if (opts.sub) li.append(el("span", "pb-opt-sub" + (opts.subCls ? " " + opts.subCls : ""), opts.sub));
+    li.setAttribute("aria-selected", String(!!opts.selected));
+    if (opts.disabled) li.setAttribute("aria-disabled", "true");
+    if (opts.title) li.title = opts.title;
+    li.addEventListener("click", () => { if (opts.disabled) return; closeRealmMenu(true); opts.run(); });
+    rows.push(li);
+    return li;
+  };
+  const head = (text) => { const h = el("li", "pb-head", text); h.setAttribute("role", "presentation"); return h; };
+  const sep = () => { const d = el("li", "pb-sep"); d.setAttribute("role", "presentation"); return d; };
+  const online = mode !== "browser";
+  const here = chosenRealm();
+  const players = (r) => (!r ? "" : r.state !== "live" ? "Offline" : r.players == null ? "Online" : `${r.players} playing`);
+  const realmRow = (r) => row("pb-realm-opt" + (r.state === "live" ? "" : " off"), r.name, {
+    icon: realmIcon(r.name, r.official, "sm"), ver: r.official ? "3.3.5a" : realmVersion(r), sub: players(r), subCls: r.state === "live" ? "live" : "",
+    selected: online && (r.official ? isOfficial() : !isOfficial() && r.address === here), title: r.tagline || r.name, run: () => pickRealm(r) });
+  const off = (realmsCache || []).find((x) => x.official) || { official: true, name: officialName(), state: "live", players: null };
+  const mine = [realmRow(off)];
+  const saved = !isOfficial() ? here : (state.settings.selected_realm && state.settings.selected_realm !== state.official_realm ? state.settings.selected_realm : "");
+  const savedRealm = saved ? realmAt(saved) : null;
+  if (saved && savedRealm) mine.push(realmRow(savedRealm));
+  else if (saved) mine.push(row("pb-realm-opt", saved, { icon: realmIcon(saved, false, "sm"), selected: online && !isOfficial(), sub: "Your address", run: () => pickRealm({ official: false, address: saved }) }));
+  const live = (realmsCache || []).filter((r) => !r.official && r.state === "live" && r.address && r.address !== saved && !hiddenBuild(r.build))
+    .sort((x, y) => (y.players || 0) - (x.players || 0)).slice(0, 6).map(realmRow);
+  const other = [
+    row("pb-browser", "Play in your browser", { sub: "Nothing to install", selected: !online, run: () => setMode("browser") }),
+    row("pb-solo", "Solo", { sub: "Coming soon", disabled: true, title: "Solo play on this PC arrives in a later Leyline release", run: () => {} }),
+  ];
+  const acts = [
+    row("pb-act", "+ Make a realm", { run: () => show("host") }),
+    row("pb-act", "Find more realms…", { run: () => show("realms") }),
+  ];
+  const parts = [[head("Your realms"), ...mine]];
+  if (live.length) parts.push([head("On the network"), ...live]);
+  parts.push(other, acts);
+  menu.replaceChildren(...parts.flatMap((g, i) => (i ? [sep(), ...g] : g)));
+}
+function openRealmMenu() {
+  if (rmenuOpen) return;
+  closeClientMenu(false);
+  renderRealmMenu();
+  rmenuOpen = true;
+  $("pb-rmenu").hidden = false;
+  $("pb-realm-btn").setAttribute("aria-expanded", "true");
+  const rows = realmRowsOf($("pb-rmenu"));
+  const at = rows.find((r) => r.getAttribute("aria-selected") === "true") || rows[0];
+  if (at) at.focus();
+}
+function closeRealmMenu(refocus) {
+  if (!rmenuOpen) return;
+  rmenuOpen = false;
+  $("pb-rmenu").hidden = true;
+  $("pb-realm-btn").setAttribute("aria-expanded", "false");
+  if (refocus) $("pb-realm-btn").focus();
+}
+$("pb-realm-btn").addEventListener("click", () => (rmenuOpen ? closeRealmMenu(true) : openRealmMenu()));
+$("pb-realm-btn").addEventListener("keydown", (e) => {
+  if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); openRealmMenu(); }
+});
+$("pb-rmenu").addEventListener("keydown", (e) => {
+  const rows = realmRowsOf($("pb-rmenu"));
+  const i = rows.indexOf(document.activeElement);
+  let j = null;
+  if (e.key === "ArrowDown") j = Math.min(rows.length - 1, i + 1);
+  else if (e.key === "ArrowUp") j = Math.max(0, i - 1);
+  else if (e.key === "Home") j = 0;
+  else if (e.key === "End") j = rows.length - 1;
+  else if (e.key === "Escape") { e.preventDefault(); closeRealmMenu(true); return; }
+  else if (e.key === "Tab") { closeRealmMenu(false); return; }
+  else if ((e.key === "Enter" || e.key === " ") && i >= 0) { e.preventDefault(); rows[i].click(); return; }
+  if (j === null) return;
+  e.preventDefault();
+  rows[j].focus();
+});
+document.addEventListener("pointerdown", (e) => {
+  if (rmenuOpen && !e.target.closest(".pb-mid .pb-pick")) closeRealmMenu(false);
+});
 
 function renderPlayBar() {
   if (!state) return;
   const c = currentClient();
-  const bar = $("play-headline").parentElement;
+  const bar = $("play-headline").parentElement;   // the status line under the realm's name
   let head = "READY TO PLAY", detail = "", warn = false;
   if (mode === "browser" && officialGamedata === false) {
     head = "BROWSER PLAY · NEEDS YOUR GAME FOLDER"; warn = true;
@@ -517,7 +618,8 @@ function renderPlayBar() {
   $("play-headline").textContent = head;
   bar.classList.toggle("warn", warn);
   $("pb-detail").textContent = detail;
-  $("pb-realm").textContent = mode === "browser" ? "Plays in your browser" : realmLabel();
+  $("pb-realm").textContent = mode === "browser" ? "In your browser" : realmLabel();
+  $("pb-realm-btn").title = mode === "browser" ? "Plays in your browser: choose a realm instead" : `${realmLabel()}: choose another realm`;
   // the realm's icon and client version beside its name (none in the browser)
   const official = isOfficial();
   const rv = mode === "browser" ? null : official ? "3.3.5a" : realmVersion(realmAt(chosenRealm()));
@@ -525,6 +627,7 @@ function renderPlayBar() {
   $("pb-realm-ver").textContent = rv || "";
   $("pb-realm-ic").hidden = mode === "browser";
   if (mode !== "browser") fillRealmIcon($("pb-realm-ic"), realmLabel(), official);
+  if (rmenuOpen) renderRealmMenu();
   renderClientMenu();
   $("play-caption").textContent = mode === "browser" ? "IN YOUR BROWSER" : (c ? `ONLINE  ·  ${c.name.toUpperCase()}` : "ONLINE");
 }
@@ -1478,9 +1581,29 @@ function realmMatches(r) {
   if ($("rl-f-now") && $("rl-f-now").checked && !(r.state === "live" && (r.players || 0) > 0)) return false;
   return true;
 }
+// The search box: a realm's name, line and tags (the official realm too).
+function realmSearched(r) {
+  const q = $("rl-q") ? $("rl-q").value.trim().toLowerCase() : "";
+  if (!q) return true;
+  return [r.name, r.tagline, r.kind, CORE_LABELS[r.core], REGION_LABELS[r.region], r.language, ...(r.tags || []).map((t) => TAG_LABELS[t] || t)]
+    .filter(Boolean).join(" ").toLowerCase().includes(q);
+}
+// How many filters are on (the number on the FILTERS button).
+function realmFilterCount() {
+  let n = RL_FILTERS.filter(([id]) => $(id) && $(id).value).length;
+  if ($("rl-f-now") && $("rl-f-now").checked) n++;
+  if ($("rl-mine") && $("rl-mine").checked) n++;
+  return n;
+}
+function clearRealmFilters() {
+  for (const [id] of RL_FILTERS) if ($(id)) $(id).value = "";
+  $("rl-f-now").checked = false;
+  $("rl-mine").checked = false;
+  renderRealms();
+}
 function networkLine(t) {
   if (!t) return "";
-  return `${t.realms} realm${t.realms === 1 ? "" : "s"} · ${t.players} player${t.players === 1 ? "" : "s"} online` + (t.bots ? ` · ${t.bots} bots` : "");
+  return `${t.realms} realm${t.realms === 1 ? "" : "s"} · ${t.players} playing`;
 }
 // A realm's look, as on the website: a hue from its name, the crystal for the official realm.
 function nameHue(name) {
@@ -1522,54 +1645,66 @@ function playersFill(players, max) {
   return Math.max(6, Math.min(100, Math.round((100 * players) / cap)));
 }
 
+let rlOtherShown = false;
 function renderRealms() {
   const box = $("rl-list");
   box.replaceChildren();
   const now = state.settings.selected_realm;
   const mine = $("rl-mine").checked;
-  if ($("rl-net")) $("rl-net").textContent = networkLine(networkTotals);
-  let shown = 0;
-  for (const r of realmsCache) {
+  const net = $("rl-net");
+  if (net) {
+    net.textContent = networkLine(networkTotals);
+    net.title = networkTotals && networkTotals.bots ? `${networkTotals.bots} bots too` : "";
+  }
+  const nf = realmFilterCount();
+  $("rl-fcount").hidden = !nf;
+  $("rl-fcount").textContent = nf ? String(nf) : "";
+  $("rl-filters-btn").classList.toggle("on", nf > 0);
+  $("rl-filters-btn").setAttribute("aria-label", nf ? `Filters, ${nf} on` : "Filters");
+  if (!rlOtherShown && !isOfficial()) { rlOtherShown = true; $("rl-other").open = true; }   // their own realm address: show where it is set
+  // the official realm first, then the network's order (realms.rs)
+  const order = realmsCache.filter((r) => r.official).concat(realmsCache.filter((r) => !r.official));
+  let community = 0;
+  for (const r of order) {
     const fit = clientFor(r);
     if (mine && !fit) continue;
-    if (!realmMatches(r)) continue;
-    shown++;
+    if (!realmMatches(r) || !realmSearched(r)) continue;
+    if (!r.official) community++;
     const live = r.state === "live";
     const card = el("article", "realm-card rl" + (r.address && r.address === now ? " on" : "") + (r.featured ? " featured" : "")
       + (r.official ? " official" : "") + (live ? "" : " off"));
-    // like the website's realm list (stream/hub.py realm_row): icon · name, version, badges, meta · players · actions
+    // icon · name, version and one tag (Official or Featured) / one line (type · core) · players · PLAY
     const main = el("div", "rl-main");
     const title = el("div", "rl-title");
-    title.append(el("b", "name", r.name));
+    const name = el("b", "name", r.name);
+    if (r.tagline) name.title = r.tagline;
+    title.append(name);
+    if (r.verified) { const v = el("span", "rl-ok", "✓"); v.title = "Verified host: checked by Leyline staff"; v.setAttribute("aria-label", "Verified host"); title.append(v); }
     const ver = realmVersion(r);
     if (ver) { const v = el("span", "rl-ver", ver); v.title = "Game client version"; title.append(v); }
-    const badge = (text, cls, tip) => { const b = el("span", "rl-bdg" + (cls ? " " + cls : ""), text); if (tip) b.title = tip; title.append(b); };
-    if (r.official) badge("Official", "o");
-    if (r.official && r.temporary) badge("Temporary", "warn");
-    if (r.featured) badge("Featured", "f");
-    if (r.verified) badge("Verified", "v", "Verified host: checked by Leyline staff");
-    if (r.is_new) badge("New", "");
-    if (r.direct && p2pHosting) badge("Direct connect available", "v");
-    if (r.build && !fit) badge(`Needs your own ${r.build} client`, "warn");
-    const meta = el("div", "rl-meta");
-    const m = (text, cls) => { if (text) meta.append(el("span", cls || "", text)); };
-    m(r.official ? "Run by Leyline" : "Community realm");
-    m(r.kind);
-    m(CORE_LABELS[r.core] || "Other server");
-    if (r.region) m((REGION_LABELS[r.region] || r.region) + (r.region_estimated ? " (estimated)" : ""));
-    for (const t of r.tags || []) if (!r.official) m(TAG_LABELS[t] || t);
-    m(r.language);
+    if (r.official) { const b = el("span", "rl-bdg o", "Official"); if (r.temporary) b.title = "Temporary: our own realm for now"; title.append(b); }
+    else if (r.featured) title.append(el("span", "rl-bdg f", "Featured"));
+    const line = el("div", "rl-meta");
+    const bits = [r.kind, CORE_LABELS[r.core] || "Other server"];
+    if (r.direct && p2pHosting) bits.push("Direct connect available");
+    line.append(el("span", "", bits.filter(Boolean).join(" · ")));
+    // everything else about the realm, on hover
+    const more = [r.official ? "Run by Leyline" : "Community realm", r.is_new ? "New" : "",
+      r.region ? (REGION_LABELS[r.region] || r.region) + (r.region_estimated ? " (estimated)" : "") : "", r.language || "",
+      ...(r.official ? [] : (r.tags || []).map((t) => TAG_LABELS[t] || t))];
     const u = r.uptime_7d != null ? r.uptime_7d : r.uptime_24h;
-    if (u != null) m(`${u}% up · ${r.uptime_7d != null ? "7 d" : "24 h"}`, u >= 95 ? "ok" : u >= 75 ? "" : "warn");
-    main.append(title, meta);
-    if (r.tagline) main.append(el("p", "desc", r.tagline));
-    if (r.rules && r.rules.length) {
-      const ul = el("ul", "rules");
-      ul.replaceChildren(...r.rules.slice(0, 4).map((x) => el("li", "", x)));
-      main.append(ul);
-    }
-    if (!r.address) main.append(el("div", "hint", "No desktop address yet: PLAY asks the relay"));
-    // players online, with a small fill bar
+    if (u != null) more.push(`${u}% up · ${r.uptime_7d != null ? "7 d" : "24 h"}`);
+    if (r.address) more.push("Realmlist: " + r.address);
+    line.title = more.filter(Boolean).join(" · ") + (r.rules && r.rules.length ? "\n" + r.rules.slice(0, 4).join("\n") : "");
+    main.append(title, line);
+    if (r.build && !fit) main.append(el("div", "rl-note", `Needs your own ${r.build} client`));
+    // the realm's own links, quiet
+    const links = el("div", "rl-links");
+    if (r.join_url) links.append(linkBtn("Make an account", r.join_url));
+    if (r.discord) links.append(linkBtn("Discord", r.discord));
+    if (r.report_url && !r.official) { const rep = linkBtn("Report", r.report_url); rep.title = "Report this realm to Leyline staff (on the website)"; links.append(rep); }
+    if (links.children.length) main.append(links);
+    // players: an online dot, the count and a small fill bar
     const pop = el("div", "rl-pop");
     const st = el("span", "state " + (live ? "is-online" : "is-offline"));
     st.append(el("span", "dot"));
@@ -1577,11 +1712,11 @@ function renderRealms() {
     else if (r.players == null) st.append(el("span", "", "Online"));
     else {
       const n = el("span", "");
-      n.append(el("b", "rl-n", String(r.players)), document.createTextNode(`${r.max_players ? " of " + r.max_players : ""} playing`));
+      n.append(el("b", "rl-n", String(r.players)), document.createTextNode(r.max_players ? ` / ${r.max_players}` : " playing"));
       st.append(n);
+      st.title = `${r.players}${r.max_players ? " of " + r.max_players : ""} playing` + (r.bots ? ` · ${r.bots} bots` : "");
     }
     pop.append(st);
-    if (live && r.bots) pop.append(el("small", "rl-bots", `${r.bots} bots`));
     if (live) {
       const bar = el("span", "rl-bar");
       bar.setAttribute("aria-hidden", "true");
@@ -1590,43 +1725,69 @@ function renderRealms() {
       bar.append(fill);
       pop.append(bar);
     }
-    card.append(realmIcon(r.name, r.official), main, pop);
     const acts = el("div", "acts");
-    const play = el("button", "btn small primary", "PLAY");
+    if (heroKeyOn && !r.official && r.realm_id && r.state === "live") {
+      const hk = el("button", "btn small", "Sign in with your Hero Key");
+      hk.title = "No account to make: your Hero Key signs you in here (a one-time password, shown below)";
+      hk.disabled = !state.settings.clients.length;
+      hk.addEventListener("click", () => playRealmHeroKey(r, hk));
+      acts.append(hk);
+    }
+    const play = el("button", "btn small primary rl-play", "PLAY");
     if (!state.settings.clients.length) { play.disabled = true; play.title = "Add a game client first"; }
     else if (!fit) { play.title = `This realm runs ${r.build}: PLAY says what is missing`; }
     else play.title = `Plays with ${fit.name}`;
     play.addEventListener("click", () => playRealm(r, play));
-    acts.append(play);
-    if (heroKeyOn && !r.official && r.realm_id && r.state === "live") {
-      const hk = el("button", "btn small", "Sign in with your Hero Key");
-      hk.title = "No account to make: your Hero Key signs you in here (a one-time password, shown below)";
-      hk.disabled = play.disabled;
-      hk.addEventListener("click", () => playRealmHeroKey(r, hk));
-      acts.append(hk);
-    }
-    if (r.join_url) acts.append(linkBtn("Make an account", r.join_url));
-    if (r.discord) acts.append(linkBtn("Discord", r.discord));
-    if (r.report_url && !r.official) { const rep = linkBtn("Report", r.report_url); rep.title = "Report this realm to Leyline staff (on the website)"; acts.append(rep); }
-    if (r.address) { const ad = el("code", "rl-addr", r.address); ad.title = "Realmlist: the realm address for a desktop client"; acts.append(ad); }
-    card.append(acts);
+    acts.prepend(play);
+    card.append(realmIcon(r.name, r.official), main, pop, acts);
     box.append(card);
   }
-  if (realmsCache.length <= 1) box.append(el("p", "hint", "No community realms listed right now. Host one: see Host your own below."));
-  else if (shown <= 1 && mine) box.append(el("p", "hint", "None of the listed realms fits your clients. Untick the box to see them all."));
-  else if (shown <= 1) box.append(el("p", "hint", "No community realms match these filters."));
+  const empty = (text, label, fn) => {
+    const e = el("div", "rl-empty");
+    e.append(el("span", "", text));
+    const b = el("button", "btn small", label);
+    b.type = "button";
+    b.addEventListener("click", fn);
+    e.append(b);
+    box.append(e);
+  };
+  const realmsQ = $("rl-q").value.trim();
+  if (realmsCache.filter((r) => !r.official).length === 0) empty("No community realms yet. Be the first to run one.", "HOST ONE", () => show("host"));
+  else if (!community && realmsQ) empty(`No realm called “${realmsQ}”.`, "CLEAR SEARCH", () => { $("rl-q").value = ""; renderRealms(); });
+  else if (!community && nf) empty(mine && nf === 1 ? "None of the listed realms fits your clients." : "No realms match these filters.", "CLEAR FILTERS", clearRealmFilters);
 }
 for (const id of ["rl-f-build", "rl-f-tag", "rl-f-region", "rl-f-lang", "rl-f-now"]) {
   if ($(id)) $(id).addEventListener("change", () => renderRealms());
 }
+$("rl-q").addEventListener("input", () => renderRealms());
+$("rl-f-clear").addEventListener("click", clearRealmFilters);
 if ($("rl-host")) $("rl-host").addEventListener("click", () => show("host"));
+if ($("rl-host-link")) $("rl-host-link").addEventListener("click", () => show("host"));   // the Host page has Link my server
+// The FILTERS popover and the … menu: one open at a time; a click outside or Escape closes it.
+function rlPopover(btnId, boxId) {
+  const btn = $(btnId), box = $(boxId);
+  const set = (open) => { box.hidden = !open; btn.setAttribute("aria-expanded", String(open)); btn.classList.toggle("open", open); };
+  btn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    const open = box.hidden;
+    document.querySelectorAll("#page-realms .rl-popover").forEach((b) => { if (b !== box && !b.hidden) b.dispatchEvent(new Event("rl-close")); });
+    set(open);
+    if (open) { const f = box.querySelector("select, input, button"); if (f) f.focus(); }
+  });
+  box.addEventListener("rl-close", () => set(false));
+  box.addEventListener("click", (ev) => ev.stopPropagation());
+  box.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { set(false); btn.focus(); } });
+  document.addEventListener("click", () => { if (!box.hidden) set(false); });
+  return set;
+}
+rlPopover("rl-filters-btn", "rl-filters");
+const rlMenu = rlPopover("rl-more", "rl-menu");
 invoke("p2p_flags").then((v) => {
   p2pHosting = !!(v && v.effective && v.effective.p2p_hosting);
   heroKeyOn = !!(v && v.effective && v.effective.herokey_sso);   // Hero Key sign-in on realms (docs/HERO-KEY-SSO.md)
 }).catch(() => {});
 const CORE_LABELS = { azerothcore: "AzerothCore", trinitycore: "TrinityCore", cmangos: "CMaNGOS", vmangos: "vMaNGOS", mangos: "MaNGOS", other: "Other server" };
 $("rl-mine").addEventListener("change", () => renderRealms());
-
 async function playRealm(r, btn) {
   const picked = needClient("rl-status");
   if (!picked) return;
@@ -1663,12 +1824,14 @@ async function playRealmHeroKey(r, btn) {
 
 $("rl-refresh").addEventListener("click", () => loadRealms());
 $("rl-back").addEventListener("click", async () => {
+  rlMenu(false);
   const c = needClient("rl-status");
   if (!c) return;
   try { say("rl-status", await invoke("back_to_official", { client: c.id }), "ok"); await refresh(); renderRealms(); }
   catch (e) { say("rl-status", String(e), "bad"); }
 });
 $("rl-restore").addEventListener("click", async () => {
+  rlMenu(false);
   const c = needClient("rl-status");
   if (!c) return;
   try { say("rl-status", await invoke("restore_realmlist", { client: c.id }), "ok"); await refresh(); renderRealms(); }

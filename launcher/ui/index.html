@@ -200,35 +200,50 @@
   <section class="page" id="page-realms">
     <div class="panel wide">
       <h2>Realms</h2>
-      <div class="toolbar">
-        <label class="inline">Play with <select class="client-pick" data-for="realms"></select></label>
-        <button type="button" class="btn small" id="rl-back">BACK TO WRATH</button>
-        <button type="button" class="btn small" id="rl-restore" title="Put back the realmlist you had before Leyline">MY OWN REALMLIST</button>
-        <button type="button" class="btn small" id="rl-refresh">REFRESH</button>
+      <div class="toolbar rl-tools">
+        <input id="rl-q" type="search" placeholder="Find a realm" aria-label="Find a realm" autocomplete="off" spellcheck="false">
+        <div class="rl-pop-wrap">
+          <button type="button" class="btn small rl-fbtn" id="rl-filters-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="rl-filters">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>FILTERS<span class="rl-fcount" id="rl-fcount" hidden></span></button>
+          <div class="rl-popover" id="rl-filters" role="dialog" aria-label="Filter realms" hidden>
+            <div class="rl-fgrid">
+              <label>Build <select id="rl-f-build"><option value="">any</option></select></label>
+              <label>Rules <select id="rl-f-tag"><option value="">any</option></select></label>
+              <label>Region <select id="rl-f-region"><option value="">any</option></select></label>
+              <label>Language <select id="rl-f-lang"><option value="">any</option></select></label>
+            </div>
+            <label class="check"><input type="checkbox" id="rl-f-now"> Has players now</label>
+            <label class="check"><input type="checkbox" id="rl-mine"> Only realms my clients can play</label>
+            <div class="rl-pop-foot"><button type="button" class="link-s" id="rl-f-clear">Clear filters</button></div>
+          </div>
+        </div>
+        <span class="toolbar-fill"></span>
+        <select class="client-pick rl-client" data-for="realms" aria-label="Play with" title="Play with"></select>
         <button type="button" class="btn small" data-page-go="modes" title="Minigames and game modes">MODES</button>
-        <label class="check inline"><input type="checkbox" id="rl-mine"> Only realms my clients can play</label>
+        <button type="button" class="icon-btn" id="rl-refresh" aria-label="Refresh" title="Refresh the list">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button>
+        <div class="rl-pop-wrap">
+          <button type="button" class="icon-btn" id="rl-more" aria-label="More" title="More" aria-haspopup="menu" aria-expanded="false" aria-controls="rl-menu">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+          <div class="rl-popover rl-menu" id="rl-menu" role="menu" hidden>
+            <button type="button" role="menuitem" id="rl-back">Back to the official realm</button>
+            <button type="button" role="menuitem" id="rl-restore" title="Put back the realmlist you had before Leyline">Use my own realmlist</button>
+          </div>
+        </div>
       </div>
       <p class="net-line" id="rl-net" aria-live="polite"></p>
-      <div class="toolbar rl-filters" aria-label="Filter realms">
-        <label class="inline">Build <select id="rl-f-build"><option value="">any</option></select></label>
-        <label class="inline">Rules <select id="rl-f-tag"><option value="">any</option></select></label>
-        <label class="inline">Region <select id="rl-f-region"><option value="">any</option></select></label>
-        <label class="inline">Language <select id="rl-f-lang"><option value="">any</option></select></label>
-        <label class="check inline"><input type="checkbox" id="rl-f-now"> Has players now</label>
-      </div>
       <p class="status" id="rl-status" role="status"></p>
       <div class="realm-list" id="rl-list"></div>
-      <section class="card host-cta" id="rl-host-cta">
-        <!-- TODO(owner): the "Host your own" heading and lede -->
-        <div class="card-head"><span>HOST YOUR OWN</span></div>
-        <p class="lede">Community realms are the Leyline network. Anyone can run one from their own PC.</p>
-        <ol class="steps">
-          <li>Get the Host pack (on the Host page) and Docker.</li>
-          <li>Pick a profile, a name and your house rules. The realm runs on your PC.</li>
-          <li>Make it public: it shows up here for everyone, with no port forwarding. You are its GM.</li>
-        </ol>
-        <div class="row"><button type="button" class="btn" id="rl-host">OPEN HOST</button></div>
+      <section class="rl-host-banner" id="rl-host-cta" aria-label="Host your own">
+        <span class="rl-host-ic" aria-hidden="true"><img src="art/brand/leyline-crystal-256.webp" alt="" decoding="async"></span>
+        <p><b>Host your own realm.</b> <span>It runs on your PC and shows up here for everyone, no port forwarding.</span></p>
+        <div class="rl-host-acts">
+          <button type="button" class="btn small primary" id="rl-host">START A REALM</button>
+          <button type="button" class="btn small" id="rl-host-link">LINK MY SERVER</button>
+        </div>
       </section>
+      <details class="rl-other" id="rl-other">
+        <summary>Got an invite link or another realm address?</summary>
       <h3>A private realm</h3>
       <p class="lede">Got an invite link? Paste it here and Leyline points your client at that realm. Make your account on the link's page first.</p>
       <div class="row"><input id="rl-invite" placeholder="https://relay.openvanilla.app/join/…#…" autocomplete="off" spellcheck="false"><button type="button" class="btn" id="rl-join">JOIN</button></div>
@@ -245,6 +260,7 @@
         </label>
         <p class="hint" id="play-hint"></p>
       </div>
+      </details>
     </div>
   </section>
 
@@ -440,8 +456,8 @@
   </div>
 </dialog>
 
-<!-- The play bar, on every page: the client picker (a drop-up list, app.js renderClientMenu), the realm and one status
-     line, the play mode and PLAY. #play-client stays the model the rest of app.js reads; the list sets it. -->
+<!-- The play bar, on every page: the client picker (a drop-up list, app.js renderClientMenu), the realm picker with one
+     status line (a drop-up list, app.js renderRealmMenu: realms, browser play, Make a realm) and PLAY. #play-client stays the model the rest of app.js reads; the list sets it. -->
 <form id="play-form" class="playbar">
   <div class="pb-left">
     <span class="pb-label" id="pb-client-label">GAME CLIENT</span>
@@ -455,15 +471,20 @@
     <select id="play-client" class="sr" tabindex="-1" aria-hidden="true"></select>
   </div>
   <div class="pb-mid">
-    <button type="button" class="pb-realm" id="pb-realm-btn" title="Choose a realm"><span class="rl-ic sm crystal" id="pb-realm-ic" aria-hidden="true"></span><span class="client-realm" id="pb-realm">Official realm</span><span class="rl-ver sm" id="pb-realm-ver" hidden></span><svg class="pb-go" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
-    <div class="pb-status bar"><span class="dot" aria-hidden="true"></span><span id="play-headline">READY TO PLAY</span><span id="pb-detail"></span><span id="play-status" class="status" role="status"></span></div>
+    <span class="pb-label" id="pb-realm-label">REALM</span>
+    <div class="pb-pick">
+      <button type="button" class="pb-client pb-realm" id="pb-realm-btn" aria-haspopup="listbox" aria-expanded="false" aria-controls="pb-rmenu" aria-labelledby="pb-realm-label pb-realm-btn">
+        <span class="rl-ic sm crystal" id="pb-realm-ic" aria-hidden="true"></span>
+        <span class="pb-realm-txt">
+          <span class="pb-realm-top"><span class="client-realm" id="pb-realm">Official realm</span><span class="rl-ver sm" id="pb-realm-ver" hidden></span></span>
+          <span class="pb-status bar"><span class="dot" aria-hidden="true"></span><span id="play-headline">READY TO PLAY</span><span id="pb-detail"></span><span id="play-status" class="status" role="status"></span></span>
+        </span>
+        <svg class="pb-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
+      </button>
+      <ul class="pb-menu pb-rmenu" id="pb-rmenu" role="listbox" aria-label="Realms" hidden></ul>
+    </div>
   </div>
   <div class="pb-right">
-    <div class="modes" role="radiogroup" aria-label="Play mode">
-      <button type="button" class="mode" role="radio" data-mode="online">ONLINE</button>
-      <button type="button" class="mode" role="radio" data-mode="solo" aria-disabled="true" title="Solo play on this PC arrives in a later Leyline release">SOLO</button>
-      <button type="button" class="mode" role="radio" data-mode="browser">BROWSER</button>
-    </div>
     <button type="submit" class="play" id="play-go"><span class="sr">Play</span></button>
     <span class="caption" id="play-caption">ONLINE</span>
   </div>
