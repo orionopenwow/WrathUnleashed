@@ -303,6 +303,11 @@ st, _, beacon = req("GET", "/wrath/leyline-preview/beacon")
 check("hub Host a Beacon: the launcher's Host page and the website", 'href="/wrath/leyline">Get the launcher' in beacon
       and 'href="/wrath/host"' in beacon)
 
+# ---------------------------------------------------------------- Warden (Browser players off) is carried for the hub
+check("warden carried from the relay record (Play in browser only without it)",
+      net.extra({"profile": {"warden": True}})["warden"] is True and net.extra({"profile": {"warden": "yes"}})["warden"] is None
+      and net.extra({})["warden"] is None)
+
 # ---------------------------------------------------------------- shipping: the signin step
 STREAM = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 fl = open(os.path.join(STREAM, "fastloop.sh"), encoding="utf-8").read()

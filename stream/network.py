@@ -138,6 +138,9 @@ def extra(rec: dict) -> dict:
         "new": com.get("new") is True,
         "score": float(sc) if isinstance(sc, (int, float)) and not isinstance(sc, bool) and math.isfinite(sc) and 0 <= sc <= 1000 else 0.0,
         "direct": com.get("directConnect") is True,
+        # Warden (the core's client anti-cheat): on, the browser client (no Warden module) is turned away, so the
+        # site must not offer "Play in browser" (the host's "Browser players" switch: setup.py browser on|off)
+        "warden": prof.get("warden") if isinstance(prof.get("warden"), bool) else None,
         "first_seen": com.get("firstSeen") if isinstance(com.get("firstSeen"), str) and len(com["firstSeen"]) <= 25 else "",
     }
 
@@ -247,7 +250,7 @@ def record_of(r: dict, sample: dict | None = None) -> dict:
         "type": r.get("type", "PvE"),
         "profile": {"game": None, "version": BUILDS.get(r.get("build", 12340)), "build": r.get("build", 12340),
                     "core": r.get("core", "azerothcore"), "address": relay, "port": r.get("port"),
-                    "ruleset": r.get("ruleset", "custom")},
+                    "ruleset": r.get("ruleset", "custom"), "warden": r.get("warden")},
         "connect": {"kind": "web-signin", "url": f"https://{relay}/join/{rid}", "label": "Join this realm"},
         "rules": list(r.get("rules") or []),
         "tags": list(r.get("tags") or []), "region": r.get("region"), "language": r.get("language"),

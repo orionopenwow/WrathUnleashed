@@ -101,7 +101,8 @@ REGIONS = {"na-east": "NA east", "na-west": "NA west", "sa": "S. America", "eu":
 TAGS = ("blizzlike", "boosted", "custom", "pvp", "rp", "hangout")
 LANG_RE = re.compile(r"^[a-z]{2,3}(-[A-Z]{2})?$")
 NO_BOTS = ("dalaran",)                     # setup.py PROFILE_BOTS: 0 (and the other cores: none yet)
-OPTION_KEYS = ("type", "xp", "loot", "rep", "start", "bots", "signup", "herokey", "region", "lang", "tags", "max")
+OPTION_KEYS = ("type", "xp", "loot", "rep", "start", "bots", "signup", "herokey", "region", "lang", "tags", "max",
+               "browser")
 # Ready-made realms (owner 2026-10-30: "recommend more server types ... maybe a Duels Server with simple rules, example
 # build and mod servers"): each fills the form from presets and options the kit already has (nothing new on the host's
 # PC); the host still names it and presses Start server. id -> (label, one line, preset, options, tagline, rules).
@@ -214,6 +215,14 @@ def options(form: dict, preset: str) -> tuple[dict, dict]:
     m = num("max", 0, 10000)
     if m:
         out["max"] = m
+    br = g("browser")
+    if br:   # "Browser players": Warden off so the browser client (3.3.5a, no Warden module) can join (setup.py)
+        if br not in ("on", "off"):
+            err["browser"] = "Browser players: on or off."
+        elif br == "on" and not ac:
+            err["browser"] = "Browser players need an AzerothCore ruleset."
+        else:
+            out["browser"] = br
     return out, err
 
 
@@ -454,20 +463,33 @@ def relay_api() -> str:
 
 def relay_online(rid: str) -> bool | None:
     """True / False from GET /api/realms/<id>; None when the relay doesn't know it yet or can't be reached."""
+    return relay_info(rid).get("online")
+
+
+def relay_info(rid: str) -> dict:
+    """GET /api/realms/<id>, cached STATUS_TTL: {"online": bool|None, "listed": bool|None, "listed_in_s": float|None}.
+    A newer relay says itself when a public realm is listed and how long after its tunnel came up (launch smoke S6), so
+    the host's page needs not wait for the site's own copy of the realm list (up to a minute or two old)."""
     now = time.monotonic()
     with _lock:
         hit = _status.get(rid)
         if hit and now - hit[0] < STATUS_TTL:
             return hit[1]
-    v = None
+    v = {"online": None, "listed": None, "listed_in_s": None}
     try:
         req = urllib.request.Request(f"{relay_api()}/api/realms/{rid}", headers={"Accept": "application/json",
                                                                                  "User-Agent": "wrath-portal"})
         with urllib.request.urlopen(req, timeout=2.5) as r:
             doc = json.loads(r.read(65536).decode("utf-8"))
-        v = bool(doc.get("online")) if isinstance(doc, dict) else None
+        if isinstance(doc, dict):
+            v["online"] = bool(doc.get("online"))
+            if isinstance(doc.get("listed"), bool):
+                v["listed"] = doc["listed"]
+            li = doc.get("listed_in_s")
+            if isinstance(li, (int, float)) and not isinstance(li, bool) and 0 <= li < 86400:
+                v["listed_in_s"] = float(li)
     except Exception:  # noqa: BLE001
-        v = None
+        pass
     with _lock:
         _status[rid] = (now, v)
         if len(_status) > 5000:
@@ -523,6 +545,15 @@ def try_claim(rec: dict) -> None:
         return
 
 
+def fmt_secs(v: float) -> str:
+    """0.3 s, 12 s, 2 min 5 s: how long the realm took to be listed after the PC connected."""
+    if v < 10:
+        return f"{v:.1f} s"
+    if v < 120:
+        return f"{int(round(v))} s"
+    return f"{int(v // 60)} min {int(v % 60)} s"
+
+
 def status_of(rec: dict) -> tuple[str, str, bool]:
     """(state, text, final). Also learns the realm id from the relay (pairing), forgets an old record's realm key
     once the PC has connected, and claims."""
@@ -535,8 +566,15 @@ def status_of(rec: dict) -> tuple[str, str, bool]:
         rec["first_online"] = int(time.time())
         changed = True
     rid = rec["realm_id"]
-    online = relay_online(rid)
+    info = relay_info(rid)
+    online = info["online"]
     entry = listed_entry(rid) if rec["visibility"] == "public" else None
+    if not (entry and entry.get("live")) and online and rec["visibility"] == "public" and info["listed"]:
+        entry = {"live": True, "claimed": False}   # the relay lists it already; the site's copy catches up
+    if entry and entry.get("live") and "listed_in_s" not in rec:
+        seen = int(time.time()) - rec["first_online"] if rec.get("first_online") else 0   # an older relay: this page's view
+        rec["listed_in_s"] = info["listed_in_s"] if info["listed_in_s"] is not None else (seen if seen > 0 else None)
+        changed = True
     if (online or entry) and rec.get("realm_key"):
         rec["realm_key"] = None            # the PC holds it now; the site keeps no copy
         rec["first_online"] = int(time.time())
@@ -545,7 +583,8 @@ def status_of(rec: dict) -> tuple[str, str, bool]:
         if not entry.get("claimed") and not rec.get("claimed"):
             try_claim(rec)
             changed = changed or bool(rec.get("claimed"))
-        state = ("listed", "Online, listed", True)
+        li = rec.get("listed_in_s")
+        state = ("listed", "Online, listed" + (f" in {fmt_secs(li)}" if isinstance(li, (int, float)) else ""), True)
     elif online and rec["visibility"] == "private":
         state = ("online", "Online, private: friends join with your invite link", True)
     elif online:
@@ -749,7 +788,13 @@ def more_settings(vals: dict, errs: dict) -> str:
             + f'<label for="f-lang">Language<span class="hint">A code like en, de or pt-BR (optional)</span></label>'
               f'<input type="text" id="f-lang" name="lang" maxlength="6" value="{e(v("lang"))}">{er("lang")}'
             + f'<label>Tags</label><div class="tags">{tag_html}</div>{er("tags")}'
-            + number("max", "Max players shown on the list", 0, 10000, "0 = not shown")
+            + number("max", "Max players", 0, 10000, "The server lets in no more than this, and the realm list shows it. "
+                     "0 = the ruleset's own")
+            + select("browser", "Browser players", [("", "The default: on for the AzerothCore rulesets"),
+                                                    ("on", "On: the anti-cheat is off so browsers can join"),
+                                                    ("off", "Off: desktop clients only, anti-cheat on")],
+                     "The browser client has no anti-cheat module, so it joins only with the core's client anti-cheat "
+                     "off. The server's own checks stay on.")
             + '</details>')
 
 
@@ -867,7 +912,8 @@ def start_page(rec: dict) -> bytes:
         '<p class="ly-fine">The first start imports the databases and can take 5 to 20 minutes. '
         f'<a href="{e(GUIDE_URL)}" rel="noopener noreferrer">Hosting guide</a> · '
         f'<a href="{ALWAYS_ON_URL}">Keep it always on</a> · <a href="/wrath/host">Your realms</a></p>')
-    return page(rec["name"], inner, refresh=0 if final else REFRESH)
+    # while it is about to be listed, look again sooner (the relay lists it seconds after the PC connects)
+    return page(rec["name"], inner, refresh=0 if final else (5 if state == "online" else REFRESH))
 
 
 # ----------------------------------------------------------------------------------------------
