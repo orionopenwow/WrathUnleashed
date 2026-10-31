@@ -149,10 +149,11 @@ test('the backdrop: behind the content area only, under the wash; plain when it 
     const b = document.getElementById('backdrop'), m = document.querySelector('main'), s = document.querySelector('.side');
     const cs = getComputedStyle(b);
     const rect = (e) => { const x = e.getBoundingClientRect(); return [x.left, x.top, x.width, x.height].map(Math.round); };
-    return { img: cs.backgroundImage, b: rect(b), m: rect(m), sideBg: getComputedStyle(s).backgroundImage, panel: getComputedStyle(document.querySelector('.home .card')).backdropFilter };
+    return { img: cs.backgroundImage, b: rect(b), m: rect(m), sideBg: getComputedStyle(s).backgroundImage, panel: getComputedStyle(document.querySelector('.home .news')).backdropFilter };
   });
   assert.match(r.img, /linear-gradient\(rgba\(9, 11, 17, 0\.52\).*rgba\(9, 11, 17, 0\.8\) 80%\), url\("https:\/\/play\.openvanilla\.app\/wrath\/art\/leyline-shot-backdrop\.webp"\)/);
-  assert.deepEqual(r.b, r.m, 'exactly behind the content area');
+  assert.deepEqual(r.b.slice(0, 2).concat(r.b[3]), r.m.slice(0, 2).concat(r.m[3]), 'exactly behind the content area');
+  assert.ok(r.b[2] >= r.m[2], 'as wide as it, and on Home under the docked friends panel too');
   assert.equal(r.sideBg, 'none', 'not behind the side bar');
   assert.match(r.panel, /blur/, 'panels are a blurred layer over it');
   assert.equal(await page.isChecked('#set-backdrop'), true, 'on by default');

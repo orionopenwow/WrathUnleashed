@@ -133,3 +133,20 @@ body:has(#page-play.on) .titlebar .winbtns { margin-left: 216px; }
 body:has(#page-play.on) main { padding-right: calc(216px + 20px); }
 body:has(#page-play.on) .home { grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 1150px) { body:has(#page-play.on) main { padding-right: calc(200px + 16px); } }
+/* owner 2026-10-30: "remove the bubble border and merge into header": the panel is part of the window's chrome, from the
+   very top (the window buttons sit on it) to the play bar, in the title bar's colour, square, one hairline on its left */
+body:has(#page-play.on) .home .card.home-friends {
+  top: 0; border-radius: 0; box-shadow: none; padding-top: 26px;
+  background: var(--t-chrome); -webkit-backdrop-filter: none; backdrop-filter: none;
+  border: 0; border-left: var(--t-border-w) solid var(--t-border);
+}
+body:has(#page-play.on) .home .card.home-friends .hf-me { border-bottom: 0; padding-top: 6px; }
+body:has(#page-play.on) .titlebar .winbtns { position: relative; z-index: 30; }
+/* owner 2026-10-30: "give apparent scroll bar so people know there's more below": on Home the content area ends at the
+   docked panel (so its scroll bar shows beside it), and the scroll bar is a visible bar, not a hairline */
+body:has(#page-play.on) main { padding-right: 20px; margin-right: 216px; }
+@media (max-width: 1150px) { body:has(#page-play.on) main { padding-right: 16px; margin-right: 200px; } }
+main { scrollbar-width: auto; scrollbar-color: color-mix(in srgb, var(--t-accent) 55%, var(--t-border-strong)) color-mix(in srgb, var(--t-text) 5%, transparent); }
+main::-webkit-scrollbar { width: 10px; }
+main::-webkit-scrollbar-track { background: color-mix(in srgb, var(--t-text) 5%, transparent); }
+main::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--t-accent) 55%, var(--t-border-strong)); border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }

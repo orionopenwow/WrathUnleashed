@@ -383,3 +383,4 @@
 1138a ship Save to GitHub: Home's friends panel in place of the Server and Game client cards (GitHub then rebuilds Leyline.exe)
 1139a ship Save to GitHub: search across the title bar, no account button, the friends panel docked and slim (GitHub then rebuilds Leyline.exe)
 1140a ship Save to GitHub: the friends panel in the top right, a shorter search box (GitHub then rebuilds Leyline.exe)
+1141a ship Save to GitHub: the friends panel merged into the title bar, a visible scroll bar on Home (GitHub then rebuilds Leyline.exe)
