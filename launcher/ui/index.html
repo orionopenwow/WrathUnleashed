@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="themes/themes.css"><script src="themes.js"></script>
 <link rel="stylesheet" href="social.css">
 <link rel="stylesheet" href="modes.css">
+<link rel="stylesheet" href="home.css"><!-- Home: the hero gallery and the rows below it (home.js) -->
 </head>
 <body class="ly">
 <div class="frame">
@@ -66,11 +67,14 @@
   <!-- HOME -->
   <section class="page" id="page-play">
     <div class="home">
-      <article class="news">
-        <div class="news-top"><span id="news-tag"></span></div>
-        <h1 id="news-title"></h1>
-        <ul id="news-items"></ul>
-        <button type="button" class="news-more" data-page-go="news">Read the patch notes ›</button>
+      <!-- the hero gallery (home.js): the featured mode, what's new, browser play, hosting, a Workshop mod -->
+      <article class="news hero" id="hero" aria-roledescription="carousel" aria-label="Highlights">
+        <div class="hero-slides" id="hero-slides" aria-live="off"></div>
+        <div class="hero-ctl" id="hero-ctl" hidden>
+          <button type="button" class="hero-arrow" id="hero-prev" aria-label="Previous slide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <div class="hero-dots" id="hero-dots" role="group" aria-label="Choose a slide"></div>
+          <button type="button" class="hero-arrow" id="hero-next" aria-label="Next slide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+        </div>
       </article>
 
       <div class="cards-col">
@@ -95,6 +99,36 @@
           <div class="hf-list" id="hf-list" role="list"></div>
         </section>
       </div>
+      <button type="button" class="home-cue" id="home-cue" hidden>More below<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>
+
+    <!-- below the fold (home.js): one row each, shown once its data is in, hidden when empty -->
+    <div class="home-more" id="home-more">
+      <section class="hm-sec" id="hm-realms" aria-labelledby="hm-realms-h" hidden>
+        <div class="card-head hm-head"><span id="hm-realms-h">POPULAR REALMS</span><button type="button" class="link" data-hm-go="realms">See all ›</button></div>
+        <div class="hm-row" id="hm-realms-row"></div>
+      </section>
+      <section class="hm-sec" id="hm-mods" aria-labelledby="hm-mods-h" hidden>
+        <div class="card-head hm-head"><span id="hm-mods-h">MODS TO TRY</span><button type="button" class="link" data-hm-go="discover">See all ›</button></div>
+        <div class="hm-row" id="hm-mods-row"></div>
+      </section>
+      <section class="hm-sec" id="hm-modes" aria-labelledby="hm-modes-h" hidden>
+        <div class="card-head hm-head"><span id="hm-modes-h">GAME MODES</span><button type="button" class="link" data-hm-go="modes">See all ›</button></div>
+        <div class="hm-row" id="hm-modes-row"></div>
+      </section>
+      <section class="hm-sec" id="hm-news" aria-labelledby="hm-news-h" hidden>
+        <div class="card-head hm-head"><span id="hm-news-h">NEWS</span><button type="button" class="link" data-hm-go="news">See all ›</button></div>
+        <div class="hm-row two" id="hm-news-row"></div>
+      </section>
+      <section class="hm-sec hm-host" id="hm-host" aria-label="Host your own">
+        <span class="hm-host-ic" aria-hidden="true"><img src="art/brand/leyline-crystal-256.webp" alt="" decoding="async"></span>
+        <div class="hm-host-txt"><b>Host your own</b><span>Your realm on the Leyline network. No port forwarding.</span></div>
+        <div class="hm-host-acts">
+          <button type="button" class="btn small primary" id="hm-host-start">START A REALM</button>
+          <button type="button" class="btn small" id="hm-host-link">LINK MY SERVER</button>
+          <button type="button" class="link-s" id="hm-host-docs">Docs ›</button>
+        </div>
+      </section>
     </div>
   </section>
 
@@ -388,5 +422,6 @@
 <script src="modes.js"></script>
 <script src="app.js"></script>
 <script src="host.js"></script>
+<script src="home.js"></script>
 </body>
 </html>

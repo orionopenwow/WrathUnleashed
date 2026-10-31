@@ -130,19 +130,19 @@ test('PLAY in the browser, offline list, remembered page, text not markup', asyn
   await page.close();
 });
 
-test('Key art: on the Azeroth Survivors card and as the featured banner on Home, one click to its card', async () => {
+test('Key art: on the Azeroth Survivors card and as the featured slide of Home\'s gallery, one click to its card', async () => {
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.addInitScript(FAKE, { modes: CATALOG.modes });
   await page.goto(INDEX);
-  const ban = page.locator('#page-play .news #feat-mode');
-  await page.waitForFunction(() => { const i = document.querySelector('#feat-mode img'); return i && i.complete && i.naturalWidth > 0; });
-  assert.equal(await ban.getAttribute('data-mode'), 'azeroth-survivors');
-  assert.match(await ban.getAttribute('aria-label'), /Featured mode: Azeroth Survivors/);
-  assert.ok(await page.evaluate(() => document.querySelector('.news').classList.contains('has-feat') && document.querySelector('.news').firstElementChild.id === 'feat-mode'), 'the art is the hero card\'s backdrop');
-  assert.match(await ban.textContent(), /FEATURED MODE.*Azeroth Survivors.*See it in Modes/);
-  assert.equal(await page.$eval('#feat-mode img', (i) => i.getAttribute('src')), 'art/modes/azeroth-survivors.webp');
+  const slide = page.locator('#page-play #hero .hero-slide[data-key="mode"]');
+  await page.waitForFunction(() => { const i = document.querySelector('#hero .hero-slide[data-key="mode"] img'); return i && i.complete && i.naturalWidth > 0; });
+  assert.equal(await slide.locator('.hs-title').textContent(), 'Azeroth Survivors');
+  assert.match(await slide.locator('.hs-kick').textContent(), /Featured mode/);
+  assert.equal(await slide.locator('img').getAttribute('src'), 'art/modes/azeroth-survivors.webp');
+  assert.ok(await slide.evaluate((s) => s.classList.contains('has-art')), 'the art fills the slide');
+  const ban = slide.locator('.hs-go');
   await ban.click();
   assert.ok(await page.isVisible('#page-modes'));
   await page.waitForFunction(() => { const c = document.querySelector('#md-list .md-card[data-mode="azeroth-survivors"]'); return c && c.classList.contains('md-flash'); });
@@ -156,14 +156,14 @@ test('Key art: on the Azeroth Survivors card and as the featured banner on Home,
   await page.close();
 });
 
-test('Key art missing: no banner on Home, the card as before', async () => {
+test('Key art missing: no featured slide on Home, the card as before', async () => {
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.route('**/art/modes/**', (r) => r.abort());
   await page.addInitScript(FAKE, { modes: CATALOG.modes });
   await page.goto(INDEX);
-  await page.waitForFunction(() => !document.getElementById('feat-mode'));
+  await page.waitForFunction(() => window.LeylineHome && !window.LeylineHome.slides().includes('mode'));
   await page.evaluate(() => window.LeylineNav.show('modes'));
   await page.waitForFunction(() => document.querySelectorAll('#md-list .md-card').length > 0);
   await page.waitForFunction(() => !document.querySelector('#md-list .md-card[data-mode="azeroth-survivors"] img'));

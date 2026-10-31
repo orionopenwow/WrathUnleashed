@@ -178,11 +178,8 @@ $("search-form").addEventListener("submit", (ev) => {
 });
 
 // ------------------------------------------------------------------ news
+// Home's hero gallery and its News row read NEWS too (home.js); the News page lists every entry.
 function renderNews() {
-  const n = NEWS[0];
-  $("news-tag").textContent = n.tag;
-  $("news-title").textContent = n.title;
-  $("news-items").replaceChildren(...n.items.map((t) => el("li", "", t)));
   $("news-full").replaceChildren(...NEWS.map((x) => {
     const d = el("div", "news-entry");
     const ul = el("ul");
@@ -326,6 +323,7 @@ function setMode(m) {
   document.querySelectorAll(".mode").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.mode === m)));
   try { localStorage.setItem("leyline.mode", m); } catch (_) { /* fine */ }
   renderPlayBar();
+  document.dispatchEvent(new CustomEvent("leyline:mode", { detail: { mode: m } }));
 }
 document.querySelectorAll(".mode").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
 
@@ -691,6 +689,7 @@ async function loadCatalog(quiet) {
   }
   await loadRanks(true);
   renderModTiles();
+  document.dispatchEvent(new CustomEvent("leyline:catalog"));  // Home's Workshop spotlight and Mods to try (home.js)
   await loadInstalled(true);
   renderCatalog();
 }
@@ -1217,6 +1216,7 @@ async function loadRealms(quiet) {
   renderRealms();
   renderRealmRows();
   renderSrvHead();
+  document.dispatchEvent(new CustomEvent("leyline:realms"));   // Home's Popular realms row (home.js)
 }
 
 // The network (realms.rs order): featured community realms, the Leyline Sample Hangout (ours, temporary), the
@@ -1609,6 +1609,12 @@ $("upd-channel").addEventListener("change", async () => {
   catch (e) { say("upd-status", String(e), "bad"); }
 });
 setInterval(loadUpdateState, 60000);
+
+// ------------------------------------------------------------------ for Home's gallery and rows (home.js, loaded after this)
+window.LeylineApp = {
+  news: () => NEWS, realms: () => realmsCache, catalog: () => catalog, mode: () => mode, setMode, openLink,
+  realmIcon, realmVersion, hiddenBuild, nameHue,
+};
 
 // ------------------------------------------------------------------ start
 renderNews();

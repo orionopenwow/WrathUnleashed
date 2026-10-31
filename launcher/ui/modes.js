@@ -4,7 +4,7 @@
 //
 // Loaded before app.js: it adds its own page, so app.js's navigation and its client pickers (.client-pick) pick it up
 // like the others. It has no menu item since the side menu matches the website's (owner 2026-10-30): Home's featured
-// mode, Realms › MODES and show("modes") (window.LeylineNav) open it. PLAY follows the Home page's play setting (localStorage
+// gallery, Realms › MODES and show("modes") (window.LeylineNav) open it. PLAY follows the Home page's play setting (localStorage
 // "leyline.mode"): in the browser it opens the mode's link; on the desktop it writes the pick into your 3.3.5a
 // client (mode_prepare_desktop) and starts it on the official realm (app.rs "play"). The UI only ever names a
 // mode id: every address is built by the core. Everything from the catalog is shown with textContent.
@@ -90,7 +90,7 @@
     $("md-net").textContent = "Loading…";
     let l;
     try { l = await invoke("modes_list"); }
-    catch (e) { $("md-net").textContent = ""; say(String(e), "bad"); return; }
+    catch (e) { loaded = false; $("md-net").textContent = ""; say(String(e), "bad"); return; }   // opening the page tries again
     modes = Array.isArray(l.modes) ? l.modes : [];
     const live = modes.filter((m) => m.status === "live").length;
     let line = `${live} to play · ${modes.length - live} coming soon`;
@@ -98,7 +98,10 @@
     else if (l.from_cache) line += " · offline: the last list Leyline saw";
     $("md-net").textContent = line;
     render();
+    document.dispatchEvent(new CustomEvent("leyline:modes"));   // Home's Game modes row (home.js)
   }
+  // Home asks for the list once at start (the same modes_list the page makes; the core caches it).
+  function ensure() { if (!loaded) load(); }
 
   function card(m) {
     const c = el("div", "realm-card md-card");
@@ -187,8 +190,8 @@
     }
   }
 
-  // ---------------------------------------------------------------- the featured mode on Home: its key art as a banner in
-  // the hero card, one click to its card on this page. Removed if the art doesn't load (Home stays as it was).
+  // ---------------------------------------------------------------- open one mode: this page with its card flashed (Home's
+  // gallery and its Game modes row call it; home.js builds the featured mode's slide from ART and artImg).
   function show(id) {
     openPage();
     const go = () => {
@@ -204,30 +207,11 @@
       setTimeout(() => mo.disconnect(), 10000);
     }
   }
-  function featureBanner() {
-    const news = document.querySelector("#page-play .news");
-    const a = ART[FEATURED];
-    const img = artImg(FEATURED, "fm-art");
-    if (!news || !a || !img) return;
-    img.alt = "";
-    const b = el("button", "feat-mode");
-    b.type = "button"; b.id = "feat-mode"; b.dataset.mode = FEATURED;
-    b.setAttribute("aria-label", `Featured mode: ${a.title}. See it on the Modes page`);
-    const txt = el("span", "fm-txt");
-    txt.append(el("small", "", "FEATURED MODE"), el("b", "", a.title), el("i", "", "See it in Modes ›"));
-    b.append(img, txt);
-    img.addEventListener("error", () => b.remove());
-    b.addEventListener("click", () => show(FEATURED));
-    img.addEventListener("error", () => news.classList.remove("has-feat"));
-    news.classList.add("has-feat");      // the art fills the whole hero card; its words sit on top
-    news.insertBefore(b, news.firstChild);
-  }
-  featureBanner();
 
   // ---------------------------------------------------------------- start
   $("md-refresh").addEventListener("click", load);
   // whenever the page opens (show("modes"), or the page remembered from last time): load once, then keep "PLAY …" current
   new MutationObserver(() => { if (page.classList.contains("on")) { if (!loaded) load(); else renderHow(); } }).observe(page, { attributes: true, attributeFilter: ["class"] });
 
-  window.LeylineModes = { load, modes: () => modes, show, open: openPage, ART };
+  window.LeylineModes = { load, ensure, modes: () => modes, show, open: openPage, ART, FEATURED, artImg, KIND, playersText };
 })();
