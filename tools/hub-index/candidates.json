@@ -64,6 +64,77 @@
    "description": "WoW Legacy Addon - Retail UI (3.3.5a)"
   },
   {
+   "repo": "https://github.com/Acolit-sys/QuestieRetailMinimapNav",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "Retail-style quest navigation arrow for the DragonUI minimap, using Questie-335 as the data source.",
+   "topics": [
+    "dragonui",
+    "lua",
+    "minimap",
+    "quest-navigation",
+    "questie",
+    "world-of-warcraft",
+    "wotlk",
+    "wotlk-335",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-06"
+  },
+  {
+   "repo": "https://github.com/Adrestie/mod-profession-xp",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "AzerothCore module for xp reward when gathering and crafting",
+   "archived": false,
+   "pushed": "2026-10-24"
+  },
+  {
+   "repo": "https://github.com/AdrianoBotti/JRawrCharacterExporter",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "Apache-2.0",
+   "description": "World of Warcraft 3.3.5 addon that exports the current character as Rawr XML for JRawr",
+   "topics": [
+    "addon",
+    "jrawr",
+    "theorycrafting",
+    "world-of-warcraft",
+    "wotlk"
+   ],
+   "archived": false,
+   "pushed": "2026-10-23"
+  },
+  {
+   "repo": "https://github.com/adriftiano/Critters-Addon-Wow-3.3.5a",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "description": "This addon keeps an all-time record of you highest critical heal and damages on multiple hero's and has a cute crit streak like Arkham knights and such",
+   "archived": false,
+   "pushed": "2026-10-03"
+  },
+  {
    "repo": "https://github.com/Aethixdryad140461-coder/azerothcore-custom-resp-modules",
    "via": [
     "github-topic-page:vmangos",
@@ -74,6 +145,125 @@
     "3.3.5a"
    ],
    "stars": 32
+  },
+  {
+   "repo": "https://github.com/agent-wow/mod-char-widget",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "Full-stack AzerothCore module and widget for all character info panels.",
+   "archived": false,
+   "pushed": "2026-10-07"
+  },
+  {
+   "repo": "https://github.com/agent-wow/mod-chat-widget",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "Full-stack AzerothCore module and widget for all character chat logs.",
+   "archived": false,
+   "pushed": "2026-10-07"
+  },
+  {
+   "repo": "https://github.com/agent-wow/mod-map-widget",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "Full-stack AzerothCore module and widget for map panels.",
+   "archived": false,
+   "pushed": "2026-10-07"
+  },
+  {
+   "repo": "https://github.com/agent-wow/mod-unit-widget",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "Full-stack AzerothCore module and widget for all character unit frames.",
+   "archived": false,
+   "pushed": "2026-10-07"
+  },
+  {
+   "repo": "https://github.com/Ahmedrn/ArenaLFG",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 2,
+   "licence": "MIT",
+   "description": "A 2v2 arena partner finder for WoW 3.3.5a (WotLK).",
+   "topics": [
+    "2v2",
+    "arena",
+    "pvp",
+    "warmane",
+    "wotlk",
+    "wotlk-335a",
+    "wotlk-addon",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
+   "repo": "https://github.com/aiueo00091/server-soft-launcher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Public overview for Server Soft Launcher AppID review. Private development; documentation only, no source code or builds.",
+   "archived": false,
+   "pushed": "2026-10-15"
+  },
+  {
+   "repo": "https://github.com/Akotz89/wow-playerbots-strategic-director",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Strategic director source for Playerbots",
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
+   "repo": "https://github.com/Albert-RC/stats-trimmer",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "Stats Trimmer: compact stat lines in item tooltips for WoW: Forever",
+   "topics": [
+    "lua",
+    "world-of-warcraft",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-20"
   },
   {
    "repo": "https://github.com/alchem1ster/Vanilla-Iconic",
@@ -109,6 +299,17 @@
    "description": "Auctionator for World of Warcraft - Wrath of the Lich King (3.3.5a)"
   },
   {
+   "repo": "https://github.com/Aldeide/fury-forever-sim",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Blazing-fast WoW: Forever Level 60 Fury Warrior Simulator (Rust + WASM + Tauri)",
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
    "repo": "https://github.com/Aldori15/azerothcore-eluna-accountwide",
    "via": [
     "github-topic-page:azerothcore-lua"
@@ -119,6 +320,34 @@
    "stars": 35
   },
   {
+   "repo": "https://github.com/Aldori15/mod-questie-bridge",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 5,
+   "description": "AzerothCore module that exposes live server state to Questie-335 for events, quest pools, world state/progress, phasing, moving questgivers, resets, and reward rates.",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/alexjonssinabon/wowcool-launcher-linux",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Linux-лаунчер wowcool",
+   "archived": false,
+   "pushed": "2026-10-24"
+  },
+  {
    "repo": "https://github.com/alseif0x/rustycore",
    "via": [
     "github-topic-page:wotlk"
@@ -127,6 +356,31 @@
     "3.3.5a"
    ],
    "stars": 32
+  },
+  {
+   "repo": "https://github.com/alterational/azerothcore-ownedcore",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "Azerothcore + Playerbots with the same-ish configuration as on the Ownedcore topic",
+   "archived": false,
+   "pushed": "2026-10-24"
+  },
+  {
+   "repo": "https://github.com/Alukarho/VoiceOver-Launcher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Instaladores del VoiceOver Launcher (AI VoiceOver para WoW). Solo versiones publicadas.",
+   "archived": false,
+   "pushed": "2026-10-24"
   },
   {
    "repo": "https://github.com/Amaroth/GobGenerator2",
@@ -149,6 +403,27 @@
     "5.4.8"
    ],
    "stars": 7
+  },
+  {
+   "repo": "https://github.com/Apodez-dev/WowLK-3.3.5-launcher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Кастомный лаунчер для World of Warcraft 3.3.5a с поддержкой VK_LAYER (Vulkan/ReShade) и управлением HD-модами. Подходит для игры на любом проекте 3.3.5a",
+   "topics": [
+    "dotne",
+    "launcher",
+    "reshade",
+    "vulkan",
+    "wow",
+    "wowcircle"
+   ],
+   "archived": false,
+   "pushed": "2026-10-21"
   },
   {
    "repo": "https://github.com/araxiaonline/Delves",
@@ -202,6 +477,28 @@
    "description": "An experimental World of Warcraft emulator in Rust"
   },
   {
+   "repo": "https://github.com/arusiasotto/wow-forever-a840",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "description": "Adreno 840 Turnip driver and GameNative launch scripts for WoW Forever Beta",
+   "archived": false,
+   "pushed": "2026-10-23"
+  },
+  {
+   "repo": "https://github.com/arusiasotto/wow-forever-droiddeck",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 3,
+   "description": "World of Warcraft on DroidDeck: Proton, launchers, and docs",
+   "archived": false,
+   "pushed": "2026-10-23"
+  },
+  {
    "repo": "https://github.com/AscEmu/AscEmu",
    "via": [
     "github-topic-page:cataclysm",
@@ -212,6 +509,50 @@
     "5.4.8"
    ],
    "stars": 114
+  },
+  {
+   "repo": "https://github.com/aspollon/mod-playerbots-auctions",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
+   "repo": "https://github.com/aspollon/mod-playerbots-immersion",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "description": "Immersion Life - AFK Realm continuation of City Life for Playerbots",
+   "archived": false,
+   "pushed": "2026-10-24"
+  },
+  {
+   "repo": "https://github.com/astrangedaytoday15-dev/azerothcore-335-field-notes",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 2,
+   "licence": "CC-BY-4.0",
+   "description": "AzerothCore 3.3.5a field notes: native 4th talent tab / tree for every class, custom spells and spell_proc, gotchas, Claude Code workflow, plus a mod-playerbots guild bank patch. Tested/source-tagged. CC BY 4.0.",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "playerbots",
+    "talent-tree",
+    "world-of-warcraft-mod",
+    "wotlk",
+    "wotlk-335a"
+   ],
+   "archived": false,
+   "pushed": "2026-10-22"
   },
   {
    "repo": "https://github.com/astronomiwe/tbc-sdk-python",
@@ -812,6 +1153,199 @@
    "description": "Integrated development environment (IDE), an editor for Smart Scripts (SAI/smart_scripts) for TrinityCore based servers."
   },
   {
+   "repo": "https://github.com/BarronZeta/RE-Roller",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "RE: Roller by Vash - an ability and talent reroll planner for Grimfall (WoW 3.3.5a).",
+   "topics": [
+    "grimfall",
+    "lua",
+    "reroll",
+    "talents",
+    "world-of-warcraft",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-10"
+  },
+  {
+   "repo": "https://github.com/bboyJohnn/wow-vanilla-AdminPanel",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "1.12"
+   ],
+   "stars": 0,
+   "description": "Web admin panel for CMaNGOS Classic (WoW 1.12.1 / Vanilla): accounts, characters, bans, statistics, world map teleport, custom items, NPCs and quests, restart scheduler, mangosd.conf editor, logs and GM console. Python + aiohttp, no Docker needed.",
+   "topics": [
+    "admin-panel",
+    "aiohttp",
+    "cmangos",
+    "game-server",
+    "mangos",
+    "mariadb",
+    "private-server",
+    "python",
+    "server-management",
+    "vanilla-wow",
+    "web-panel",
+    "world-of-warcraft",
+    "wow",
+    "wow-classic",
+    "wow-emulator",
+    "wow-server"
+   ],
+   "archived": false,
+   "pushed": "2026-10-24"
+  },
+  {
+   "repo": "https://github.com/bboymain/XPBarIsland",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "description": "Experience, reputation, honor, pet XP and skills in one island flush to the top of the screen. Classic-era WoW addon. Bug reports welcome.",
+   "topics": [
+    "addon",
+    "classic-wow",
+    "world-of-warcraft",
+    "wow",
+    "wow-addon",
+    "xp-bar"
+   ],
+   "archived": false,
+   "pushed": "2026-10-15"
+  },
+  {
+   "repo": "https://github.com/BellaHealFr/BellaHealFr",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Mes addons pour World of Warcraft 3.3.5 (Wrath of the Lich King)",
+   "archived": false,
+   "pushed": "2026-10-24"
+  },
+  {
+   "repo": "https://github.com/BellaHealFr/Strata",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-3.0",
+   "description": "Carte du monde continue pour WoW 3.3.5 (Wrath of the Lich King), créée par un passionné : Kalimdor, les Royaumes de l'Est et le Norfendre sur une seule carte, zoom et déplacement libres. En français et en anglais, sans dépendance.",
+   "topics": [
+    "3-3-5",
+    "addon",
+    "english",
+    "french",
+    "lua",
+    "world-map",
+    "world-of-warcraft",
+    "wotlk",
+    "wow-addon",
+    "wrath-of-the-lich-king"
+   ],
+   "archived": false,
+   "pushed": "2026-10-27"
+  },
+  {
+   "repo": "https://github.com/BellaHealFr/VuhPlus",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 2,
+   "licence": "GPL-3.0",
+   "description": "Cadres de raid pour soigneurs, WoW 3.3.5 (Wrath of the Lich King), créés par un passionné : soin au clic, dispel, débuffs de boss, rôles reconnus, recharges du raid. En français, sans dépendance.",
+   "topics": [
+    "3-3-5",
+    "addon",
+    "french",
+    "healer",
+    "healing",
+    "lua",
+    "raid-frames",
+    "world-of-warcraft",
+    "wotlk",
+    "wow-addon",
+    "wrath-of-the-lich-king"
+   ],
+   "archived": false,
+   "pushed": "2026-10-24"
+  },
+  {
+   "repo": "https://github.com/BellaHealFr/Zenith",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 2,
+   "licence": "GPL-3.0",
+   "description": "Compteur de combat pour WoW 3.3.5, créé par un passionné de Wrath of the Lich King : les mêmes chiffres pour tout le groupe, relecture des combats, records par boss, analyse. En français, sans dépendance.",
+   "topics": [
+    "3-3-5",
+    "addon",
+    "damage-meter",
+    "french",
+    "lua",
+    "world-of-warcraft",
+    "wotlk",
+    "wow-addon",
+    "wrath-of-the-lich-king"
+   ],
+   "archived": false,
+   "pushed": "2026-10-25"
+  },
+  {
+   "repo": "https://github.com/Bemental77/wow_forever_android_apk",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "GPL-3.0",
+   "archived": false,
+   "pushed": "2026-10-08"
+  },
+  {
+   "repo": "https://github.com/benmills/MagicMap",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 3,
+   "licence": "GPL-3.0",
+   "description": "Your minimap, but it zooms out to the whole world: WoW Forever's minimap blips on a smooth, zoomable map drawn from the game's own terrain. M grows it into a big map.",
+   "topics": [
+    "lua",
+    "minimap",
+    "world-of-warcraft",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-21"
+  },
+  {
    "repo": "https://github.com/bkader/Skada-Cata",
    "via": [
     "github-topic-page:cata"
@@ -850,6 +1384,32 @@
    ],
    "builds": [],
    "stars": 5
+  },
+  {
+   "repo": "https://github.com/BlaMacfly/HomeCraft-Vanilla",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "1.12"
+   ],
+   "stars": 0,
+   "description": "World of Warcraft 1.12.1 en solo, hors ligne, en français : serveur VMaNGOS local, compagnons PlayerBots, launcher Rust à un seul bouton. Le client du jeu n'est pas inclus.",
+   "topics": [
+    "egui",
+    "french",
+    "launcher",
+    "offline",
+    "playerbots",
+    "rust",
+    "single-player",
+    "vanilla",
+    "vmangos",
+    "world-of-warcraft",
+    "wow-1-12-1"
+   ],
+   "archived": false,
+   "pushed": "2026-10-23"
   },
   {
    "repo": "https://github.com/blodyiheb/SahtoutCMS",
@@ -899,6 +1459,497 @@
    "description": "An addon that enables players to control their experience gain rate by right-clicking their XP bar."
   },
   {
+   "repo": "https://github.com/buildthehomelab/wow-addon-DBM",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "description": "Deadly Boss Mods (DBM-Warmane 10.1.13) for AzerothCore 3.3.5a: playerbot and Individual Progression fixes, 36 folders merged into 7",
+   "archived": false,
+   "pushed": "2026-10-22"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-ci",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "description": "Shared CI for buildthehomelab WoW 3.3.5a (AzerothCore) modules and addons",
+   "archived": false,
+   "pushed": "2026-10-31"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-beast-collection",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "AzerothCore module: Pokémon-style hunter stables for 3.3.5 — unlimited pet box, a field guide of every tameable beast (finds, Beast Lore, spawn maps), shinies and rewards, with the BeastCollection addon",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "world-of-warcraft",
+    "world-of-warcraft-addon",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-22"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-bot-lfg-accept",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "AzerothCore module: playerbots always accept the Dungeon Finder ready check and get pulled into the dungeon",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "playerbots",
+    "world-of-warcraft",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-22"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-bot-quiet-rolls",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "AzerothCore module: playerbots pass on group loot without a \"passed on\" line in the chat window",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "playerbots",
+    "world-of-warcraft",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-12"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-cache-version",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "AzerothCore module: checksums the client-cached world tables at startup so a launcher (e.g. Portalkeeper) knows when to clear players' WoW Cache",
+   "topics": [
+    "azerothcore-module"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-combat-watchdog",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "AzerothCore module: releases players and bots from combat with creatures that stopped fighting (stuck-in-combat fix for dungeons)",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "world-of-warcraft",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-21"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-dungeon-brd",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "AzerothCore module: Blackrock Depths tweaks - 5 minute Lyceum respawns, Hand of Justice back on Angerforge, Iron Hall flame strips for Magmus",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "world-of-warcraft",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-21"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-forever-journal",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 5,
+   "licence": "MIT",
+   "description": "AzerothCore 3.3.5a module + addon: a retail-style Dungeon Journal (bosses, abilities, loot with drop chances, quests, lockouts) built from your realm's own data",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "world-of-warcraft",
+    "world-of-warcraft-addon",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-31"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-forever-periodic-crit",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "AzerothCore module: DoT and HoT ticks can crit, as in WoW Forever",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "world-of-warcraft",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-21"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-forever-torch",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "AzerothCore module: the Night Watchman's Torch from WoW Forever - a torch players carry that lights the ground around them, found on a fallen Night Watch Guard in Duskwood at night",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "world-of-warcraft",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-24"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-forever-world-buffs",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "AzerothCore module: WoW Forever world buff rule - world buffs pause in raids and come back with their time left",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "world-of-warcraft",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-26"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-gathering-tools",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "AzerothCore module: Mining and Skinning without a pick or knife; carrying the tool gives +10 skill and 25% faster gathering",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "world-of-warcraft",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-21"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-legacy",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "AzerothCore module: WoW Forever's Legacy system. Account-wide challenges earn points; each character spends them on perk trees (Adventure, Resourcefulness, Professions), picked from the launcher.",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "world-of-warcraft",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-31"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-lfg-progression",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "AGPL-3.0",
+   "description": "AzerothCore module: the Dungeon Finder follows mod-individual-progression (locks dungeons and randoms from eras you haven't reached)",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "world-of-warcraft",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-21"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-lost-legendaries",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "AzerothCore module: lost legendary items back in the game - Talisman of Binding, Shard of the Defiler, Glaive of the Defender, and an Ashbringer quest chain with a summoned boss",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "world-of-warcraft",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-21"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-raid-clear",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 2,
+   "licence": "MIT",
+   "description": "Moved into wow-mod-playerbots (src/Ai/Raid/RaidClear). This repo is archived.",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "playerbots",
+    "world-of-warcraft",
+    "wotlk",
+    "wow"
+   ],
+   "archived": true,
+   "pushed": "2026-10-20"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-raid-finder",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "AGPL-3.0",
+   "description": "AzerothCore module + addon: Raid Finder window that assembles a bot raid (mod-optimal-bot-raid) and gathers it at the meeting stone",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "playerbots",
+    "world-of-warcraft",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-31"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-raid-lockout",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "AzerothCore module: per-raid lockout length in days",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "world-of-warcraft",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-22"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-retail-collection",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Every retail mount and battle pet look from wow-mod-retail-library as a learnable mount or companion: spells, items and creatures for AzerothCore (server module + spell patch builder)",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "world-of-warcraft",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-26"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-retail-pets",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Retail companion pets for AzerothCore 3.3.5a: Red Panda and Red Panda Backpacker, with their retail models",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "world-of-warcraft",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-25"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-retail-professions",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 2,
+   "licence": "MIT",
+   "description": "Retail-style profession window for AzerothCore 3.3.5a: search, filters, skill-up odds, unlearned recipes and where to learn them, recipe tracker, professions book (K). Server module + RetailProfessions addon.",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "world-of-warcraft",
+    "world-of-warcraft-addon",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-31"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-retail-warlock-pets",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Warlock demon looks on 3.3.5a: a look pack for wow-mod-transmog-plus (server module)",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "world-of-warcraft",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-22"
+  },
+  {
+   "repo": "https://github.com/buildthehomelab/wow-mod-vendor-item-preload",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "AzerothCore module: sends a vendor's item details before its list, so vendor windows show every item name the first time they open (also on a freshly emptied client Cache)",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "world-of-warcraft",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-21"
+  },
+  {
    "repo": "https://github.com/Byloth/cmangos-docker",
    "via": [
     "github-topic-page:cmangos"
@@ -919,6 +1970,28 @@
    "description": "AzerothCore module that immediately skips the cooldown of the Hearthstone after use"
   },
   {
+   "repo": "https://github.com/Canon-tech/canon-launcher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Launcher for the Canon private Minecraft community server",
+   "archived": false,
+   "pushed": "2026-10-21"
+  },
+  {
+   "repo": "https://github.com/CaoxKitty/wowcraft-forever-cost-tracker",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "checks the cost of lvling professions in WoW forever from launch",
+   "archived": false,
+   "pushed": "2026-10-21"
+  },
+  {
    "repo": "https://github.com/cbunting99/vMangos-Repack",
    "via": [
     "github-topic-page:vmangos"
@@ -929,6 +2002,230 @@
    "stars": 11
   },
   {
+   "repo": "https://github.com/Checkov23/ForeverDungeonRoutes",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "WoW: Forever addon: routes, boss order and notes for the classic dungeons on the world map, with route editor and import/export",
+   "archived": false,
+   "pushed": "2026-10-13"
+  },
+  {
+   "repo": "https://github.com/ChristianJacobsen/azerothcore-helm",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "Helm chart and images for AzerothCore: WoW WotLK (3.3.5a), vanilla or playerbots",
+   "topics": [
+    "azerothcore",
+    "game-server",
+    "helm",
+    "helm-chart",
+    "homelab",
+    "kubernetes",
+    "mmorpg",
+    "playerbots",
+    "self-hosted",
+    "world-of-warcraft",
+    "wotlk",
+    "wow",
+    "wow-emulator",
+    "wow-private-server",
+    "wrath-of-the-lich-king"
+   ],
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
+   "repo": "https://github.com/ChrisTop700/azerothcore-wotlk-docker-solo-lab",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Turn-key blueprint for running a solo/small-group AzerothCore WotLK (3.3.5a) server using Docker Desktop on Windows with WSL 2, NPCBots, AutoBalance, and automated network backups.",
+   "archived": false,
+   "pushed": "2026-10-25"
+  },
+  {
+   "repo": "https://github.com/cjwhiskers/TriggerBar",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 2,
+   "description": "World of Warcraft: Forever addon that turns the Gamepad UI's four stacked action bars into one flat hotbar with a section for each trigger. Visual only.",
+   "topics": [
+    "action-bars",
+    "controller",
+    "gamepad",
+    "lua",
+    "world-of-warcraft",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-05"
+  },
+  {
+   "repo": "https://github.com/clawdroppin/AzerothCore-ServerManager",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Windows app that builds and manages your own WoW 3.3.5a AzerothCore server with hundreds of AI Playerbots - guided install, plain-language settings, safe updates with rollback, check & repair, backups, friends & Discord.",
+   "topics": [
+    "335a",
+    "azerothcore",
+    "game-server",
+    "ollama",
+    "playerbots",
+    "powershell",
+    "private-server",
+    "server-manager",
+    "windows",
+    "world-of-warcraft",
+    "wotlk",
+    "wow",
+    "wow-server",
+    "wpf"
+   ],
+   "archived": false,
+   "pushed": "2026-10-09"
+  },
+  {
+   "repo": "https://github.com/cmangos/playerbots",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 141,
+   "description": "PlayerBot module forked from https://github.com/celguar/mangosbot-bots",
+   "archived": false,
+   "pushed": "2026-10-28"
+  },
+  {
+   "repo": "https://github.com/CodeNoLimits/dreamnova-ugc-studio",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "DreamNova UGC Studio — Claude skill: UGC reels, talking heads, /brag launch videos, wow icons reel, Hebrew-safe captions, measured QC",
+   "archived": false,
+   "pushed": "2026-10-08"
+  },
+  {
+   "repo": "https://github.com/codxbre/wow-mobile-bannerhub",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Unofficial BannerHub build for playing WoW 3.3.5a on Android with background play",
+   "archived": false,
+   "pushed": "2026-10-18"
+  },
+  {
+   "repo": "https://github.com/CosmicCuddle/N-Addon-Collection",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "description": "A collection of custom World of Warcraft 3.3.5a addons for the Naxxramas AzerothCore server, featuring Individual Progression, Playerbot integration, dungeon guides, and raid loot management.",
+   "archived": false,
+   "pushed": "2026-10-25"
+  },
+  {
+   "repo": "https://github.com/csfh/wow.oma",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "An .oma bundle that launches World of Warcraft through the local wow.sh script",
+   "topics": [
+    "odk",
+    "oma",
+    "world-of-warcraft"
+   ],
+   "archived": false,
+   "pushed": "2026-10-28"
+  },
+  {
+   "repo": "https://github.com/cyberdid/azeroth-worldweaver",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "Natural-language Claude and Codex companions for AzerothCore: shared world telemetry, memory, playerbot actions, hunting, loot and player-confirmed trade.",
+   "topics": [
+    "ai-agents",
+    "azerothcore",
+    "claude",
+    "codex",
+    "game-telemetry",
+    "llm-agents",
+    "playerbots",
+    "world-of-warcraft",
+    "wotlk"
+   ],
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
+   "repo": "https://github.com/dadec666/TomTom-3.3.5a-Modern",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "description": "Modernized TomTom addon for WoW 3.3.5a with Retail-like UI, batch import and performance fixes",
+   "archived": false,
+   "pushed": "2026-10-04"
+  },
+  {
+   "repo": "https://github.com/damienselarez-creator/mod-wow-compagnon",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "Module AzerothCore autonome réunissant gameplay, progression, dialogues et mémoire des compagnons.",
+   "archived": false,
+   "pushed": "2026-10-10"
+  },
+  {
    "repo": "https://github.com/DanieltheDeveloper/azerothcore-transmog-3.3.5a",
    "via": [
     "github-topic-page:azerothcore-lua"
@@ -937,6 +2234,390 @@
     "3.3.5a"
    ],
    "stars": 50
+  },
+  {
+   "repo": "https://github.com/DarckRovert/ProjectJaina_AbbreviatedStatus",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 2,
+   "licence": "MIT",
+   "description": "Abreviación inteligente y compacta de textos de salud y maná para WoW 3.3.5a (Ecosistema Project Jaina)",
+   "topics": [
+    "azerothcore",
+    "project-jaina",
+    "status-text",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/DarckRovert/ProjectJaina_AdminTools",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 2,
+   "licence": "MIT",
+   "description": "Panel integral de comandos de administración, teletransporte y control de servidor para Game Masters en WoW 3.3.5a (Ecosistema Project Jaina)",
+   "topics": [
+    "admin-tools",
+    "azerothcore",
+    "gm-tools",
+    "project-jaina",
+    "world-of-warcraft",
+    "wotlk-335a",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/DarckRovert/ProjectJaina_Carbonite",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 2,
+   "licence": "MIT",
+   "description": "Suite satelital HD de cartografía, navegación y misiones para WoW 3.3.5a (Hardened - Ecosistema Project Jaina)",
+   "topics": [
+    "azerothcore",
+    "carbonite",
+    "navigation",
+    "project-jaina",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-31"
+  },
+  {
+   "repo": "https://github.com/DarckRovert/ProjectJaina_DBM",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 2,
+   "licence": "MIT",
+   "description": "Monorepositorio unificado de Deadly Boss Mods (DBM v4.52) adaptado y estabilizado para Project Jaina (3.3.5a)",
+   "topics": [
+    "azerothcore",
+    "boss-mods",
+    "dbm",
+    "project-jaina",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-23"
+  },
+  {
+   "repo": "https://github.com/DarckRovert/ProjectJaina_GearScore",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 2,
+   "licence": "MIT",
+   "description": "Monorepositorio unificado de GearScore (3.1.16) y BonusScanner (5.3) optimizado para Project Jaina (3.3.5a)",
+   "topics": [
+    "azerothcore",
+    "gearscore",
+    "project-jaina",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/DarckRovert/ProjectJaina_GMGenie",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "Suite integral de herramientas administrativas para Game Masters en WoW 3.3.5a / AzerothCore (Ecosistema Project Jaina)",
+   "topics": [
+    "azerothcore",
+    "gm-tools",
+    "project-jaina",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/DarckRovert/ProjectJaina_Graphics",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 2,
+   "licence": "MIT",
+   "description": "Suite Gráfica HD & Control de Renderizado Nativo para World of Warcraft 3.3.5a (Ecosistema Project Jaina)",
+   "topics": [
+    "azerothcore",
+    "directx9",
+    "graphics",
+    "hd-graphics",
+    "project-jaina",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/DarckRovert/ProjectJaina_IntiObjGPS",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "Editor por lotes de coordenadas GPS de GameObjects para Game Masters (Ecosistema Project Jaina)",
+   "topics": [
+    "azerothcore",
+    "gm-tools",
+    "project-jaina",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/DarckRovert/ProjectJaina_LoreHUD",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "Subtítulos cinematográficos y HUD de estado narrativo para LoreBots en WoW 3.3.5a (Ecosistema Project Jaina)",
+   "topics": [
+    "azerothcore",
+    "cinematic",
+    "lorebots",
+    "project-jaina",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/DarckRovert/ProjectJaina_MultiBot",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 2,
+   "licence": "MIT",
+   "description": "Interfaz gráfica integral para control, estrategias y gestión de Playerbots (mod-playerbots) en WoW 3.3.5a (Ecosistema Project Jaina)",
+   "topics": [
+    "azerothcore",
+    "mod-playerbots",
+    "multibot",
+    "playerbots",
+    "project-jaina",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/DarckRovert/ProjectJaina_Polyglot",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "Neural multi-language dynamic chat translation module for Project Jaina (WotLK 3.3.5a)",
+   "topics": [
+    "azerothcore",
+    "chat-translator",
+    "localization",
+    "project-jaina",
+    "translation",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/DarckRovert/ProjectJaina_PrideTrace",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "Herramienta de diagnóstico y telemetría de input en vuelo de solo lectura para Project Jaina",
+   "topics": [
+    "azerothcore",
+    "project-jaina",
+    "qa-tools",
+    "telemetry",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/DarckRovert/ProjectJaina_Radio",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "In-game streaming audio and radio entertainment suite for Project Jaina (WotLK 3.3.5a)",
+   "topics": [
+    "azerothcore",
+    "in-game-radio",
+    "multimedia",
+    "project-jaina",
+    "streaming-audio",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/DarckRovert/ProjectJaina_Talented",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 2,
+   "licence": "MIT",
+   "description": "Editor integral de plantillas de talentos, calculadoras de mascotas y glifos para WoW 3.3.5a (Ecosistema Project Jaina)",
+   "topics": [
+    "azerothcore",
+    "project-jaina",
+    "talents",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/DarckRovert/ProjectJaina_TBCBalance",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "Indicador privado de balance y composición de bandas TBC para Game Masters (Ecosistema Project Jaina)",
+   "topics": [
+    "azerothcore",
+    "gm-tools",
+    "project-jaina",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/DarckRovert/ProjectJaina_Voice",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 2,
+   "licence": "MIT",
+   "description": "Sistema de Voz Espacial 3D y Proximidad WebRTC para Project Jaina (WotLK 3.3.5a)",
+   "topics": [
+    "azerothcore",
+    "project-jaina",
+    "spatial-audio",
+    "webrtc",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/DarckRovert/ProjectJaina_Wardrobe",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "Guardarropa, catálogo cosmético y sistema de transfiguración visual para Project Jaina (3.3.5a)",
+   "topics": [
+    "azerothcore",
+    "project-jaina",
+    "transmog",
+    "wardrobe",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/DarkSoe/DBCraft",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "DBCraft: An open-source, database editor written by scratch in pure Rust",
+   "archived": false,
+   "pushed": "2026-10-22"
   },
   {
    "repo": "https://github.com/Day36512/mod-reagent-bank-account",
@@ -961,6 +2642,18 @@
    "stars": 10
   },
   {
+   "repo": "https://github.com/ddingning/woworoot",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "GPL-3.0",
+   "description": "vivo Android root research and kernel exploration.",
+   "archived": false,
+   "pushed": "2026-10-27"
+  },
+  {
    "repo": "https://github.com/DedInc/wrobot-auto-trial",
    "via": [
     "github-topic-page:tbc"
@@ -971,12 +2664,63 @@
    "stars": 9
   },
   {
+   "repo": "https://github.com/DeepCapt/ahledger-sync",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 2,
+   "description": "Source of AHledger sync and the AHledger addon (World of Warcraft: Forever auction house prices). Source-available: read it, build it, verify what it does.",
+   "topics": [
+    "auction-house",
+    "tauri",
+    "world-of-warcraft",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-12"
+  },
+  {
    "repo": "https://github.com/defsky/Registration-Page",
    "via": [
     "github-topic-page:mangos"
    ],
    "builds": [],
    "stars": 3
+  },
+  {
+   "repo": "https://github.com/DenoHearth/DenoMap",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "The world map of every Forever zone in four times the resolution, discovered areas, zone highlights and flight maps included, deeper zoom, and the minimap in 4K too.",
+   "topics": [
+    "4k",
+    "addon",
+    "classic-plus",
+    "forever",
+    "hd-map",
+    "hd-textures",
+    "lua",
+    "map",
+    "minimap",
+    "real-esrgan",
+    "texture-pack",
+    "ui",
+    "upscaling",
+    "warcraft",
+    "world-map",
+    "world-of-warcraft",
+    "wow",
+    "wow-addon",
+    "wow-classic",
+    "wow-forever"
+   ],
+   "archived": false,
+   "pushed": "2026-10-20"
   },
   {
    "repo": "https://github.com/deseven/mod-pbc",
@@ -990,6 +2734,65 @@
    "description": "A character-focused LLM integration for AzerothCore/Playerbots"
   },
   {
+   "repo": "https://github.com/DigitalMindDesign/Launcher-Dauntless-Private-Server",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 3,
+   "licence": "AGPL-3.0",
+   "description": "Launcher Windows pour jouer a Dauntless 1.4.4 sur un serveur prive Dauntless Revived, entre amis via Tailscale",
+   "archived": false,
+   "pushed": "2026-10-18"
+  },
+  {
+   "repo": "https://github.com/Dinkleberrrg/MikScrollingBattleText",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "1.12"
+   ],
+   "stars": 0,
+   "description": "Mirror of the MikScrollingBattleText folder from pepopo978/Vanilla_MikScrollingBattleText (MSBT 4.43 for WoW 1.12, Turtle/OctoWoW spells) for the Octo launcher.",
+   "archived": false,
+   "pushed": "2026-10-02"
+  },
+  {
+   "repo": "https://github.com/dlss5-one-click/DLSS5-One-Click",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "DLSS 5 One Click 0.14.1 drops witcher 3, wow, reshade after the dll lands. feeder pair, amd gate, dlss5oneclick stamp, admin prompt, raid nights, shader stack, elixir mix, vendor stall extra. ",
+   "topics": [
+    "dlss",
+    "dlss-4-5",
+    "dlss-5-amd",
+    "dlss-5-cyberpunk",
+    "dlss-5-feeder",
+    "dlss-5-gta-5",
+    "dlss-5-mod",
+    "dlss-5-nvidia",
+    "dlss-5-release",
+    "dlss-5-renodx",
+    "dlss-5-reshade",
+    "dlss5",
+    "dlss5oneclick",
+    "gta-5-dlss-5",
+    "nvidia-dlss-5",
+    "renodx",
+    "renodx-dlss-5",
+    "reshade",
+    "reshade-dlss-5",
+    "skyrim-dlss-5"
+   ],
+   "archived": false,
+   "pushed": "2026-10-28"
+  },
+  {
    "repo": "https://github.com/DMCK96/azeroth-world-editor",
    "via": [
     "web:github topic pages 2026-10-30"
@@ -998,6 +2801,35 @@
     "3.3.5a"
    ],
    "stars": 16
+  },
+  {
+   "repo": "https://github.com/Dopey99101/wow-3.3.5a-launcher-updates",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "The home for RealmVoyager launcher updates for WoW 3.3.5a, including new artwork, layout improvements, features, and bug fixes. Download only the latest release to keep your launcher up to date—it includes all previous launcher updates, so there’s no need to download older versions.",
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/Dragnogd/Instance-Achievement-Tracker",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 16,
+   "description": "Track the completion and failure of achievements in raids and dungeons",
+   "topics": [
+    "warcraft-addon",
+    "world-of-warcraft",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-18"
   },
   {
    "repo": "https://github.com/drfdev/turtle-wow-loot-navigator",
@@ -1010,15 +2842,72 @@
    "stars": 3
   },
   {
-   "repo": "https://github.com/DustinHendrickson/mod-classless-wildcard",
+   "repo": "https://github.com/dudemcbro/mod-dk",
    "via": [
-    "github-topic-page:azerothcore-module"
+    "scout:github:new"
    ],
    "builds": [
     "3.3.5a"
    ],
-   "stars": 51,
-   "description": "A re-creation and re-imagining of the Ascension Classless and Wildcard system"
+   "stars": 2,
+   "licence": "GPL-3.0",
+   "description": "AzerothCore module: Death Knights level from 1 like other classes, with trainer-taught spells and low-level scaling.",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "death-knight",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-13"
+  },
+  {
+   "repo": "https://github.com/DukulWoW/BigChatBox",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "licence": "GPL-3.0",
+   "description": "An easily customizable chat input box with channel display, history, scaling, full appearance control, snippet system, auto-complete and much more.",
+   "topics": [
+    "addon",
+    "addons",
+    "world-of-warcraft",
+    "world-of-warcraft-addon",
+    "world-of-warcraft-classic",
+    "worldofwarcraft",
+    "wow",
+    "wow-addon",
+    "wow-addons",
+    "wow-classic-addon",
+    "wow-forever",
+    "wow-midnight",
+    "wow-retail",
+    "wowaddon",
+    "wowaddons"
+   ],
+   "archived": false,
+   "pushed": "2026-10-11"
+  },
+  {
+   "repo": "https://github.com/DustinHendrickson/mod-classless-wildcard",
+   "via": [
+    "github-topic-page:azerothcore-module",
+    "scout:github:risers"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 56,
+   "description": "A re-creation and re-imagining of the Ascension Classless and Wildcard system",
+   "licence": "GPL-2.0",
+   "topics": [
+    "azerothcore-module"
+   ],
+   "archived": false,
+   "pushed": "2026-10-25"
   },
   {
    "repo": "https://github.com/DustinHendrickson/mod-ollama-bot-buddy",
@@ -1059,6 +2948,142 @@
    ],
    "builds": [],
    "stars": 11
+  },
+  {
+   "repo": "https://github.com/ebreen/azeroth-survivors-ps5",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Play Azeroth Survivors (Aethus's WoW roguelike) on a jailbroken PS5 via prospero-win: launcher profile, DualSense preset, one-command installer and updater",
+   "topics": [
+    "azeroth-survivors",
+    "prospero-win",
+    "ps5",
+    "ps5-homebrew",
+    "wine"
+   ],
+   "archived": false,
+   "pushed": "2026-10-26"
+  },
+  {
+   "repo": "https://github.com/Eldodeldo/EldoUI",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "licence": "Apache-2.0",
+   "description": "An AI-made, deeply modular UI addon for WoW: Forever. More than 90 modules you can turn on or off, ten ready-made layouts, four roles and one consistent look across every window.",
+   "topics": [
+    "action-bars",
+    "addon",
+    "lua",
+    "nameplates",
+    "ui",
+    "unit-frames",
+    "user-interface",
+    "world-of-warcraft",
+    "wow-addon",
+    "wow-forever"
+   ],
+   "archived": false,
+   "pushed": "2026-10-28"
+  },
+  {
+   "repo": "https://github.com/electrobutterfly/mod-afk-kicker",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 2,
+   "licence": "GPL-2.0",
+   "description": "A module for AzerothCore that automatically kicks players who remain AFK (Away From Keyboard) for longer than a configurable duration, useful for high-population servers where inactive sessions consume player slots, memory, and CPU.",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "hacktoberfest"
+   ],
+   "archived": false,
+   "pushed": "2026-10-21"
+  },
+  {
+   "repo": "https://github.com/electrobutterfly/mod-ip-limiter",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "GPL-2.0",
+   "description": "A module for AzerothCore that limits how many players may connect from a single IP address. When the limit is exceeded, every, or the last joining player from that IP is kicked. Specific IP addresses (e.g. internet cafés, LAN parties, or your own office) can be whitelisted and exempted from the limit.",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "hacktoberfest"
+   ],
+   "archived": false,
+   "pushed": "2026-10-21"
+  },
+  {
+   "repo": "https://github.com/electrobutterfly/mod-playerbots-auctioneer",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "GPL-2.0",
+   "description": "Playerbots-Auctioneer is a heavily modified [mod-playerbots] fork for AzerothCore which provides an auction-house and vendor self contained economy for the bot population.",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "hacktoberfest",
+    "playerbots",
+    "playerbots-auctioneer"
+   ],
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
+   "repo": "https://github.com/electrobutterfly/trinitycore-afk-kicker",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "A module for TrinityCore that automatically kicks players who remain AFK (Away From Keyboard) for longer than a configurable duration, useful for high-population servers where inactive sessions consume player slots, memory, and CPU.",
+   "topics": [
+    "trinitycore",
+    "trinitycore-custom"
+   ],
+   "archived": false,
+   "pushed": "2026-10-18"
+  },
+  {
+   "repo": "https://github.com/electrobutterfly/trinitycore-ip-limiter",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "A module for AzerothCore that limits how many players may connect from a single IP address. When the limit is exceeded, every player, or the last joining player from that IP is kicked. Specific IP addresses (e.g. internet cafés, LAN parties, or your own office) can be whitelisted and exempted from the limit.",
+   "topics": [
+    "trinitycore",
+    "trinitycore-custom"
+   ],
+   "archived": false,
+   "pushed": "2026-10-18"
   },
   {
    "repo": "https://github.com/ElunaLuaEngine/Eluna",
@@ -1137,6 +3162,42 @@
    "stars": 487
   },
   {
+   "repo": "https://github.com/ericssm/mod-playerbots-city-life",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "mod-playerbots-city-life continue",
+   "archived": false,
+   "pushed": "2026-10-24"
+  },
+  {
+   "repo": "https://github.com/errordnk/altbot",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "WoW 3.3.5a (WotLK) addon for questing and levelling with your own alt-bots (mod-playerbots, AzerothCore): raid stats board, action bar, per-bot bags, armory, strategies, quest log and spellbook",
+   "topics": [
+    "3-3-5a",
+    "azerothcore",
+    "lua",
+    "mod-playerbots",
+    "playerbots",
+    "world-of-warcraft",
+    "wotlk",
+    "wow",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-18"
+  },
+  {
    "repo": "https://github.com/EsreverWoW/ShestakUI_Classic",
    "via": [
     "github-topic-page:tbc",
@@ -1147,6 +3208,99 @@
     "3.3.5a"
    ],
    "stars": 129
+  },
+  {
+   "repo": "https://github.com/evil-morfar/RCLootCouncil2",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 23,
+   "licence": "LGPL-3.0",
+   "description": "RCLootCouncil - addon for World of Warcraft",
+   "topics": [
+    "rclootcouncil",
+    "world-of-warcraft",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/EvilTactician/ac-commit-report",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Commit Report for my Azerothcore Modules",
+   "archived": false,
+   "pushed": "2026-10-27"
+  },
+  {
+   "repo": "https://github.com/faroke/EchoTomeFinder",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "WoW 3.3.5 addon for Project Ebonhold: highlights Echo Tomes in bags, banks and loot rolls, and tells which of your characters want them.",
+   "topics": [
+    "lua",
+    "project-ebonhold",
+    "world-of-warcraft",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-17"
+  },
+  {
+   "repo": "https://github.com/ferrancasbasp/wow_rpg_next",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "RPG de sesión con motor compartido (core) y clientes web (player)",
+   "archived": false,
+   "pushed": "2026-10-07"
+  },
+  {
+   "repo": "https://github.com/filinodz/ForeverMegaSQLPack",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "Audited Classic content pack for ForeverRepack and ForeverCore: teleporters, profession travel and verified vendors.",
+   "topics": [
+    "classic-wow",
+    "forevercore",
+    "foreverrepack",
+    "sql",
+    "trinitycore",
+    "world-of-warcraft"
+   ],
+   "archived": false,
+   "pushed": "2026-10-13"
+  },
+  {
+   "repo": "https://github.com/FirzaOs-arch/Pixel-launch-Sawit-Wowo",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "This application make from FirzaOs. This launcher very cool and easily for telphone, elegen, simple, turbo fast, animation, appdrawer Nova. And other option launcher. And me add name \"Sawit Wowo\" in my project application. Join this app.",
+   "archived": false,
+   "pushed": "2026-10-15"
   },
   {
    "repo": "https://github.com/Foereaper/CSMH",
@@ -1272,6 +3426,54 @@
    "stars": 122
   },
   {
+   "repo": "https://github.com/FrontMage/WoWBox",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 2,
+   "licence": "MIT",
+   "description": "Android runtime for Battle.net and World of Warcraft, based on Winlator.",
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/fun3588/firestorm-tww-multi-account-login",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Firestorm (TWW 11.2.5) 多账号管理与一键免密/令牌登录器 | Multi-account manager & one-click token launcher for WoW 11.2.5",
+   "topics": [
+    "csharp",
+    "dotnet8",
+    "firestorm",
+    "game-launcher",
+    "multi-account",
+    "the-war-within",
+    "token-login",
+    "winforms",
+    "world-of-warcraft"
+   ],
+   "archived": false,
+   "pushed": "2026-10-07"
+  },
+  {
+   "repo": "https://github.com/FunMonkeyDev/WoWPeruLandGearExport",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Addon para exportar el gear de versiones 3.3.5 como WowPeruLand",
+   "archived": false,
+   "pushed": "2026-10-10"
+  },
+  {
    "repo": "https://github.com/FusionWowCMS/FusionCMS",
    "via": [
     "github-topic-page:azerothcore"
@@ -1302,6 +3504,84 @@
    "stars": 5
   },
   {
+   "repo": "https://github.com/gadaffihub/wow-forever-model-viewer",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Custom local model and sound viewer for the installed WoW Forever Beta, with automatic or manual installation selection.",
+   "archived": false,
+   "pushed": "2026-10-16"
+  },
+  {
+   "repo": "https://github.com/GalacticWandererAddon/BattlefieldInfo",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 6,
+   "description": "Addon for Wow Era Battlefield Map. (and wow Forever when it releases)",
+   "topics": [
+    "classic-era",
+    "lua",
+    "map",
+    "world-of-warcraft",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-27"
+  },
+  {
+   "repo": "https://github.com/Galikai/wow-forever-dressing-room-android",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "archived": false,
+   "pushed": "2026-10-09"
+  },
+  {
+   "repo": "https://github.com/Garretonzo/mod-hardcore-high-risk",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "module for azerothcore for high risk realms with loot dropping and death/resets for playerbots",
+   "archived": false,
+   "pushed": "2026-10-01"
+  },
+  {
+   "repo": "https://github.com/garwin00/is-wow-forever-out-yet",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Is WoW Forever out yet? A countdown to launch.",
+   "archived": false,
+   "pushed": "2026-10-06"
+  },
+  {
+   "repo": "https://github.com/Geeksterer/SavedLockouts",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-3.0",
+   "description": "A lightweight World of Warcraft 3.3.5 addon that tracks and displays raid lockout statuses across all characters.",
+   "archived": false,
+   "pushed": "2026-10-23"
+  },
+  {
    "repo": "https://github.com/Gel88566ight/mod-rpocket-playerbots",
    "via": [
     "github-topic-page:wotlk"
@@ -1312,6 +3592,32 @@
    "stars": 32
   },
   {
+   "repo": "https://github.com/Geraldlol/witchcraft",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 2,
+   "licence": "MIT",
+   "description": "Claude Code and Codex inside WoW Forever, with terminal tabs and a WoW MCP server for character context, quests and Lua errors. Free, open source, Windows.",
+   "topics": [
+    "claude-code",
+    "codex",
+    "lua",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "nodejs",
+    "terminal",
+    "windows",
+    "world-of-warcraft",
+    "wow-addon",
+    "wow-forever"
+   ],
+   "archived": false,
+   "pushed": "2026-10-04"
+  },
+  {
    "repo": "https://github.com/gitdalisar/mod-Faction-Free",
    "via": [
     "github-topic-page:azerothcore-module"
@@ -1320,6 +3626,23 @@
     "3.3.5a"
    ],
    "stars": 34
+  },
+  {
+   "repo": "https://github.com/glitterfartz/wpp-vscode-syntax",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "VS Code extension for TrinityCore / WowPacketParser parsed text captures.",
+   "topics": [
+    "trinitycore",
+    "world-of-warcraft",
+    "worldofwarcraft",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-10"
   },
   {
    "repo": "https://github.com/GoldpawsStuff/AzeriteUI5",
@@ -1341,6 +3664,61 @@
    "description": "AzerothCore Module for an Advanced Global Chat"
   },
   {
+   "repo": "https://github.com/graeme02015-ctrl/SingleButtonRotation",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Blizzlike action bar icon that dynamically updates with spell cast, contains rotation for all specs/classes except healers. Addon roations are broken down into seperate Lua files for easier editing and customisation. This addon is azerothcore 3.3.5 but it should work in any lua unlocked 3.3.5 client/server.",
+   "archived": false,
+   "pushed": "2026-10-11"
+  },
+  {
+   "repo": "https://github.com/greenya/ClassicUA",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 24,
+   "description": "World of Warcraft: Classic Ukrainization Addon",
+   "topics": [
+    "localization",
+    "lua",
+    "ukrainian",
+    "world-of-warcraft",
+    "wow",
+    "wow-addon",
+    "wow-classic"
+   ],
+   "archived": false,
+   "pushed": "2026-10-28"
+  },
+  {
+   "repo": "https://github.com/gregoryjayuk/vmangos-toolkit",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "1.12"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Tools for a private vanilla WoW server on vMaNGOS: an auction-house economy modelled on real item scarcity, a generated level-40 quest chain, persistent party-bot companions, and all 727 GM commands.",
+   "topics": [
+    "game-server",
+    "mangos",
+    "python",
+    "sql",
+    "vmangos",
+    "world-of-warcraft"
+   ],
+   "archived": false,
+   "pushed": "2026-10-18"
+  },
+  {
    "repo": "https://github.com/Grim-Batol/Paragon-Anniversary",
    "via": [
     "github-topic-page:azerothcore-lua"
@@ -1349,6 +3727,55 @@
     "3.3.5a"
    ],
    "stars": 34
+  },
+  {
+   "repo": "https://github.com/GrimfallAddonFixes/recount-grimfall",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Recount for Grimfall WoW 3.3.5 with Greater Skeletal Warrior damage attribution. Single-folder addon download.",
+   "archived": false,
+   "pushed": "2026-10-24"
+  },
+  {
+   "repo": "https://github.com/gsehun811-cloud/mod-playerbots-llm-commander",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "LLM Commander and raid preparation extensions for AzerothCore mod-playerbots.",
+   "archived": false,
+   "pushed": "2026-10-01"
+  },
+  {
+   "repo": "https://github.com/gsehun811-cloud/mod-raid-manager",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "AzerothCore Raid Manager — Automated raid formation, role balancing, and intelligent equipment preparation for Playerbots.",
+   "topics": [
+    "azerothcore",
+    "cplusplus",
+    "playerbots",
+    "raid-manager",
+    "world-of-warcraft",
+    "wotlk"
+   ],
+   "archived": false,
+   "pushed": "2026-10-27"
   },
   {
    "repo": "https://github.com/gslance/cmangos-playerbot-manager",
@@ -1367,6 +3794,69 @@
    "builds": [],
    "stars": 34,
    "description": "A custom launcher and patcher for private servers."
+  },
+  {
+   "repo": "https://github.com/gswxy/GSWXY-Realm",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "AGPL-3.0",
+   "description": "GSWXY Realm - fnOS Native AzerothCore Playerbots Server Distribution (no Docker, bundled DB, zhCN data)",
+   "archived": false,
+   "pushed": "2026-10-08"
+  },
+  {
+   "repo": "https://github.com/Harakty/ForeverTools",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Personal WoW Forever launcher and on-demand addon catalogue — planning and API-access evaluation",
+   "archived": false,
+   "pushed": "2026-10-10"
+  },
+  {
+   "repo": "https://github.com/hastecraft/super-tweaks",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 4,
+   "licence": "MPL-2.0",
+   "description": "Opinionated and highly optimized quality-of-life tweaks for WoW Forever in one neat package.",
+   "topics": [
+    "addon",
+    "lua",
+    "warcraft",
+    "world-of-warcraft",
+    "wow-addon",
+    "wow-forever"
+   ],
+   "archived": false,
+   "pushed": "2026-10-25"
+  },
+  {
+   "repo": "https://github.com/Hearts47/RunPace",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "Azeroth Survivors addon: kills/min and XP/min tracker with low-HP, enemy-count and boss alerts.",
+   "topics": [
+    "azeroth-survivors",
+    "lua",
+    "wow-1-12",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
   },
   {
    "repo": "https://github.com/Helias/BG-Queue-Abuser-Viewer",
@@ -1447,6 +3937,17 @@
    "stars": 10
   },
   {
+   "repo": "https://github.com/hemantpatle153-ops/wowcity-downloads",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Downloadable WowCity installers (Windows and Android, no source)",
+   "archived": false,
+   "pushed": "2026-10-26"
+  },
+  {
    "repo": "https://github.com/henhouse/live-player-map",
    "via": [
     "github-topic-page:mangos"
@@ -1479,13 +3980,45 @@
   {
    "repo": "https://github.com/heyitsbench/mod-worgoblin",
    "via": [
-    "github-topic-page:azerothcore-module"
+    "github-topic-page:azerothcore-module",
+    "scout:github:risers"
    ],
    "builds": [
     "3.3.5a"
    ],
-   "stars": 39,
-   "description": "Module for AzerothCore that adds Worgen and Goblin as playable races."
+   "stars": 40,
+   "description": "Module for AzerothCore that adds Worgen and Goblin as playable races.",
+   "licence": "AGPL-3.0",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module"
+   ],
+   "archived": false,
+   "pushed": "2026-10-18"
+  },
+  {
+   "repo": "https://github.com/Highest-V/RAY",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Addon for the game WOW 3.3.5 like a remembering about self skills. RAY - Remember About Yourself",
+   "archived": false,
+   "pushed": "2026-10-27"
+  },
+  {
+   "repo": "https://github.com/highlylikely2169-lgtm/QuestCompass",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "QuestCompass WoW Forever addon and launcher",
+   "archived": false,
+   "pushed": "2026-10-23"
   },
   {
    "repo": "https://github.com/Hokken/Chatter-Companion",
@@ -1521,6 +4054,112 @@
    "description": "An AI-powered in-game assistant for AzerothCore"
   },
   {
+   "repo": "https://github.com/iamstupidplaceholder/benilla-wasm",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "1.12"
+   ],
+   "stars": 0,
+   "licence": "Apache-2.0",
+   "description": "WebAssembly browser port of benilla, a Rust/Bevy WoW 1.12.1 client. English and Russian localization. No game assets included.",
+   "archived": false,
+   "pushed": "2026-10-06"
+  },
+  {
+   "repo": "https://github.com/Ildourol/mod-all-flightpaths",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Automatically discovers and unlocks all faction-appropriate flight/taxi paths across all continents upon character login.",
+   "topics": [
+    "azerothcore-module"
+   ],
+   "archived": false,
+   "pushed": "2026-10-03"
+  },
+  {
+   "repo": "https://github.com/Ildourol/mod-playerbots-artisans",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Enhances crafting immersion by making crafting bots advertise their trade services in Trade and General channels.",
+   "topics": [
+    "azerothcore-module"
+   ],
+   "archived": false,
+   "pushed": "2026-10-03"
+  },
+  {
+   "repo": "https://github.com/Ildourol/mod-playerbots-city-life",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Populates capital cities and major hubs (Stormwind, Orgrimmar, Ironforge, etc.) with ambient bot foot traffic.",
+   "topics": [
+    "azerothcore-module"
+   ],
+   "archived": true,
+   "pushed": "2026-10-21"
+  },
+  {
+   "repo": "https://github.com/Ildourol/mod-playerbots-pvp-life",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "Generates dynamic open-world PvP skirmishes and continuous dueling activity for playerbots.",
+   "topics": [
+    "azerothcore-module"
+   ],
+   "archived": true,
+   "pushed": "2026-10-12"
+  },
+  {
+   "repo": "https://github.com/Ildourol/Playerbots-Life-Dashboard",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Real-time World of Warcraft 3.3.5a dashboard for AzerothCore Playerbots City Life and PvP Life modules. Monitor bot activities, populations, schedules, PvP encounters, and locations with interactive management tools and live updates.",
+   "archived": true,
+   "pushed": "2026-10-13"
+  },
+  {
+   "repo": "https://github.com/ilusixn/coa-item-search",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "description": "WoW 3.3.5 addon for Conquest of Azeroth servers: search every item by name or id and add it with one click",
+   "archived": false,
+   "pushed": "2026-10-10"
+  },
+  {
    "repo": "https://github.com/impulseffs/NameSpoofer",
    "via": [
     "github-topic-page:wotlk-addon"
@@ -1531,6 +4170,30 @@
    "stars": 3
   },
   {
+   "repo": "https://github.com/imrooniel/azerothcore-wotlk-necromancer-fixed",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "AzerothCore WotLK Necromancer class module",
+   "archived": false,
+   "pushed": "2026-10-19"
+  },
+  {
+   "repo": "https://github.com/Irgis25/capybara-launcher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Desktop launcher for private, invite-only modded Minecraft community servers",
+   "archived": false,
+   "pushed": "2026-10-10"
+  },
+  {
    "repo": "https://github.com/Isidorsson/Eluna-scripts",
    "via": [
     "github-topic-page:azerothcore-lua"
@@ -1539,6 +4202,109 @@
     "3.3.5a"
    ],
    "stars": 106
+  },
+  {
+   "repo": "https://github.com/italicninja/mod-cortex-chat",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "AzerothCore module: playerbots answer real players' chat in character through an LLM (Anthropic, OpenAI-compatible, Ollama)",
+   "archived": false,
+   "pushed": "2026-10-22"
+  },
+  {
+   "repo": "https://github.com/italicninja/mod-forge",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "AzerothCore module: PoE-style generated loot (affixes, Legendaries, Uniques, spell affixes)",
+   "archived": false,
+   "pushed": "2026-10-23"
+  },
+  {
+   "repo": "https://github.com/jacobjdowning/battlenet-umu",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "A Nix Flake that provides a Home-Manager module to declaratively configure Battle.net games and WoW addons using umu-launcher and instawow",
+   "archived": false,
+   "pushed": "2026-10-28"
+  },
+  {
+   "repo": "https://github.com/Jakobzs/VoA25-3.3.5",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Spec run invite addon for VoA 25, targeting the 3.3.5 addon",
+   "archived": false,
+   "pushed": "2026-10-02"
+  },
+  {
+   "repo": "https://github.com/jaredgei/wow-forever-android",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 121,
+   "licence": "GPL-3.0",
+   "description": "Play the World of Warcraft: Forever beta natively on Snapdragon 8 Series / 8 Elite Android devices (AYN Thor, RP6, Odin Portal, Galaxy). Standalone launcher forked from GameNative.",
+   "archived": false,
+   "pushed": "2026-10-28"
+  },
+  {
+   "repo": "https://github.com/Jedrimos/hotlk-launcher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Game launcher for Home of the Lich King (WoW 3.3.5a private server)",
+   "archived": false,
+   "pushed": "2026-10-28"
+  },
+  {
+   "repo": "https://github.com/jeff-arn/wow-model-viewer",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "1.12"
+   ],
+   "stars": 0,
+   "description": "Native linux model viewer for WoW 1.12.1 client",
+   "archived": false,
+   "pushed": "2026-10-18"
+  },
+  {
+   "repo": "https://github.com/jibay442/forever_docker",
+   "via": [
+    "scout:github:new",
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 33,
+   "licence": "GPL-2.0",
+   "description": "Self-hosted WoW Forever server for you and your friends. TrinityCore + Docker, a web portal for quick account creation, and a Windows/macOS/Linux launcher with auto-login. No realmlist edits needed.",
+   "archived": false,
+   "pushed": "2026-10-18"
   },
   {
    "repo": "https://github.com/Jnnshschl/AmeisenNavigation",
@@ -1573,6 +4339,42 @@
    "description": "Run CMaNGOS using Docker!"
   },
   {
+   "repo": "https://github.com/jzmlucas/wow-wotlk-playerbots-herald",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "Kit local de self-host para WoW WotLK 3.3.5a com Playerbots e addon Herald.",
+   "archived": false,
+   "pushed": "2026-10-28"
+  },
+  {
+   "repo": "https://github.com/ka6a4ekk/botLauncher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "This project is a custom made json config editor for WoW bot farm",
+   "archived": false,
+   "pushed": "2026-10-09"
+  },
+  {
+   "repo": "https://github.com/Karrz1/Karrz-playerbots-wow-forever",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 4,
+   "licence": "GPL-2.0",
+   "archived": false,
+   "pushed": "2026-10-31"
+  },
+  {
    "repo": "https://github.com/kasperfriend/friends-graphics",
    "via": [
     "web:github topic pages 2026-10-30"
@@ -1581,6 +4383,34 @@
     "3.3.5a"
    ],
    "stars": 1
+  },
+  {
+   "repo": "https://github.com/kbtoy/mod-last_name",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "This module creates a quest that is obtainable starting at level 20, sent via the mailbox, upon completion you will be able to enter a last name.",
+   "topics": [
+    "azerothcore-module"
+   ],
+   "archived": false,
+   "pushed": "2026-10-02"
+  },
+  {
+   "repo": "https://github.com/kcham01/Raidscribe",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "GPL-3.0",
+   "description": "WOW instance summarizer for Android & Widows.",
+   "archived": false,
+   "pushed": "2026-10-22"
   },
   {
    "repo": "https://github.com/Kelsidavis/WoWee",
@@ -1595,6 +4425,103 @@
    "stars": 1000
   },
   {
+   "repo": "https://github.com/KesaObscura/FullManaForever",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "World of Warcraft: Forever addon for healers and every mana user: lights up your mana potion, rune, mana gem or own mana spell (Evocation, Innervate, Mana Tide...) the moment it is ready and fits your missing mana. Mana bar with the five-second rule (5SR) and live mana regen, also in combat. 9 languages.",
+   "topics": [
+    "addon",
+    "classic-plus",
+    "consumables",
+    "curseforge",
+    "five-second-rule",
+    "healer",
+    "lua",
+    "mana",
+    "mana-potion",
+    "mana-regen",
+    "world-of-warcraft",
+    "world-of-warcraft-addon",
+    "world-of-warcraft-forever",
+    "wow",
+    "wow-addon",
+    "wow-forever"
+   ],
+   "archived": false,
+   "pushed": "2026-10-25"
+  },
+  {
+   "repo": "https://github.com/KesaObscura/VertiCrop",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "World of Warcraft addon for content creators: an in-game 9:16 crop frame with YouTube Shorts, TikTok and Instagram Reels safe zones. Lay out your UI for vertical video before you hit record. Retail, Classic and WoW Forever. 9 languages.",
+   "topics": [
+    "aspect-ratio",
+    "content-creator",
+    "instagram-reels",
+    "lua",
+    "obs",
+    "overlay",
+    "safe-zone",
+    "streaming",
+    "tiktok",
+    "vertical-video",
+    "warcraft-addon",
+    "world-of-warcraft",
+    "wow-addon",
+    "wow-classic",
+    "wow-forever",
+    "youtube-shorts"
+   ],
+   "archived": false,
+   "pushed": "2026-10-25"
+  },
+  {
+   "repo": "https://github.com/ketho-wow/KethoDoc",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 28,
+   "licence": "MIT",
+   "description": "Dumps the WoW API",
+   "topics": [
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-24"
+  },
+  {
+   "repo": "https://github.com/Kevinn2709/Meca-Launcher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "  Launcher for a private, friends-only Minecraft: Java Edition server. NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.",
+   "archived": false,
+   "pushed": "2026-10-11"
+  },
+  {
+   "repo": "https://github.com/Khaoz-dev/khaoz-launcher-releases",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Khaoz Server WoW",
+   "archived": false,
+   "pushed": "2026-10-31"
+  },
+  {
    "repo": "https://github.com/Kirazul/Transmorpher",
    "via": [
     "github-topic-page:wotlk"
@@ -1605,12 +4532,233 @@
    "stars": 34
   },
   {
+   "repo": "https://github.com/kk8o/wuxian-workshop",
+   "via": [
+    "scout:github:new",
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 15,
+   "licence": "MIT",
+   "description": "无限工坊：用AI写魔兽插件",
+   "topics": [
+    "ai-agent",
+    "claude-code",
+    "lua",
+    "mcp",
+    "windows",
+    "world-of-warcraft",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-27"
+  },
+  {
+   "repo": "https://github.com/L333T/mf-route-tool",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Master Farmer Route Tool - all WoW versions (Master Farmer launcher build)",
+   "archived": false,
+   "pushed": "2026-10-28"
+  },
+  {
+   "repo": "https://github.com/L333T/sp-pull",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Slave Pens Mage Solo Pull - WoW Classic TBC Anniversary (Master Farmer launcher build)",
+   "archived": false,
+   "pushed": "2026-10-26"
+  },
+  {
    "repo": "https://github.com/lasyan3/TrinityCore-Single",
    "via": [
     "github-topic-page:trinitycore"
    ],
    "builds": [],
    "stars": 19
+  },
+  {
+   "repo": "https://github.com/Leaf-Spring/mod-character-scale",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Módulo para usar diferentes estaturas para tu personaje en Azerothcore WOTLK 3.3.5a",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "wotlk",
+    "wotlk-335a",
+    "wow",
+    "wow-335a"
+   ],
+   "archived": false,
+   "pushed": "2026-10-13"
+  },
+  {
+   "repo": "https://github.com/Leaf-Spring/mod-draenei-druid",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Módulo para agregar la clase Druida a la Raza Draenei en Azerothcore WOTLK 3.3.5a",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "draenei",
+    "druid",
+    "wotlk",
+    "wotlk-335a",
+    "wow",
+    "wow-335a"
+   ],
+   "archived": false,
+   "pushed": "2026-10-23"
+  },
+  {
+   "repo": "https://github.com/Leaf-Spring/mod-druid-travel-speed",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Módulo para que Forma de Viaje del Druida se comporte a velocidad de montura fuera de combate en Azerothcore WOTLK 3.3.5a",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "druid",
+    "travel-form",
+    "wotlk",
+    "wotlk-335a",
+    "wow",
+    "wow-335a"
+   ],
+   "archived": false,
+   "pushed": "2026-10-08"
+  },
+  {
+   "repo": "https://github.com/Leaf-Spring/mod-gnome-priest",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Módulo para agregar la clase Priest a la Raza Gnome en Azerothcore WOTLK 3.3.5a",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "gnome",
+    "gnome-priest",
+    "priest",
+    "wotlk",
+    "wotlk-335",
+    "wotlk-335a",
+    "wotlk-wow",
+    "wow",
+    "wow-335a"
+   ],
+   "archived": false,
+   "pushed": "2026-10-23"
+  },
+  {
+   "repo": "https://github.com/Leaf-Spring/mod-human-hunter",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "description": "Módulo para agregar la clase Hunter a la Raza Humana en Azerothcore WOTLK 3.3.5a",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "human",
+    "hunter",
+    "wotlk",
+    "wotlk-335",
+    "wotlk-335a",
+    "wotlk-wow",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-24"
+  },
+  {
+   "repo": "https://github.com/Leaf-Spring/mod-nightelf-warlock",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Módulo para agregar la clase Brujo a la Raza Night Elf en Azerothcore WOTLK 3.3.5a",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "night-elf",
+    "nightelf",
+    "warlock",
+    "wotlk",
+    "wotlk-335a",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-23"
+  },
+  {
+   "repo": "https://github.com/Leaf-Spring/mod-tauren-mage",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Módulo para agregar la clase Mago a la Raza Tauren en Azerothcore WOTLK 3.3.5a",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "mago",
+    "tauren",
+    "wotlk",
+    "wotlk-335",
+    "wotlk-335a",
+    "wotlk-wow",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-23"
+  },
+  {
+   "repo": "https://github.com/Leizer-g7/mod-global-progression-authority",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Global Progression Authority module for AzerothCore",
+   "archived": false,
+   "pushed": "2026-10-11"
   },
   {
    "repo": "https://github.com/leoaviana/QuestTradutor",
@@ -1644,6 +4792,84 @@
    "description": "AzerothCoreAdmin (ACAdmin) is a general interface add-on which will help an admin."
   },
   {
+   "repo": "https://github.com/LightforgeProject/lightforge",
+   "via": [
+    "scout:github:new",
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 97,
+   "licence": "GPL-3.0",
+   "description": "Linux Native World of Warcraft / Battle.net Launcher ",
+   "topics": [
+    "battle-net",
+    "game-launcher-software",
+    "iced",
+    "linux",
+    "proton",
+    "proton-ge",
+    "rust",
+    "wine",
+    "world-of-warcraft",
+    "wow",
+    "wow-forever",
+    "wowaddon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/LightFrost/3.3.5-interface-files-enGB",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Interface files extracted from WoW WotLK 3.3.5a client (enGB) for reference in creating addons. ",
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/LipsOfJolie/SimpleChatFilter",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "WoW 3.3.5 Addon for global chats filtering",
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
+   "repo": "https://github.com/locus313/mod-guild-discord",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "AzerothCore module: Discord integration for guilds (guild chat bridge, events, account linking)",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "cpp",
+    "discord",
+    "discord-webhook",
+    "guild",
+    "world-of-warcraft",
+    "wotlk"
+   ],
+   "archived": false,
+   "pushed": "2026-10-19"
+  },
+  {
    "repo": "https://github.com/lohvht/azothacore-rs",
    "via": [
     "github-topic-page:trinitycore"
@@ -1662,6 +4888,31 @@
    "stars": 3
   },
   {
+   "repo": "https://github.com/longvo92/blf2mat",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Convert CAN/CAN-FD BLF logs to MAT files or Simulink Signal Editor Datasets, with a Python GUI and CLI.",
+   "topics": [
+    "automotive",
+    "blf",
+    "can-bus",
+    "can-fd",
+    "cli",
+    "data-conversion",
+    "dbc",
+    "gui",
+    "matlab",
+    "python",
+    "simulink"
+   ],
+   "archived": false,
+   "pushed": "2026-10-28"
+  },
+  {
    "repo": "https://github.com/Lordcaster/resocket-wow-lk",
    "via": [
     "github-topic-page:cmangos",
@@ -1671,6 +4922,28 @@
     "3.3.5a"
    ],
    "stars": 32
+  },
+  {
+   "repo": "https://github.com/ltthtrunghau/cap80-client-updates",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Public Cap80 client updates and launcher downloads. No server databases or private configuration.",
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
+   "repo": "https://github.com/lukewilson1002-debug/azeroth-unbound",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Windows launcher for solo and LAN Vanilla WoW, optional playable Naga, and experimental dungeon and raid scaling. Public alpha releases.",
+   "archived": false,
+   "pushed": "2026-10-30"
   },
   {
    "repo": "https://github.com/lumenveil/Lumenveil",
@@ -1695,6 +4968,18 @@
    "description": "A Vanilla game server aimed at providing the best developer experience"
   },
   {
+   "repo": "https://github.com/LyraCoreProject/wow_world_messages",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "Apache-2.0",
+   "description": "wow_world_messages 0.3.0 with flate2's pure-Rust backend, for the LyraCore Module (wasm). Upstream: gtker/wow_messages",
+   "archived": false,
+   "pushed": "2026-10-28"
+  },
+  {
    "repo": "https://github.com/m3ck0/tbc-adapter",
    "via": [
     "github-topic-page:tbc"
@@ -1703,6 +4988,95 @@
     "2.4.3"
    ],
    "stars": 19
+  },
+  {
+   "repo": "https://github.com/malektha-pixel/ElvUI_Multibot",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "AGPL-3.0",
+   "description": "An ElvUI-integrated command center for AzerothCore Playerbots.  Control your companions, inspect their characters, manage equipment and quests, configure combat strategies, and organize parties or full raids — all through a graphical interface designed for World of Warcraft 3.3.5a. ",
+   "archived": false,
+   "pushed": "2026-10-09"
+  },
+  {
+   "repo": "https://github.com/mama128/mod-epic-bosses",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "GPL-3.0",
+   "description": "mod-epic-bosses for AzerothCore 3.3.5a enhances boss fights with customizable atmospheric and visual effects: spawn cosmetic auras, aggro sounds/roars, custom yells, screen-shaking camera effects, localized weather manipulation, and HP-based phase model transformations",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "azerothcore-modules",
+    "wotlk",
+    "wotlk-335",
+    "wotlk-335a",
+    "wotlk-wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/mama128/mod-global-scaling",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "GPL-3.0",
+   "description": "Dynamic global scaling module for AzerothCore 3.3.5a. Scales overworld non-critter creatures, dungeons, and raids to Level 80 endgame difficulty dynamically in memory without permanent database changes.",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "azerothcore-modules",
+    "wotlk",
+    "wotlk-335",
+    "wotlk-335a",
+    "wotlk-wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/manatactical/mod-mana-loot-pet",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "description": "Pet now loots for your lazy ass.",
+   "topics": [
+    "azerothcore-module"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/manatactical/mod-mana-speedflying",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Speedflying module for Azerothcore. Necessary to enjoy retail mount with WXL-Mana-Speedflying",
+   "archived": false,
+   "pushed": "2026-10-29"
   },
   {
    "repo": "https://github.com/mangoszero/server",
@@ -1741,6 +5115,43 @@
     "5.4.8"
    ],
    "stars": 4
+  },
+  {
+   "repo": "https://github.com/marccram/wowza",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "WoWZA: World of Warcraft Zone Advisor. An in-game AI advisor for WoW Forever.",
+   "topics": [
+    "ai",
+    "claude",
+    "world-of-warcraft",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-05"
+  },
+  {
+   "repo": "https://github.com/markgravity/ImprovedForever",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 2,
+   "licence": "MIT",
+   "description": "WoW Forever addon: quality-of-life tweaks for playing with a gamepad (wheels, touchpad, vibration, button overrides)",
+   "topics": [
+    "controller",
+    "gamepad",
+    "lua",
+    "world-of-warcraft",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-26"
   },
   {
    "repo": "https://github.com/masterking32/3D-Character-Viewer",
@@ -1821,6 +5232,104 @@
    "description": "Native macOS launcher for classic World of Warcraft (1.12, TBC 2.4.3, WotLK 3.3.5a) on Apple Silicon"
   },
   {
+   "repo": "https://github.com/matou1118/Az335-2026MS-Battleground",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "GPL-2.0",
+   "description": "码头哥 2026 MS 战场版 — 完整源码树 (AzerothCore + mod-playerbots, GPLv2) · 官网 https://www.ttread.cn/",
+   "archived": false,
+   "pushed": "2026-10-19"
+  },
+  {
+   "repo": "https://github.com/matou1118/Matou2026MS-Battleground",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 2,
+   "licence": "GPL-2.0",
+   "description": "码头哥 2026 MS 战场版 — 文档、补丁、脚本与工具（AzerothCore + mod-playerbots） · 官网 https://www.ttread.cn/",
+   "archived": false,
+   "pushed": "2026-10-18"
+  },
+  {
+   "repo": "https://github.com/MattJCR/Azerothcore-Single-Player-Auto-Installer",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "AGPL-3.0",
+   "description": "ES: Servidor AzerothCore WotLK 3.3.5a para jugar solo o con amigos, con bots, panel web e instalador. | EN: Single-player AzerothCore WotLK 3.3.5a server with bots, web panel and installer.",
+   "topics": [
+    "auto-installer",
+    "automated-installer",
+    "azerothcore",
+    "azerothcore-installer",
+    "english",
+    "espanol",
+    "installer",
+    "playerbots",
+    "private-server",
+    "single-player",
+    "spanish",
+    "wotlk",
+    "wotlk-server",
+    "wow",
+    "wow-3-3-5a",
+    "wrath-of-the-lich-king"
+   ],
+   "archived": false,
+   "pushed": "2026-10-28"
+  },
+  {
+   "repo": "https://github.com/MekBits/mod-lfg-expansion",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "AGPL-3.0",
+   "description": "AzerothCore module: keep the Dungeon Finder inside the expansion a character has reached (works with mod-individual-progression).",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "wotlk"
+   ],
+   "archived": false,
+   "pushed": "2026-10-04"
+  },
+  {
+   "repo": "https://github.com/MekBits/mod-summon-friend",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "AGPL-3.0",
+   "description": "AzerothCore module: summon a group member with .summonfriend, using the normal summon dialog.",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "wotlk"
+   ],
+   "archived": false,
+   "pushed": "2026-10-04"
+  },
+  {
    "repo": "https://github.com/Merrymak3r/wow-llm-personas",
    "via": [
     "github-topic-page:cmangos"
@@ -1861,6 +5370,17 @@
    "stars": 18
   },
   {
+   "repo": "https://github.com/misakimiku2/cbjq-local-server",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Snowbreak: Containment Zone local private server integration - one-click launcher, web console, GM tools",
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
    "repo": "https://github.com/mitjafelicijan/TurtleTweaks",
    "via": [
     "github-topic-page:turtle-wow"
@@ -1883,6 +5403,23 @@
    "description": "AzerothCore Playerbots Module"
   },
   {
+   "repo": "https://github.com/mooreatv/AuctionDB",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 24,
+   "licence": "GPL-3.0",
+   "description": "Wow (classic) Auction Database addon",
+   "topics": [
+    "world-of-warcraft",
+    "wow-addon",
+    "wow-auction-house"
+   ],
+   "archived": false,
+   "pushed": "2026-10-25"
+  },
+  {
    "repo": "https://github.com/mostlynick3/azerothcore-lua-ah-bot",
    "via": [
     "github-topic-page:azerothcore-lua"
@@ -1891,6 +5428,91 @@
     "3.3.5a"
    ],
    "stars": 15
+  },
+  {
+   "repo": "https://github.com/moust4ki/DingGuideWoWForever",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 2,
+   "licence": "GPL-3.0",
+   "description": "Ding! — free, open-source leveling guide addon for WoW Forever (1.60): its own waypoint arrow, leveling routes for both factions, automatic quests, built for gamepads.",
+   "topics": [
+    "addon",
+    "gamepad",
+    "leveling-guide",
+    "lua",
+    "quest-helper",
+    "world-of-warcraft",
+    "wow-addon",
+    "wow-forever"
+   ],
+   "archived": false,
+   "pushed": "2026-10-15"
+  },
+  {
+   "repo": "https://github.com/MRAktiv/Talkmancer",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 2,
+   "description": "Live WoW chat translation: an addon plus a free Windows app. Offline translation or DeepSeek, replies in your language.",
+   "topics": [
+    "chat-translation",
+    "deepseek",
+    "offline-translation",
+    "translation",
+    "windows",
+    "world-of-warcraft",
+    "wow-addon",
+    "wow-forever"
+   ],
+   "archived": false,
+   "pushed": "2026-10-15"
+  },
+  {
+   "repo": "https://github.com/MrAnonymz/WoW-Imito",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 30,
+   "licence": "Artistic-2.0",
+   "description": "Play WoW Vanilla, The Burning Crusade and Wrath of the Lich King on Android phones and tablets alongside PC players. Android 12+ and ARM64 required.",
+   "topics": [
+    "android",
+    "arm64",
+    "touch-controls",
+    "wotlk"
+   ],
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
+   "repo": "https://github.com/MrGuato/muster",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "WoW 3.3.5a addon for mod-playerbots: raise a whole dungeon or raid group in one click, give orders, and tune each bot's strategies from one panel.",
+   "topics": [
+    "azerothcore",
+    "lua",
+    "mod-playerbots",
+    "playerbots",
+    "world-of-warcraft",
+    "wotlk",
+    "wow-3-3-5a",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-25"
   },
   {
    "repo": "https://github.com/MrJeremyHobbs/ELUNA-2019-Dev-Days-Alma-Course",
@@ -1931,6 +5553,42 @@
    "stars": 59
   },
   {
+   "repo": "https://github.com/MShkolenko/algalon-launcher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Launcher for WoW Forever private realms (Windows; macOS coming). MIT. Official builds target the Algalon Forever realm.",
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/msromike/Cues",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "Sound cues for game events: your target entering or leaving attack range, and entering or leaving combat. WoW Forever, EllesmereUI.",
+   "topics": [
+    "accessibility",
+    "audio",
+    "audio-video",
+    "combat",
+    "data-broker",
+    "ellesmereui",
+    "map-minimap",
+    "world-of-warcraft",
+    "wow-addon",
+    "wow-forever"
+   ],
+   "archived": false,
+   "pushed": "2026-10-23"
+  },
+  {
    "repo": "https://github.com/multisocket/multisocket",
    "via": [
     "github-topic-page:mangos"
@@ -1948,6 +5606,30 @@
     "5.4.8"
    ],
    "stars": 3
+  },
+  {
+   "repo": "https://github.com/N0rule/KnightLauncherCustom",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "GPL-3.0",
+   "description": "Custom Knight Launcher with private servers using the shared Spiral Knights client",
+   "archived": false,
+   "pushed": "2026-10-18"
+  },
+  {
+   "repo": "https://github.com/n3rdyguy/wow-classic-launcher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Launcher de código abierto para el servidor Classic Forever (cliente beta 1.60.1)",
+   "archived": false,
+   "pushed": "2026-10-01"
   },
   {
    "repo": "https://github.com/NathanHandley/EQWOWConverter",
@@ -1989,6 +5671,109 @@
    "stars": 205
   },
   {
+   "repo": "https://github.com/nexartgroup/ElvUI_BagFilter",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "ElvUI plugin for WoW 3.3.5a: filter and category selector for bags and bank with saved filters, bulk delete, disenchant and recipe learning (EasyGear-aware)",
+   "topics": [
+    "elvui",
+    "lua",
+    "world-of-warcraft",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-24"
+  },
+  {
+   "repo": "https://github.com/nexartgroup/ProfessionMenu",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "WoW 3.3.5a addon: a Professions button with a roll-out list of your professions (ElvUI look, optional icon-only mode and active abilities)",
+   "topics": [
+    "elvui",
+    "lua",
+    "world-of-warcraft",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-17"
+  },
+  {
+   "repo": "https://github.com/nexartgroup/Transmog",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "AGPL-3.0",
+   "description": "Modern wardrobe UI for the AzerothCore mod-transmog-plus module (WoW 3.3.5a, German/English + 6 more languages)",
+   "topics": [
+    "azerothcore",
+    "lua",
+    "transmog",
+    "world-of-warcraft",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-24"
+  },
+  {
+   "repo": "https://github.com/nicholasc2099-lab/lu-launcher-releases",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Download the LEGO Universe Launcher for Nick's private server (Windows and Mac).",
+   "archived": false,
+   "pushed": "2026-10-24"
+  },
+  {
+   "repo": "https://github.com/NoisedLabs/noised",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "Apache-2.0",
+   "description": "Noised: the quantum security layer for Solana. Post-quantum (LMS) signed token launches that can't be rugged, programmable launch rules, Autopilot, PQ vault, private balances, QSL-1 standard, TypeScript SDK and MCP server.",
+   "topics": [
+    "anchor",
+    "hash-based-signatures",
+    "langgraph",
+    "launchpad",
+    "lms",
+    "mcp",
+    "meteora",
+    "post-quantum",
+    "quantum-resistant",
+    "security",
+    "solana",
+    "token-2022",
+    "token-launchpad",
+    "typescript-sdk"
+   ],
+   "archived": false,
+   "pushed": "2026-10-16"
+  },
+  {
    "repo": "https://github.com/noisiver/mod-assistant",
    "via": [
     "github-topic-page:azerothcore-module"
@@ -2022,24 +5807,125 @@
    "description": "This module will increase the experience, money, reputation and skill ups gained on weekends. That means friday from 18:00 (6 PM), saturday and sunday. It will announce the start and end of the weekend bonus"
   },
   {
-   "repo": "https://github.com/NoM0Re/WeakAuras-WotLK",
+   "repo": "https://github.com/nolt/mod-polish-translation",
    "via": [
-    "github-topic-page:wotlk"
+    "scout:github:new"
    ],
    "builds": [
     "3.3.5a"
    ],
-   "stars": 117
+   "stars": 1,
+   "licence": "GPL-2.0",
+   "description": "Polish translation of AzerothCore server-side texts (quests, NPCs, items, gossip) as a module, switchable per account.",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "localization",
+    "polish",
+    "translation",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-25"
+  },
+  {
+   "repo": "https://github.com/NoM0Re/Cell-WotLK",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 20,
+   "description": "A World of Warcraft raid frame addon.",
+   "topics": [
+    "addon",
+    "world-of-warcraft",
+    "world-of-warcraft-addon",
+    "wotlk",
+    "wotlk-backport",
+    "wotlk-wow",
+    "wotlk-wow-addons",
+    "wow",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-20"
+  },
+  {
+   "repo": "https://github.com/NoM0Re/WeakAuras-WotLK",
+   "via": [
+    "github-topic-page:wotlk",
+    "scout:github:risers"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 118,
+   "licence": "GPL-2.0",
+   "description": "World of Warcraft addon that provides a powerful framework to display customizable graphics on your screen.",
+   "topics": [
+    "addon",
+    "world-of-warcraft",
+    "world-of-warcraft-addon",
+    "wotlk",
+    "wotlk-backport",
+    "wotlk-wow",
+    "wotlk-wow-addons",
+    "wow",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
   },
   {
    "repo": "https://github.com/NoM0Re/WoW-3.3.5a-Addons",
    "via": [
-    "github-topic-page:wotlk"
+    "github-topic-page:wotlk",
+    "scout:github:risers"
    ],
    "builds": [
     "3.3.5a"
    ],
-   "stars": 453
+   "stars": 454,
+   "description": "Most Useful WoW Addons for Patch 3.3.5a WotLK",
+   "topics": [
+    "addon",
+    "lua",
+    "world-of-warcraft",
+    "world-of-warcraft-addon",
+    "wotlk",
+    "wotlk-backport",
+    "wotlk-wow",
+    "wow",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-28"
+  },
+  {
+   "repo": "https://github.com/NoM0Re/WoW-3.3.5a-Addons2",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 30,
+   "description": "Most Useful WoW Addons for Patch 3.3.5a WotLK",
+   "topics": [
+    "addon",
+    "lua",
+    "world-of-warcraft",
+    "world-of-warcraft-addon",
+    "wotlk",
+    "wotlk-backport",
+    "wotlk-wow",
+    "wotlk-wow-addons",
+    "wow",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-28"
   },
   {
    "repo": "https://github.com/NotCoffee418/TrinityCreator",
@@ -2109,6 +5995,85 @@
    "stars": 5
   },
   {
+   "repo": "https://github.com/orionopenwow/openvanilla-art-tools",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Art sources, UI kits and the generator scripts behind the launcher, site and addon artwork; plus the project's maintenance tools.",
+   "topics": [
+    "game-art",
+    "pillow",
+    "tools",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-23"
+  },
+  {
+   "repo": "https://github.com/orionopenwow/openvanilla-launcher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 4,
+   "licence": "MIT",
+   "description": "OpenVanilla.exe: play online, solo or in the browser, the Workshop, signed updates and live news; plus the release packaging.",
+   "topics": [
+    "game-launcher",
+    "python",
+    "vanilla",
+    "windows",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-23"
+  },
+  {
+   "repo": "https://github.com/orionopenwow/openvanilla-server",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 3,
+   "description": "Everything that runs a realm: the realm images and CMaNGOS patches, the web/asset service, Server Studio, Play Solo packs, the relay, and the turnkey Hetzner deployment.",
+   "topics": [
+    "cmangos",
+    "docker",
+    "private-server",
+    "self-hosted",
+    "vanilla",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-23"
+  },
+  {
+   "repo": "https://github.com/oriont-ed/ARMS-PVP-WARRIOR-3.3.5A-MY-FAVORITE-ADDONS.",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "for wotlk 3.3.5a",
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/ornfelt/wander_nodes_util",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 21,
+   "description": "Utilities for Trickerer's wandering npcbots",
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
    "repo": "https://github.com/Ostoic/RaidBrowser",
    "via": [
     "github-topic-page:wotlk"
@@ -2118,6 +6083,41 @@
    ],
    "stars": 48,
    "description": "Bringing LFR to Wrath of the Lich King (Non-Classic)"
+  },
+  {
+   "repo": "https://github.com/oUF-wow/oUF",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 239,
+   "licence": "MIT",
+   "description": "WoW AddOn - Unit frame framework.",
+   "topics": [
+    "framework",
+    "lua",
+    "ouf",
+    "warcraft-addon",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
+   "repo": "https://github.com/p3lim-wow/Inomena",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 22,
+   "description": "Collection of bits and bobs that make up my UI. You shouldn't use this if you expect to have a working UI afterwards.",
+   "topics": [
+    "lua",
+    "warcraft-addon",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-26"
   },
   {
    "repo": "https://github.com/paalgyula/summit",
@@ -2140,6 +6140,36 @@
    "description": "This is a continuation of the MaNGOSWebV3 project."
   },
   {
+   "repo": "https://github.com/palanimForever/XPForever",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "A cleaner, smarter experience bar for World of Warcraft: Forever – XP, quest XP and rested XP at a glance, plus XP per hour, time and kills to level. By Palanim.",
+   "topics": [
+    "experience-bar",
+    "lua",
+    "world-of-warcraft",
+    "wow-addon",
+    "wow-forever"
+   ],
+   "archived": false,
+   "pushed": "2026-10-13"
+  },
+  {
+   "repo": "https://github.com/Pallaladin/Forever-Mobile",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "app to update addon for wow forever on android",
+   "archived": false,
+   "pushed": "2026-10-18"
+  },
+  {
    "repo": "https://github.com/pangolp/mod-recruit-friend",
    "via": [
     "github-topic-page:azerothcore-module"
@@ -2159,6 +6189,17 @@
    "stars": 9
   },
   {
+   "repo": "https://github.com/panleo945-bot/WOWME",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Window manager app for javascript, allows to be launched in about blank and blob too. ",
+   "archived": false,
+   "pushed": "2026-10-06"
+  },
+  {
    "repo": "https://github.com/paradosi/postal-community-edition",
    "via": [
     "github-topic-page:tbc"
@@ -2168,6 +6209,17 @@
    ],
    "stars": 9,
    "description": "Enhanced mailbox tools for World of Warcraft."
+  },
+  {
+   "repo": "https://github.com/pealz1/nova-ram",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Fast native Windows manager for multiple Roblox accounts — multi-launch, private servers, auto-rejoin, anti-AFK, encrypted vault, and an MCP/HTTP API for AI tools. Written in Rust.",
+   "archived": false,
+   "pushed": "2026-10-11"
   },
   {
    "repo": "https://github.com/PentSec/DragonUI_AddOnSkins",
@@ -2200,6 +6252,77 @@
    "stars": 12
   },
   {
+   "repo": "https://github.com/Phanty78/mod-hunger-thirst",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "Hunger & Thirst for AzerothCore WotLK 3.3.5a: persistent satiety and hydration gauges, advisory and survival modes, optional client addon.",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "azerothcore-modules",
+    "hunger",
+    "survival",
+    "world-of-warcraft",
+    "wotlk",
+    "wotlk-335",
+    "wotlk-335a",
+    "wotlk-wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-25"
+  },
+  {
+   "repo": "https://github.com/Phanty78/mod-overhaul-combat-AI",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "A complete overhaul and customization of enemy AI during combat.",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "wotlk",
+    "wotlk-335",
+    "wotlk-335a",
+    "wotlk-wow",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-25"
+  },
+  {
+   "repo": "https://github.com/PixelCattt/Forever-Launcher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Launcher to Join Private Servers in WoW-Forever.",
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
+   "repo": "https://github.com/pjerra/mod-playerbots-coa",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "Mirror of Zyth45/mod-playerbots (CoA, v2.8). GPL-2.0, credit Zyth45 / SquidBots",
+   "archived": false,
+   "pushed": "2026-10-28"
+  },
+  {
    "repo": "https://github.com/pjerra/turtle-agent",
    "via": [
     "github-topic-page:vanilla-wow"
@@ -2209,6 +6332,25 @@
    ],
    "stars": 4,
    "description": "Headless WoW 1.12 / Turtle WoW client with a local JSON-RPC API"
+  },
+  {
+   "repo": "https://github.com/PjSalty/wc3-launcher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "One-download Warcraft III: The Frozen Throne launcher with native Create Game hosting through a private PvPGN server. Windows and Linux, no port forwarding.",
+   "topics": [
+    "go",
+    "nat-traversal",
+    "networking",
+    "pvpgn",
+    "warcraft-3",
+    "wine"
+   ],
+   "archived": false,
+   "pushed": "2026-10-12"
   },
   {
    "repo": "https://github.com/Player-Doite/DoiteAuras",
@@ -2230,6 +6372,30 @@
     "2.4.3"
    ],
    "stars": 89
+  },
+  {
+   "repo": "https://github.com/poseyjoseph-cloud/bot-brigade",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "description": "Bot Brigade: a simple, good-looking WoW 3.3.5a add-on for questing and running dungeons with your Playerbots alts (AzerothCore)",
+   "archived": false,
+   "pushed": "2026-10-09"
+  },
+  {
+   "repo": "https://github.com/Prem7040/https-app.crewai.com-studio-v2-projects-81e7790f-f339-453d-b68c-66b74dbc1faf-editor",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "New ai project",
+   "archived": false,
+   "pushed": "2026-10-01"
   },
   {
    "repo": "https://github.com/ProjectSkyfire/SkyFire_548",
@@ -2256,6 +6422,16 @@
    "description": "SkyFireONE is a full featured (FL/OSS) emulator for the Burning Crusade expansion."
   },
   {
+   "repo": "https://github.com/qoatzelcoat/wow-forever-android-addon-manager",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "archived": false,
+   "pushed": "2026-10-16"
+  },
+  {
    "repo": "https://github.com/r-o-b-o-t-o/azerothcore-armory",
    "via": [
     "github-topic-page:azerothcore",
@@ -2276,6 +6452,48 @@
     "3.3.5a"
    ],
    "stars": 2
+  },
+  {
+   "repo": "https://github.com/R3DG0L1AD/mod-additional-races",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "64-race RaceMgr core + ogre caveman talk / language fix for AzerothCore Playerbots.",
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
+   "repo": "https://github.com/R3DG0L1AD/mod-lvl1-heirlooms",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "AzerothCore Eluna: first-login class heirloom kit + 36-slot bags. Playerbots skipped.",
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
+   "repo": "https://github.com/R3DG0L1AD/mod-quest-teleport",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "AzerothCore Eluna Teleport Near for the 3.3.5 quest log (stock + ForeverUI). Playerbots-safe.",
+   "archived": false,
+   "pushed": "2026-10-29"
   },
   {
    "repo": "https://github.com/RagedUnicorn/tf-aws-wow-vanilla-server",
@@ -2339,6 +6557,44 @@
    ],
    "builds": [],
    "stars": 6
+  },
+  {
+   "repo": "https://github.com/rdlc-arch/CameraPitch-3.3.5a",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "WoW 3.3.5a has keybinds for turning left and right, but none for looking up and down. This addon adds them.",
+   "archived": false,
+   "pushed": "2026-10-27"
+  },
+  {
+   "repo": "https://github.com/rdlc-arch/NoDragCam-3.3.5a",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "A tiny World of Warcraft 3.3.5a (WotLK) addon that stops the camera from rotating when you left-click + drag or tap and hold on a touchscreen.",
+   "archived": false,
+   "pushed": "2026-10-28"
+  },
+  {
+   "repo": "https://github.com/realmfirst/wow-forever-launch-data",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "CC-BY-4.0",
+   "description": "WoW Forever launch data: launch time by time zone, source ledger, addon status. Maintained by the Realm First desk.",
+   "archived": false,
+   "pushed": "2026-10-29"
   },
   {
    "repo": "https://github.com/refaim/Friend-O-Tron",
@@ -2423,6 +6679,52 @@
    "stars": 90
   },
   {
+   "repo": "https://github.com/RockAnon/DBC7-Editor",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "licence": "Zlib",
+   "archived": false,
+   "pushed": "2026-10-18"
+  },
+  {
+   "repo": "https://github.com/romaindnd89-cmd/Prof-bard",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Métier de barde pour AzerothCore (WoW 3.3.5) : mini-jeu de rythme, instruments, concerts, spécialités, instrument légendaire. Bard profession module + addon.",
+   "archived": false,
+   "pushed": "2026-10-18"
+  },
+  {
+   "repo": "https://github.com/RoseEX/Alisios-Launcher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "for english speakers: the launcher for my wow ps, dont even try to use it, its in spanish.",
+   "archived": false,
+   "pushed": "2026-10-07"
+  },
+  {
+   "repo": "https://github.com/rosswillden/wayward-crafting-plan",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "WoW Forever crafting plan for the Wayward guild: gated recipes from launch to raid opening",
+   "archived": false,
+   "pushed": "2026-10-28"
+  },
+  {
    "repo": "https://github.com/rsnitsch/vhs-deshaker",
    "via": [
     "github-topic-page:tbc"
@@ -2431,6 +6733,29 @@
     "2.4.3"
    ],
    "stars": 23
+  },
+  {
+   "repo": "https://github.com/Russianranger/esteria_android",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "GPL-3.0",
+   "description": "WoW Esteria for Android",
+   "archived": false,
+   "pushed": "2026-10-31"
+  },
+  {
+   "repo": "https://github.com/RwDen/RomanghoLauncher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "A Korean-language Windows launcher for a small private Minecraft: Java Edition modpack server community.",
+   "archived": false,
+   "pushed": "2026-10-31"
   },
   {
    "repo": "https://github.com/s0h2x/Immersion-WotLK",
@@ -2454,6 +6779,33 @@
    "stars": 23
   },
   {
+   "repo": "https://github.com/s1aai/firestorm-wine-fix",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "LGPL-2.1",
+   "description": "Play Firestorm WoW on Linux with the official launcher: one command sets up a patched GE-Proton (Wine ole32 RevokeDragDrop fix)",
+   "archived": false,
+   "pushed": "2026-10-12"
+  },
+  {
+   "repo": "https://github.com/Sagiroth/TortoiseBots",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 38,
+   "licence": "AGPL-3.0",
+   "description": "Playerbots for TortoiseWoW 1.18.1 (Please read README.md)",
+   "topics": [
+    "tortoise-module"
+   ],
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
    "repo": "https://github.com/SahtoutDev/SahtoutCMS",
    "via": [
     "github-topic-page:azerothcore"
@@ -2473,6 +6825,20 @@
    ],
    "stars": 6,
    "description": "Real-time Chinese to English translation addon for World of Warcraft 1.12"
+  },
+  {
+   "repo": "https://github.com/Saqra1/mod-arena-healthstones",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "AzerothCore arena preparation module supplying team Healthstones and mage refreshments.",
+   "archived": false,
+   "pushed": "2026-10-31"
   },
   {
    "repo": "https://github.com/Sarjuuk/aowow",
@@ -2508,6 +6874,121 @@
    "description": "Python wowcore 2.4.3"
   },
   {
+   "repo": "https://github.com/SethNubth/NaerCounter",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Addons WoLK 3.3.5 Naerzone profesiones ",
+   "archived": false,
+   "pushed": "2026-10-26"
+  },
+  {
+   "repo": "https://github.com/SethNubth/NaerzRadar",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Addons WoLK 3.3.5 Naerzone",
+   "archived": false,
+   "pushed": "2026-10-26"
+  },
+  {
+   "repo": "https://github.com/SethNubth/RaidPolice",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Addons WoLK 3.3.5 Naerzone ",
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
+   "repo": "https://github.com/SethNubth/SethDetectorFishParry",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Addons WoLK 3.3.5 Naerzone",
+   "archived": false,
+   "pushed": "2026-10-24"
+  },
+  {
+   "repo": "https://github.com/SethNubth/SethLeatCore",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Addons WoLK 3.3.5 Naerzone ",
+   "archived": false,
+   "pushed": "2026-10-24"
+  },
+  {
+   "repo": "https://github.com/SethNubth/SethRaidArbiter",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Addons WoLK 3.3.5 Naerzone",
+   "archived": false,
+   "pushed": "2026-10-23"
+  },
+  {
+   "repo": "https://github.com/seyoung7432-netizen/14DayLauncher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Desktop launcher for the 14Day private multiplayer server and modpack.",
+   "archived": false,
+   "pushed": "2026-10-05"
+  },
+  {
+   "repo": "https://github.com/SFX-WoW/Masque",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 54,
+   "description": "A button-skinning engine for World of Warcraft.",
+   "topics": [
+    "lua",
+    "masque",
+    "world-of-warcraft",
+    "world-of-warcraft-addon",
+    "world-of-warcraft-classic",
+    "wow",
+    "wow-addon",
+    "wow-classic"
+   ],
+   "archived": false,
+   "pushed": "2026-10-28"
+  },
+  {
    "repo": "https://github.com/shagu/pfQuest",
    "via": [
     "github-topic-page:tbc"
@@ -2530,12 +7011,40 @@
    "description": "A User Interface Replacement for World of Warcraft: Vanilla & TBC"
   },
   {
+   "repo": "https://github.com/Shard/wrath-mcp",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "AzerothCore module, TypeScript SDK and MCP server for driving a World of Warcraft 3.3.5a character as an LLM agent",
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
    "repo": "https://github.com/Shauren/tc-client-launcher",
    "via": [
     "github-topic-page:trinitycore"
    ],
    "builds": [],
    "stars": 28
+  },
+  {
+   "repo": "https://github.com/shoemin/WoWDataStudio",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "1.12"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "WoW Data Studio: a Windows editor for World of Warcraft 1.12.1 client data (DBC tables, models, textures, maps) and VMaNGOS server data, with a matching command line (wds).",
+   "archived": false,
+   "pushed": "2026-10-29"
   },
   {
    "repo": "https://github.com/Shonik/lua-battlepass",
@@ -2592,6 +7101,103 @@
    "description": "Reforging system for AzerothCore."
   },
   {
+   "repo": "https://github.com/SimianJake/mod-acsdk",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "Module for AzerothCore which extends the server to expose data for SDK clients",
+   "archived": false,
+   "pushed": "2026-10-25"
+  },
+  {
+   "repo": "https://github.com/Skylake-unreachable/Action-Bar-Saver-Ultimate-WoW-3.3.5a-addon",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Action Bar Saver Ultimate for WoW 3.3.5a — Export and import profiles between accounts in just a few clicks without overwriting your existing settings",
+   "archived": false,
+   "pushed": "2026-10-09"
+  },
+  {
+   "repo": "https://github.com/Skylake-unreachable/BindPad-Ultimate-WoW-3.3.5a-addon",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "BindPad Ultimate for WoW 3.3.5a — profile export in just a few clicks",
+   "archived": false,
+   "pushed": "2026-10-09"
+  },
+  {
+   "repo": "https://github.com/skywardpixel/forever-keymap",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Plan your WoW Forever action bars and keybindings before launch: drag abilities, Quick Bind keys and mouse buttons, and see it all on a keyboard view.",
+   "archived": false,
+   "pushed": "2026-10-28"
+  },
+  {
+   "repo": "https://github.com/Smealm/ViewLight",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "A launcher for Imlight, the Revive101 private Wizard101 server: press Play and the server is fetched, configured, started, and Wizard101 opens connected to it and signed in.",
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/smhgzll/wow-vulkan-probe",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "MIT",
+   "description": "Vulkan layer that adds modern water, volumetric fog, soft shadows and a graphics inspector to WoW 3.3.5a on Linux (Proton + DXVK)",
+   "topics": [
+    "dxvk",
+    "game-modding-tool",
+    "modding",
+    "vulkan",
+    "wow",
+    "wow-335a"
+   ],
+   "archived": false,
+   "pushed": "2026-10-09"
+  },
+  {
+   "repo": "https://github.com/Solfood/mod-guild-bridge",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "guildmaster bridge: AzerothCore module",
+   "archived": false,
+   "pushed": "2026-10-25"
+  },
+  {
    "repo": "https://github.com/Speiser/ClassicEmu",
    "via": [
     "github-topic-page:tbc",
@@ -2603,6 +7209,17 @@
    ],
    "stars": 48,
    "description": "ClassicEmu is an Open Source Server for World of Warcraft (1.12.1, 2.4.3 and 3.3.5a) written in .NET"
+  },
+  {
+   "repo": "https://github.com/srrmke/wow-addons-sandbox",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 6,
+   "description": "A browser sandbox that runs World of Warcraft addons (Lua and XML) and renders their frames live, so you can see an addon's UI without launching the game. It reloads when you save files, and has a console, event firing, mock player data, slash commands and a frame inspector.",
+   "archived": false,
+   "pushed": "2026-10-24"
   },
   {
    "repo": "https://github.com/ssdeanx/tortoise-wow",
@@ -2624,24 +7241,172 @@
    "stars": 42
   },
   {
-   "repo": "https://github.com/suprepupre/LuaBoost",
+   "repo": "https://github.com/STRHercules/CustomRaceModule",
    "via": [
-    "github-topic-page:wotlk"
+    "scout:github:new"
    ],
    "builds": [
     "3.3.5a"
    ],
-   "stars": 56
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "An AzerothCore module for installing custom races, modifying GLUES, extending race count, per account limits and more!",
+   "archived": false,
+   "pushed": "2026-10-14"
+  },
+  {
+   "repo": "https://github.com/STRHercules/WoWLauncher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 3,
+   "description": "Custom Launcher for Eesteria, customizable for other server developers.",
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
+   "repo": "https://github.com/subhamay-bhattacharyya/aws-lab16-alb-private-targets",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "🏗️ 📌 Lab 16 of an AWS networking series: builds a VPC with public and private subnets across two AZs, launches two web servers from custom AMIs in the private subnets, and fronts them with an internet-facing Application Load Balancer and an HTTP target group.",
+   "archived": false,
+   "pushed": "2026-10-21"
+  },
+  {
+   "repo": "https://github.com/SultonMRP/mod-playerbot-mod3",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "mod-playerbots addclass drop-in: hated Stormwind/Orgrimmar standing picks Horde vs Alliance bot pool",
+   "archived": false,
+   "pushed": "2026-10-16"
+  },
+  {
+   "repo": "https://github.com/suppdiff/FastFlood",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "WOTLK 3.3.5 flood ui",
+   "topics": [
+    "addon",
+    "world-of-warcraft",
+    "wrath-of-the-lich-king"
+   ],
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
+   "repo": "https://github.com/suprepupre/LuaBoost",
+   "via": [
+    "github-topic-page:wotlk",
+    "scout:github:risers"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 56,
+   "licence": "MIT",
+   "description": "Lua-side companion for WoW 3.3.5a: garbage collection control, loading-screen event suppression, and shared APIs for addon authors. Works standalone or alongside wow_optimize.",
+   "topics": [
+    "framerate-optimizer",
+    "lua",
+    "optimization",
+    "performance",
+    "private-server",
+    "world-of-warcraft",
+    "wotlk",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-19"
   },
   {
    "repo": "https://github.com/suprepupre/wow-optimize",
    "via": [
-    "github-topic-page:wotlk"
+    "github-topic-page:wotlk",
+    "scout:github:risers"
    ],
    "builds": [
     "3.3.5a"
    ],
-   "stars": 128
+   "stars": 128,
+   "licence": "MIT",
+   "description": "Engine-level optimization DLL for WoW 3.3.5a. Replaces the allocator, adds Lua VM and file I/O fast paths, fixes the 16-year combat log bug. Ships a frame-time benchmark so you can measure it yourself. Not for Warmane.",
+   "topics": [
+    "d3d9",
+    "dll-injection",
+    "framerate-optimizer",
+    "gaming-performance",
+    "mimalloc",
+    "minhook",
+    "optimization",
+    "private-server",
+    "reverse-engineering",
+    "world-of-warcraft",
+    "wotlk",
+    "wow",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/Syntax555/mod-playerbots-portable",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Portable Windows AzerothCore server with earned Vanilla, TBC and Wrath progression, historical talents, autonomous bot dungeons, raid support, bot auction trading and automatic updates.",
+   "topics": [
+    "azerothcore",
+    "individual-progression",
+    "playerbots",
+    "portable",
+    "windows",
+    "woltk",
+    "world-of-warcraft"
+   ],
+   "archived": false,
+   "pushed": "2026-10-31"
+  },
+  {
+   "repo": "https://github.com/tadamczak/BootyMap",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Native minimap appearance, information and launcher layout for WoW 1.12. Standalone or integrated with Booty Suite.",
+   "archived": false,
+   "pushed": "2026-10-09"
+  },
+  {
+   "repo": "https://github.com/tagban/xivlegacy-launcher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "AGPL-3.0",
+   "description": "FINAL FANTASY XIV 1.23b on private servers: one program that sets up the game and joins a server (Windows), plus a native macOS client in progress",
+   "archived": false,
+   "pushed": "2026-10-30"
   },
   {
    "repo": "https://github.com/tdymel/DPSMateTBC",
@@ -2664,6 +7429,18 @@
    ],
    "stars": 16,
    "description": "An advanced wow 2.4.3 power auras"
+  },
+  {
+   "repo": "https://github.com/tembugi/ForeverCountdown",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "A timer counting down to WoW Forever's launch, the beta's end and name reservation.",
+   "archived": false,
+   "pushed": "2026-10-21"
   },
   {
    "repo": "https://github.com/tench-rt/tentacli",
@@ -2710,6 +7487,172 @@
    "description": "A TurtleWoW DLL plugin that exposes Lua functions for SQLite database access."
   },
   {
+   "repo": "https://github.com/theforeverguides/wow-forever-data",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Open WoW Forever data (launch times, talent trees) from Forever Guides (theforeverguides.com)",
+   "topics": [
+    "world-of-warcraft",
+    "wow",
+    "wow-forever"
+   ],
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
+   "repo": "https://github.com/TheMouseNest/Collectionator",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 15,
+   "licence": "MIT",
+   "description": "World of Warcraft addon for the Auction House that adds a new Collecting tab to browse uncollected transmogs, pets, toys, mounts and recipes on all your alts.",
+   "topics": [
+    "wow",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-24"
+  },
+  {
+   "repo": "https://github.com/TheMouseNest/Journalator",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 17,
+   "licence": "MIT",
+   "description": "World of Warcraft addon. Keep track of your gold making on the AH, crafting orders and with vendors",
+   "topics": [
+    "wow",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-19"
+  },
+  {
+   "repo": "https://github.com/ThiagoSBarreto/mod-necro-home",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "GPL-3.0",
+   "description": "A bunch of quality-of-life improvements and shenanigans to save time while playing solo or enjoying a more casual gameplay experience.",
+   "topics": [
+    "azerothcore-module"
+   ],
+   "archived": false,
+   "pushed": "2026-10-21"
+  },
+  {
+   "repo": "https://github.com/ThiagoSBarreto/mod-travelers-recall",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 15,
+   "licence": "GPL-3.0",
+   "description": "An AzerothCore progressive teleport service",
+   "topics": [
+    "azerothcore-module"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/Tntdruid/azerothcore-two-realms",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "description": "Guide: run two AzerothCore realms (with mod-playerbots) on one Linux server",
+   "archived": false,
+   "pushed": "2026-10-23"
+  },
+  {
+   "repo": "https://github.com/Tntdruid/mod-arac-playerbots",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "AGPL-3.0",
+   "description": "All Races All Classes for AzerothCore with mod-playerbots support. Based on heyitsbench/mod-arac.",
+   "archived": false,
+   "pushed": "2026-10-23"
+  },
+  {
+   "repo": "https://github.com/Tntdruid/mod-drawestuff",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "GPL-2.0",
+   "description": "AzerothCore module: draws AzerothQuest's guide target as a beam of light only its player sees",
+   "archived": false,
+   "pushed": "2026-10-30"
+  },
+  {
+   "repo": "https://github.com/Tntdruid/mod-questparty",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 1,
+   "licence": "GPL-2.0",
+   "description": "AzerothCore module: lets eligible party members loot their own quest items from the same game object",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "mod-playerbots",
+    "wow-module"
+   ],
+   "archived": false,
+   "pushed": "2026-10-20"
+  },
+  {
+   "repo": "https://github.com/Tntdruid/mod_zone_scaling_playerbots",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "archived": false,
+   "pushed": "2026-10-24"
+  },
+  {
+   "repo": "https://github.com/Toracles/SpotiWoW-Octo",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "licence": "GPL-3.0",
+   "description": "A Spotify companion for Turtle WoW and OctoWoW, featuring synchronized lyrics and a Windows launcher.",
+   "archived": false,
+   "pushed": "2026-10-17"
+  },
+  {
    "repo": "https://github.com/trauntrow/mod-dungeon-master",
    "via": [
     "github-topic-page:azerothcore-module"
@@ -2724,13 +7667,23 @@
    "repo": "https://github.com/trickerer/Trinity-Bots",
    "via": [
     "github-topic-page:azerothcore",
-    "github-topic-page:wotlk"
+    "github-topic-page:wotlk",
+    "scout:github:risers"
    ],
    "builds": [
     "3.3.5a"
    ],
-   "stars": 573,
-   "description": "NPCBots for TrinityCore and AzerothCore 3.3.5"
+   "stars": 574,
+   "description": "NPCBots for TrinityCore and AzerothCore 3.3.5",
+   "topics": [
+    "azerothcore",
+    "bots",
+    "npcbots",
+    "trinitycore",
+    "wotlk"
+   ],
+   "archived": false,
+   "pushed": "2026-10-25"
   },
   {
    "repo": "https://github.com/TrinityCore/aowow",
@@ -2769,6 +7722,17 @@
    "description": "Derived from sunstrider-legacy and amied to provide fully open-sourced and playable trinity tbc core"
   },
   {
+   "repo": "https://github.com/tsumilo/DisasterZone-dev",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 1,
+   "description": "DisasterZone dev kit: addon source, specs, WoW-mock test harness, release tools, launcher",
+   "archived": false,
+   "pushed": "2026-10-18"
+  },
+  {
    "repo": "https://github.com/tswow/tswow",
    "via": [
     "web:github topic pages 2026-10-30"
@@ -2777,6 +7741,95 @@
     "3.3.5a"
    ],
    "stars": 125
+  },
+  {
+   "repo": "https://github.com/tuanus/CandyBuckets-3.3.5a",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "Unofficial WotLK 3.3.5a backport of CandyBuckets - holiday map icons (Hallow's End candy buckets, Lunar Festival elders, Midsummer bonfires)",
+   "topics": [
+    "addon",
+    "candybuckets",
+    "holiday-event",
+    "lua",
+    "world-of-warcraft",
+    "wotlk",
+    "wow"
+   ],
+   "archived": false,
+   "pushed": "2026-10-18"
+  },
+  {
+   "repo": "https://github.com/Tummie-FFXI/Cleopatra-launcher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Launcher and updater for the FFXI Cleopatra private server",
+   "archived": false,
+   "pushed": "2026-10-07"
+  },
+  {
+   "repo": "https://github.com/Twintop/TwintopInsanityBar",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 19,
+   "licence": "MIT",
+   "description": "Twintop's Resource Bar (formerly Twintop's Insanity Bar), a multi-class resource addon for World of Warcraft",
+   "topics": [
+    "addon",
+    "lua",
+    "warcraft-addon",
+    "world-of-warcraft",
+    "world-of-warcraft-addon",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-31"
+  },
+  {
+   "repo": "https://github.com/uprightbass360/AzerothCore-RealmMaster",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 17,
+   "description": "One-stop AzerothCore docker deployment with backups. All modules supported and installable. ",
+   "topics": [
+    "azerothcore-tools"
+   ],
+   "archived": false,
+   "pushed": "2026-10-23"
+  },
+  {
+   "repo": "https://github.com/VgerMods/Pawn",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 34,
+   "description": "Pawn: find upgrades, do more damage, win. (Download releases and ask questions at CurseForge.)",
+   "topics": [
+    "addon",
+    "lua",
+    "world-of-warcraft",
+    "world-of-warcraft-classic",
+    "wow",
+    "wow-addon",
+    "wow-classic"
+   ],
+   "archived": false,
+   "pushed": "2026-10-28"
   },
   {
    "repo": "https://github.com/vibecoder99-cmd/echoes-of-the-worldsoul",
@@ -2798,6 +7851,28 @@
    ],
    "stars": 53,
    "description": "A very functionally incomplete World of Warcraft: Wrath of the Lich King server emulator written in pure rust."
+  },
+  {
+   "repo": "https://github.com/VoxPhantom98/mod-personal-loot",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 2,
+   "licence": "AGPL-3.0",
+   "description": "Experimental independent personal loot, personal gold, and durable recovery for the AzerothCore Playerbots fork.",
+   "topics": [
+    "azerothcore",
+    "azerothcore-module",
+    "cpp",
+    "personal-loot",
+    "playerbots",
+    "world-of-warcraft"
+   ],
+   "archived": false,
+   "pushed": "2026-10-07"
   },
   {
    "repo": "https://github.com/walkline/ToCloud9",
@@ -2840,6 +7915,34 @@
    ],
    "stars": 3,
    "description": "Shows a glowing border around enemy magic buffs like on retail."
+  },
+  {
+   "repo": "https://github.com/Wetxius/ShestakUI",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 25,
+   "description": "Repositories for ShestakUI",
+   "topics": [
+    "lua",
+    "world-of-warcraft",
+    "wow",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
+   "repo": "https://github.com/whispermmepub/wow-reader-plus",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Independent local-first Android reader based on WoW Reader v77, with offline Word Hints and two-column EPUB reading. No Google sign-in or Drive sync.",
+   "archived": false,
+   "pushed": "2026-10-20"
   },
   {
    "repo": "https://github.com/Wiggen94/LootMonitor",
@@ -2899,6 +8002,19 @@
    "description": "A lightweight, high-performance cooldown and buff pulse addon for Vanilla WoW 1.12 and Turtle WoW."
   },
   {
+   "repo": "https://github.com/wyattabuntjer/AYN-Thor-WoW-Launcher",
+   "via": [
+    "scout:github:new",
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 16,
+   "licence": "GPL-3.0",
+   "description": "Play any flavor of World of Warcraft on your AYN Thor!",
+   "archived": false,
+   "pushed": "2026-10-29"
+  },
+  {
    "repo": "https://github.com/Xadras/GCMDB",
    "via": [
     "github-topic-page:cmangos"
@@ -2928,6 +8044,47 @@
    ],
    "stars": 23,
    "description": "A fast, static, Vanilla(+custom) TBC WoW, AoWoW-style database, hosted on GitHub Pages."
+  },
+  {
+   "repo": "https://github.com/Xian55/TrinityCore-docker",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "GPL-2.0",
+   "description": "A ready-to-run TrinityCore cata wrath legacy/classic  server: one docker compose up gives MySQL, the worldserver and the login server, with the databases created and filled on the first start.",
+   "topics": [
+    "cataclysm",
+    "docker",
+    "docker-compose",
+    "docker-container",
+    "docker-image",
+    "dockerfile",
+    "trinitycore",
+    "wow",
+    "wow-classic"
+   ],
+   "archived": false,
+   "pushed": "2026-10-17"
+  },
+  {
+   "repo": "https://github.com/xiaoyu20062032-ai/forleijun",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 4,
+   "description": "为了雷菌儿！",
+   "topics": [
+    "addon",
+    "lua",
+    "world-of-warcraft",
+    "world-of-warcraft-addon",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-18"
   },
   {
    "repo": "https://github.com/XiconQoo/AVR-TBC",
@@ -2989,6 +8146,50 @@
    "stars": 32
   },
   {
+   "repo": "https://github.com/xorbis/xorwow-launcher",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "Launcher for the XorWoW WoW 3.3.5a realm: SRP6 login, signed-manifest client updates, addons (C# WPF, .NET Framework 4.8)",
+   "archived": false,
+   "pushed": "2026-10-23"
+  },
+  {
+   "repo": "https://github.com/xrisdevs/wenilla-wotlk-with-bots",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "description": "WotLK 3.3.5a in the browser and native Rust, with NPCBots and an arena PvP development branch",
+   "archived": false,
+   "pushed": "2026-10-27"
+  },
+  {
+   "repo": "https://github.com/Xuerian/XLoot",
+   "via": [
+    "scout:github:risers"
+   ],
+   "builds": [],
+   "stars": 17,
+   "description": "World of Warcraft addon enhancing loot related functionality",
+   "topics": [
+    "world-of-warcraft",
+    "world-of-warcraft-addon",
+    "worldofwarcraft",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-31"
+  },
+  {
    "repo": "https://github.com/xVitali2/Addons-for-Vanilla-1.12.1",
    "via": [
     "github-topic-page:vanilla-addons"
@@ -3029,6 +8230,17 @@
    "stars": 10
   },
   {
+   "repo": "https://github.com/ysaaltgh/thornwood-vale",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Thornwood Vale - a WoW-style Beastmaster RPG for Android (APK releases)",
+   "archived": false,
+   "pushed": "2026-10-22"
+  },
+  {
    "repo": "https://github.com/Yuof/mod-rndbot-sync",
    "via": [
     "web:github topic pages 2026-10-30"
@@ -3037,6 +8249,60 @@
     "3.3.5a"
    ],
    "stars": 14
+  },
+  {
+   "repo": "https://github.com/z3eg/Playerbots_WTF",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "archived": false,
+   "pushed": "2026-10-21"
+  },
+  {
+   "repo": "https://github.com/zaicev101/BotDirector",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "AGPL-3.0",
+   "description": "WoW 3.3.5a addon to command mod-playerbots party bots in dungeons (orders, click-to-heal, auto-clear control), plus a dungeon test lab for AzerothCore.",
+   "topics": [
+    "3-3-5a",
+    "azerothcore",
+    "lua",
+    "playerbots",
+    "wotlk",
+    "wow",
+    "wow-addon"
+   ],
+   "archived": false,
+   "pushed": "2026-10-16"
+  },
+  {
+   "repo": "https://github.com/Zensenshi/thor-wow-arm64-proton",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 4,
+   "licence": "MIT",
+   "description": "Unofficial build scripts for running the WoW ARM64 client on AYN Thor / ArmadaOS through Proton. Source only, no binaries.",
+   "topics": [
+    "arm64",
+    "armadaos",
+    "ayn-thor",
+    "dxvk",
+    "proton",
+    "turnip",
+    "wine"
+   ],
+   "archived": false,
+   "pushed": "2026-10-14"
   },
   {
    "repo": "https://github.com/ZhengPeiRu21/mod-challenge-modes",
@@ -3126,6 +8392,20 @@
    "description": "Install and maintain AzerothCore easily using Ansible."
   },
   {
+   "repo": "https://github.com/zorkzorkus/mod-loot-boost",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "AzerothCore module to boost loot from bosses and boe world drops",
+   "archived": false,
+   "pushed": "2026-10-26"
+  },
+  {
    "repo": "https://github.com/Zottelchens-WoW-Addons/AdiBags-Cataclysm",
    "via": [
     "github-topic-page:cata"
@@ -3134,6 +8414,32 @@
     "4.3.4"
    ],
    "stars": 1
+  },
+  {
+   "repo": "https://github.com/zsurge/mod-command-audit",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [
+    "3.3.5a"
+   ],
+   "stars": 0,
+   "licence": "AGPL-3.0",
+   "description": "AzerothCore module: audit GM+ chat/console/SOAP commands",
+   "archived": false,
+   "pushed": "2026-10-27"
+  },
+  {
+   "repo": "https://github.com/Zurroh/SpiralNavigator",
+   "via": [
+    "scout:github:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "licence": "MIT",
+   "description": "A launcher for private Wizard101 servers running Imlight.",
+   "archived": false,
+   "pushed": "2026-10-29"
   },
   {
    "repo": "https://github.com/zyggy123/Treasure-Chest-System",
@@ -3160,6 +8466,39 @@
     "3.3.5a"
    ],
    "stars": 15
+  },
+  {
+   "repo": "https://gitlab.com/debbie827402/world-of-warcraft-desktop",
+   "via": [
+    "scout:gitlab:new"
+   ],
+   "builds": [],
+   "stars": 0,
+   "description": "Local Windows and macOS helper for World of Warcraft data paths, config and export caches, and export folders.\n\nSetup & download: https://telegra.ph/axldxzx-08-10",
+   "topics": [
+    "download-world-of-warcraft",
+    "download-world-of-warcraft-desktop",
+    "free-world-of-warcraft",
+    "free-world-of-warcraft-desktop",
+    "installer-world-of-warcraft",
+    "pc-world-of-warcraft",
+    "setup-world-of-warcraft",
+    "windows-world-of-warcraft",
+    "windows-world-of-warcraft-desktop",
+    "world-of-warcraft",
+    "world-of-warcraft-desktop",
+    "world-of-warcraft-desktop-download",
+    "world-of-warcraft-desktop-free",
+    "world-of-warcraft-desktop-windows",
+    "world-of-warcraft-download",
+    "world-of-warcraft-free",
+    "world-of-warcraft-installer",
+    "world-of-warcraft-pc",
+    "world-of-warcraft-setup",
+    "world-of-warcraft-windows"
+   ],
+   "archived": false,
+   "pushed": "2026-10-30"
   }
  ]
 }
