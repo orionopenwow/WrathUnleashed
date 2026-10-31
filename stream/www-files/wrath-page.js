@@ -646,7 +646,7 @@ const HOP_CSS = `
  * one-tab note page (tab.html, which has no env) names it the same way. */
 export function brand(env = window.__wenilla_env || {}, store = globalThis.localStorage) {
   const on = env.brand === 'leyline';
-  const home = on ? (String(env.home_name || '').replace(/[\u0000-\u001f<>]/g, '').slice(0, 32) || 'Dalaran Hangout') : 'Wrath';
+  const home = on ? (String(env.home_name || '').replace(/[\u0000-\u001f<>]/g, '').slice(0, 32) || 'Wrath Unleashed') : 'Wrath';
   try { if (on) store?.setItem('wu-brand', home); else store?.removeItem('wu-brand'); } catch { /* storage off */ }
   return { on, home, back: 'Back to ' + home };
 }
@@ -660,7 +660,7 @@ export function hopUi(env = window.__wenilla_env || {}, hop = window.__wuHop) {
   const name = String(env.hop_name || 'a community realm').slice(0, 32);
   const words = brand(env);
   const home = () => location.assign(hopUrl('wrath', env));
-  const hangout = !!hop.state.home;   // the Dalaran Hangout: Wrath itself, the player's own login
+  const hangout = !!hop.state.home;   // the official realm's Beacon: Wrath itself, the player's own login
   const bar = document.createElement('div');
   bar.id = 'wu-hop-bar';
   const label = document.createElement('span');

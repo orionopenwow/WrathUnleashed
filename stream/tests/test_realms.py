@@ -198,7 +198,7 @@ with open(urlfile, "w") as f:
     f.write("http://172.18.0.1:8099/api/listing/realms.json\n")
 wp.RELAY_LISTING_FILE = urlfile
 asked = []
-good = json.dumps({"realms": [{"name": "Dalaran Hangout", "state": "live",
+good = json.dumps({"realms": [{"name": "Wrath Unleashed", "state": "live",
                                "community": {"realmId": "qt6yi563z2gbxlhx", "lastHeartbeat": {"players": 2}}}]}).encode()
 real_read = wp._read_listing
 
@@ -213,7 +213,7 @@ def fake_read(url):
 wp._read_listing = fake_read
 got = wp.fetch_listing()
 check("listing: inside address down -> public address read", asked == ["http://172.18.0.1:8099/api/listing/realms.json", wp.RELAY_LISTING_DEFAULT])
-check("listing: the public answer is used", [r["name"] for r in got] == ["Dalaran Hangout"] and got[0]["live"])
+check("listing: the public answer is used", [r["name"] for r in got] == ["Wrath Unleashed"] and got[0]["live"])
 asked.clear()
 wp.RELAY_LISTING_FILE = urlfile + ".gone"
 try:
@@ -243,7 +243,7 @@ for _ in range(100):
         break
     time.sleep(0.02)
 check("listing: a new refresh replaces a hung one", wp._listing_busy is not hung_lock and wp._listing["ok"]
-      and [r["name"] for r in wp._listing["realms"]] == ["Dalaran Hangout"])
+      and [r["name"] for r in wp._listing["realms"]] == ["Wrath Unleashed"])
 gate.set()                                 # the hung one finishes later and releases only its own lock
 time.sleep(0.2)
 check("listing: the late thread leaves the new lock alone", not hung_lock.locked() and not wp._listing_busy.locked())

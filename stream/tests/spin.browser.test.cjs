@@ -25,7 +25,7 @@ function serve() {
   const srv = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://x');
     if (u.pathname === '/game.html') {
-      const env = u.searchParams.get('brand') ? '{"brand":"leyline","home_name":"Dalaran Hangout"}' : '{}';
+      const env = u.searchParams.get('brand') ? '{"brand":"leyline","home_name":"Wrath Unleashed"}' : '{}';
       res.writeHead(200, { 'content-type': 'text/html' });
       return res.end(`<!doctype html><html><head><meta charset="utf-8"><title>t</title>`
         + `<script>window.__wenilla_env = ${env};</script><script src="./wrath-early.js"></script></head>`
@@ -115,7 +115,7 @@ test('brand off: the page as before (no leyline-look.css, no class, the old art)
 
 test('tab.html follows the kept brand', async () => {
   const on = await open('/tab.html');
-  await on.page.evaluate(() => localStorage.setItem('wu-brand', 'Dalaran Hangout'));
+  await on.page.evaluate(() => localStorage.setItem('wu-brand', 'Wrath Unleashed'));
   on.asked.length = 0;
   await on.page.goto(base + '/tab.html?m=busy&r=/');
   await on.page.waitForLoadState('networkidle');

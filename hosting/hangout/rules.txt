@@ -1,4 +1,4 @@
-# The Dalaran Hangout's house rules on the Leyline realm list (one per line, up to 10, 120 characters each).
+# Wrath Unleashed's house rules on the Leyline realm list (one per line, up to 10, 120 characters each).
 # Lines starting with # are ignored. Deployed by "Deploy Dalaran hangout.bat" (the "hangout" step).
 Be kind: no harassment, hate speech or spam.
 Duel anyone who agrees; no griefing in Dalaran.

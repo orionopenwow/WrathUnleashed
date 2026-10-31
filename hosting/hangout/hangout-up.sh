@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The Dalaran Hangout: the main realm itself, reachable as a Leyline Beacon through the relay (the
+# The official realm ("Wrath Unleashed" on Leyline; it was the Dalaran Hangout): the main realm itself, reachable as a Leyline Beacon through the relay (the
 # owner hosts it; nothing runs anywhere but on the realm's own box). Run as root by "Deploy Dalaran hangout.bat"
 # (one SSH login: this folder and kit/tools arrive as a tarball over stdin):
 #
@@ -18,7 +18,7 @@
 #                     The world server is the realm's own (ov-ac-worldserver:8085).
 # What it never does: touch acore_auth.realmlist, make accounts, grant GM rights, or open a port. The realm's key
 # is made here (state/realm.key, 0600, never leaves this box); signups are off (players sign in with their own
-# Wrath login from the website; see docs/leyline-realm-hopping.md "The Dalaran Hangout").
+# Wrath login from the website; see docs/leyline-realm-hopping.md "Wrath Unleashed").
 #
 #   1 checks   root, Docker, the relay (wu-relay + its relay.env), the realm, wu-portal, the two networks
 #   2 backup   $DIR/backups/<time>/: state.tgz (host.json + the key), the id files; image -> wu-hangout-tools:rollback
@@ -44,14 +44,16 @@ AUTH_C=wu-hangout-auth
 AUTH="$AUTH_C:3724"
 WORLD="${WU_HANGOUT_WORLD:-ov-ac-worldserver:8085}"
 STATUS_URL="${WU_HANGOUT_STATUS_URL:-http://wu-portal:8091/wrath/status.json}"
-NAME="${WU_HANGOUT_NAME:-Dalaran Hangout}"
+# Its name on the Leyline realm list (owner 2026-10-30 23:32: "Wrath Unleashed" for now; the same default as
+# realm/brand.sh NAME). Re-running this step publishes a new name with the next heartbeat; the realm id stays.
+NAME="${WU_HANGOUT_NAME:-Wrath Unleashed}"
 DEFAULT_TAGLINE="WrathUnleashed's own Dalaran: your Wrath characters, and everyone meets here."
 DEFAULT_SUMMARY="The WrathUnleashed realm itself, reached through the Leyline relay and run by the WrathUnleashed team. Sign in with your Wrath login (no new account), hop here from any Leyline realm, and arrive in Dalaran."
 # The Leyline brand switch (realm/brand.sh, LEYLINE_BRAND=1 in portal.env): the listing text says Leyline (the same
-# words brand.sh writes to state/beacon.json). TODO(owner): the Dalaran Hangout's own tagline and summary on Leyline.
+# words brand.sh writes to state/beacon.json). TODO(owner): the official realm's own tagline and summary on Leyline.
 if grep -qx 'LEYLINE_BRAND=1' "${WU_WRATH_DIR:-/srv/wrath}/portal.env" 2>/dev/null; then
   DEFAULT_TAGLINE="Leyline's own Dalaran: your characters, and everyone meets here."
-  DEFAULT_SUMMARY="The Dalaran Hangout itself, reached through the Leyline relay and run by the Leyline team. Sign in with your website login (no new account), hop here from any Leyline realm, and arrive in Dalaran."
+  DEFAULT_SUMMARY="$NAME itself, reached through the Leyline relay and run by the Leyline team. Sign in with your website login (no new account), hop here from any Leyline realm, and arrive in Dalaran."
 fi
 TAGLINE="${WU_HANGOUT_TAGLINE:-$DEFAULT_TAGLINE}"
 SUMMARY="${WU_HANGOUT_SUMMARY:-$DEFAULT_SUMMARY}"
@@ -119,7 +121,7 @@ start_auth() {  # the relay players' login server, from the realm's own (its env
   return 1
 }
 if [ "$MODE" = "--remove" ]; then
-  log "Remove: the Dalaran Hangout leaves Leyline"
+  log "Remove: $NAME leaves Leyline"
   docker rm -f "$C" "$AUTH_C" >/dev/null 2>&1 || true
   remove_ids
   note "containers gone, id files gone; the key stays in $DIR/state (running this step again brings the same realm back)"
@@ -250,6 +252,6 @@ if [ -f "$WRATH_DIR/leyline-fetch.py" ]; then
   python3 -I "$WRATH_DIR/leyline-fetch.py" >/dev/null 2>&1 && note "in-game realm list refreshed" || note "in-game realm list: refreshed by its own cron within 5 minutes"
 fi
 echo
-echo "Dalaran Hangout: realm $RID on $RELAY_NAME (https://$RELAY_NAME/r/$RID/status.json)"
+echo "$NAME: realm $RID on $RELAY_NAME (https://$RELAY_NAME/r/$RID/status.json)"
 echo "Logs: docker logs -f $C (and $AUTH_C)    Off Leyline: the hangout-off step    Backup: $BK"
 echo "HANGOUT OK"

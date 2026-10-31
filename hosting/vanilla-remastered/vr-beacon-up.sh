@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Vanilla Remastered on Leyline: the old 1.12 realm (CMaNGOS Classic, client build 5875) listed as an OFFICIAL
-# Beacon through the relay, the same way as the Dalaran Hangout (hosting/hangout/hangout-up.sh): we host it for now,
+# Beacon through the relay, the same way as Wrath Unleashed (hosting/hangout/hangout-up.sh): we host it for now,
 # a community host takes it over through the Leyline P2P network later (docs/VANILLA-REMASTERED.md).
 # Run as root by "Put Vanilla Remastered on Leyline.bat" (one SSH login: this folder and kit/tools arrive as a
 # tarball over stdin). Needs the ov112-on step first (vr-realmd and vr-mangosd running on the vr-112 network).
@@ -207,7 +207,7 @@ out=$(docker run --rm --user "$UIDGID" --network none -v "$DIR:/kit" -e WU_KIT=/
   --tagline "$TAGLINE" --summary "$SUMMARY" --rules-file /kit/rules.txt 2>&1) || { echo "$out" >&2; rollback; die "writing the config failed; rolled back."; }
 RID=$(python3 -I -c 'import json,sys;print(json.loads(sys.stdin.read().strip().splitlines()[-1])["realm_id"])' <<<"$out" 2>/dev/null || true)
 [[ "$RID" =~ ^[a-z2-7]{16}$ ]] || { echo "$out" >&2; rollback; die "the config did not give a realm id; rolled back."; }
-# `setup.py official` writes the Dalaran Hangout's shape (AzerothCore, 3.3.5a): this realm is CMaNGOS Classic for the
+# `setup.py official` writes Wrath Unleashed's shape (AzerothCore, 3.3.5a): this realm is CMaNGOS Classic for the
 # 1.12.1 client. The record is what the listing shows (the agent sends it as is); "profile" is what its status says.
 out2=$(docker run --rm --user "$UIDGID" --network none -v "$DIR:/kit" -e VR_TAGS="$TAGS" --entrypoint python "$IMG" -I -c '
 import json, os

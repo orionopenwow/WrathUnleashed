@@ -397,7 +397,7 @@
 //     its realm list names) <hop_ws>/world. Nothing else is touched.
 //   * fills in that realm's own login, kept in this browser only (localStorage wu.leyline.login.<realm id>, put
 //     there by the realm's join page through wrath-page.js), never the Wrath one and never sent to our servers.
-//     One exception: the Dalaran Hangout (env.hop_home "1") is Wrath itself through the relay, so the env keeps
+//     One exception: the official realm's Beacon (env.hop_home "1") is Wrath itself through the relay, so the env keeps
 //     the player's own Wrath login there (the same account; SRP only, the password never crosses the wire).
 // wrath-page.js shows "Back to Wrath" and, with no login kept yet, the realm's join page.
 // Hero Key sign-in (the site's herokey_sso flag; docs/HERO-KEY-SSO.md): the env may instead carry hop_sso, a signed

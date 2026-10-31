@@ -11,7 +11,7 @@ small Lua data file next to the realm scripts, atomically:
     OV_LEYLINE_NETWORK   network listing  default https://play.openvanilla.app/wrath/realms.json ("" = skip it)
     OV_LEYLINE_LISTING   relay listing    default https://relay.openvanilla.app/api/listing/realms.json
     OV_LEYLINE_OUT       file to write    default /srv/wrath/custom/lua_scripts/leyline-realms.dat
-    OV_LEYLINE_HOME      the Dalaran Hangout's realm id (this realm through the relay), listed first; default:
+    OV_LEYLINE_HOME      Wrath Unleashed's realm id (this realm through the relay), listed first; default:
                          the id in /srv/wrath/hangout-realm.id (OV_LEYLINE_HOME_FILE; written by the hangout step)
     OV_LEYLINE_VR        Vanilla Remastered's realm id, the second official realm: pinned right after the Hangout
                          (official = true: the in-game list labels it Official); default: the id in

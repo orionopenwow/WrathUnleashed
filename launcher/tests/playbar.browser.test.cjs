@@ -27,7 +27,7 @@ const FAKE = ({ clients }) => {
     switch (cmd) {
       case 'get_state': return JSON.parse(JSON.stringify(st));
       case 'select': st.settings.selected_client = args.client; return null;
-      case 'realms_list': return { realms: [{ slug: 'official', name: 'Dalaran Hangout', official: true, state: 'live', build: '3.3.5a', version: '3.3.5a',
+      case 'realms_list': return { realms: [{ slug: 'official', name: 'Wrath Unleashed', official: true, state: 'live', build: '3.3.5a', version: '3.3.5a',
         core: 'azerothcore', tags: [], players: 5, bots: 0, address: 'play.openvanilla.app' }], network: { realms: 0, players: 5, bots: 0 }, from_cache: false, saved_at: 1, error: null };
       case 'realm_status': return { state: 'online', ping_ms: 10, players: 5 };
       case 'mods_catalog': return { categories: [], projects: [], from_cache: false, saved_at: 1, error: null };
@@ -162,7 +162,7 @@ test('no clients: every family greyed; a greyed row opens Find your game files; 
 
 test('the middle and right: the realm picker with its version and one status line, PLAY; no mode switch, no version text', async () => {
   const { page, ctx, errors } = await open({ clients: TWO });
-  await page.waitForFunction(() => document.getElementById('pb-realm').textContent === 'Dalaran Hangout');
+  await page.waitForFunction(() => document.getElementById('pb-realm').textContent === 'Wrath Unleashed');
   assert.equal(await page.textContent('#pb-realm-ver'), '3.3.5a');
   assert.equal(await page.textContent('#play-headline'), 'READY TO PLAY');
   assert.ok(await page.evaluate(() => document.getElementById('play-headline').closest('#pb-realm-btn')), 'the status line under the realm name');
@@ -181,7 +181,7 @@ test('the middle and right: the realm picker with its version and one status lin
 });
 
 const NET = [
-  { slug: 'official', name: 'Dalaran Hangout', official: true, state: 'live', build: '3.3.5a', version: '3.3.5a', core: 'azerothcore', tags: [], players: 5, bots: 0, address: 'play.openvanilla.app' },
+  { slug: 'official', name: 'Wrath Unleashed', official: true, state: 'live', build: '3.3.5a', version: '3.3.5a', core: 'azerothcore', tags: [], players: 5, bots: 0, address: 'play.openvanilla.app' },
   { slug: 'c-a', realm_id: 'a', name: 'Small Den', state: 'live', build: '3.3.5a', version: '3.3.5a', core: 'azerothcore', tags: [], players: 3, bots: 0, address: 'relay.openvanilla.app:40001' },
   { slug: 'c-b', realm_id: 'b', name: 'Busy Den', state: 'live', build: '3.3.5a', version: '3.3.5a', core: 'azerothcore', tags: [], players: 30, bots: 0, address: 'relay.openvanilla.app:40002' },
   { slug: 'c-c', realm_id: 'c', name: 'Asleep', state: 'offline', build: '3.3.5a', version: '3.3.5a', core: 'azerothcore', tags: [], players: 0, bots: 0, address: 'relay.openvanilla.app:40004' },
@@ -203,7 +203,7 @@ async function openNet(net = NET) {
   }, net);
   await page.goto(INDEX);
   await page.waitForFunction(() => window.LeylineNav && document.querySelector('#page-play.on') && window.__calls.some(([c]) => c === 'realms_list'));
-  await page.waitForFunction(() => document.getElementById('pb-realm').textContent === 'Dalaran Hangout');
+  await page.waitForFunction(() => document.getElementById('pb-realm').textContent === 'Wrath Unleashed');
   return { page, ctx, errors };
 }
 const rrows = (page) => page.$$eval('#pb-rmenu > li', (l) => l.map((x) => (x.classList.contains('pb-sep') ? '---' : x.classList.contains('pb-head') ? '# ' + x.textContent
@@ -217,12 +217,12 @@ test('the realm picker: a drop-up list of your realms, live realms, browser play
   assert.equal(await page.getAttribute('#pb-realm-btn', 'aria-expanded'), 'true');
   assert.equal(await page.getAttribute('#pb-rmenu', 'role'), 'listbox');
   assert.deepEqual(await rrows(page), [
-    '# Official', 'Dalaran Hangout|3.3.5a|5 playing|true|', '---',
+    '# Official', 'Wrath Unleashed|3.3.5a|5 playing|true|', '---',
     '# On the network', 'Busy Den|3.3.5a|30 playing|false|', 'Small Den|3.3.5a|3 playing|false|', '---',
     'Play in your browser||Nothing to install|false|', 'My Den||Make your Den|false|', '---',
     '+ Make a realm|||false|', 'Find more realms…|||false|',
   ], 'live realms by players; offline ones left out');
-  assert.equal(await page.evaluate(() => document.activeElement.querySelector('.pb-opt-name').textContent), 'Dalaran Hangout', 'the picked row has the focus');
+  assert.equal(await page.evaluate(() => document.activeElement.querySelector('.pb-opt-name').textContent), 'Wrath Unleashed', 'the picked row has the focus');
   const r = await page.evaluate(() => [document.getElementById('pb-rmenu').getBoundingClientRect(), document.getElementById('pb-realm-btn').getBoundingClientRect()].map((b) => [b.top, b.bottom]));
   assert.ok(r[0][1] <= r[1][0] && r[0][0] >= 0, 'a drop-up');
   // pick Busy Den: selected like the side bar's Your realms does, and saved
@@ -245,10 +245,10 @@ test('the realm picker: a drop-up list of your realms, live realms, browser play
   await page.click('#pb-realm-btn');
   assert.equal(await page.getAttribute('#pb-rmenu .pb-browser', 'aria-selected'), 'true');
   assert.equal(await page.locator('#pb-rmenu .pb-solo').count(), 0, 'Solo (coming soon) gave way to My Den');
-  await page.click('#pb-rmenu >> text=Dalaran Hangout');
+  await page.click('#pb-rmenu >> text=Wrath Unleashed');
   assert.equal(await page.evaluate(() => window.LeylineApp.mode()), 'online');
   assert.equal(await page.inputValue('#play-realm'), 'official');
-  assert.equal(await page.textContent('#pb-realm'), 'Dalaran Hangout');
+  assert.equal(await page.textContent('#pb-realm'), 'Wrath Unleashed');
   // the bottom rows
   await page.click('#pb-realm-btn');
   await page.click('#pb-rmenu >> text=+ Make a realm');
@@ -260,15 +260,15 @@ test('the realm picker: a drop-up list of your realms, live realms, browser play
   await ctx.close();
 });
 
-test('the realm picker: the official lineup first, the Dalaran Hangout labelled the Wrath realm, then Vanilla Remastered', async () => {
+test('the realm picker: the official lineup first, Wrath Unleashed labelled Official realm, then Vanilla Remastered', async () => {
   const vr = { slug: 'c-v', realm_id: 'v', name: 'Vanilla Remastered', state: 'live', build: '1.12.1', version: '1.12.1', core: 'vmangos', tags: [], players: 2, bots: 0, address: 'relay.openvanilla.app:40050' };
   const { page, ctx, errors } = await openNet([Object.assign({}, NET[0], { name: 'Leyline Sample Hangout' }), NET[1], NET[2], vr, NET[3]]);
   await page.click('#pb-realm-btn');
   const rows = await rrows(page);
-  assert.deepEqual(rows.slice(0, 4), ['# Official', 'Dalaran Hangout|3.3.5a|5 playing|true|', 'Vanilla Remastered|1.12.1|2 playing|false|', '---'],
+  assert.deepEqual(rows.slice(0, 4), ['# Official', 'Wrath Unleashed|3.3.5a|5 playing|true|', 'Vanilla Remastered|1.12.1|2 playing|false|', '---'],
     'one name for the official realm whatever the list calls it; the lineup pinned under it');
   assert.ok(!rows.slice(4).some((x) => x.startsWith('Vanilla Remastered')), 'not twice');
-  assert.equal(await page.textContent('#pb-rmenu .pb-opt-kind'), 'the Wrath realm');
+  assert.equal(await page.textContent('#pb-rmenu .pb-opt-kind'), 'Official realm');
   assert.equal(await page.locator('#pb-rmenu .pb-opt-kind').count(), 1, 'only the Hangout has the label');
   assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#pb-rmenu .pb-opt-kind'), '::before').content), '"· "');
   await page.click('#pb-rmenu >> text=Vanilla Remastered');

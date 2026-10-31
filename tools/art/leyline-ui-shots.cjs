@@ -22,7 +22,7 @@ const FAKE = ({ page, modes }) => {
     tagline: "", summary: "", join_url: null, discord: null, relay: "relay.openvanilla.app" };
   const R = (o) => Object.assign({}, base, o, { report_url: o.official ? null : "https://play.openvanilla.app/wrath/realms/report?realm=" + o.realm_id });
   const realms = [
-    R({ slug: "official", name: "Dalaran Hangout", official: true, tagline: "Our own realm: drop in and say hello.", address: "play.openvanilla.app", group: "official", players: 4, bots: 10 }),
+    R({ slug: "official", name: "Wrath Unleashed", official: true, tagline: "Our own realm: drop in and say hello.", address: "play.openvanilla.app", group: "official", players: 4, bots: 10 }),
     R({ slug: "c-dddddddddddddddd", realm_id: "dddddddddddddddd", name: "Old Days", featured: true, verified: true, core: "vmangos",
         tags: ["pvp", "rp"], region: "eu", language: "en", uptime_7d: 97, players: 12, address: "relay.openvanilla.app:40020", group: "featured" }),
     R({ slug: "c-bbbbbbbbbbbbbbbb", realm_id: "bbbbbbbbbbbbbbbb", name: "Busy Den", tags: ["bots"], region: "na-east", is_new: true,

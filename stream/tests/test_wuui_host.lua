@@ -92,7 +92,7 @@ function HasAction() return false end
 function UnitLevel() return 80 end
 function UnitClass() return "Mage", "MAGE" end
 function UnitName() return "Tester" end
-function GetRealmName() return "Dalaran Hangout" end
+function GetRealmName() return "Wrath Unleashed" end
 function PlaySound() end
 function HideUIPanel(f) f:Hide() end
 local clock = 100

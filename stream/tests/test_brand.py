@@ -1,5 +1,5 @@
 """The Leyline brand switch (owner 2026-10-30), with it ON: every portal page, feed and the page env say Leyline and
-"Dalaran Hangout" where people read them, never WrathUnleashed, Wrath Unleashed, Open Vanilla or OpenVanilla
+"Wrath Unleashed" where people read them, never WrathUnleashed, Open Vanilla or OpenVanilla
 (addresses, ids and identifiers are not text people read: href/src values, URLs, WrathUnleashedUI). With it OFF the
 other suites run unchanged (test_site.py and the rest load the portal without LEYLINE_BRAND). Also: realm/brand.sh
 check / on / off on a fake server, the sampler under the brand, the addon-list .toc swap both ways, and wu-mod.py's
@@ -31,7 +31,8 @@ def check(name, ok, extra=""):
     if ok: passed += 1; print("PASS", name)
     else: failed += 1; print("FAIL", name, str(extra)[:600])
 
-OLD = re.compile(r"WrathUnleashed(?!UI\b)|Wrath Unleashed|Open ?Vanilla|Back to Wrath\b")
+# "Wrath Unleashed" (with the space) is the main realm's own name now (owner 2026-10-30 23:32), not an old one
+OLD = re.compile(r"WrathUnleashed(?!UI\b)|Open ?Vanilla|Back to Wrath\b(?! Unleashed)")
 ADDR = re.compile(r"https?://[^\s\"'<>]+|\b[\w.-]+\.openvanilla\.app\b|github\.com/[\w./-]+")
 
 
@@ -59,17 +60,20 @@ def json_text(doc) -> str:
 
 # ---------------------------------------------------------------- 1. the names
 check("brand on: the switch is read", wp.BRAND is True)
-check("brand on: the main realm is Dalaran Hangout (REALM_NAME is ignored)", wp.REALM_NAME == "Dalaran Hangout", wp.REALM_NAME)
+check("brand on: the main realm is Wrath Unleashed (REALM_NAME is ignored)", wp.REALM_NAME == "Wrath Unleashed", wp.REALM_NAME)
 check("brand on: the site is Leyline", wp.SITE_NAME == "Leyline")
-check("brand on: the Sample Hangout is Dalaran Hangout too", wp.SAMPLER_NAME == "Dalaran Hangout")
-check("brand on: Back to Dalaran Hangout", wp.BACK_LABEL == "Back to Dalaran Hangout")
-check("sample_info: the network's official realm is Dalaran Hangout", wp.sample_info()["name"] == "Dalaran Hangout"
+check("brand on: the Sample Hangout is Wrath Unleashed too", wp.SAMPLER_NAME == "Wrath Unleashed")
+check("brand on: Back to Wrath Unleashed", wp.BACK_LABEL == "Back to Wrath Unleashed")
+check("sample_info: the network's official realm is Wrath Unleashed", wp.sample_info()["name"] == "Wrath Unleashed"
       and not OLD.search(visible(wp.sample_info()["blurb_html"])))
 
 # ---------------------------------------------------------------- 2. the safety net
 b = wp.brand_body(b'<p title="Open Vanilla">WrathUnleashed and Wrath Unleashed. <a href="https://github.com/o/WrathUnleashed">x</a>'
                   b' WrathUnleashedUI <script>var a="WrathUnleashed"</script> play.openvanilla.app</p>', "text/html; charset=utf-8").decode()
-check("safety net: text and visible attributes", "Leyline and Leyline." in b and 'title="Leyline"' in b, b)
+check("safety net: text and visible attributes; the main realm's own name (Wrath Unleashed) is kept",
+      "Leyline and Wrath Unleashed." in b and 'title="Leyline"' in b, b)
+j0 = wp.brand_body(b'{"realm":"Wrath Unleashed","by":"WrathUnleashed"}', "application/json").decode()
+check("safety net: JSON keeps the main realm's own name", json.loads(j0) == {"realm": "Wrath Unleashed", "by": "Leyline"}, j0)
 check("safety net: addresses, identifiers and scripts untouched", "github.com/o/WrathUnleashed" in b and "WrathUnleashedUI" in b
       and 'var a="WrathUnleashed"' in b and "play.openvanilla.app" in b, b)
 j = wp.brand_body(b'{"author":"WrathUnleashed","credits":"Pings by WrathUnleashed","id":"WrathUnleashedUI"}', "application/json").decode()
@@ -167,7 +171,7 @@ check("brand off: the Leyline page keeps its emblem and art", "leyline-emblem.we
       and "leyline-bg.webp" in wp0.leyline_css() and "@font-face" in wp0.leyline_css())
 
 st, _, realms = get("/wrath/realms")
-check("realms page: Dalaran Hangout is the official realm", "Dalaran Hangout" in visible(realms))
+check("realms page: Wrath Unleashed is the official realm", "Wrath Unleashed" in visible(realms))
 check("realms page: titled for Leyline", "<title>Realms · Leyline</title>" in realms, re.findall(r"<title>[^<]*</title>", realms))
 
 FEEDS = ["/wrath/status.json", "/wrath/realms.json", "/wrath/mods/all.json", "/wrath/mods/catalog.json", "/wrath/modes.json",
@@ -187,7 +191,7 @@ for path in FEEDS:
     check(f"{path}: no old names in its text", not bad, bad[:4])
 st, _, body = get("/wrath/realms.json")
 if st == 200:
-    check("realms.json: the network's sample block names Dalaran Hangout", json.loads(body).get("sample", {}).get("name") == "Dalaran Hangout", body[:300])
+    check("realms.json: the network's sample block names Wrath Unleashed", json.loads(body).get("sample", {}).get("name") == "Wrath Unleashed", body[:300])
 
 # the pages made outside the handler's routes (sign-in, account, error, busy)
 for label, page in (("sign-in", wp.signed_out_page()), ("auto sign-in", wp.auto_signin_page("n")), ("error", wp.error_page("x")),
@@ -203,10 +207,10 @@ check("account page: the player package step names no old brand", "Play</b> file
 sess = {"user": "WR1", "pass": "pw", "slice": "mini", "tier": 2, "mode": "stream"}
 envjs = wp.env_js(sess).decode()
 env = json.loads(envjs.split("window.__wenilla_env = ", 1)[1].split(";\n", 1)[0])
-check("/__env.js: brand and the home realm's name", env.get("brand") == "leyline" and env.get("home_name") == "Dalaran Hangout", env)
+check("/__env.js: brand and the home realm's name", env.get("brand") == "leyline" and env.get("home_name") == "Wrath Unleashed", env)
 hop = dict(sess, hop={"id": "abcdefghijklmnop", "name": "Frost", "home": False})
 env = json.loads(wp.env_js(hop).decode().split("window.__wenilla_env = ", 1)[1].split(";\n", 1)[0])
-check("/__env.js in a hop: the brand too", env.get("brand") == "leyline" and env.get("home_name") == "Dalaran Hangout", env)
+check("/__env.js in a hop: the brand too", env.get("brand") == "leyline" and env.get("home_name") == "Wrath Unleashed", env)
 srv.shutdown()
 
 # the docs (renamed for the public repo): with the brand on the site shows them as written; off, docs.py's UNTIL_FLIP
@@ -347,7 +351,7 @@ penv = os.path.join(w, "portal.env")
 orig_penv = read(penv)
 r = run(d, w, st, bin_, "check")
 check("brand.sh check: reports success", r.returncode == 0 and r.stdout.rstrip().endswith("BRAND CHECK OK"), r.stdout + r.stderr)
-check("brand.sh check: says what would change", "'WrathUnleashed' -> 'Dalaran Hangout'" in r.stdout and "-> 1" in r.stdout
+check("brand.sh check: says what would change", "'WrathUnleashed' -> 'Wrath Unleashed'" in r.stdout and "-> 1" in r.stdout
       and "absent -> present" in r.stdout and "fui-install.sh brand on" in r.stdout, r.stdout)
 check("brand.sh check: the realm scripts know the switch", all(f"{f} knows the switch" in r.stdout for f in ("ov_modapi.lua", "ov_qol.lua")), r.stdout)
 check("brand.sh check: changes nothing", read(penv) == orig_penv and not os.path.exists(flag)
@@ -356,7 +360,7 @@ check("brand.sh check: changes nothing", read(penv) == orig_penv and not os.path
 r = run(d, w, st, bin_, "on")
 check("brand.sh on: reports success", r.returncode == 0 and r.stdout.rstrip().endswith("BRAND OK"), r.stdout + r.stderr)
 check("brand.sh on: the realm scripts' flag file", os.path.exists(flag))
-check("brand.sh on: the realm list says Dalaran Hangout", read(os.path.join(st, "realm-name")).strip() == "Dalaran Hangout")
+check("brand.sh on: the realm list says Wrath Unleashed", read(os.path.join(st, "realm-name")).strip() == "Wrath Unleashed")
 check("brand.sh on: the old name kept", read(os.path.join(w, "brand-state", "realm-name.txt")).strip() == "WrathUnleashed")
 check("brand.sh on: portal.env LEYLINE_BRAND=1, the rest kept", "LEYLINE_BRAND=1" in read(penv) and "REALM_NAME=WrathUnleashed" in read(penv))
 check("brand.sh on: the Leyline front page goes live with it (WU_HUB_FRONT=1)", "WU_HUB_FRONT=1" in read(penv))
@@ -374,16 +378,16 @@ r = run(d, w, st, bin_, "on")
 check("brand.sh on twice: still the real old name", r.returncode == 0 and read(os.path.join(w, "brand-state", "realm-name.txt")).strip() == "WrathUnleashed"
       and read(penv).count("LEYLINE_BRAND=") == 1)
 r = run(d, w, st, bin_, "check")
-check("brand.sh check while on: says what off would put back", "the brand is ON now" in r.stdout and "'Dalaran Hangout' -> 'WrathUnleashed'" in r.stdout, r.stdout)
+check("brand.sh check while on: says what off would put back", "the brand is ON now" in r.stdout and "'Wrath Unleashed' -> 'WrathUnleashed'" in r.stdout, r.stdout)
 
-# the Sample Hangout while the brand is on: the realm is still Dalaran Hangout
+# the Sample Hangout while the brand is on: the realm is still Wrath Unleashed
 open(os.path.join(w, ".env"), "w").write("OV_PROFILE=main\n")
 shutil.copy(os.path.join(REPO, "realm", "profiles", "main.env"), os.path.join(w, "profiles", "main.env"))
 shutil.copy(os.path.join(REPO, "realm", "modules.env"), os.path.join(w, "modules.env"))
 open(os.path.join(st, "started"), "w").write("1\n")
 ov_file = os.path.join(REPO, "realm", "profiles", "sampler.env")
 r = run(d, w, st, bin_, "check", ov_file, script="sampler.sh")
-check("sampler under the brand: check names Dalaran Hangout", "-> 'Dalaran Hangout'" in r.stdout and "Leyline Sample Hangout'" not in r.stdout.split("realm list name")[1].split("\n")[0], r.stdout[-800:])
+check("sampler under the brand: check names Wrath Unleashed", "-> 'Wrath Unleashed'" in r.stdout and "Leyline Sample Hangout'" not in r.stdout.split("realm list name")[1].split("\n")[0], r.stdout[-800:])
 
 r = run(d, w, st, bin_, "off")
 check("brand.sh off: reports success", r.returncode == 0 and r.stdout.rstrip().endswith("BRAND OK"), r.stdout + r.stderr)

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The Leyline brand switch (owner 2026-10-30: "wait for the site to change on my command"). Everything players and
-# visitors read says Leyline, and the main realm is "Dalaran Hangout". Run as root on the server by
+# visitors read says Leyline, and the main realm is "Wrath Unleashed" (NAME below; owner 2026-10-30 23:32, "for now";
+# it was "Dalaran Hangout"). Run as root on the server by
 # "Leyline brand.bat" (one SSH login):
 #
 #   bash brand.sh check     read only: prints what "on" (or "off", when it is on) would change
@@ -9,17 +10,19 @@
 #
 # What "on" changes (backups first, in /root/brand-backups/<time>/; the old realm name in brand-state/):
 #   1 custom/lua_scripts/leyline-brand.on: the realm scripts (ov_modapi.lua OVMod.Brand) see it within 30 s and say
-#     "Leyline" / "Dalaran Hangout" in chat, the welcome and the in-game Leyline window; each login tells the
+#     "Leyline" / "Wrath Unleashed" in chat, the welcome and the in-game Leyline window; each login tells the
 #     WrathUnleashedUI addon. No "reload ale" and no world server restart: nobody is kicked.
-#   2 acore_auth.realmlist: the name in the game's realm list becomes "Dalaran Hangout" (the login server reads it
-#     again within 20 s; players in the world stay in). With the Sample Hangout on, it is "Dalaran Hangout" too.
-#   3 portal.env: LEYLINE_BRAND=1 and WU_HUB_FRONT=1 (the front page; LEYLINE_HUB_FRONT=0 keeps it hidden) (wrath_portal.py: the site is "Leyline", the main realm "Dalaran Hangout", the
-#     page layer's "Back to Dalaran Hangout"); wu-portal recreated (stream visitors click Play again, as after
+#   2 acore_auth.realmlist: the name in the game's realm list becomes "Wrath Unleashed" (the login server reads it
+#     again within 20 s; players in the world stay in). With the Sample Hangout on, it is "Wrath Unleashed" too.
+#     Running "on" again while it is on renames the realm to NAME (how a new name goes live) and keeps the name
+#     from before the brand as the one "off" goes back to.
+#   3 portal.env: LEYLINE_BRAND=1 and WU_HUB_FRONT=1 (the front page; LEYLINE_HUB_FRONT=0 keeps it hidden) (wrath_portal.py: the site is "Leyline", the main realm "Wrath Unleashed", the
+#     page layer's "Back to Wrath Unleashed"); wu-portal recreated (stream visitors click Play again, as after
 #     any sign-in update).
 #   4 the streamed addons' addon-list names (fui-install.sh / mods-install.sh brand on: WrathUnleashedUI.toc and
 #     WUModCatalog.toc Title/Notes/Author), wu-play restarted. Skipped (said so) when those scripts are older than
 #     this switch: run the foreverui and mods steps first.
-#   5 the Dalaran Hangout's relay listing text (hangout-beacon/state/beacon.json tagline and summary, sent with the
+#   5 the official realm's relay listing text (hangout-beacon/state/beacon.json tagline and summary, sent with the
 #     agent's next heartbeat), when the hangout runs on this box.
 # "off" undoes 1-5 (the realm name from brand-state/realm-name.txt, or "Leyline Sample Hangout" while the Sample
 # Hangout is on). Folder names, saved variables, chat prefixes, ids, cookies, domains and routes never change.
@@ -28,7 +31,9 @@ set -euo pipefail
 WU="${WU_DIR:-/srv/wrath}"
 cd "$WU"
 MODE="${1:-check}"
-NAME="${LEYLINE_REALM_NAME:-Dalaran Hangout}"
+# The official realm's name with the brand on. The same default is in realm/sampler.sh, server/deploy.sh,
+# hosting/hangout/hangout-up.sh, stream/wrath_portal.py (OFFICIAL_REALM_NAME) and the realm scripts (ov_modapi.lua).
+NAME="${LEYLINE_REALM_NAME:-Wrath Unleashed}"
 SAMPLE_NAME="Leyline Sample Hangout"
 STATE="$WU/brand-state"
 REALM_ID="${WU_REALM_ID:-1}"
@@ -49,9 +54,9 @@ supports() { [ -f "$1" ] && grep -q '^  brand)' "$1"; }
 sql_str() { printf '%s' "$1" | sed "s/'/''/g"; }
 
 # The hangout's relay listing text, with the brand on (descriptive, not the owner's own pitch).
-# TODO(owner): the Dalaran Hangout's own tagline and summary on Leyline (the same two lines are in hosting/hangout/hangout-up.sh)
+# TODO(owner): the official realm's own tagline and summary on Leyline (the same two lines are in hosting/hangout/hangout-up.sh)
 HB_TAGLINE_ON="Leyline's own Dalaran: your characters, and everyone meets here."
-HB_SUMMARY_ON="The Dalaran Hangout itself, reached through the Leyline relay and run by the Leyline team. Sign in with your website login (no new account), hop here from any Leyline realm, and arrive in Dalaran."
+HB_SUMMARY_ON="$NAME itself, reached through the Leyline relay and run by the Leyline team. Sign in with your website login (no new account), hop here from any Leyline realm, and arrive in Dalaran."
 
 ON_NOW=0; [ "$(portal_brand)" = 1 ] && ON_NOW=1
 if [ "$MODE" = off ] && sampler_on; then OFF_NAME="$SAMPLE_NAME"; else OFF_NAME=$(cat "$STATE/realm-name.txt" 2>/dev/null || echo WrathUnleashed); fi
@@ -102,8 +107,9 @@ v=$(live_env OV_LEYLINE_BRAND); [ -z "$v" ] || echo "  NOTE: the world server's 
 # 2 realm list name
 old=$(current_name)
 if [ "$MODE" = on ]; then
-  # keep the name to go back to (the Sample Hangout's own name is not kept: off works that one out itself)
-  if [ -n "$old" ] && [ "$old" != "$NAME" ] && [ "$old" != "$SAMPLE_NAME" ]; then printf '%s\n' "$old" > "$STATE/realm-name.txt"; fi
+  # keep the name to go back to (the Sample Hangout's own name is not kept: off works that one out itself; nor is
+  # the name while the brand is already on: that is a brand name, e.g. "Dalaran Hangout" before the rename)
+  if [ "$ON_NOW" = 0 ] && [ -n "$old" ] && [ "$old" != "$NAME" ] && [ "$old" != "$SAMPLE_NAME" ]; then printf '%s\n' "$old" > "$STATE/realm-name.txt"; fi
   NEW="$NAME"
 else
   NEW="$OFF_NAME"
@@ -180,7 +186,7 @@ PY
     chown 10001:10001 "$HB/state/beacon.json" 2>/dev/null || true
     docker run --rm --user 10001:10001 --network none -v "$HB:/kit" -e WU_KIT=/kit "$HB_IMG" python -m wuhost.setup rules >/dev/null 2>&1 \
       && echo "  sent with the agent's next heartbeat" \
-      || echo "  NOTE: wuhost.setup rules did not run ($HB_IMG): the hangout step (Deploy Dalaran hangout.bat) sends it"
+      || echo "  NOTE: wuhost.setup rules did not run ($HB_IMG): the hangout step sends it"
   else
     echo "  NOTE: could not write $HB/state/beacon.json (the rest is done)"
   fi

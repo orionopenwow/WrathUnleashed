@@ -168,13 +168,16 @@ local function onLogout(event, player)
 end
 
 -- The Leyline brand switch (owner 2026-10-30; realm/brand.sh on|off). While it is on, the realm's scripts say
--- "Leyline" and call this realm "Dalaran Hangout" where players read it (chat tags, the welcome, the Leyline
+-- "Leyline" and call this realm OVMod.OFFICIAL_NAME ("Wrath Unleashed") where players read it (chat tags, the welcome, the Leyline
 -- window's home realm), and each login tells the addon: mod "wubrand", name "brand", data
 -- "leyline\t<realm name>" (WrathUnleashedUI.lua W.Brand; the addon also asks with "wubrand"/"ask"). Off: nothing
 -- is sent and every word is the old one. On = OV_LEYLINE_BRAND=1 in the world server's environment (0 forces off),
 -- else the flag file OV_BRAND_FILE (default /azerothcore/lua_scripts/leyline-brand.on = the host's
 -- custom/lua_scripts/leyline-brand.on), looked at no more than every BRAND_CACHE seconds: brand.sh flips it with no
 -- reload and no restart. Prefixes, mod ids, saved variables and every internal name stay as they are.
+-- The official realm's name while the brand is on (owner 2026-10-30 23:32: "Wrath Unleashed" for now; the world
+-- server's OV_LEYLINE_REALM_NAME overrides it). ov_leyline.lua, ov_qol.lua and ov_discord.lua read it from here.
+OVMod.OFFICIAL_NAME = "Wrath Unleashed"
 local BRAND_FILE = os.getenv("OV_BRAND_FILE") or "/azerothcore/lua_scripts/leyline-brand.on"
 local BRAND_CACHE = 30
 local brandAt, brandOn = -1e9, false
@@ -199,10 +202,10 @@ local function plainName(s, fallback)
 end
 
 -- { on, name = the project ("Leyline" | "WrathUnleashed"), realm = this realm's name, home = what "Back to ..."
--- says ("Dalaran Hangout" | "Wrath") }
+-- says (OVMod.OFFICIAL_NAME | "Wrath") }
 function OVMod.Brand()
     if OVMod.BrandOn() then
-        local realm = plainName(os.getenv("OV_LEYLINE_REALM_NAME"), "Dalaran Hangout")
+        local realm = plainName(os.getenv("OV_LEYLINE_REALM_NAME"), OVMod.OFFICIAL_NAME)
         return { on = true, name = "Leyline", realm = realm, home = realm }
     end
     return { on = false, name = "WrathUnleashed", realm = plainName(os.getenv("OV_REALM_NAME"), "WrathUnleashed"),

@@ -23,15 +23,19 @@ local W = WrathUnleashedUI
 
 -- The Leyline brand switch (owner 2026-10-30): while the realm has it on (ov_modapi.lua OVMod.Brand, realm/brand.sh)
 -- it tells this addon at login over OVMOD (mod "wubrand", name "brand", data "leyline\t<realm name>"), and the
--- windows say "Leyline" and call the main realm "Dalaran Hangout". No word from the realm = off: every text is the
+-- windows say "Leyline" and call the main realm by the name it sends (W.OFFICIAL_NAME when it sends none). No word
+-- from the realm = off: every text is the
 -- old one. Only what players read changes: the addon's folder, saved variables, frame names and prefixes stay.
 -- Kept in memory only (never saved), so a realm that turns it off is off at the next login.
 W.Brand = { on = false, name = "WrathUnleashed", home = "Wrath", back = "Back to Wrath" }
+-- The official realm's name (owner 2026-10-30 23:32: "Wrath Unleashed" for now; the realm's own copy is
+-- ov_modapi.lua OVMod.OFFICIAL_NAME). Leyline.lua reads it from here.
+W.OFFICIAL_NAME = "Wrath Unleashed"
 local brandWatchers = {}
 function W.OnBrand(fn) brandWatchers[#brandWatchers + 1] = fn end
 function W.SetBrand(realm)
     realm = type(realm) == "string" and realm:gsub("|", ""):gsub("[%c]", ""):sub(1, 32) or ""
-    if realm == "" then realm = "Dalaran Hangout" end
+    if realm == "" then realm = W.OFFICIAL_NAME end
     W.Brand = { on = true, name = "Leyline", home = realm, back = "Back to " .. realm }
     for _, fn in ipairs(brandWatchers) do pcall(fn, W.Brand) end
 end

@@ -127,9 +127,9 @@ for f in $WORLD_SQL; do
 done
 
 log "8/10 Realm address and restart"
-# The Leyline brand switch (realm/brand.sh): while it is on, the realm list keeps "Dalaran Hangout".
+# The Leyline brand switch (realm/brand.sh): while it is on, the realm list keeps "Wrath Unleashed" (brand.sh NAME).
 LIST_NAME="$REALM_NAME"
-grep -qx 'LEYLINE_BRAND=1' portal.env 2>/dev/null && LIST_NAME="${LEYLINE_REALM_NAME:-Dalaran Hangout}"
+grep -qx 'LEYLINE_BRAND=1' portal.env 2>/dev/null && LIST_NAME="${LEYLINE_REALM_NAME:-Wrath Unleashed}"
 bash set-realm-address.sh "$REALM_HOST" "$LIST_NAME"
 docker compose restart ac-worldserver
 sleep 2

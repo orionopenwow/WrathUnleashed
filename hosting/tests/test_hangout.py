@@ -1,4 +1,4 @@
-"""The Dalaran Hangout (the operator's own realm as a Leyline Beacon) and website pairing, against the REAL relay and
+"""The official realm, Wrath Unleashed (the operator's own realm as a Leyline Beacon) and website pairing, against the REAL relay and
 agent with a fake AzerothCore realm:
 
   * `setup.py official` writes a public, signup-off, "official" host.json with a key made where it runs;
@@ -74,7 +74,7 @@ class Hangout(unittest.IsolatedAsyncioTestCase):
         os.makedirs(self.kit)
         with open(os.path.join(self.kit, "rules.txt"), "w") as f:
             f.write("# comment\nBe kind.\nDuels by consent.\n")
-        out, _ = run_setup(self.kit, "official", "--name", "Dalaran Hangout", "--relay", "relay.test",
+        out, _ = run_setup(self.kit, "official", "--name", "Wrath Unleashed", "--relay", "relay.test",
                            "--relay-url", self.base + "/agent", "--listing-url", self.http + "/api/listing/heartbeat",
                            "--auth-service", "ov-ac-authserver:3724", "--world-service", "ov-ac-worldserver:8085",
                            "--status-url", f"http://127.0.0.1:{self.status.server_address[1]}/wrath/status.json",
@@ -109,7 +109,7 @@ class Hangout(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stat.S_IMODE(os.stat(kp).st_mode), 0o600)
         self.assertEqual(keys.realm_id(keys.public_key(keys.load_or_create(kp))), self.rid)
         # again: the same key and id; brand words refused; a host kit folder refused
-        out, _ = run_setup(self.kit, "official", "--name", "Dalaran Hangout", "--auth-service", "a:1", "--world-service", "b:2")
+        out, _ = run_setup(self.kit, "official", "--name", "Wrath Unleashed", "--auth-service", "a:1", "--world-service", "b:2")
         self.assertEqual(json.loads(out)["realm_id"], self.rid)
         with self.assertRaises(SystemExit):
             run_setup(self.kit, "official", "--name", "WoW Hangout", "--auth-service", "a:1", "--world-service", "b:2")
@@ -117,7 +117,7 @@ class Hangout(unittest.IsolatedAsyncioTestCase):
         os.makedirs(other)
         run_setup(other, "init", "--name", "Frost Haven", "--profile", "main", "--visibility", "private", "--gm-name", "frostgm")
         with self.assertRaises(SystemExit):
-            run_setup(other, "official", "--name", "Dalaran Hangout", "--auth-service", "a:1", "--world-service", "b:2")
+            run_setup(other, "official", "--name", "Wrath Unleashed", "--auth-service", "a:1", "--world-service", "b:2")
         with self.assertRaises(SystemExit):   # and the other way round
             run_setup(self.kit, "init", "--name", "X", "--profile", "main", "--visibility", "public")
 
@@ -125,7 +125,7 @@ class Hangout(unittest.IsolatedAsyncioTestCase):
         self.assertIn(self.rid, self.relay.sessions)
         st, doc, _ = await http("GET", f"{self.http}/api/listing/realms.json")
         rec = next(r for r in doc["realms"] if r["community"]["realmId"] == self.rid)
-        self.assertEqual((rec["name"], rec["state"], rec["profile"]["ruleset"]), ("Dalaran Hangout", "live", "dalaran"))
+        self.assertEqual((rec["name"], rec["state"], rec["profile"]["ruleset"]), ("Wrath Unleashed", "live", "dalaran"))
         self.assertEqual((rec["community"]["lastHeartbeat"]["players"], rec["community"]["lastHeartbeat"]["bots"]), (7, 31))
         st, doc, _ = await http("GET", f"{self.http}/r/{self.rid}/status.json")
         self.assertEqual((doc["online"], doc["players"], doc["bots"]), (True, 7, 31))

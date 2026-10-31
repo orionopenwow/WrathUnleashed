@@ -19,7 +19,7 @@
 --   OV_HEARTH_RESET   .hearth                                   default on
 --   OV_BOT_SUMMON     .summon                                   default on
 --   OV_REALM_NAME     realm name shown in the welcome           default "WrathUnleashed"
---                     (while the Leyline brand is on: OV_LEYLINE_REALM_NAME, default "Dalaran Hangout")
+--                     (while the Leyline brand is on: OV_LEYLINE_REALM_NAME, default "Wrath Unleashed")
 --   OV_QOL_WELCOME    login welcome message                     default on
 --   OV_QOL_BOTHELP    .qol bots help text                       default on
 --   OV_DUEL_RESET     restore health/power/cooldowns at duel end  default on only with OV_BRAWL=1
@@ -79,12 +79,12 @@ end
 
 local function isBrawl() return os.getenv("OV_BRAWL") == "1" end
 local function realmName()
-    -- the Leyline brand switch (ov_modapi.lua OVMod.Brand, realm/brand.sh): "Dalaran Hangout" while it is on
+    -- the Leyline brand switch (ov_modapi.lua OVMod.Brand, realm/brand.sh): OVMod.OFFICIAL_NAME while it is on
     local m = rawget(_G, "OVMod")
     if m and m.Brand then return m.Brand().realm end
     if os.getenv("OV_LEYLINE_BRAND") == "1" then
         local b = os.getenv("OV_LEYLINE_REALM_NAME")
-        return (b and b ~= "") and b or "Dalaran Hangout"
+        return (b and b ~= "") and b or "Wrath Unleashed"   -- ov_modapi.lua OVMod.OFFICIAL_NAME
     end
     local n = os.getenv("OV_REALM_NAME")
     if n and n ~= "" then return n end

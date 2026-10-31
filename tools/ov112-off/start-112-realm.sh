@@ -74,7 +74,7 @@ PROBE="$SRC/hosting/vanilla-remastered/probe112.py"
 command -v docker >/dev/null || die "docker not found"
 
 # A probe container: python on the given network, the upload's wunet and probe112.py read-only. No image is pulled:
-# the box already has python:3.12-alpine (wu-portal) and wu-hangout-tools:1 (the Dalaran Hangout's agent).
+# the box already has python:3.12-alpine (wu-portal) and wu-hangout-tools:1 (Wrath Unleashed's agent).
 PY_IMG=""
 for i in python:3.12-alpine wu-hangout-tools:1; do docker image inspect "$i" >/dev/null 2>&1 && { PY_IMG=$i; break; }; done
 probe() {  # probe NETWORK ARGS...

@@ -29,7 +29,7 @@ const FAKE = ({ page, backdrop, tabs }) => {
       case 'get_state': return { version: 'test', settings: { clients: [{ id: 'c335a-1', name: 'My Wrath', path: '/x', build: '3.3.5a', realmlist: '' }],
         selected_client: 'c335a-1', selected_realm: 'play.openvanilla.app', wine: { enabled: false, command: 'wine', prefix: '' } },
         official_realm: 'play.openvanilla.app', browser_url: 'https://play.openvanilla.app/wrath', windows: true, data_dir: '/tmp' };
-      case 'realms_list': return { realms: [{ slug: 'official', name: 'Dalaran Hangout', official: true, state: 'live', build: '3.3.5a',
+      case 'realms_list': return { realms: [{ slug: 'official', name: 'Wrath Unleashed', official: true, state: 'live', build: '3.3.5a',
         version: '3.3.5a', core: 'azerothcore', tags: [], players: 5, bots: 0, address: 'play.openvanilla.app' }],
         network: { realms: 0, players: 5, bots: 0 }, from_cache: false, saved_at: 1, error: null };
       case 'realm_status': return { state: 'online', ping_ms: 10, players: 5 };
@@ -80,7 +80,7 @@ test('the side menu matches the website, with the same line icons', async () => 
   assert.equal(await page.textContent('.side-label'), 'YOUR REALMS');
   assert.equal(await page.locator('[data-link="support"]:visible').count(), 0, 'support buttons stay hidden');
   // Your realms: the crystal for the official realm and the gold client version
-  await page.waitForFunction(() => document.querySelector('#realm-rows .realm-row .name').textContent === 'Dalaran Hangout');
+  await page.waitForFunction(() => document.querySelector('#realm-rows .realm-row .name').textContent === 'Wrath Unleashed');
   assert.equal(await page.getAttribute('#realm-rows .realm-row .rl-ic img', 'src'), 'art/brand/leyline-crystal-256.webp');
   assert.equal(await page.textContent('#realm-rows .realm-row .rl-ver'), '3.3.5a');
   assert.equal(await page.textContent('#pb-realm-ver'), '3.3.5a', 'the play bar too');

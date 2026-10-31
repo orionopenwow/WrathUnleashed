@@ -14,7 +14,7 @@
 #     support proxies, and only mangosd/realmd of the wenilla-realm stack: restart policy set to "no",
 #     then stopped. Nothing is removed.
 # What it never touches: anything naming wu-, leyline, hangout, relay, portal, stream, wrath or caddy
-# (Leyline and the Dalaran Hangout run on the same server), the wenilla-realm stack's realm, caddy and
+# (Leyline and Wrath Unleashed run on the same server), the wenilla-realm stack's realm, caddy and
 # mariadb containers (the website front and the proxy everything goes through), Docker itself, and
 # /etc/cron.d (only reported).
 # Before changing anything it saves root's crontab, the unit files and their state, and each

@@ -343,7 +343,7 @@ fn replace_confirm(names: &[String]) -> String {
 /// moving their own folders of the same names aside (else the error starts with `REPLACE_CONFIRM`).
 pub fn install(client: &Path, build: Build, d: &Descriptor, scratch: &Path, replace_ok: bool) -> Result<Done, String> {
     if build != Build::V335a {
-        return Err("The Leyline addons are for the Dalaran Hangout's client, not this one.".into());
+        return Err(format!("The Leyline addons are for {}'s client, not this one.", crate::realms::SAMPLE_NAME));
     }
     let d = clean(d.clone()).ok_or("The Leyline addons listing does not look right.")?;
     let man = mods::load(client);

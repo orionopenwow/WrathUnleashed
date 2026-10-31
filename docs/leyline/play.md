@@ -71,7 +71,7 @@ You need your own 3.3.5a install (build 12340). We don't provide game files.
 
 The player package has a `Play` .bat file that asks for your 3.3.5a folder once and opens the game in your browser. It only reads your own files, on your PC.
 
-Dalaran Hangout is a 3.3.5a realm. A 1.12 or 2.4.3 client plays on community realms of its own build, and the [Leyline launcher](launcher.md) picks the right client from your own folders.
+Wrath Unleashed is a 3.3.5a realm. A 1.12 or 2.4.3 client plays on community realms of its own build, and the [Leyline launcher](launcher.md) picks the right client from your own folders.
 
 ## Community realms
 

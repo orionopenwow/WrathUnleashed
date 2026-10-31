@@ -212,7 +212,7 @@ html[data-base="light"] .hs-side { box-shadow: 0 14px 30px rgba(16, 24, 40, .12)
   background: color-mix(in srgb, var(--t-accent) 14%, var(--t-chrome)); font-weight: 700; bottom: -18px; }
 .home-cue:hover { background: color-mix(in srgb, var(--t-accent) 24%, var(--t-chrome)); }
 
-/* ---------------------------------------------------------------- the launch slide: Join the Dalaran Hangout */
+/* ---------------------------------------------------------------- the launch slide: Join the official realm */
 .hs-hangout { --hs-wash: radial-gradient(95% 90% at 82% 18%, color-mix(in srgb, var(--t-accent-2) 30%, transparent), transparent 62%),
   radial-gradient(80% 75% at 0% 100%, color-mix(in srgb, var(--t-accent) 22%, transparent), transparent 62%); }
 .hs-hangout .hs-title { font-size: 42px; }
@@ -226,7 +226,7 @@ html[data-base="light"] .hs-side { box-shadow: 0 14px 30px rgba(16, 24, 40, .12)
 .hs-lineup .hs-rl-n i { font: 500 12px var(--t-font); font-style: normal; color: var(--t-text-2); }
 @media (max-width: 1150px) { .hs-hangout .hs-title { font-size: 34px; } }
 
-/* the play bar's realm picker: the Hangout's label beside its name ("Dalaran Hangout · the Wrath realm") */
+/* the play bar's realm picker: the Hangout's label beside its name ("Wrath Unleashed · Official realm") */
 .pb-opt-kind { flex: none; font-size: 12px; font-weight: 500; color: var(--t-text-2); white-space: nowrap; }
 .pb-opt-kind::before { content: "· "; }
 

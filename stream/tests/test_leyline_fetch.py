@@ -1,4 +1,4 @@
-"""realm/custom/leyline-fetch.py: the in-game Leyline window's realm list lists the Dalaran Hangout first (its id from
+"""realm/custom/leyline-fetch.py: the in-game Leyline window's realm list lists the Wrath Unleashed first (its id from
 OV_LEYLINE_HOME or the hangout step's id file), then live realms, busiest first; with no hangout, as before.
 
     python3 -I stream/tests/test_leyline_fetch.py [realm/custom/leyline-fetch.py]
@@ -26,7 +26,7 @@ def rec(rid, name, live, players):
 tmp = tempfile.mkdtemp()
 listing = os.path.join(tmp, "listing.json")
 with open(listing, "w") as f:
-    json.dump({"realms": [rec("abcdefghijklmnop", "Busy Den", True, 40), rec(HANG, "Dalaran Hangout", True, 2),
+    json.dump({"realms": [rec("abcdefghijklmnop", "Busy Den", True, 40), rec(HANG, "Wrath Unleashed", True, 2),
                           rec("qrstuvwxyz234567", "Quiet Corner", False, 0)]}, f)
 
 
@@ -66,7 +66,7 @@ check("a junk hangout id changes nothing", rc == 0 and ids[0] == "abcdefghijklmn
 net = {"kind": "network", "realms": [
     dict(rec("abcdefghijklmnop", "Busy Den", True, 40), community={"realmId": "abcdefghijklmnop", "score": 50,
                                                                    "lastHeartbeat": {"players": 40, "bots": 0}}),
-    dict(rec(HANG, "Dalaran Hangout", True, 2), community={"realmId": HANG, "sample": True, "score": 60,
+    dict(rec(HANG, "Wrath Unleashed", True, 2), community={"realmId": HANG, "sample": True, "score": 60,
                                                           "lastHeartbeat": {"players": 2, "bots": 30}}),
     dict(rec("featuredfeatured", "Picked", True, 0), tags=["pvp", "nope"], language="de",
          community={"realmId": "featuredfeatured", "featured": True, "verified": True, "score": 5, "uptime": {"d7": 97},

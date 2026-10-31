@@ -145,7 +145,7 @@ class HangoutDeploy(unittest.TestCase):
         cfg = self.cfg()
         rid = cfg["realm_id"]
         self.assertTrue(cfg["official"])
-        self.assertEqual((cfg["name"], cfg["visibility"], cfg["signup"], cfg["realmlist"]), ("Dalaran Hangout", "public", "off", "keep"))
+        self.assertEqual((cfg["name"], cfg["visibility"], cfg["signup"], cfg["realmlist"]), ("Wrath Unleashed", "public", "off", "keep"))
         self.assertEqual((cfg["relay_url"], cfg["listing_url"]), ("ws://172.18.0.1:8100/agent", "http://172.18.0.1:8100/api/listing/heartbeat"))
         self.assertEqual((cfg["auth_service"], cfg["world_service"], cfg["status_url"]),
                          ("wu-hangout-auth:3724", "ov-ac-worldserver:8085", "http://wu-portal:8091/wrath/status.json"))

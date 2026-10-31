@@ -1,4 +1,4 @@
-# Client patches (the Dalaran Hangout browser client)
+# Client patches (the Wrath Unleashed browser client)
 
 Our changes to the browser client, as patches against benilla-wotlk (pinned commit `b9a49428`).
 Moved here from the repo root on 2026-10-30; nothing was deleted.

@@ -205,7 +205,7 @@ Leyline is a **mod launcher** and a **peer-to-peer realm network** for classic g
   installs them into your own client in one click and checks every file first.
 - **Play in your browser** (nothing to install), or **with your own client**: the launcher finds the client you
   already have, points it at the realm you picked and starts it.
-- **A sample realm to try**: our temporary *Dalaran Hangout* (3.3.5a) is a Leyline realm like any other, and
+- **A sample realm to try**: our temporary *Wrath Unleashed* (3.3.5a) is a Leyline realm like any other, and
   it gets our client additions first.
 - **Open source**, MIT licensed. No game data is in this repo: hosts extract what their realm needs from their
   own install, on their own PC, and it never leaves it.

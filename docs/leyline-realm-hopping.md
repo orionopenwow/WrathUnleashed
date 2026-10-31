@@ -53,7 +53,7 @@ tab. "Back to Wrath" is one click in the window and on the page.
 - The kept password is in this browser's localStorage, readable by script on the game's origin.
   "Use another account" on the bar forgets it.
 
-## The Dalaran Hangout (the owner's realm as a Beacon)
+## Wrath Unleashed (the owner's realm as a Beacon)
 
 The owner hosts it; nothing runs anywhere but on the realm's own box. `hosting/hangout/hangout-up.sh` (the
 `hangout` step; `hangout-off` takes it off Leyline, keeping its key) runs two containers next to the realm:
@@ -62,7 +62,7 @@ The owner hosts it; nothing runs anywhere but on the realm's own box. `hosting/h
   `official: true` (the agent never touches `acore_auth.realmlist`, accounts or GM rights), players and bots
   from `http://wu-portal:8091/wrath/status.json`. Its key is made on the box (`state/realm.key`, 0600). It
   tunnels to the relay's web side on the same box (`ws://<RELAY_HTTP_BIND>/agent`) and is listed as
-  "Dalaran Hangout".
+  "Wrath Unleashed".
 - `wu-hangout-auth`: a second login server for relay players: the realm's own authserver image and settings
   (copied from `ov-ac-authserver`), the same database, no published port, but `AC_WRONG_PASS_MAX_COUNT=0`.
   Every relay player reaches a realm from the agent's address; the realm's own IP ban (10 wrong passwords,
@@ -140,7 +140,7 @@ keep working.
   an unlisted origin can't frame it. A popup can't work (COOP severs `window.opener`), and a credentialless
   iframe isn't needed. Keep Caddy from stripping the headers (it doesn't today).
 
-## Live test: Wrath's Dalaran -> the Dalaran Hangout through the relay -> Back to Wrath
+## Live test: Wrath's Dalaran -> Wrath Unleashed through the relay -> Back to Wrath
 
 Run in the owner's browser pane, signed in to play.openvanilla.app. Deployed first: `relay`, `hangout` (its last
 lines print the hangout's realm id, below `RID`), `signin`, `client`, `scripts`. Nothing here makes an account
@@ -149,12 +149,12 @@ or types a password: every login is the player's own, filled in by the page.
 1. **The hangout is live.** On any play.openvanilla.app page:
    ```js
    const L = await (await fetch('https://relay.openvanilla.app/api/listing/realms.json')).json();
-   const H = L.realms.find((r) => r.name === 'Dalaran Hangout');
+   const H = L.realms.find((r) => r.name === 'Wrath Unleashed');
    const RID = H.community.realmId;
    [H.state, RID, H.community.lastHeartbeat]          // 'live', the id, {online: true, players: N, bots: N}
    (await (await fetch(`https://relay.openvanilla.app/r/${RID}/status.json`)).json())   // online: true
    ```
-   `https://play.openvanilla.app/wrath/realms` shows Dalaran Hangout first among community realms, with
+   `https://play.openvanilla.app/wrath/realms` shows Wrath Unleashed first among community realms, with
    "Play in Dalaran".
 2. **On Wrath, in the world.** Open `https://play.openvanilla.app/wrath`, pick a character, enter the world. On the
    game tab (wrath.openvanilla.app):
@@ -168,22 +168,22 @@ or types a password: every login is the player's own, filled in by the page.
    await new Promise((r) => setTimeout(r, 3000));
    await wenilla.lua(`local t = {} for i, r in ipairs(WrathUnleashedUI.Leyline.realms) do
      t[i] = r.id .. '|' .. r.name .. '|' .. tostring(r.live) end return table.concat(t, '\n')`)
-   // 'this|WrathUnleashed|true' first, then '<RID>|Dalaran Hangout|true'
+   // 'this|WrathUnleashed|true' first, then '<RID>|Wrath Unleashed|true'
    ```
 4. **Hop to the hangout** (the window's own Join; clicking Join on that row is the same):
    ```js
    await wenilla.lua(`for _, r in ipairs(WrathUnleashedUI.Leyline.realms) do
-     if r.name == 'Dalaran Hangout' then WrathUnleashedUI.Leyline.Join(r) return r.id end end`)
+     if r.name == 'Wrath Unleashed' then WrathUnleashedUI.Leyline.Join(r) return r.id end end`)
    ```
    Within about a second the tab goes to `play.openvanilla.app/wrath?go=r:<RID>` and comes back to the game at
    `wrath.openvanilla.app/?go=r:<RID>`. If it doesn't: `window.__wuHop.status().watch` shows `polls`, `taken`
    and `error`.
 5. **On the hangout.** After the reload:
    ```js
-   const s = window.__wuHop.status(); s.hop      // {id: RID, name: 'Dalaran Hangout', base: 'wss://relay.openvanilla.app/ws/<RID>', login: true, home: true}
+   const s = window.__wuHop.status(); s.hop      // {id: RID, name: 'Wrath Unleashed', base: 'wss://relay.openvanilla.app/ws/<RID>', login: true, home: true}
    s.signedIn                                    // true: the Wrath login, no join page
    !!document.querySelector('#wu-hop-join')      // false
-   document.querySelector('#wu-hop-bar').textContent   // 'On Dalaran Hangout · Leyline' + 'Back to Wrath' (no 'Use another account')
+   document.querySelector('#wu-hop-bar').textContent   // 'On Wrath Unleashed · Leyline' + 'Back to Wrath' (no 'Use another account')
    ```
    The character list comes up by itself (same account, same characters). Enter the world, then:
    ```js

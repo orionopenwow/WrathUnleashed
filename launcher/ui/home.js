@@ -4,7 +4,7 @@
 // shown, and the site's list of Home screenshots (/wrath/art/home/home.json, the one address the window's CSP lets it read). Every page jump goes through window.LeylineNav.show(page, noLoad, tab). Everything from a catalog, the realm
 // list, the forum or home.json is shown with textContent; nothing here is set as HTML.
 //
-// The gallery: first, the launch slide (Join the Dalaran Hangout: Play now and Join the Discord, with the official
+// The gallery: first, the launch slide (Join the official realm, App.HANGOUT: Play now and Join the Discord, with the official
 // lineup, what's on and the latest forum threads beside it); then one slide per highlight (the featured mode, what's
 // new, browser play with the realms on the network, hosting, your Den, a Workshop mod with its screenshots), each a big
 // title, one short line, a row of live counts and one button, over the owner's in-game screenshot (fetched from the
@@ -54,11 +54,11 @@
   function slideDefs() {
     const out = [];
     const M = Modes();
-    // (0) launch (owner 2026-10-30): the Dalaran Hangout, the Wrath realm where everyone meets, is the front door.
+    // (0) launch (owner 2026-10-30): the official realm (App.HANGOUT), where everyone meets in Dalaran, is the front door.
     // Play now selects it and presses PLAY (browser play when there is no 3.3.5a client); Join the Discord is the core's
     // named link. TODO(owner): the kicker and the line, his words.
     if (App.playHangout) {
-      out.push({ key: "hangout", kicker: "Open now · " + App.HANGOUT.kind, title: "Join the " + App.HANGOUT.name,
+      out.push({ key: "hangout", kicker: "Open now · " + App.HANGOUT.kind, title: "Join " + App.HANGOUT.name,
         line: "Everyone meets in Dalaran. Say hello, then try /golf and /modes.",
         chips: hangoutChips, photo: true, side: hangoutSide, cta: "Play now", run: () => App.playHangout(),
         cta2: "Join the Discord", run2: () => App.openLink("discord") });
@@ -107,7 +107,7 @@
     const hang = App.realms().find((r) => r.official);
     const live = liveRealms();
     const out = [];
-    if (hang && hang.state === "live" && hang.players != null) out.push({ t: `${hang.players} in the Hangout now`, live: true });
+    if (hang && hang.state === "live" && hang.players != null) out.push({ t: `${hang.players} on ${App.HANGOUT.name} now`, live: true });
     if (live.length) out.push({ t: `${sum(live)} playing on ${plural(live.length, "realm")}` });
     return out;
   }
@@ -225,7 +225,7 @@
     const on = M ? M.modes().filter((m) => m.status === "live" && m.kind === "realm").slice(0, 3) : [];
     if (on.length) {
       const card = el("div", "hs-glass hs-whats");
-      card.append(sideHead("What's on in the Hangout"));
+      card.append(sideHead("What's on in " + App.HANGOUT.name));
       const row = el("div", "hs-mt-row");
       for (const m of on) {
         const b = el("button", "hs-mt");

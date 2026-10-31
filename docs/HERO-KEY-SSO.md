@@ -67,7 +67,7 @@ What each party sees:
 
 ### In the browser game (a hop)
 
-- `stream/wrath_portal.py` `hop_env`: with the flag on, a hop to a Beacon (not the Dalaran Hangout, which already
+- `stream/wrath_portal.py` `hop_env`: with the flag on, a hop to a Beacon (not Wrath Unleashed, which already
   uses the Wrath login) gets `hop_sso: {assertion, sig, redeem}` and the one-time login in `user`/`pass`.
 - `stream/www-files/wrath-early.js` (the leyline-hop block): checks that `redeem` is this realm's route on the same
   relay as the bridge, posts the assertion (`credentials: "omit"`), and holds the client's start (its wasm download)

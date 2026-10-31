@@ -225,7 +225,7 @@ check(".wu mentions .mounts", (function() local x = player(); events[42](42, x, 
 -- the Leyline brand switch: the chat tag (OVMod.Brand from ov_modapi.lua; off: the old one)
 local t0 = player(); events[42](42, t0, "wu")
 check("brand off: the old chat tag", t0.msgs[1]:find("|cff66ccff[WrathUnleashed]|r ", 1, true) == 1)
-_G.OVMod = { Brand = function() return { on = true, name = "Leyline", realm = "Dalaran Hangout", home = "Dalaran Hangout" } end }
+_G.OVMod = { Brand = function() return { on = true, name = "Leyline", realm = "Wrath Unleashed", home = "Wrath Unleashed" } end }
 local t1 = player(); events[42](42, t1, "wu")
 check("brand on: [Leyline]", t1.msgs[1]:find("|cff66ccff[Leyline]|r ", 1, true) == 1 and not t1.msgs[1]:find("WrathUnleashed", 1, true))
 _G.OVMod = nil

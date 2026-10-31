@@ -124,9 +124,9 @@ salted daily hash; the knock table is memory-only. Caddy runs without an access 
   if the realm's latest **signed** heartbeat carries that token. Implemented and tested on the
   listing side; the site side (Hero Key sign-in page, token issue) is the website's to build.
 
-## The Dalaran Hangout (`hangout/`)
+## Wrath Unleashed (`hangout/`)
 
-The owner's own realm, reachable as a Leyline Beacon through the relay on the same box ("Dalaran Hangout", listed
+The owner's own realm, reachable as a Leyline Beacon through the relay on the same box ("Wrath Unleashed", listed
 first): a live target to hop to and from. `hangout/Deploy Dalaran hangout.bat` (the `hangout` step;
 `hangout-off` takes it off Leyline) runs `hangout-up.sh`: backup, build, `setup.py official` (public, signup
 off, the realm list, accounts and GM rights never touched; the key made on the box), a second login server for

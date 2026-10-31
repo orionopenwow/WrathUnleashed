@@ -1,5 +1,5 @@
 // Headless Chromium (Playwright): the Leyline brand switch on the stream page files. With the brand ON (the portal's
-// /__env.js sends brand + home_name), the hop bar and the join page say "Back to Dalaran Hangout" and the one-tab
+// /__env.js sends brand + home_name), the hop bar and the join page say "Back to Wrath Unleashed" and the one-tab
 // note page (tab.html) says Leyline; with it OFF (no env.brand) they say exactly what they said before.
 //
 //   node --test tests/brand.browser.test.cjs          (from the stream folder; needs Playwright)
@@ -12,7 +12,8 @@ const http = require('node:http');
 const { chromium } = require('playwright');
 
 const WWW = path.join(__dirname, '..', 'www-files');
-const OLD = /WrathUnleashed|Wrath Unleashed|Open ?Vanilla|Back to Wrath\b/;
+// "Wrath Unleashed" (with the space) is the main realm's own name now (owner 2026-10-30 23:32), not an old one
+const OLD = /WrathUnleashed|Open ?Vanilla|Back to Wrath\b(?! Unleashed)/;
 
 function serve() {
   const srv = http.createServer((req, res) => {
@@ -53,10 +54,10 @@ test('brand on and off: the hop bar, the join page and the one-tab note', async 
   const base = `http://127.0.0.1:${srv.address().port}`;
   const browser = await chromium.launch();
   try {
-    const on = await hopPage(browser, base, { ...hopEnv, brand: 'leyline', home_name: 'Dalaran Hangout' });
-    assert.match(on.text, /Back to Dalaran Hangout/, 'on: the bar and the join page name the main realm');
+    const on = await hopPage(browser, base, { ...hopEnv, brand: 'leyline', home_name: 'Wrath Unleashed' });
+    assert.match(on.text, /Back to Wrath Unleashed/, 'on: the bar and the join page name the main realm');
     assert.doesNotMatch(on.text, OLD, 'on: no old names');
-    assert.equal(on.kept, 'Dalaran Hangout', 'on: kept for tab.html');
+    assert.equal(on.kept, 'Wrath Unleashed', 'on: kept for tab.html');
 
     const off = await hopPage(browser, base, hopEnv);
     assert.match(off.text, /Back to Wrath/, 'off: the old words');
@@ -64,7 +65,7 @@ test('brand on and off: the hop bar, the join page and the one-tab note', async 
 
     const tab = await browser.newPage();
     await tab.goto(base + '/tab.html');
-    await tab.evaluate(() => localStorage.setItem('wu-brand', 'Dalaran Hangout'));
+    await tab.evaluate(() => localStorage.setItem('wu-brand', 'Wrath Unleashed'));
     await tab.goto(base + '/tab.html?m=busy&r=/');
     const t = await tab.evaluate(() => ({ title: document.title, h: document.getElementById('t').textContent }));
     assert.equal(t.title, 'Leyline');

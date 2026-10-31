@@ -1,13 +1,13 @@
 -- Leyline (3.3.5a API): the in-game window of the Leyline network, in the Mods & Workshop panel's look.
 --   Realms:  every Leyline realm (name, ruleset, players, online/offline), this one first. "Copy link" puts the
 --            realm's link (PUBLIC_BASE/r/<id>) in the box to copy; "Join" hops there: the browser game reloads
---            on that realm. The home button (always at the bottom: "Back to Wrath", or "Back to Dalaran Hangout" with the Leyline brand on) hops home.
+--            on that realm. The home button (always at the bottom: "Back to Wrath", or "Back to Wrath Unleashed" with the Leyline brand on) hops home.
 --   Friends across realms: the place for the global friends list (coming).
 --   Your game folder: "Streamed: Dalaran, capitals, starting areas" or "Whole world: your game folder", and
 --            "Use my game folder", which asks the page for the folder picker (GameFolder.lua).
 -- Opened by Esc > Realm List, /leyline and /realms. "Host your own" opens the Host window (Host.lua): set up a realm,
 -- and "Your realm" for its GM.
--- This realm is one row: its own relay listing (the Beacon of the same realm, e.g. the Dalaran Hangout's) is not a
+-- This realm is one row: its own relay listing (the Beacon of the same realm, e.g. the official realm's) is not a
 -- second row. The realm says which listing that is (S:<id>:<live>, below); an older realm doesn't, so a listed realm
 -- with this realm's own name is taken as it too. The row then keeps the listing's id: "Copy link" gives the relay
 -- link in the desktop client (where the relay is how other clients come in) and the /wrath link in the browser.
@@ -374,9 +374,10 @@ local function info(text) if win then win.info:SetText(text) end end
 function L.OnWrath()
     if not GetRealmName then return true end
     local ok, name = pcall(GetRealmName)
-    -- Home is our realm under any of its names: today's, the Sample Hangout's, and the Leyline brand's.
+    -- Home is our realm under any of its names: today's, the Sample Hangout's, the Leyline brand's, the official name
+    -- and the one it had before (Dalaran Hangout, until 2026-10-30).
     return not ok or name == nil or name == HOME_REALM or name == "Leyline Sample Hangout"
-        or name == "Dalaran Hangout" or (brand().on and name == brand().home)
+        or name == W.OFFICIAL_NAME or name == "Dalaran Hangout" or (brand().on and name == brand().home)
 end
 
 -- Ask the page to reload the game on target ("wrath" or a relay realm id). False for anything else.
@@ -391,7 +392,7 @@ function L.Hop(target, name)
         info(brand().back .. "... the game reloads there in a moment.")
     else
         info("Hopping to " .. (name or "that realm") .. "... the game reloads there in a moment. The first time, you "
-            .. "make an account on that realm (or sign in to yours); the Dalaran Hangout uses your "
+            .. "make an account on that realm (or sign in to yours); " .. (W.OFFICIAL_NAME or "our realm") .. " uses your "
             .. (brand().on and "own" or "Wrath") .. " login.")
     end
     return true

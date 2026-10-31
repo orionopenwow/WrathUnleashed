@@ -212,10 +212,10 @@ foot = re.search(r'<footer class="hb-foot">.*?</footer>', front, re.S).group(0)
 check("footer: Docs, Download, Forum, Status, the wordmark, Join the Discord and GitHub only",
       all(f">{x}<" in foot for x in ("Docs", "Download", "Forum", "Status", "GitHub")) and ">Community<" not in foot and "<b>Leyline</b>" in foot
       and f'href="{wp.DISCORD_URL}" rel="noopener noreferrer"' in foot and "</svg>Join the Discord</a>" in foot)
-# launch (2026-10-30): the Dalaran Hangout is the front door, the Discord everywhere
+# launch (2026-10-30): the official realm (Wrath Unleashed) is the front door, the Discord everywhere
 ho = re.search(r'<section class="hb-ho[^"]*" id="hangout".*?</section>', front, re.S)
-check("launch: under the hero, The Dalaran Hangout is open, Play in your browser and Join the Discord",
-      ho and "<h2 id=\"hb-ho-h\">The Dalaran Hangout is open</h2>" in ho.group(0)
+check("launch: under the hero, Wrath Unleashed is open, Play in your browser and Join the Discord",
+      ho and "<h2 id=\"hb-ho-h\">Wrath Unleashed is open</h2>" in ho.group(0)
       and '<a class="hb-cta sm" href="/wrath">Play in your browser</a>' in ho.group(0)
       and f'href="{wp.DISCORD_URL}"' in ho.group(0) and "TODO(owner): the Hangout line" in ho.group(0)
       and front.index('class="hb-hero"') < front.index('id="hangout"') < front.index('id="realms"'))
@@ -223,8 +223,8 @@ cm = re.search(r'<section class="hb-sec hb-cm hb-rv" id="forum".*?</section>', f
 check("launch: the Forum and Discord section opens with a big Join the Discord, and the Community feature section links it and the forum",
       cm and cm.group(0).index('class="hb-cm-dc big"') < cm.group(0).index('class="hb-cm-g') and re.search(r'id="f-community".*?href="/wrath/leyline/forum"', front, re.S) and f'href="{wp.DISCORD_URL}"' in cm.group(0)
       and re.search(r'id="f-community".*?Join the Discord</a>', front, re.S))
-check("launch: the Hangout row comes first, named, labelled the Wrath realm",
-      re.search(r'<li class="hb-rl home[^"]*" data-home="1"[^>]*>.*?<b>Dalaran Hangout</b><span class="hb-rl-k">the Wrath realm</span>', front))
+check("launch: the Hangout row comes first, named, labelled Official realm",
+      re.search(r'<li class="hb-rl home[^"]*" data-home="1"[^>]*>.*?<b>Wrath Unleashed</b><span class="hb-rl-k">Official realm</span>', front))
 # the owner's 2026-10-30 additions: realms under the hero, the feature sections in order, how it works, the polish
 fs = re.findall(r'<section class="hb-fs hb-rv( flip)?" id="f-([a-z]+)".*?<p class="hb-eyebrow">.*?</span>([^<]+)</p><h2[^>]*>([^<]+)</h2>'
                 r'<p class="hb-lede">([^<]+)</p><ul class="hb-points">(.*?)</ul><p class="hb-fs-a">(.*?)</p></div>'
@@ -919,7 +919,7 @@ check("realm types from tags: Normal, PvP, RP, RP-PvP", [HB.realm_type(t)[0] for
 check("population words from players: Offline, Low, Medium, High, Full", [HB.population(*x)[0] for x in (
       (False, 50), (True, None), (True, 0), (True, 19), (True, 20), (True, 79), (True, 80), (True, 199), (True, 200), (True, 900))]
       == ["Offline", "Low", "Low", "Low", "Medium", "Medium", "High", "High", "Full", "Full"])
-RROWS = [{"home": True, "name": "Dalaran Hangout", "live": True, "players": 4, "tags": ["hangout"], "build": 12340},
+RROWS = [{"home": True, "name": "Wrath Unleashed", "live": True, "players": 4, "tags": ["hangout"], "build": 12340},
          {"id": "featuredfeatured", "name": "Old Days", "live": True, "players": 90, "tags": ["rp", "pvp"], "featured": True, "build": 12340},
          {"id": "busybusybusybusy", "name": "Busy Den", "live": True, "players": 230, "tags": ["pvp"], "build": 12340},
          {"id": "quietquietquietq", "name": "Quiet <Meadow>", "live": True, "players": 30, "tags": ["rp"], "build": 5875},
@@ -928,7 +928,7 @@ rl = HB.hub.realm_list_art((RROWS, {}, True, {}, {}))
 rrows = re.findall(r'<li><a class="hb-rlx-r([^"]*)" href="([^"]+)"[^>]*data-type="([a-z]+)" data-pop="([a-z]+)">'
                    r'<span class="hb-rlx-n">([^<]+)</span><span class="hb-rlx-t[^"]*">([^<]+)</span>.*?<span class="hb-rlx-p[^"]*">([^<]+)</span></a></li>', rl)
 check("realm list: the rows from the live list in its order, then a dimmed Your realm here (Host one) row",
-      [r[4] for r in rrows] == ["Dalaran Hangout", "Old Days", "Busy Den", "Quiet &lt;Meadow&gt;", "Sleepy", "Your realm here"]
+      [r[4] for r in rrows] == ["Wrath Unleashed", "Old Days", "Busy Den", "Quiet &lt;Meadow&gt;", "Sleepy", "Your realm here"]
       and rrows[-1][0] == " you" and rrows[-1][1] == "/wrath/host" and rrows[-1][5] == "Host one", [r[4] for r in rrows])
 check("realm list: types coloured from tags, population in words", [(r[5], r[2]) for r in rrows[:5]] == [
       ("Normal", "pve"), ("RP-PvP", "rppvp"), ("PvP", "pvp"), ("RP", "rp"), ("Normal", "pve")]
@@ -1229,8 +1229,8 @@ with wp._listing_lock:
                        ok=True, fetched=True, at=time.monotonic() + 1e6, when=time.time())
 lr = HB.hub.realm_rows()
 names = [r["name"] for r in lr[0]] if lr else []
-check("launch lineup: the Dalaran Hangout pinned first, then Vanilla Remastered (official by name until its record says so), "
-      "then the network's own order", names[:2] == ["Dalaran Hangout", "Vanilla Remastered"] and names.index("Busy Den") < names.index("Staff Pick"), names)
+check("launch lineup: the Wrath Unleashed pinned first, then Vanilla Remastered (official by name until its record says so), "
+      "then the network's own order", names[:2] == ["Wrath Unleashed", "Vanilla Remastered"] and names.index("Busy Den") < names.index("Staff Pick"), names)
 check("launch lineup: a record marked official or pinned joins the lineup", HB.lineup_rank({"official": True}) == 0
       and HB.lineup_rank({"pinned": True}) == 0 and HB.lineup_rank({"name": "Busy Den"}) == 1)
 lfp = req("/wrath/leyline-preview")[2].decode()

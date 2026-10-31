@@ -204,9 +204,10 @@ async function refresh() {
 // ------------------------------------------------------------------ realm: the chosen realm, the rows, live status
 function isOfficial() { return $("play-realm").value === "official"; }
 function chosenRealm() { return isOfficial() ? state.official_realm : $("play-custom").value.trim(); }
-// The official realm is the Dalaran Hangout (launch, owner 2026-10-30): the Wrath realm, where everyone meets in
-// Dalaran. One name everywhere, whatever the listing calls it (the Sample Hangout, the realm's own name).
-const HANGOUT = { name: "Dalaran Hangout", kind: "the Wrath realm" };
+// The official realm (launch, owner 2026-10-30; renamed "Wrath Unleashed" for now, owner 2026-10-30 23:32): where
+// everyone meets in Dalaran. One name everywhere, whatever the listing calls it (the Sample Hangout, the realm's own
+// name). The one place the launcher's UI names it: home.js and addons.js read it from here (window.LeylineApp.HANGOUT).
+const HANGOUT = { name: "Wrath Unleashed", kind: "Official realm" };
 // The official lineup after the Hangout: a record the network marks official or pinned, or one known by name until it
 // does (Vanilla Remastered). Pinned under the Hangout in the play bar's realm picker.
 const LINEUP_NAMES = ["vanilla remastered"];
@@ -600,7 +601,7 @@ function renderRealmMenu() {
     icon: realmIcon(r.name, r.official, "sm"), ver: r.official ? "3.3.5a" : realmVersion(r), sub: players(r), subCls: r.state === "live" ? "live" : "",
     kind: r.official ? HANGOUT.kind : "",
     selected: online && (r.official ? isOfficial() : !isOfficial() && r.address === here), title: r.tagline || r.name, run: () => pickRealm(r) });
-  // the official lineup first (launch): the Dalaran Hangout pinned at the top, labelled, then Vanilla Remastered when
+  // the official lineup first (launch): the official realm (HANGOUT) pinned at the top, labelled, then Vanilla Remastered when
   // its record is on the list
   const off = (realmsCache || []).find((x) => x.official) || { official: true, name: officialName(), state: "live", players: null };
   const lineup = (realmsCache || []).filter((r) => inLineup(r) && r.address && !hiddenBuild(r.build));
@@ -1628,8 +1629,9 @@ async function loadRealms(quiet) {
   if (!quiet) say("rl-status", "Loading the realm list…");
   try {
     const l = await invoke("realms_list");
-    // the core's official record (slug "official", realms.rs official()) is the Hangout; community records never are
-    realmsCache = l.realms.map((r) => (r.official && r.slug === "official" ? Object.assign({}, r, { name: HANGOUT.name, kind: HANGOUT.kind }) : r));
+    // the core's official record (slug "official", realms.rs official()) is the Hangout; community records never are.
+    // Its card keeps the record's own type (PvE): the Official badge already says what HANGOUT.kind would.
+    realmsCache = l.realms.map((r) => (r.official && r.slug === "official" ? Object.assign({}, r, { name: HANGOUT.name }) : r));
     realmNames = l.realms.map((r) => r.name);
     const when = l.saved_at ? new Date(l.saved_at * 1000).toLocaleString() : "an earlier visit";
     const n = l.realms.length - 1;
@@ -2102,7 +2104,7 @@ $("upd-channel").addEventListener("change", async () => {
 setInterval(loadUpdateState, 60000);
 
 // ------------------------------------------------------------------ for Home's gallery and rows (home.js, loaded after this)
-// Home's "Join the Dalaran Hangout" slide: select the Hangout and press PLAY. With a 3.3.5a client, that client on
+// Home's "Join <HANGOUT.name>" slide: select the Hangout and press PLAY. With a 3.3.5a client, that client on
 // the Hangout; without one, browser play (the Hangout plays in the browser, nothing to install).
 function playHangout() {
   $("play-realm").value = "official";

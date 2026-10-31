@@ -999,7 +999,7 @@ class Hub:
         players = st.get("players") if st and isinstance(st.get("players"), int) else rec.get("players")
         bots = st.get("bots") if st and isinstance(st.get("bots"), int) else rec.get("bots")
         home = {**rec, "home": True, "official": True, "live": live, "players": players, "bots": bots, "build": BROWSER_BUILD,
-                "name": HANGOUT_NAME,   # the Wrath realm, sampler or not: one name everywhere at launch
+                "name": HANGOUT_NAME,   # the official realm, sampler or not: one name everywhere at launch
                 "kind": HANGOUT_KIND, "tagline": rec.get("tagline") or HANGOUT_LINE,
                 "temporary": bool(sample.get("temporary")), "featured": False, "new": False, "group": "home",
                 "address": self.portal("PUBLIC_HOST") or "play.openvanilla.app"}
@@ -1117,7 +1117,7 @@ class Hub:
                 '<circle cx="15" cy="10.5" r="1.2"/></svg>Join the Discord</a>')
 
     def hangout_open(self, got=None) -> str:
-        """Under the hero (launch, owner 2026-10-30): the Dalaran Hangout is open, the front door. Play in your browser
+        """Under the hero (launch, owner 2026-10-30): the official realm (HANGOUT_NAME) is open, the front door. Play in your browser
         and Join the Discord; the players there now when the realm says so."""
         e = html.escape
         home = next((r for r in (got[0] if got else []) if r.get("home")), None)
@@ -1133,7 +1133,7 @@ class Hub:
                + "</span>") if live else ""
         return ('<section class="hb-ho hb-rv" id="hangout" aria-labelledby="hb-ho-h">'
                 f'<div class="hb-ho-t"><p class="hb-eyebrow">{e(HANGOUT_NAME)} · {e(HANGOUT_KIND)}{now}</p>'
-                '<h2 id="hb-ho-h">The Dalaran Hangout is open</h2>'
+                f'<h2 id="hb-ho-h">{e(HANGOUT_NAME)} is open</h2>'
                 '<!-- TODO(owner): the Hangout line, his words -->'
                 '<p class="hb-ho-l">Everyone meets in Dalaran: say hello, try minigolf and the game modes, then head out together. '
                 'Nothing to install.</p></div>'
@@ -2621,7 +2621,7 @@ text-decoration:none;color:var(--lk-text-2)!important}
 stroke-linejoin:round}.hb-dc svg circle{fill:currentColor;stroke:none}
 .hb-social a.hb-dc{min-height:34px;padding:0 12px;border-radius:var(--lk-r-sm);border:1px solid var(--lk-border-strong);color:var(--lk-text)!important;font-weight:650}
 .hb-social a.hb-dc:hover{text-decoration:none;border-color:var(--lk-accent);background:var(--lk-accent-soft)}
-/* the Dalaran Hangout band under the hero */
+/* the official realm's band under the hero */
 .hb-ho{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px 24px;margin:0 0 18px;padding:18px 22px;
 border:1px solid var(--lk-border-strong);border-radius:var(--lk-r);background:linear-gradient(120deg,rgba(91,141,239,.16),rgba(139,108,240,.10) 60%,rgba(20,23,31,.55));
 box-shadow:0 10px 30px rgba(0,0,0,.25)}
@@ -3411,12 +3411,13 @@ def hub_totals(rows: list[dict]) -> dict:
     return {"realms": len(live), "players": sum(num(r.get("players")) for r in live),
             "bots": sum(num(r.get("bots")) for r in live)}
 FRONT_REALMS = 60       # rows sent on the front page (8 show until a filter is used; the rest are on the realm list)
-# The launch lineup (owner 2026-10-30): the Dalaran Hangout is our own realm, the Wrath realm where everyone meets in
-# Dalaran, pinned first everywhere; then the official records the staff mark (Vanilla Remastered, when its record
-# exists), then the rest of the network in its own order.
-HANGOUT_NAME = "Dalaran Hangout"
-HANGOUT_KIND = "the Wrath realm"
-HANGOUT_LINE = "The Wrath realm, where everyone meets in Dalaran. One click and you are in, in this browser."
+# The launch lineup (owner 2026-10-30): our own realm, the official one where everyone meets in Dalaran, pinned first
+# everywhere; then the official records the staff mark (Vanilla Remastered, when its record exists), then the rest of
+# the network in its own order. Its name: "Wrath Unleashed" for now (owner 2026-10-30 23:32); LEYLINE_REALM_NAME in
+# portal.env overrides it here as it does in wrath_portal.py.
+HANGOUT_NAME = os.environ.get("LEYLINE_REALM_NAME", "").strip() or "Wrath Unleashed"
+HANGOUT_KIND = "Official realm"
+HANGOUT_LINE = "The official realm, where everyone meets in Dalaran. One click and you are in, in this browser."
 OFFICIAL_NAMES = ("vanilla remastered",)   # an official realm known by name until its record carries official/pinned
 
 
