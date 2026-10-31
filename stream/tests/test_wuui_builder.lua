@@ -209,8 +209,12 @@ win.stepBtn:Fire("OnClick")
 win.nudge["x-"]:Fire("OnClick")
 check("the step button: 3 yd", win.stepBtn:GetText() == "Step 3 yd" and sent[#sent][2]:find("move x %-3$"))
 win.stepBtn:Fire("OnClick")
+check("then 10 yd", win.stepBtn:GetText() == "Step 10 yd")
+win.stepBtn:Fire("OnClick")
+check("and round to 0.01 yd (fine nudges)", win.stepBtn:GetText() == "Step 0.01 yd")
+win.stepBtn:Fire("OnClick"); win.stepBtn:Fire("OnClick")
 win.nudge["y+"]:Fire("OnClick")
-check("and round to 0.25 yd", sent[#sent][2]:find("move y 0%.25$"))
+check("then 0.1 and 0.25 yd", sent[#sent][2]:find("move y 0%.25$"))
 local o0 = p.o
 win.turnL:Fire("OnClick")
 check("turn +15 degrees", math.abs(p.o - (o0 + math.rad(15))) < 1e-6)
@@ -559,6 +563,105 @@ do
     check("Load, replacing", sent[#sent][2] == "wuden\tcmd\t1/1\tload cosy replace")
     E.ShowDen(false)
     check("closes", not den:IsShown())
+end
+
+-- 2026-10-30, the Den editor: every object and models, the properties panel's nudges and tools, stack by a click,
+-- /edit on a player's own game, the Den panel's way back, and the hello a Den listens for
+do
+    local function lastSent() return sent[#sent][2] end
+    local function pickCat(name)
+        for _ = 1, #B.CATS do if win.catBtn:GetText() == "Category: " .. name then return true end; win.catBtn:Fire("OnClick") end
+        return win.catBtn:GetText() == "Category: " .. name
+    end
+    check("categories include Every object and Models", pickCat("objects"))
+    check("an empty search category says how to search", win.count:GetText():find("Enter"))
+    win.search:SetText("bench"); win.search:Fire("OnTextChanged")
+    check("typing doesn't search by itself", not lastSent():find("find"))
+    win.search:Fire("OnEnterPressed")
+    check("Enter asks the realm to search every object", lastSent() == "wubuild\tcmd\t1/1\tfind bench")
+    fireClient("OVMOD", "wubuild\tfound\t1/1\tobjects,1,1;500006,t500006,objects,Garden Bench,1;500001,t500001,objects,Long Table,2",
+        "WHISPER", "Tester")
+    check("the answer fills the list", #B.shown == 2 and shown()[1].name:GetText() == "Garden Bench" and win.count:GetText():find("more"))
+    win.down:Fire("OnClick")
+    check("Down at the end asks for the next page", lastSent() == "wubuild\tcmd\t1/1\tfind bench 2")
+    fireClient("OVMOD", "wubuild\tfound\t1/1\tobjects,2,0;500007,t500007,objects,Stone Bench,1", "WHISPER", "Tester")
+    check("page 2 adds to the list", #B.shown == 3)
+    shown()[1]:Fire("OnDoubleClick")
+    check("double-click places a found object by its entry", lastSent() == "wubuild\tcmd\t1/1\tspawn 500006")
+    check("a found object is remembered for Recent", WrathUnleashedUIChar.builder.items[500006].name == "Garden Bench")
+    pickCat("models")
+    win.search:SetText("lamp"); win.search:Fire("OnTextChanged"); win.search:Fire("OnEnterPressed")
+    check("Models searches the models", lastSent() == "wubuild\tcmd\t1/1\tmodels lamp")
+    fireClient("OVMOD", "wubuild\tfound\t1/1\tmodels,1,0;2000004523,m4523,models,LampPost01 (model 4523),1", "WHISPER", "Tester")
+    shown()[1]:Fire("OnDoubleClick")
+    check("a model goes to the realm as its entry number", lastSent() == "wubuild\tcmd\t1/1\tspawn 2000004523")
+    win.search:SetText(""); win.search:Fire("OnTextChanged")
+    pickCat("all")
+    B.menuTab = "recent"; B.ShowMenu(true)
+    check("Recent shows found objects and models too", (function()
+        local names = {}
+        for _, c in ipairs(B.MenuList()) do names[c.name] = true end
+        return names["Garden Bench"] and names["LampPost01 (model 4523)"] end)())
+    B.menuTab = "objects"; B.MenuRefresh()
+    check("the spawn menu's Every object tab lists the last search", #B.MenuList() == 3)
+    B.ShowMenu(false); B.menuTab = "all"
+
+    -- the properties panel: nudges and tools (on the chair placed above)
+    win.spawn:Fire("OnClick")
+    serverClock = serverClock + 2
+    B.ShowProps(true)
+    local panel = B.Panel()
+    panel.plus.x:Fire("OnClick")
+    check("panel: x + nudges by the move step", lastSent():find("^wubuild\tcmd\t1/1\tmove x [%d%.]+$"))
+    panel.minus.turn:Fire("OnClick")
+    check("panel: turn - by the angle step (15)", lastSent() == "wubuild\tcmd\t1/1\tturn -15")
+    panel.angle:Fire("OnClick")
+    panel.plus.turn:Fire("OnClick")
+    check("panel: the angle step cycles (45)", panel.angle:GetText() == "Angle 45 deg" and lastSent() == "wubuild\tcmd\t1/1\tturn 45")
+    panel.plus.scale:Fire("OnClick")
+    check("panel: size + 0.1", lastSent():find("setscale 1%.10$"))
+    local n0 = #sent
+    panel.plus.pitch:Fire("OnClick")
+    check("panel: pitch without the module says so, sends nothing", #sent == n0 and panel.status:GetText():find("Tilt needs"))
+    for _, t in ipairs({ { "Lock", "lock" }, { "Unlock", "unlock" }, { "Hide", "hide" }, { "Show all", "show all" },
+        { "Measure", "measure" }, { "Align X", "align x" }, { "Bottoms", "align bottom" }, { "Redo", "redo" } }) do
+        panel.tools[t[1]]:Fire("OnClick")
+        check("panel tool: " .. t[1], lastSent() == "wubuild\tcmd\t1/1\t" .. t[2])
+    end
+    panel.tools["Stack on"]:Fire("OnClick")
+    check("panel: Stack on outside edit mode stacks on the first picked", lastSent() == "wubuild\tcmd\t1/1\tstack")
+    B.ShowProps(false)
+
+    -- edit mode: Stack, then a click on a prop
+    E.StartStack()
+    E.Clicked(player.x, player.y, player.z)
+    check("stack: a click on the ground waits for a prop", E.pending and E.pending.kind == "stack")
+    E.Clicked(player.x, player.y, player.z, 1234)
+    check("stack: a click on a prop sends it", lastSent() == "wubuild\tcmd\t1/1\tstackon obj 1234" and E.pending == nil)
+
+    -- /edit on a player's own game: the Builder and the Properties panel instead of the browser's camera
+    local cvarSet
+    local realSet = SetCVar
+    SetCVar = function() cvarSet = true end
+    GetCVar = function() return nil end
+    win:Hide()
+    E.Toggle()
+    check("/edit on your own game: the Builder and Properties open, no camera switch", win:IsShown() and B.Panel():IsShown() and not cvarSet)
+    LeylineEdit = function() end
+    E.Toggle()
+    check("/edit in the browser client: the edit camera", cvarSet)
+    LeylineEdit, GetCVar, SetCVar = nil, nil, realSet
+    B.ShowProps(false)
+
+    -- the Den panel's way back, and the hello on entering the world
+    E.ShowDen(true)
+    for _, f in ipairs(created) do if f.parent == E.DenPanel() and f.text == "Back to the room" then f:Fire("OnClick") end end
+    check("Den panel: Back to the room", lastSent() == "wuden\tcmd\t1/1\thome")
+    E.ShowDen(false)
+    E.helloSent = nil
+    for _, f in ipairs(frames) do if f.events.PLAYER_ENTERING_WORLD then f:Fire("OnEvent", "PLAYER_ENTERING_WORLD") end end
+    check("entering the world: the addon says hello to a Den", (function()
+        for _, m in ipairs(sent) do if m[2] == "wuden\tinfo\t1/1\t" then return true end end end)())
 end
 
 -- the client ignores messages that aren't the realm's answer to us

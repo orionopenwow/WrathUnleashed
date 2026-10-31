@@ -872,6 +872,12 @@ mod tests {
     #[test]
     fn the_real_addons_pass_the_checks() {
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        // The public Leyline repo carries the launcher without the addons' sources: nothing to check there.
+        let srcs = ["stream/fui-web/Interface/AddOns/WrathUnleashedUI", "addons/OVArmory", "addons/OVQoL"];
+        if srcs.iter().any(|r| !repo.join(r).is_dir()) {
+            eprintln!("skipped: the addons' sources are not in this checkout");
+            return;
+        }
         let t = tempfile::tempdir().unwrap();
         for (name, rel) in [
             ("WrathUnleashedUI", "stream/fui-web/Interface/AddOns/WrathUnleashedUI"),

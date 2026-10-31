@@ -42,6 +42,7 @@ local FILE = os.getenv("OV_DEN_INVITE_FILE") or "/azerothcore/lua_scripts/den-in
 local CHECK_MS = 2000          -- the edge check
 local BACK_COOLDOWN = 3        -- seconds between two "back in the room" for one player
 local AREA_ID = 876            -- AreaTable.dbc: the island's own area (the hearth's area)
+local ADDON_WAIT = 20          -- seconds after a login without a word from the addon: say how to get it
 
 local OVMod
 do
@@ -129,17 +130,30 @@ local function plan(t, fz)
     local n = math.max(1, math.floor(half * 2 / tile + 0.5))
     for i = 1, n do offs[i] = -half + tile * (i - 0.5) end
     local out = {}
-    local function add(entry, x, y, z, o) out[#out + 1] = { entry = entry, x = x, y = y, z = z, o = o or 0 } end
-    for _, ox in ipairs(offs) do
-        for _, oy in ipairs(offs) do add(t.floor, d.x + ox, d.y + oy, fz) end
+    local function add(entry, x, y, z, o, s) out[#out + 1] = { entry = entry, x = x, y = y, z = z, o = o or 0, s = s } end
+    -- With the models' bounds (the server's own GameObjectDisplayInfo, OVBuild.ModelBox) every block is sized to
+    -- exactly one tile, the floor's tops level with the ground: one seamless, flat surface. Without them, the
+    -- blocks stand at their own size on the ground (the spacing is "to verify" in game).
+    local b = B()
+    local function fit(entry)
+        if not (b and b.ModelBox) then return nil end
+        local w, dp, lo, hi = b.ModelBox(entry)
+        if not w or w <= 0.05 or hi - lo <= 0.01 then return nil end
+        local s = math.max(0.1, math.min(5, tile / math.max(w, dp)))
+        return s, lo * s, hi * s
     end
+    local fs, _, ftop = fit(t.floor)
+    for _, ox in ipairs(offs) do
+        for _, oy in ipairs(offs) do add(t.floor, d.x + ox, d.y + oy, fs and (fz - ftop) or fz, 0, fs) end
+    end
+    local ws, wlo, whi = fit(t.wall)
     for r = 0, t.rows - 1 do
-        local z = fz + tile * (r + 0.5)
+        local z = ws and (fz - wlo + (whi - wlo) * r) or (fz + tile * (r + 0.5))
         for _, o in ipairs(offs) do
-            add(t.wall, d.x + o, d.y + half, z, 0)                         -- north
-            if math.abs(o) > tile then add(t.wall, d.x + o, d.y - half, z, 0) end   -- south, the doorway in its middle
-            add(t.wall, d.x + half, d.y + o, z, math.pi / 2)                -- east
-            add(t.wall, d.x - half, d.y + o, z, math.pi / 2)                -- west
+            add(t.wall, d.x + o, d.y + half, z, 0, ws)                         -- north
+            if math.abs(o) > tile then add(t.wall, d.x + o, d.y - half, z, 0, ws) end   -- south, the doorway in its middle
+            add(t.wall, d.x + half, d.y + o, z, math.pi / 2, ws)                -- east
+            add(t.wall, d.x - half, d.y + o, z, math.pi / 2, ws)                -- west
         end
     end
     local c = half - 2
@@ -189,8 +203,22 @@ local function toRoom(player, quiet)
     if not quiet then say(player, "That's the edge of the Den: back in the room. (|cffffff00.den|r says what's here.)") end
 end
 
+-- The building tools (edit mode, the Builder, the Den panel) are the Leyline UI addon (WrathUnleashedUI): the
+-- browser client has it built in; a player's own game gets it from the launcher (Addons). The addon asks for
+-- the Den's info when it loads (EditMode.lua, PLAYER_ENTERING_WORLD); whoever stays silent hears how to get it.
+local loginAt, heard, hinted = {}, {}, {}
+local function addonHint(player)
+    local g = player:GetGUIDLow()
+    if heard[g] or hinted[g] or not loginAt[g] or os.time() - loginAt[g] < ADDON_WAIT then return end
+    hinted[g] = true
+    say(player, "Building here works best with the Leyline UI addon: edit mode, the Builder window and the Den panel. "
+        .. "Get it in the Leyline launcher (Addons, then Leyline UI) and restart the game.")
+    say(player, "Until then, everything works as commands: |cffffff00.den|r and |cffffff00.build help|r.")
+end
+
 local function checkOne(player)
     if not player then return end
+    addonHint(player)
     if inside(player) then
         -- the room goes up the first time anyone stands in the Den (its grid is loaded then)
         local b = B()
@@ -351,6 +379,8 @@ end
 
 local function onLogin(event, player)
     if not player then return end
+    local g = player:GetGUIDLow()
+    loginAt[g], heard[g], hinted[g] = os.time(), nil, nil
     if not free(player) and not inside(player) then toRoom(player, true) end
     arrive(player)
 end
@@ -379,11 +409,12 @@ if CreateLuaEvent then CreateLuaEvent(checkAll, CHECK_MS, 0) end
 
 if OVMod then
     OVMod.On(MOD, "cmd", function(player, data)
+        heard[player:GetGUIDLow()] = true
         if #(data or "") > 80 then return end
         run(player, data)
         sendInfo(player)
     end)
-    OVMod.On(MOD, "info", function(player) sendInfo(player) end)
+    OVMod.On(MOD, "info", function(player) heard[player:GetGUIDLow()] = true; sendInfo(player) end)
 end
 
 -- after a restart (or a Lua reload): the Builder knows the floor at once
@@ -391,4 +422,4 @@ if B() and settings.floor then B().SetFloor(floorZ()) end
 
 -- for stream/tests/test_ov_den.lua (read only)
 OV_DEN_TEST = { THEMES = THEMES, plan = plan, buildRoom = buildRoom, inside = inside, checkAll = checkAll,
-    inviteLink = inviteLink, settings = settings, run = run, role = role }
+    inviteLink = inviteLink, settings = settings, run = run, role = role, heard = heard, ADDON_WAIT = ADDON_WAIT }

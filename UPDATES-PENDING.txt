@@ -415,3 +415,11 @@
 1154b foreverui Addon: one-time defaults and instant quests on Leyline realms only
 1154c addons Publish the Leyline addons pack (release leyline-addons) for the launcher
 1154d ship Save to GitHub: the above
+1155a0 check Server check (read-only): SOAP gave an empty reply again
+1155a scripts Builder: lock, hide, measure, align, stack, tilt, exact numbers (official realm; any object and models stay Den-only) (live reload; a 5-minute warning if a restart is needed)
+1155b foreverui Builder and Properties panel: every object, models, exact transforms
+1155c hostkit Host kit: the Den (bigger flat room, any object, models, addon hint)
+1155d signin Site: the new host pack listing
+1155e addons Republish the Leyline addons with the new Builder
+1155f ship Save to GitHub: the Den work
+1156a ship Save to GitHub: launcher build fix (the addons test skips when the addons' sources are not in the public repo) (GitHub then rebuilds Leyline.exe)
