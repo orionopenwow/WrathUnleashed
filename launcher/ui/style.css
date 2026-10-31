@@ -193,6 +193,19 @@ svg { flex: none; }
 .chip-txt { display: grid; text-align: left; line-height: 1.2; }
 .chip-txt span { font-size: 13px; font-weight: 600; }
 .chip-txt i { font-style: normal; font-size: 11.5px; color: var(--t-ok); }
+/* the one account control (owner 2026-10-30: Home's Account card is gone, so this one stands out) */
+#tb-account {
+  height: 42px; padding: 0 6px 0 5px; gap: 10px; border-radius: 999px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--t-accent) 22%, var(--t-panel)), color-mix(in srgb, var(--t-accent-2) 14%, var(--t-panel)));
+  border: 1px solid color-mix(in srgb, var(--t-accent) 55%, transparent);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.25), 0 4px 14px color-mix(in srgb, var(--t-accent) 28%, transparent);
+}
+#tb-account:hover { border-color: var(--t-accent); filter: brightness(1.08); }
+#tb-account .chip-crest { width: 32px; height: 32px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--t-accent) 60%, transparent); }
+.chip-go {
+  margin-left: 4px; padding: 6px 10px; border-radius: 999px; font: 700 10.5px var(--t-font); letter-spacing: .08em;
+  background: var(--t-accent); color: #fff;
+}
 /* the window buttons tucked into the top-right corner (owner 2026-10-30): flush with the edge, small, no gap */
 .winbtns { display: flex; gap: 0; align-self: flex-start; margin-left: 4px; }
 .winbtns button { width: 34px; height: 26px; border: 0; border-radius: 0; background: transparent; color: var(--t-muted); cursor: pointer; display: grid; place-items: center; }

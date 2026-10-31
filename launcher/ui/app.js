@@ -974,9 +974,10 @@ async function showLinkedRealm(id) {
 $("cat-q").addEventListener("input", renderCatalog);
 $("cat-fit").addEventListener("change", renderCatalog);
 
-// The three tiles on Home: the picked client's installed mods (updates first), or Workshop picks when it has none.
+// The three mod tiles (owner 2026-10-30: taken off Home; kept for a page that brings the box back).
 function renderModTiles() {
   const box = $("mod-tiles");
+  if (!box) return;
   box.replaceChildren();
   const mine = installed.slice().sort((x, y) => (y.update ? 1 : 0) - (x.update ? 1 : 0)).slice(0, 3);
   const picks = catalog.projects.filter((p) => p.source === "packaged").concat(catalog.projects.filter((p) => p.source !== "packaged"));
