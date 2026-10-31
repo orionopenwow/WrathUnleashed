@@ -422,6 +422,9 @@ local function apply(nowOn)
             if B.Panel() then B.Dock(B.Panel(), false) end
         end
         if E.hidUI then E.hidUI = nil; UIParent:Show() end
+        -- Shift + wheel turns a carried prop; where the client also gave it to the bar's page keys, the main bar
+        -- came back on another page (WrathUnleashedUI.lua, PAGE_KEYS)
+        if W.MainBarHome then W.MainBarHome() end
     end
 end
 

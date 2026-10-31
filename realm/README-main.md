@@ -6,7 +6,8 @@ and on its first login every new character chooses once:
 * **Begin your adventure at level 1** (a Death Knight: carry on with the Ebon Hold story at 55), or
 * **Boost to level 80**: pick a spec, then up to two primary professions, and the character gets level 80, every
   class spell a trainer teaches up to 80 plus the class-quest spells, all its weapon skills at 400, riding up to
-  Artisan with Cold Weather Flying, Swift Zhevra and Albino Drake, dual spec, the chosen professions (and any it
+  Artisan with Cold Weather Flying, Swift Zhevra, Albino Drake and the Celestial Steed (the bars' mount button: it
+  rides where flying isn't allowed, e.g. Dalaran, and flies where it is), dual spec, the chosen professions (and any it
   already had) plus Cooking, First Aid and Fishing at 450 with every trainer recipe, four Frostweave Bags equipped,
   the spec's **PvE kit** (Heroes' T7 10-man set + ilvl ~200 off-pieces) and **PvP kit** (Deadly Gladiator's), class
   reagents, and a teleport to Dalaran with the hearthstone set there. What doesn't fit in the bags comes by mail.
@@ -78,7 +79,8 @@ Optional: add `main` to the profile list in the comments of `realm\Switch profil
    20-slot bags, the PvE and PvP items of `kits.md` (Warrior / Protection) and the Medallion of the Alliance in the
    bags; spellbook full up to level 80 ranks (talent spells such as Vigilance come once the talent is taken);
    Defensive and Berserker Stance; weapon skills 400/400 (character pane -> Skills); Artisan Riding and Cold
-   Weather Flying, Albino Drake and Swift Zhevra in the mount tab (Dalaran itself is no-fly: use the zhevra);
+   Weather Flying, Albino Drake, Swift Zhevra and Celestial Steed in the mount tab; the bottom right bar's last
+   button is the Celestial Steed and mounts in Dalaran (on the ground; it flies on Krasus' Landing and outside);
    Talents pane shows 71 points and a second spec; Mining, Blacksmithing, Cooking, First Aid, Fishing at 450/450.
 3. Type `.boost` again: "This character has already been boosted." Relog: no menu, no reminder.
 4. New **Orc Death Knight**: the menu (55), Boost -> Blood -> "No professions": Medallion of the Horde, Runeforging

@@ -12,7 +12,8 @@
 --       level 80 (talent points come with it); every class spell a trainer teaches up to 80, plus the
 --       spells normally learned by class quests (stances, pet spells, demons, totems, forms, class mounts);
 --       weapon skills of every weapon type the class can train, at 400; Apprentice to Artisan riding and Cold
---       Weather Flying, a ground and a flying mount; dual talent specialization; the chosen primary professions
+--       Weather Flying, a ground and a flying mount and the Celestial Steed (the bars' mount button, see
+--       SMART_MOUNT); dual talent specialization; the chosen primary professions
 --       plus Cooking, First Aid and Fishing at 450 with every recipe a trainer teaches (the character's own
 --       professions too); four 20-slot bags (put in the empty bag slots); the PvE and PvP kit for the spec
 --       and class reagents in the bags, the rest by in-game mail; teleport to Dalaran, hearthstone set there.
@@ -90,6 +91,13 @@ local DALARAN = { map = 571, zone = 4395, x = 5804.15, y = 624.771, z = 647.767,
 
 local RIDING = { 33388, 33391, 34090, 34091, 54197 } -- Apprentice, Journeyman, Expert, Artisan, Cold Weather Flying
 local MOUNTS = { 49322, 60025 }                         -- Swift Zhevra (ground), Albino Drake (flying), as Brawl
+-- The bars' mount button (owner 2026-10-30: "fix mounts in Dalaran, they dont work"): the Albino Drake only flies, so
+-- in Dalaran (a no-fly city but for Krasus' Landing) and anywhere else flying is not allowed it is refused ("You
+-- can't use that here"), and it was the mount the bars offered next to the ground one. The
+-- Celestial Steed (75614, the item mount 54811 teaches) is one of the core's scaling mounts (spell_generic.cpp
+-- spell_gen_mount, "spell_celestial_steed"): it runs on the ground where flying is not allowed and flies where it is,
+-- at the speed the riding skill allows. The drake stays in the spellbook (Mounts tab).
+local SMART_MOUNT = 75614
 
 -- Weapon skill spells per class (the weapon master list, as brawl_world_2.sql 3b). 196 1H axe, 197 2H axe, 198 1H
 -- mace, 199 2H mace, 200 polearm, 201 1H sword, 202 2H sword, 227 staff, 264 bow, 266 gun, 1180 dagger,
@@ -174,7 +182,8 @@ local KNOWN_TEACHERS = { [13820] = true, [34768] = true }
 --   { a, b, .. }  the first of these the character knows (faction or race versions of one spell)
 --   0             left empty
 --   RACIAL        the race's active racial;  HEARTH the Hearthstone (item);  PVP the kit's PvP medallion (item)
---   GROUND / FLY  the boost's ground / flying mount
+--   GROUND / FLY  the boost's ground mount / the mount that works everywhere (SMART_MOUNT; the Albino Drake for a
+--                 character without it)
 -- A spell the character doesn't know yet (a talent) keeps its button free and is put there when it is learned.
 -- Rows in a spec replace the class's row that starts at the same button.
 local RACIAL, HEARTH, PVP, GROUND, FLY = "racial", "hearth", "pvp", "ground", "fly"
@@ -857,8 +866,12 @@ local function resolveLayout(player, specKey, withKit)
                         action, kind = (try(player, "GetTeam") == TEAM_HORDE) and med.horde or med.alliance, ACTION_ITEM
                     end
                 elseif e == GROUND or e == FLY then
-                    local m = MOUNTS[e == GROUND and 1 or 2]
-                    if player:HasSpell(m) then action = m end
+                    if e == FLY and player:HasSpell(SMART_MOUNT) then
+                        action = SMART_MOUNT
+                    else
+                        local m = MOUNTS[e == GROUND and 1 or 2]
+                        if player:HasSpell(m) then action = m end
+                    end
                 elseif e == RACIAL then
                     for _, r in ipairs(RACIALS) do
                         if player:HasSpell(r) then action = r; break end
@@ -1007,6 +1020,105 @@ local function startBars(player, delay)
     end)
 end
 
+local function loadBarState(guid)
+    local q = CharDBQuery(string.format(
+        "SELECT spec, kit, applied_at, waiting0, waiting1 FROM ov_boost_bars WHERE guid = %d", guid))
+    if not q then return nil end
+    return { spec = q:GetString(0), kit = q:GetUInt32(1) == 1, applied = q:GetUInt32(2) > 0,
+             waiting = { [0] = buttonSet(q:GetString(3)), [1] = buttonSet(q:GetString(4)) } }
+end
+
+-- Characters boosted before SMART_MOUNT: the layout's FLY button still holds the Albino Drake, which is refused in
+-- Dalaran. Once per session, a few seconds after login (saved first, so the rows read are the buttons as they are),
+-- that button becomes the Celestial Steed in character_action, for both specs, and the client is shown it at once.
+-- Only where the layout put the drake and the drake still is: a button the player changed is left alone. The
+-- server's in-memory copy keeps the drake there UNCHANGED (nothing writes it back over the row; the next login or
+-- spec switch loads the row), and a press sends the spell the client's button shows.
+local smartDone = {}
+local function flyButtons(player, specKey)
+    local list = {}
+    for start, row in pairs(layoutRows(player:GetClass(), specKey) or {}) do
+        for i, e in ipairs(row) do
+            if e == FLY and start + i - 1 < MAX_ACTION_BUTTONS then list[#list + 1] = start + i - 1 end
+        end
+    end
+    table.sort(list)
+    return list
+end
+
+local function smartMountButtons(player)
+    local guid = player:GetGUIDLow()
+    local st = barState[guid]
+    if not st or not st.applied then return 0 end
+    local list = flyButtons(player, st.spec)
+    if #list == 0 then return 0 end
+    local saved, found = {}, false
+    for spec = 0, 1 do
+        saved[spec] = savedButtons(guid, spec)
+        for _, button in ipairs(list) do
+            local b = saved[spec][button]
+            if b and b[2] == ACTION_SPELL and b[1] == MOUNTS[2] then found = true end
+        end
+    end
+    if not found then return 0 end
+    if not player:HasSpell(SMART_MOUNT) then player:LearnSpell(SMART_MOUNT) end
+    if not player:HasSpell(SMART_MOUNT) then return 0 end   -- not a spell this core knows: keep the drake
+    local active, n = try(player, "GetActiveSpec") or 0, 0
+    for spec = 0, 1 do
+        local new, covered = {}, {}
+        for _, button in ipairs(list) do
+            local b = saved[spec][button]
+            if b and b[2] == ACTION_SPELL and b[1] == MOUNTS[2] then
+                new[button], covered[button] = { SMART_MOUNT, ACTION_SPELL }, true
+                saved[spec][button] = new[button]
+                if spec == active then n = n + 1 end
+            end
+        end
+        if next(new) then writeButtons(guid, spec, new, covered) end
+    end
+    if n > 0 then
+        sendButtons(player, saved[active])
+        say(player, "Your bars' mount is now the Celestial Steed: it rides where flying isn't allowed (Dalaran) and " ..
+            "flies where it is. Every mount is in the spellbook (Mounts tab).")
+    end
+    return n
+end
+
+local function smartMountSoon(player)
+    local guid = player:GetGUIDLow()
+    if smartDone[guid] then return end
+    smartDone[guid] = true
+    later(player, 4000, "mount button save", function(p)
+        if try(p, "IsInWorld") == false then smartDone[guid] = nil; return smartMountSoon(p) end
+        p:SaveToDB()
+        later(p, BAR_STEP_MS, "mount button", smartMountButtons)
+    end)
+end
+
+-- WrathUnleashedUI (the browser's addon, WrathUnleashedUI.lua) fills a level 80's empty bar buttons from the
+-- spellbook. A boosted character's bars are this script's layout, so the addon asks first ("wubars" "ask" over
+-- OVMOD) and is told "boost" (leave the bars to the realm) or "none"; the boost itself also says "boost" at once.
+-- Filling while the layout was being written put spellbook spells over it ("bars are broken sometimes").
+local OVMod
+do
+    local ok, m = pcall(function() return require("ov_modapi") end)
+    if ok and type(m) == "table" then OVMod = m end
+    if not OVMod and type(rawget(_G, "OVMod")) == "table" then OVMod = rawget(_G, "OVMod") end
+end
+local function tellBars(player, word)
+    if OVMod and OVMod.Send then pcall(OVMod.Send, player, "wubars", "layout", word) end
+end
+local function barsWord(player)
+    local guid = player:GetGUIDLow()
+    if barState[guid] or loadBarState(guid) then return "boost" end   -- ov_boost_bars: a layout of this script
+    return "none"
+end
+if OVMod and OVMod.On then
+    OVMod.On("wubars", "ask", function(player)
+        if player then tellBars(player, barsWord(player)) end
+    end)
+end
+
 -- After a talent: teach its trainer ranks, wear what the new talent allows (a second weapon with Dual Wield),
 -- then put the layout's spells that were waiting for a talent on their buttons (active spec), unless the player
 -- has put something else there.
@@ -1072,14 +1184,6 @@ local function afterTalentReset(player)
     saveBarState(guid, st)
 end
 
-local function loadBarState(guid)
-    local q = CharDBQuery(string.format(
-        "SELECT spec, kit, applied_at, waiting0, waiting1 FROM ov_boost_bars WHERE guid = %d", guid))
-    if not q then return nil end
-    return { spec = q:GetString(0), kit = q:GetUInt32(1) == 1, applied = q:GetUInt32(2) > 0,
-             waiting = { [0] = buttonSet(q:GetString(3)), [1] = buttonSet(q:GetString(4)) } }
-end
-
 local function doBoost(player, state)
     local ok, why = canBoost(player)
     if not ok then
@@ -1108,7 +1212,7 @@ local function doBoost(player, state)
         learnList(player, WEAPON_SPELLS[player:GetClass()])
         player:AdvanceSkillsToMax()
     end)
-    step(player, "riding", function() learnList(player, RIDING); learnList(player, MOUNTS) end)
+    step(player, "riding", function() learnList(player, RIDING); learnList(player, MOUNTS); learnList(player, { SMART_MOUNT }) end)
     step(player, "dual spec", function()
         if (try(player, "GetSpecsCount") or 1) < 2 then
             player:CastSpell(player, 63680, true)
@@ -1141,6 +1245,7 @@ local function doBoost(player, state)
         CharDBExecute(string.format("REPLACE INTO ov_boost_bars (guid, spec, kit, applied_at, waiting0, waiting1) " ..
             "VALUES (%d, '%s', %d, 0, '', '')", guid, state.spec, withKit and 1 or 0))
         startBars(player)
+        tellBars(player, "boost")
     end)
 
     say(player, string.format("Boosted to %d as %s: %d class spells, riding, dual spec and professions learned.",
@@ -1440,6 +1545,7 @@ local function onLogin(event, player)
     local guid = player:GetGUIDLow()
     barState[guid] = loadBarState(guid)
     if barState[guid] and not barState[guid].applied then startBars(player, 5000) end   -- logged out too soon
+    if barState[guid] and barState[guid].applied then smartMountSoon(player) end      -- the drake button (SMART_MOUNT)
     if choiceOf(guid) ~= "pending" then return end
     if canBoost(player) then
         say(player, "You haven't chosen yet: type |cffffff00.boost|r to boost this character to 80, or just play on.")
@@ -1538,4 +1644,5 @@ RegisterPlayerGossipEvent(MENU_ID, 2, onSelect)
 OV_MAIN_TEST = { BARS = BARS, RACIALS = RACIALS, INV_SLOTS = INV_SLOTS, resolveLayout = resolveLayout,
     buildButtonsPacket = buildButtonsPacket, layoutRows = layoutRows, equipSet = equipSet, barState = barState,
     SMSG_ACTION_BUTTONS = SMSG_ACTION_BUTTONS, MAX_ACTION_BUTTONS = MAX_ACTION_BUTTONS,
-    START_KITS = START_KITS, fillStartKit = fillStartKit }
+    START_KITS = START_KITS, fillStartKit = fillStartKit, SMART_MOUNT = SMART_MOUNT, MOUNTS = MOUNTS,
+    flyButtons = flyButtons, smartMountButtons = smartMountButtons, barsWord = barsWord }
