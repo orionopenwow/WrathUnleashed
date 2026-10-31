@@ -420,12 +420,14 @@ pub fn parse_check(out: &str) -> CheckReport {
     let mut last: Option<usize> = None;
     let mut summary = String::new();
     for raw in docker::plain(out).lines() {
-        let kind = if raw.starts_with("  OK ") {
-            "ok"
-        } else if raw.starts_with("  PROBLEM ") {
-            "bad"
-        } else if raw.starts_with("  NOTE ") {
-            "note"
+        // the kit indents its lines by two spaces; match the word itself so the indent never matters
+        let t = raw.trim_start();
+        let (kind, rest) = if let Some(r) = t.strip_prefix("OK ") {
+            ("ok", r)
+        } else if let Some(r) = t.strip_prefix("PROBLEM ") {
+            ("bad", r)
+        } else if let Some(r) = t.strip_prefix("NOTE ") {
+            ("note", r)
         } else {
             let l = raw.trim();
             if let Some(fix) = l.strip_prefix("-> ") {
@@ -439,7 +441,7 @@ pub fn parse_check(out: &str) -> CheckReport {
             }
             continue;
         };
-        let text: String = raw.split_at(10.min(raw.len())).1.trim().chars().take(240).collect();
+        let text: String = rest.trim().chars().take(240).collect();
         if text.is_empty() {
             continue;
         }

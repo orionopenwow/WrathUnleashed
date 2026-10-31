@@ -5,7 +5,7 @@ rem One double-click opens the Leyline launcher. No installer, nothing to set up
 rem   it keeps one file, .launcher\Leyline.exe in this folder, fresh from
 rem   https://github.com/orionopenwow/Leyline/releases/download/launcher-latest/Leyline.exe
 rem   (GitHub builds it from main after every launcher change), and opens it.
-rem   A newer one is fetched only when there is one; with no internet the copy you have opens.
+rem   A newer one is fetched only when there is one (an open launcher is closed to swap it in); with no internet the copy you have opens.
 rem "Open Leyline Launcher.bat" rebuild    builds it from launcher\ on this PC instead (needs Node.js and Rust).
 rem Nothing here changes the game, the server or the website.
 set "WU=%~dp0"
@@ -25,7 +25,15 @@ if exist "%EXE%" (
 )
 if exist "%EXE%.new" (
   for %%F in ("%EXE%.new") do if %%~zF GTR 1000000 (
-    move /y "%EXE%.new" "%EXE%" >nul 2>&1 || echo Leyline is open, so the update waits for the next start.
+    rem a launcher that is still open holds the file: close it first (a game it started keeps running)
+    tasklist /fi "imagename eq Leyline.exe" 2>nul | find /i "Leyline.exe" >nul && (
+      echo Closing the open Leyline launcher to update it...
+      taskkill /im Leyline.exe >nul 2>&1
+      timeout /t 2 /nobreak >nul
+      taskkill /f /im Leyline.exe >nul 2>&1
+      timeout /t 1 /nobreak >nul
+    )
+    move /y "%EXE%.new" "%EXE%" >nul 2>&1 && echo Updated the Leyline launcher. || echo Could not replace Leyline.exe: close Leyline and run this again.
   )
   if exist "%EXE%.new" del "%EXE%.new" >nul 2>&1
 )
