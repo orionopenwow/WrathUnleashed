@@ -10,6 +10,8 @@ reachable through the relay without opening any port at home.
   * public realms: a signed heartbeat to the Beacons listing every 60 s
   * a realm made on the website: its hello carries the pair hash of the website's token (wunet/keys.pair_hash),
     so the website finds this realm's id; the key itself is made here, on the host's PC
+  * a server the host already runs, linked to the realm list (host.json "linked": true, `setup.py link`): hands off
+    exactly like the operator's own realm below, and the record's core and client are the host's
   * the operator's own realm as a Beacon (host.json "official": true, written by `setup.py official`): the realm
     list row, accounts and GM rights are never touched (that realm has its own sign-in); players and bots come
     from host.json "status_url" (the play page's /wrath/status.json) instead of the database
@@ -239,8 +241,9 @@ class Agent:
         return keys.pair_hash(c) if isinstance(c, str) and c else None
 
     def official(self):
-        """The operator's own realm, reached through the relay: hands off its realm list, accounts and GM rights."""
-        return self.cfg.get("official") is True
+        """Hands off its realm list, accounts and GM rights: the operator's own realm (setup.py official) or a server
+        the host already runs, linked to the realm list (setup.py link)."""
+        return self.cfg.get("official") is True or self.cfg.get("linked") is True
 
     def host_sha(self):
         """sha256 of the host-only secret (in the host's own join link): the relay marks signups made

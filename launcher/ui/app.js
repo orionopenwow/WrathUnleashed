@@ -897,7 +897,7 @@ async function handleDeepLink() {
 // "Your realm" tab (leyline://host?manage=<what>): the Host page with what to do for that control. Nothing starts.
 const HOST_WORDS = {
   core: { azerothcore: "AzerothCore", cmangos: "CMaNGOS" },
-  preset: { dalaran: "Dalaran hangout", main: "Classic levelling", brawl: "Brawl", progression: "Progression",
+  preset: { dalaran: "Dalaran hangout", main: "Classic levelling", brawl: "Brawl", progression: "Progression", vanillaplus: "Vanilla+",
     "cmangos-1.12.1": "CMaNGOS Classic", "cmangos-2.4.3": "CMaNGOS TBC" },
   type: { normal: "Normal", pvp: "PvP", rp: "RP", rppvp: "RP-PvP" },
   start: { level1: "Level 1 only", boost: "Level 1, or the boost to 80" },

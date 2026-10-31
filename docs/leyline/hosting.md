@@ -2,6 +2,8 @@
 
 Anyone can host a 3.3.5a realm (on AzerothCore) from their own PC. On Leyline a hosted realm is called a Beacon. The host kit and the relay are built and tested. Going live on the public relay needs the owner's deploy steps.
 
+Want a realm that stays up for good (a Vanilla+ realm on a spare PC or a small server), or already run a server and want it on the realm list? See [Always-on realms](always-on.md): one command either way.
+
 ## What you need
 
 - Docker: [Docker Desktop](https://www.docker.com/products/docker-desktop/) on Windows and macOS, Docker Engine on Linux. Every helper runs in containers, so you need no Python on the host.
@@ -75,6 +77,7 @@ Answers can come from the environment, so it can run without prompts: `LEYLINE_N
 | `main` | A full game from level 1 at 3x experience, with the optional one-time boost to 80. |
 | `brawl` | Everyone starts at 80 in Dalaran with their class spells, riding and reputations. |
 | `progression` | 1x rates from level 1. Each character moves through the three eras of content at their own pace. No boost. |
+| `vanillaplus` | Vanilla+: the original world only, level 60, 1.5x experience; made to stay up (see [Always-on realms](always-on.md)). |
 
 ## House rules
 

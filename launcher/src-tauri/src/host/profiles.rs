@@ -30,6 +30,7 @@ pub const PROFILES: &[KitProfile] = &[
     KitProfile { id: "main", label: "3.3.5a: normal from level 1, or a one-time boost", build: Build::V335a, core: "azerothcore", own_folder: false },
     KitProfile { id: "brawl", label: "3.3.5a: everyone starts at 80", build: Build::V335a, core: "azerothcore", own_folder: false },
     KitProfile { id: "progression", label: "3.3.5a: blizzlike progression", build: Build::V335a, core: "azerothcore", own_folder: false },
+    KitProfile { id: "vanillaplus", label: "3.3.5a: Vanilla+ (the original world to 60, made to stay up)", build: Build::V335a, core: "azerothcore", own_folder: false },
     KitProfile { id: "cmangos-1.12.1", label: "1.12.1: a plain realm (CMaNGOS Classic)", build: Build::V1121, core: "cmangos", own_folder: true },
     KitProfile { id: "cmangos-2.4.3", label: "2.4.3: a plain realm (CMaNGOS TBC)", build: Build::V243, core: "cmangos", own_folder: true },
     KitProfile { id: "tcpp-4.3.4", label: "4.3.4: a plain realm (TrinityCore 4.3.4)", build: Build::V434, core: "trinitycore", own_folder: true },
@@ -219,7 +220,7 @@ mod tests {
         let o = offers_in(Some(&k), &mine, true);
         assert_eq!(o.len(), PROFILES.len());
         let ready: Vec<&str> = o.iter().filter(|x| x.note.is_none()).map(|x| x.id.as_str()).collect();
-        assert_eq!(ready, ["dalaran", "main", "brawl", "progression", "cmangos-2.4.3"]);
+        assert_eq!(ready, ["dalaran", "main", "brawl", "progression", "vanillaplus", "cmangos-2.4.3"]);
         let tbc = o.iter().find(|x| x.id == "cmangos-2.4.3").unwrap();
         assert_eq!((tbc.version.as_str(), tbc.clients[0].path.as_str()), ("2.4.3", "/games/243"));
         let classic = o.iter().find(|x| x.id == "cmangos-1.12.1").unwrap();

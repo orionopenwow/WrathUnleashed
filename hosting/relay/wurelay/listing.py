@@ -50,7 +50,7 @@ from wunet import domains, keys
 from . import httpd
 
 TYPES = ("PvE", "PvP", "RP", "RP-PvP", "Fun")
-RULESETS = ("main", "brawl", "progression", "casual", "dalaran", "custom")
+RULESETS = ("main", "brawl", "progression", "casual", "dalaran", "vanillaplus", "custom")
 HTTPS_DISCORD = re.compile(r"^https://(discord\.gg|discord\.com/invite)/[A-Za-z0-9-]{2,32}$")
 CLAIM_RE = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
 SKEW = 300

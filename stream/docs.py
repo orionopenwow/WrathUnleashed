@@ -33,6 +33,7 @@ PAGES = (
     ("mods", "Mod format"),
     ("publishing", "Publishing"),
     ("hosting", "Hosting"),
+    ("always-on", "Always-on realms"),
     ("launcher", "Launcher"),
     ("hero-key", "Hero Key"),
     ("cross-server", "Other servers"),

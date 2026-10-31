@@ -5,6 +5,12 @@
 #
 #   leyline host                 set up and start a Beacon (first time: a few questions); safe to re-run
 #   leyline host --config-only   only write the config (state/, .env); start later with: leyline host
+#   leyline host --ruleset vanillaplus --public --always-on
+#                                answers on the command line (also --name NAME, --private, --gm NAME); --always-on
+#                                makes Docker (and so the realm) start again by itself after this machine reboots
+#   leyline link                 a server you ALREADY run (any core) on the Leyline realm list: only a small agent
+#                                runs next to it; it never changes your server (4 questions). --always-on as for
+#                                host. Also: leyline link status | stop | remove
 #   leyline status               invite / join link, realm list line, GM account, relay status
 #   leyline gm NAME              give GM rights to your own account NAME (you make the account)
 #   leyline rules                after editing state/rules.txt or state/beacon.json
@@ -14,8 +20,11 @@
 #
 # Questions can be answered from the environment (no prompts): LEYLINE_NAME, LEYLINE_RULESET
 # (dalaran | main | brawl | progression, or a profile for another client in profiles/: cmangos-1.12.1, cmangos-2.4.3;
-# default dalaran; WU_CLIENT_DIR = that client's game folder), LEYLINE_VISIBILITY (public | private;
-# default public), LEYLINE_GM (your account name), LEYLINE_TAGLINE, LEYLINE_RULES_FILE (one rule per line).
+# default dalaran; vanillaplus = the original world only, level 60, made to stay up; WU_CLIENT_DIR = that client's
+# game folder), LEYLINE_VISIBILITY (public | private; default public), LEYLINE_GM (your account name),
+# LEYLINE_TAGLINE, LEYLINE_RULES_FILE (one rule per line). leyline link: LEYLINE_LINK_NAME, LEYLINE_LINK_AUTH,
+# LEYLINE_LINK_WORLD, LEYLINE_LINK_CLIENT (vanilla | tbc | wrath), LEYLINE_LINK_TAGLINE, LEYLINE_LINK_CORE,
+# LEYLINE_LINK_TAGS, LEYLINE_LINK_STATUS_URL.
 #
 # This command never makes game accounts and never sets passwords. You make your own account on
 # your join page (your password never leaves your browser) and it gets GM rights by itself.
@@ -102,13 +111,49 @@ house_rules() {
   host_sh rules >/dev/null 2>&1 || true
 }
 
+# --always-on: the realm's containers already restart by themselves (restart: unless-stopped); this makes sure Docker
+# itself starts when the machine boots, so a reboot (a VPS's kernel update, a power cut) brings the realm back.
+always_on() {
+  step "Always on"
+  if [ "$(uname -s)" = Linux ] && command -v systemctl >/dev/null 2>&1; then
+    if [ "$(id -u)" = 0 ]; then
+      systemctl enable docker >/dev/null 2>&1 && say "  Docker starts when this machine boots." \
+        || say "  ${Y}Could not turn on Docker at boot: run  systemctl enable docker${N}"
+    elif command -v sudo >/dev/null 2>&1 && sudo -n systemctl enable docker >/dev/null 2>&1; then
+      say "  Docker starts when this machine boots."
+    else
+      say "  ${Y}One more thing, as root: sudo systemctl enable docker${N}  (so Docker, and your realm, start after a reboot)"
+    fi
+  elif [ "$(uname -s)" = Darwin ]; then
+    say "  In Docker Desktop: Settings > General > 'Start Docker Desktop when you sign in'. Keep this Mac awake"
+    say "  (System Settings > Energy: 'Prevent automatic sleeping')."
+  else
+    say "  Make Docker start when this machine boots (Docker Desktop: Settings > General > start when you sign in)."
+  fi
+  local c pol bad=0
+  for c in $(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E '^(wu-host-|wu-link-)' || true); do
+    pol="$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' "$c" 2>/dev/null || true)"
+    [ "$pol" = unless-stopped ] || [ "$pol" = always ] || { bad=1; say "  ${Y}$c does not restart by itself ($pol)${N}"; }
+  done
+  [ "$bad" = 0 ] && say "  Every realm container restarts by itself if it stops."
+  say "  After a reboot, check with: leyline status   (or: docker ps)"
+}
+
 cmd_host() {
-  local config_only=0
-  for a in "$@"; do
-    case "$a" in
+  local config_only=0 keep_on=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
       --config-only) config_only=1 ;;
-      *) die "Unknown option '$a'. Try: leyline help" ;;
+      --always-on) keep_on=1 ;;
+      --public) LEYLINE_VISIBILITY=public ;;
+      --private) LEYLINE_VISIBILITY=private ;;
+      --ruleset) [ $# -ge 2 ] || die "--ruleset needs a name"; LEYLINE_RULESET="$2"; shift ;;
+      --ruleset=*) LEYLINE_RULESET="${1#*=}" ;;
+      --name) [ $# -ge 2 ] || die "--name needs a name"; LEYLINE_NAME="$2"; shift ;;
+      --gm) [ $# -ge 2 ] || die "--gm needs your account name"; LEYLINE_GM="$2"; shift ;;
+      *) die "Unknown option '$1'. Try: leyline help" ;;
     esac
+    shift
   done
   [ -f "$HOSTSH" ] || die "host-wrath-realm.sh is missing next to this script (use the full host kit)."
   local first=1; [ -f "$STATE/host.json" ] && first=0
@@ -122,7 +167,7 @@ cmd_host() {
   ask LEYLINE_NAME "Realm name" "Dalaran Hangout"
   # the profiles offered now (profiles/host-profile.sh profile_list: 4.3.4 is not offered for now)
   local others; others="$( (. "$KIT/profiles/host-profile.sh" && profile_list) 2>/dev/null | tr '\n' ' ' || true)"
-  ask LEYLINE_RULESET "Ruleset: dalaran (light hangout, boost to 80, no bots), main, brawl, progression${others:+, or for another client: $others}" "dalaran" dalaran main brawl progression $others
+  ask LEYLINE_RULESET "Ruleset: dalaran (light hangout, boost to 80, no bots), main, brawl, progression, vanillaplus (the original world to 60, always on)${others:+, or for another client: $others}" "dalaran" dalaran main brawl progression vanillaplus $others
   ask LEYLINE_VISIBILITY "public (listed on the Leyline realm list) or private (only people with your invite link)" "public" public private
   if [ "$first" = 1 ] && [ -z "${LEYLINE_TAGLINE:-}" ] && interactive; then
     read -r -p "One line for the realm list (Enter for the ruleset's default): " LEYLINE_TAGLINE || true
@@ -162,10 +207,120 @@ cmd_host() {
   if [ "$LEYLINE_VISIBILITY" = public ]; then
     say "Your Beacon shows on the Leyline realm list within a minute of starting."
   fi
+  if [ "$keep_on" = 1 ] && [ "$config_only" = 0 ]; then always_on; fi
+}
+
+# ------------------------------------------------------------------------------------------------ leyline link
+# A server you already run, on the Leyline realm list. Only the agent runs (container wu-link-agent): one outbound
+# connection to the relay, the signed realm-list heartbeat, and the relay's players passed on to your login server.
+# Your server is never changed: not its realm list, accounts, GM rights or files (the agent has no database login).
+LINK_C=wu-link-agent
+link_tools() {   # setup.py with the kit folder (this PC's python3 with LEYLINE_LOCAL_TOOLS=1, else the tools image)
+  if [ "${LEYLINE_LOCAL_TOOLS:-0}" = 1 ]; then PYTHONPATH="$KIT/tools" WU_KIT="$KIT" python3 -m wuhost.setup "$@"; return; fi
+  docker run --rm --user "$(id -u):$(id -g)" -v "$KIT:/kit" -e WU_KIT=/kit "${WU_TOOLS_IMAGE:-wu-host-tools:1}" python -m wuhost.setup "$@"
+}
+link_image() {
+  local img="${WU_TOOLS_IMAGE:-wu-host-tools:1}"
+  [ "${LEYLINE_LOCAL_TOOLS:-0}" = 1 ] && return 0
+  command -v docker >/dev/null 2>&1 || die "Docker is not installed. Get Docker Desktop (Mac) or Docker Engine (Linux), then run this again."
+  docker info >/dev/null 2>&1 || die "Docker is installed but not running. Start it, then run this again."
+  if docker pull -q "${WU_TOOLS_PREBUILT:-ghcr.io/orionopenwow/wu-host-tools:1}" >/dev/null 2>&1; then
+    docker tag "${WU_TOOLS_PREBUILT:-ghcr.io/orionopenwow/wu-host-tools:1}" "$img"
+  elif ! docker image inspect "$img" >/dev/null 2>&1; then
+    say "  Building the small helper image (once, about a minute)..."
+    docker build -q -t "$img" "$KIT/tools" >/dev/null || die "Building the helper image failed (is this machine online?)."
+  fi
+}
+for_container() {  # an address as the agent's container sees it: on Mac and Windows "this PC" is host.docker.internal
+  local a="$1"
+  if [ "$(uname -s)" != Linux ]; then
+    a="$(printf '%s' "$a" | sed -E 's/^(127\.0\.0\.1|localhost):/host.docker.internal:/')"
+  fi
+  printf '%s' "$a"
+}
+link_state() { sed -n "s/^ *\"$1\": *\(true\|false\|[0-9]*\).*/\1/p" "$STATE/relay-state.json" 2>/dev/null | head -1; }
+
+cmd_link() {
+  local keep_on=0
+  if [ "${1:-}" = --always-on ]; then keep_on=1; shift; fi
+  [ "${2:-}" = --always-on ] && keep_on=1
+  case "${1:-}" in
+    status)
+      [ -f "$STATE/host.json" ] || die "Nothing linked yet: run  leyline link"
+      say "Linked server: $(state_get name)   realm id $(state_get realm_id)"
+      say "Agent:  $(docker ps -a --filter "name=^$LINK_C\$" --format '{{.Status}}' 2>/dev/null | head -1)"
+      say "Relay:  $([ "$(link_state connected)" = true ] && echo connected || echo 'not connected yet')   realm list: $(link_state listing_status)"
+      say "Page:   https://play.${LEYLINE_DOMAIN:-openvanilla.app}/wrath/r/$(state_get realm_id)"
+      return ;;
+    stop) docker stop "$LINK_C" >/dev/null 2>&1 || true; say "Stopped. Your server shows as offline on the list at once and leaves it after 6 hours. Start again: leyline link"; return ;;
+    remove)
+      docker rm -f "$LINK_C" >/dev/null 2>&1 || true
+      say "The agent is gone: your server leaves the realm list (offline at once, off the list within 6 hours)."
+      say "The realm id is kept in state/ (realm.key): run  leyline link  again to come back as the same realm."
+      return ;;
+    ""|up|start) ;;
+    *) die "Usage: leyline link [status | stop | remove]" ;;
+  esac
+  if [ -f "$STATE/host.json" ] && ! grep -q '"linked": true' "$STATE/host.json"; then
+    die "This kit folder already hosts a realm. Unzip a fresh copy of the host kit to link a server you already run."
+  fi
+  link_image
+  local old_auth old_world
+  old_auth="$(state_get auth_service)"; old_world="$(state_get world_service)"
+  LEYLINE_LINK_NAME="${LEYLINE_LINK_NAME:-$(state_get name)}"
+  step "Link a server you already run"
+  ask LEYLINE_LINK_NAME "1. Its name on the realm list" "My Realm"
+  ask LEYLINE_LINK_AUTH "2. Its login server, as this machine reaches it" "${old_auth:-127.0.0.1:3724}"
+  ask LEYLINE_LINK_WORLD "3. Its world server, as this machine reaches it" "${old_world:-127.0.0.1:8085}"
+  ask LEYLINE_LINK_CLIENT "4. The client it's for: vanilla, tbc or wrath" "wrath" vanilla tbc wrath
+  local build
+  case "$LEYLINE_LINK_CLIENT" in vanilla) build=5875 ;; tbc) build=8606 ;; wrath) build=12340 ;;
+    *) die "LEYLINE_LINK_CLIENT: vanilla, tbc or wrath" ;; esac
+  if [ -z "${LEYLINE_LINK_TAGLINE:-}" ] && interactive && [ ! -f "$STATE/host.json" ]; then
+    read -r -p "One line for the realm list (optional): " LEYLINE_LINK_TAGLINE || true
+  fi
+  local args=(link --name "$LEYLINE_LINK_NAME" --auth-service "$(for_container "$LEYLINE_LINK_AUTH")"
+              --world-service "$(for_container "$LEYLINE_LINK_WORLD")" --build "$build")
+  [ -n "${LEYLINE_LINK_TAGLINE:-}" ] && args+=(--tagline "$LEYLINE_LINK_TAGLINE")
+  [ -n "${LEYLINE_LINK_CORE:-}" ] && args+=(--core "$LEYLINE_LINK_CORE")
+  [ -n "${LEYLINE_LINK_TAGS:-}" ] && args+=(--tags "$LEYLINE_LINK_TAGS")
+  [ -n "${LEYLINE_LINK_STATUS_URL:-}" ] && args+=(--status-url "$LEYLINE_LINK_STATUS_URL")
+  [ -n "${WU_RELAY:-${LEYLINE_RELAY:-}}" ] && args+=(--relay "${WU_RELAY:-$LEYLINE_RELAY}")
+  [ -n "${WU_RELAY_URL:-}" ] && args+=(--relay-url "$WU_RELAY_URL")
+  [ -n "${WU_LISTING_URL:-}" ] && args+=(--listing-url "$WU_LISTING_URL")
+  mkdir -p "$STATE"
+  link_tools "${args[@]}" >/dev/null || die "The link settings were refused (see above)."
+  if [ "${LEYLINE_LINK_NO_START:-0}" != 1 ]; then
+    step "Starting the agent"
+    local net=(--add-host host.docker.internal:host-gateway)
+    [ "$(uname -s)" = Linux ] && net=(--network host)
+    docker rm -f "$LINK_C" >/dev/null 2>&1 || true
+    docker run -d --name "$LINK_C" --restart unless-stopped --read-only --cap-drop ALL \
+      --security-opt no-new-privileges --memory 96m --tmpfs /tmp --log-opt max-size=10m --log-opt max-file=3 \
+      --user "$(id -u):$(id -g)" -v "$STATE:/state" "${net[@]}" "${WU_TOOLS_IMAGE:-wu-host-tools:1}" \
+      python -m wuhost.agent --state /state >/dev/null || die "The agent did not start (docker logs $LINK_C)."
+    local i
+    for i in $(seq 1 "${LEYLINE_LINK_WAIT:-30}"); do [ "$(link_state connected)" = true ] && break; sleep 2; done
+    if [ "$(link_state connected)" = true ]; then say "  ${G}Connected to the Leyline relay.${N}"
+    else say "  ${Y}Not connected yet: check this machine is online (docker logs $LINK_C).${N}"; fi
+  fi
+  step "Done"
+  say "  Your server shows on the Leyline realm list within a minute: https://play.${LEYLINE_DOMAIN:-openvanilla.app}/wrath/r/$(state_get realm_id)"
+  say "  Nothing on your server was changed. Two things to know:"
+  say "  - Players arrive at your login server through the relay; the realm address your server hands out must"
+  say "    already work for players (it's the one they use today). Leyline leaves it alone."
+  say "  - Relay players all come from the agent's address, so turn off your login server's wrong-password IP ban"
+  say "    (AzerothCore/TrinityCore: WrongPass.MaxCount = 0 in authserver.conf; CMaNGOS/vMaNGOS: WrongPass.MaxCount = 0"
+  say "    in realmd.conf). The relay limits wrong passwords per player instead."
+  say "  It's listed as Unclaimed until you claim it for your Hero Key account: once the site gives you a claim token"
+  say "  (its Claim a realm page), run: leyline claim TOKEN"
+  say "  Later: leyline link status | stop | remove. The agent restarts by itself whenever Docker runs."
+  if [ "$keep_on" = 1 ] && [ "${LEYLINE_LINK_NO_START:-0}" != 1 ]; then always_on; fi
 }
 
 case "${1:-help}" in
   host|up|start) shift; cmd_host "$@" ;;
+  link) shift; cmd_link "$@" ;;
   status|show) host_sh show ;;
   gm)
     [ $# -ge 2 ] && valid_gm "$2" || die "Usage: leyline gm NAME   (your own account, 3-16 letters or digits)"
@@ -175,6 +330,6 @@ case "${1:-help}" in
   rules) shift; [ "${1:-}" = "--edit" ] && { LEYLINE_RULES_FILE="" house_rules; exit 0; }; host_sh rules ;;
   public|private|check|stop|logs|new-invite|claim|signup|herokey|options) host_sh "$@" ;;
   friend) die "leyline doesn't make accounts. Friends make their own on your join page (leyline status shows the link)." ;;
-  -h|--help|help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//' ;;
+  -h|--help|help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//' ;;
   *) die "Unknown command '$1'. Try: leyline help" ;;
 esac

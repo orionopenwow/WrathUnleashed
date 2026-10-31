@@ -71,6 +71,7 @@ SITE_SECRET = os.environ.get("WU_LISTING_SITE_SECRET", "")
 PER_ACCOUNT = int(os.environ.get("WU_HOST_PER_ACCOUNT", "3") or 3)
 MAX_TOTAL = 5000
 GUIDE_URL = "/wrath/docs/hosting"      # docs/leyline/hosting.md, served by the portal (the repo is private)
+ALWAYS_ON_URL = "/wrath/docs/always-on"   # docs/leyline/always-on.md: a realm that stays up, or a server you already run
 
 # The same rules as setup.py and the relay.
 NAME_RE = re.compile(r"^[A-Za-z0-9 _'-]{1,32}$")
@@ -83,6 +84,7 @@ PRESETS = {   # setup.py PROFILES, in the order the form shows them (dalaran fir
     "main": ("Classic levelling", "The full world from level 1, with a one-time boost to 80 for anyone who wants it."),
     "brawl": ("Brawl", "Everyone starts at 80 in Dalaran with everything unlocked."),
     "progression": ("Progression", "Level 1x through the original world, then the two expansions, per character."),
+    "vanillaplus": ("Vanilla+", "The original world only, level 60, 1.5x XP: made to stay up for good on a spare PC or a small server."),
     # the host kit's other cores (hosting/kit/tools/wuhost/cores.py; docs/HOST-ANY-CLIENT.md)
     "cmangos-1.12.1": ("CMaNGOS Classic", "The CMaNGOS core, built on your PC from its own source, for the classic client."),
     "cmangos-2.4.3": ("CMaNGOS TBC", "The CMaNGOS core, built on your PC from its own source, for the first expansion's client."),
@@ -127,6 +129,11 @@ RECIPES = {
            "A roleplay hangout in Dalaran.",
            ("Stay in character in public channels; out of character goes in whispers or brackets.",
             "Be kind: no harassment, hate speech or spam.", "No cheats, bots or exploits.", "The host's word is final.")),
+    "vanillaplus": ("Vanilla+ (always on)", "The original world to level 60 at 1.5x, open to everyone: run it on a spare PC or a small server and leave it up.",
+                    "vanillaplus", {"bots": "0", "signup": "open", "herokey": "on", "tags": "blizzlike,custom"},
+                    "Vanilla+: the original world to level 60, always on.",
+                    ("Be kind: no harassment, hate speech or spam.", "No cheats, bots or exploits.",
+                     "Characters are kept for good: this realm doesn't reset.", "The host's word is final.")),
     "smallgroup": ("Small-group levelling", "The full world from level 1 at double speed, with bots to fill your party.",
                    "main", {"xp": "2", "start": "level1", "bots": "20", "max": "20", "herokey": "on"},
                    "Small-group levelling at double speed.",
@@ -781,7 +788,9 @@ def form_page(owner: str, display: str, vals: dict | None = None, errs: dict | N
          f'({PER_ACCOUNT}). Open one above to start it.</p></section>' if full else
          '<section class="ly-panel recipes"><h2>Start from a ready-made realm</h2><ul class="recipes-l">'
          + "".join(f'<li><a href="/wrath/host?recipe={k}"><b>{e(r[0])}</b><span>{e(r[1])}</span></a></li>' for k, r in RECIPES.items())
-         + '</ul><p class="hint">Each fills the form below; name it and press Start server.</p></section>'
+         + '</ul><p class="hint">Each fills the form below; name it and press Start server.</p>'
+         f'<p class="hint">Want it up all the time, or already run a server? <a href="{ALWAYS_ON_URL}">Run an always-on '
+         'realm, or put your own server on the list</a>.</p></section>'
          '<section class="ly-panel"><h2>New realm</h2>'
          + (f'<p class="note" role="status">{e(note)}</p>' if note else "")
          + (f'<p class="err">{e(errs["_"])}</p>' if "_" in errs else "") +
@@ -849,14 +858,15 @@ def start_page(rec: dict) -> bytes:
         f'<section class="ly-panel"><h2>Your link</h2>{links}</section>'
         '<section class="ly-panel"><h2>Set up your PC</h2><ol>'
         f'<li>Install <a href="https://www.docker.com/products/docker-desktop/" rel="noopener noreferrer">Docker</a> '
-        f'and unzip the <a href="{e(kit)}" rel="noopener noreferrer">host kit</a>. The server uses your own 3.3.5a game '
+        f'and unzip the <a href="{e(kit)}" rel="noopener noreferrer">host kit</a>. The server uses your own game '
         'files, read on your PC; nothing is downloaded or shared.</li>'
         f'<li>Download your realm\'s file into the kit folder and run it.{dl}</li>'
         '<li>Leave it running. This page changes to <b>Online</b> when your PC connects to the relay.</li>'
         + gm +
         '</ol></section>'
         '<p class="ly-fine">The first start imports the databases and can take 5 to 20 minutes. '
-        f'<a href="{e(GUIDE_URL)}" rel="noopener noreferrer">Hosting guide</a> · <a href="/wrath/host">Your realms</a></p>')
+        f'<a href="{e(GUIDE_URL)}" rel="noopener noreferrer">Hosting guide</a> · '
+        f'<a href="{ALWAYS_ON_URL}">Keep it always on</a> · <a href="/wrath/host">Your realms</a></p>')
     return page(rec["name"], inner, refresh=0 if final else REFRESH)
 
 
