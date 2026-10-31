@@ -154,7 +154,7 @@ check("the sample: labelled Temporary, its own numbers, Play", ">Temporary</span
       and 'href="/wrath?go=h:dalaran">Play in Dalaran</a>' in page[i_sample:i_busy])
 check("the hangout's relay record is the sample, not listed twice", "<h2>Dalaran Hangout</h2>" not in page)
 check("hidden by staff: not on the page", "Hidden Away" not in page and HIDDEN not in page)
-check("network line: live community realms + the sample", "5 realms · 36 players online · 70 bots" in page,
+check("network line: live community realms + the sample", "5 realms · 39 players online · 50 bots" in page,   # the hangout from its own status (4 players, 10 bots), not its record
       re.findall(r'net-line">([^<]*)', page))
 check("featured and verified badges", ">Featured</span>" in page[i_feat:i_sample] and "Verified host" in page[i_feat:i_sample]
       and "Verified host" in page[i_busy:i_plain] and "Featured" not in page[i_busy:i_plain])
@@ -190,7 +190,7 @@ doc = json.loads(raw)
 ids = [r["community"]["realmId"] for r in doc["realms"]]
 check("realms.json: 200, CORS, network kind", st == 200 and h.get("access-control-allow-origin") == "*" and doc["kind"] == "network")
 check("realms.json: display order, hidden left out", ids == [FEAT, HANG, BUSY, PLAIN, OLD, SLEEPY], ids)
-check("realms.json: network totals", doc["network"] == {"realms": 5, "players": 36, "bots": 70}, doc["network"])
+check("realms.json: network totals", doc["network"] == {"realms": 5, "players": 39, "bots": 50}, doc["network"])
 c = {r["community"]["realmId"]: r for r in doc["realms"]}
 check("realms.json: featured, verified, sample, group", c[FEAT]["community"]["featured"] and c[FEAT]["community"]["verified"]
       and c[HANG]["community"]["sample"] and c[HANG]["community"]["sampleName"] == "Leyline Sample Hangout"
@@ -308,6 +308,15 @@ check("hub Host a Beacon: the launcher's Host page and the website", 'href="/wra
 check("warden carried from the relay record (Play in browser only without it)",
       net.extra({"profile": {"warden": True}})["warden"] is True and net.extra({"profile": {"warden": "yes"}})["warden"] is None
       and net.extra({})["warden"] is None)
+
+# ---------------------------------------------------------------- totals: players and bots apart, our own realm from its own status
+_t = net.totals([{"id": "h" * 16, "live": True, "hangout": True, "players": 1, "bots": 0},
+                 {"id": "c" * 16, "live": True, "players": 3, "bots": 7}], {"online": True, "players": 0, "bots": 1})
+check("totals: bots never counted as players (our realm from its own status)", _t == {"realms": 2, "players": 3, "bots": 8}, _t)
+_t = net.totals([{"id": "h" * 16, "live": True, "hangout": True, "players": 2, "bots": 5}], {})
+check("totals: without its own status, the record's numbers", _t == {"realms": 1, "players": 2, "bots": 5}, _t)
+_t = net.totals([], {"online": True, "players": 4, "bots": 2})
+check("totals: our realm with no record yet", _t == {"realms": 1, "players": 4, "bots": 2}, _t)
 
 # ---------------------------------------------------------------- Vanilla Remastered: the second official realm (vr-realm.id)
 VRID = "vrvrvrvrvrvrvrvr"
