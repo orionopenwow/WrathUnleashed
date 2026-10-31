@@ -140,6 +140,13 @@
         if (go) go.click();
       });
       acts.append(b);
+    } else if (m.status !== "live") {
+      // Not playable yet: say so where PLAY would be, so it never looks like a broken button.
+      const b = el("button", "btn small md-soon", "COMING SOON");
+      b.type = "button";
+      b.disabled = true;
+      b.title = `${m.title} isn't playable yet. It shows here when it is.`;
+      acts.append(b);
     }
     const links = (m.credit ? [m.credit.source].concat(m.credit.more || []) : []);
     links.forEach((u, i) => {

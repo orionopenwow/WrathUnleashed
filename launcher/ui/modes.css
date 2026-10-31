@@ -10,3 +10,4 @@
 .md-card.md-flash { animation: md-flash 1.6s ease; }
 @keyframes md-flash { 0%, 40% { box-shadow: 0 0 0 2px var(--t-accent), 0 0 30px color-mix(in srgb, var(--t-accent) 40%, transparent); } 100% { box-shadow: none; } }
 @media (prefers-reduced-motion: reduce) { .md-card.md-flash { animation: none; } }
+.md-card .md-soon { cursor: default; opacity: .7; }
