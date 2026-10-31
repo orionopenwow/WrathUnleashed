@@ -268,7 +268,7 @@ async fn play_realm_herokey(core: State<'_, Core>, client: String, slug: String)
     };
     let d2 = dir.clone();
     let login = blocking(move || crate::herokey::sign_in(&d2, &rid)).await.map_err(|e| {
-        if e == "signed_out" { "Sign in on the Friends page first (your Hero Key, on the web).".to_string() } else { e }
+        if e == "signed_out" { "Sign in on Home first (top right: your Hero Key or Google, on the web).".to_string() } else { e }
     })?;
     let profile = core.client(&client)?;
     let _ = crate::herokey::set_account_name(&profile.path, &login.user);
@@ -473,7 +473,7 @@ async fn mods_ranked(
     Ok(crate::rankings::Ranked { ids, metrics, from_cache, error })
 }
 
-/// Rate a catalog project 1-5 (0 takes it back), signed in with the Friends sign-in. "signed_out" otherwise.
+/// Rate a catalog project 1-5 (0 takes it back), signed in with the Leyline sign-in (Home's profile). "signed_out" otherwise.
 #[tauri::command]
 async fn mod_rate(core: State<'_, Core>, project: String, stars: u8) -> Result<serde_json::Value, String> {
     let dir = core.dir.clone();
@@ -923,6 +923,9 @@ pub fn run() {
             crate::social::commands::social_signin_cancel,
             crate::social::commands::social_call,
             crate::social::commands::social_signout,
+            // the Forum page: reading the website's forum, opening its pages (forum.rs)
+            crate::forum::commands::forum_call,
+            crate::forum::commands::forum_open,
             // the Modes page (modes.rs)
             crate::modes::commands::modes_list,
             crate::modes::commands::mode_open_browser,

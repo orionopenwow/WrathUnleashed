@@ -1,7 +1,7 @@
 // The launcher's side menu, page tabs and backdrop (ui/index.html, ui/app.js, ui/style.css) in Chromium with a fake
-// Tauri core: the menu matches the website's (Home, Realms, Mods, Host, Community, News; then Your realms, Settings,
-// Help), Mods has the tabs Installed and Discover and Community has Friends and Hub, the old page ids (mymods,
-// discover, friends, community, mods) still land on the right page and tab, the arrow keys move between tabs, the
+// Tauri core: the menu matches the website's (Home, Realms, Mods, Host, Forum, News; then Your realms, Settings,
+// Help), Mods has the tabs Installed and Discover, the Forum replaced Community (Friends and Hub) and the old page ids
+// (mymods, discover, friends, community, hub, mods) still land on the right page and tab, the arrow keys move between tabs, the
 // Your realms rows carry the realm's icon and client version, and the website's backdrop sits behind the content area
 // only, with the plain colour when it fails to load or Settings › Background picture is off.
 //
@@ -73,7 +73,7 @@ const where = (page) => page.evaluate(() => ({
 test('the side menu matches the website, with the same line icons', async () => {
   const { page, ctx, errors } = await open();
   const items = await page.$$eval('aside nav .nav', (b) => b.map((x) => [x.dataset.page, x.textContent.trim().replace(/\d+$/, '')]));
-  assert.deepEqual(items, [['play', 'Home'], ['realms', 'Realms'], ['mods', 'Mods'], ['host', 'Host'], ['community', 'Community'], ['news', 'News']]);
+  assert.deepEqual(items, [['play', 'Home'], ['realms', 'Realms'], ['mods', 'Mods'], ['host', 'Host'], ['forum', 'Forum'], ['news', 'News']]);
   assert.equal(await page.locator('aside nav .nav svg').count(), 6, 'each with its line icon');
   const foot = await page.$$eval('.side-foot .nav:not([hidden])', (b) => b.map((x) => x.dataset.page));
   assert.deepEqual(foot, ['settings', 'help']);
@@ -91,7 +91,7 @@ test('the side menu matches the website, with the same line icons', async () => 
   await ctx.close();
 });
 
-test('Mods: Installed and Discover tabs; Community: Friends and Hub; the arrow keys', async () => {
+test('Mods: Installed and Discover tabs; the Forum (no tabs, no Friends); the arrow keys', async () => {
   const { page, ctx, errors } = await open();
   await page.click('.nav[data-page="mods"]');
   assert.deepEqual(await where(page), { nav: ['mods'], page: ['page-mods'], panes: ['pane-installed'] });
@@ -114,20 +114,21 @@ test('Mods: Installed and Discover tabs; Community: Friends and Hub; the arrow k
   await page.click('#pane-installed [data-page-go="discover"]');
   assert.deepEqual((await where(page)).panes, ['pane-discover']);
   // a page remembers its last tab
-  await page.click('.nav[data-page="community"]');
-  assert.deepEqual(await where(page), { nav: ['community'], page: ['page-community'], panes: ['pane-friends'] });
-  await page.click('#tab-community-hub');
-  assert.ok(await page.isVisible('#pane-hub [data-link="discord"]'));
+  await page.click('.nav[data-page="forum"]');
+  assert.deepEqual(await where(page), { nav: ['forum'], page: ['page-forum'], panes: [] });
+  assert.ok(await page.isVisible('#fm-discord'), 'the Forum page has Join the Discord');
+  assert.ok(await page.evaluate(() => window.__calls.some(([c, a]) => c === 'forum_call' && a.action === 'categories')), 'opening it reads the forum');
+  assert.equal(await page.locator('#page-community, #pane-friends, #nav-friends-count, .nav[data-page="community"]').count(), 0, 'no Community page, Friends tab or friends badge');
   await page.click('.nav[data-page="mods"]');
   assert.deepEqual((await where(page)).panes, ['pane-discover'], 'Mods opens on its last tab');
   assert.deepEqual(await page.evaluate(() => [localStorage.getItem('leyline.page'), JSON.parse(localStorage.getItem('leyline.tabs'))]),
-    ['mods', { mods: 'discover', community: 'hub' }]);
+    ['mods', { mods: 'discover' }]);
   assert.deepEqual(errors, []);
   await ctx.close();
 });
 
 for (const [old, want] of [['mymods', ['page-mods', 'pane-installed']], ['discover', ['page-mods', 'pane-discover']],
-  ['friends', ['page-community', 'pane-friends']], ['hub', ['page-community', 'pane-hub']], ['community', ['page-community', 'pane-friends']],
+  ['friends', ['page-forum', null]], ['hub', ['page-forum', null]], ['community', ['page-forum', null]], ['chat', ['page-forum', null]],
   ['mods', ['page-mods', 'pane-installed']], ['modes', ['page-modes', null]], ['nonsense', ['page-play', null]]]) {
   test(`the old page id "${old}" (remembered, or from a button or link) lands on the right page and tab`, async () => {
     const { page, ctx, errors } = await open({ page: old });
@@ -154,7 +155,7 @@ test('the backdrop: behind the content area only, under the wash; plain when it 
   assert.match(r.img, /linear-gradient\(rgba\(9, 11, 17, 0\.52\).*rgba\(9, 11, 17, 0\.8\) 80%\), url\("https:\/\/play\.openvanilla\.app\/wrath\/art\/leyline-shot-backdrop\.webp"\)/);
   assert.equal(r.b[0], r.m[0], 'starts at the content area\'s left edge, not behind the side bar');
   assert.ok(r.b[1] <= r.m[1] && r.b[1] + r.b[3] === r.m[1] + r.m[3], 'behind the content area, and up behind the see-through title bar');
-  assert.ok(r.b[2] >= r.m[2], 'as wide as it, and on Home under the docked friends panel too');
+  assert.ok(r.b[2] >= r.m[2], 'as wide as it, and on Home under the docked profile panel too');
   assert.equal(r.sideBg, 'none', 'not behind the side bar');
   assert.match(r.panel, /blur/, 'panels are a blurred layer over it');
   assert.equal(await page.isChecked('#set-backdrop'), true, 'on by default');

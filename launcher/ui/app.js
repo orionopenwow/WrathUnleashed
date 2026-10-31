@@ -71,15 +71,16 @@ document.querySelectorAll("[data-link]").forEach((b) => b.addEventListener("clic
 $("tb-account").addEventListener("click", () => openLink("account"));
 
 // ------------------------------------------------------------------ navigation
-// The side menu matches the website's (stream/hub.py nav_items): Home (play), Realms, Mods, Host, Community, News,
-// then Settings and Help. Mods and Community are one page each with tabs. The page ids from before (mymods,
-// discover, friends, hub) still work everywhere: show() maps them to the page + tab, so a remembered page, a
+// The side menu matches the website's (stream/hub.py nav_items): Home (play), Realms, Mods, Host, Forum, News,
+// then Settings and Help. Mods is one page with tabs. The page ids from before (mymods, discover, and community,
+// friends and hub, which became the Forum on 2026-10-30) still work everywhere: show() maps them to the page + tab, so a remembered page, a
 // data-page-go button or a leyline:// link lands where it used to; a page with tabs alone opens its last tab. Modes has no menu item
 // but is still a page (Home's featured mode, Realms › MODES, show("modes")).
-const TABS = { mods: ["installed", "discover"], community: ["friends", "hub"] };
+const TABS = { mods: ["installed", "discover"] };
 const ALIASES = { mymods: ["mods", "installed"], installed: ["mods", "installed"], discover: ["mods", "discover"],
-  friends: ["community", "friends"], hub: ["community", "hub"] };
-const loaders = { "mods:discover": () => loadCatalog(), "mods:installed": () => loadInstalled(), realms: () => loadRealms(), host: () => loadHost() };
+  community: ["forum", ""], friends: ["forum", ""], hub: ["forum", ""], chat: ["forum", ""] };
+const loaders = { "mods:discover": () => loadCatalog(), "mods:installed": () => loadInstalled(), realms: () => loadRealms(), host: () => loadHost(),
+  forum: () => window.LeylineForum && window.LeylineForum.load() };
 let currentPage = "play";
 let currentTab = "";
 const lastTab = {};
@@ -1059,7 +1060,7 @@ function renderCatalog() {
   for (const p of list) grid.append(projectCard(p, c));
 }
 
-// Rating stars on a card's picture (shown on hover and focus). Rating needs the Community › Friends sign-in (the
+// Rating stars on a card's picture (shown on hover and focus). Rating needs the Leyline sign-in on Home (the
 // same website sign-in).
 function rateStars(p) {
   const stars = el("span", "stars");
@@ -1082,7 +1083,7 @@ async function rateProject(p, n, box) {
     if (ranked && ranked.metrics && ranked.metrics[p.id] && r && r.rating) ranked.metrics[p.id].rating = r.rating;
     say("cat-status", `Thanks: you rated ${p.name} ${n} star${n > 1 ? "s" : ""}.`, "ok");
   } catch (e) {
-    say("cat-status", String(e) === "signed_out" ? "Sign in under Community › Friends to rate mods (the same sign-in as the website)." : String(e), "bad");
+    say("cat-status", String(e) === "signed_out" ? "Sign in on Home (top right) to rate mods (the same sign-in as the website)." : String(e), "bad");
   }
 }
 
