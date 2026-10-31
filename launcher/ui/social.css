@@ -129,3 +129,7 @@ body:has(#page-play.on) .home .card.home-friends {
 }
 body:has(#page-play.on) .titlebar .winbtns { margin-left: 216px; }
 @media (max-width: 1150px) { body:has(#page-play.on) .home .card.home-friends { width: 200px; } body:has(#page-play.on) .titlebar .winbtns { margin-left: 200px; } }
+/* everything on Home stays clear of the docked panel: the hero row and the rows below the fold */
+body:has(#page-play.on) main { padding-right: calc(216px + 20px); }
+body:has(#page-play.on) .home { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 1150px) { body:has(#page-play.on) main { padding-right: calc(200px + 16px); } }
