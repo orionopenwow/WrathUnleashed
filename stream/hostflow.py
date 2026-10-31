@@ -85,6 +85,7 @@ PRESETS = {   # setup.py PROFILES, in the order the form shows them (dalaran fir
     "brawl": ("Brawl", "Everyone starts at 80 in Dalaran with everything unlocked."),
     "progression": ("Progression", "Level 1x through the original world, then the two expansions, per character."),
     "vanillaplus": ("Vanilla+", "The original world only, level 60, 1.5x XP: made to stay up for good on a spare PC or a small server."),
+    "den": ("My Den", "A private room to build in with friends: invite only, no bots, the smallest realm of all."),
     # the host kit's other cores (hosting/kit/tools/wuhost/cores.py; docs/HOST-ANY-CLIENT.md)
     "cmangos-1.12.1": ("CMaNGOS Classic", "The CMaNGOS core, built on your PC from its own source, for the classic client."),
     "cmangos-2.4.3": ("CMaNGOS TBC", "The CMaNGOS core, built on your PC from its own source, for the first expansion's client."),
@@ -100,13 +101,19 @@ REGIONS = {"na-east": "NA east", "na-west": "NA west", "sa": "S. America", "eu":
            "me": "Middle East", "asia": "Asia", "oce": "Oceania"}
 TAGS = ("blizzlike", "boosted", "custom", "pvp", "rp", "hangout")
 LANG_RE = re.compile(r"^[a-z]{2,3}(-[A-Z]{2})?$")
-NO_BOTS = ("dalaran",)                     # setup.py PROFILE_BOTS: 0 (and the other cores: none yet)
+NO_BOTS = ("dalaran", "den")                     # setup.py PROFILE_BOTS: 0 (and the other cores: none yet)
 OPTION_KEYS = ("type", "xp", "loot", "rep", "start", "bots", "signup", "herokey", "region", "lang", "tags", "max",
                "browser")
 # Ready-made realms (owner 2026-10-30: "recommend more server types ... maybe a Duels Server with simple rules, example
 # build and mod servers"): each fills the form from presets and options the kit already has (nothing new on the host's
 # PC); the host still names it and presses Start server. id -> (label, one line, preset, options, tagline, rules).
 RECIPES = {
+    # My Den (docs/DEN.md, the kit's den profile): one room on the host's PC, private, sign-up by invite, no bots
+    "den": ("My Den", "A private room to build in with friends: invite only, no bots, light on your PC.",
+            "den", {"vis": "private", "bots": "0", "signup": "invite", "herokey": "on"},
+            "A Den: a room to build in, for friends with the invite link.",
+            ("Be kind: no harassment, hate speech or spam.", "Build only where the owner lets you.",
+             "The owner's word is final.")),
     "duels": ("Duels", "Level 80 in Dalaran, everything unlocked, duels reset health and cooldowns, 1v1 arena.",
               "brawl", {"bots": "0", "type": "normal", "tags": "pvp,hangout", "max": "40", "signup": "open", "herokey": "on"},
               "Duels in Dalaran: level 80, everything unlocked, rematch freely.",
