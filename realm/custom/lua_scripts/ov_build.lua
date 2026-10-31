@@ -119,6 +119,22 @@ local BUILD_AREAS = {
 if os.getenv("OV_BUILD_DALARAN") == "1" then
     BUILD_AREAS[#BUILD_AREAS + 1] = { name = "Krasus Landing", map = 571, x = 5813.37, y = 453.40, z = 658.93, r = 30 }
 end
+-- A Den (OV_DEN=1, realm/profiles/den.env; the room and its rules are ov_den.lua, docs/DEN.md): the realm's one
+-- build area. The room stands on the sealed island in the far north-east corner of Kalimdor (map 1), AzerothCore's
+-- game_tele 424 'GMIsland' (16226.2, 16257.0, 13.2): every 3.3.5a client has the island, the world database has no
+-- creature within 600 yards of it but its Spirit Healer, and the nearest other spawn on map 1 is more than 5000
+-- yards away, so nothing wanders in. OV_DEN_X / _Y / _Z move it (to verify in game: the spot is the tele point).
+-- half: the room's half width inside its walls (OV_DEN_SIZE, 8-20); r: the Den's edge, the room plus its yard.
+local DEN
+if os.getenv("OV_DEN") == "1" then
+    local function at(name, default) return tonumber(os.getenv(name) or "") or default end
+    local half = math.max(8, math.min(20, math.floor(at("OV_DEN_SIZE", 12))))
+    DEN = { name = "Your Den", map = 1, x = at("OV_DEN_X", 16226.2), y = at("OV_DEN_Y", 16257.0), z = at("OV_DEN_Z", 13.2),
+        half = half, r = half + 14 }
+    for i = #BUILD_AREAS, 1, -1 do BUILD_AREAS[i] = nil end   -- a Den is the realm: no other build area
+    BUILD_AREAS[1] = DEN
+    DEN.key = "1"
+end
 
 ------------------------------------------------------------------------------------------------
 -- catalog: gameobject entries players may place. Checked on 2026-10-25 against AzerothCore's
@@ -492,15 +508,40 @@ local CATALOG = {
     { id = 20818, key = "nightelfmoonwe", cat = "decor", name = "Night Elf Moon Well" },   -- type 5, display 4691
     { id = 26480, key = "craghelmsplate", cat = "decor", name = "Craghelm's Plate and Chain" },   -- type 5, display 635
     { id = 32372, key = "thegreatforge", cat = "decor", name = "The Great Forge" },   -- type 5, display 660
+
+    -- Added 2026-10-30 for Dens: floors, walls, steps and rugs (Midnight's walls / floors / ceilings), checked
+    -- against AzerothCore's gameobject_template.sql: type 5, no AIName, no ScriptName, no trap. Sizes in game are
+    -- "to verify"; the Den's room (ov_den.lua) is built from the first three.
+    { id = 188067, key = "iceblock", cat = "structure", name = "Ice Block" },              -- display 6752, size 1
+    { id = 188142, key = "iceblockbig", cat = "structure", name = "Ice Block, Big" },      -- display 6752, size 2
+    { id = 195000, key = "iceblockhuge", cat = "structure", name = "Ice Block, Huge" },    -- display 6752, size 3
+    { id = 190024, key = "platform", cat = "structure", name = "Platform" },               -- display 7854
+    { id = 190023, key = "platformsmall", cat = "structure", name = "Platform, small" },   -- display 7854, size 0.7
+    { id = 190615, key = "platform2", cat = "structure", name = "Platform, second" },      -- display 7963
+    { id = 202872, key = "rocketplatform", cat = "structure", name = "Rocket Platform" },  -- display 9441
+    { id = 184924, key = "buildingblock", cat = "structure", name = "Building Block" },    -- display 5811
+    { id = 19393, key = "pvpwall2", cat = "structure", name = "Wall, second" },            -- display 9393
+    { id = 19394, key = "pvpwall3", cat = "structure", name = "Wall, third" },             -- display 9394
+    { id = 19660, key = "woodstairs", cat = "structure", name = "Wooden Stairs" },         -- display 9660
+    { id = 19661, key = "woodstairs2", cat = "structure", name = "Wooden Stairs, second" },  -- display 9661
+    { id = 187117, key = "stairway", cat = "structure", name = "Stairway" },               -- display 7593
+    { id = 181396, key = "rug", cat = "decor", name = "Rug" },                             -- display 6360
+    { id = 181077, key = "rugbig", cat = "decor", name = "Rug, big" },                     -- display 159, size 2
+    { id = 188346, key = "taurenrug", cat = "decor", name = "Tauren Rug" },                -- display 7757
+    { id = 188347, key = "taurenrug2", cat = "decor", name = "Tauren Rug, second" },       -- display 7758
+    { id = 188348, key = "taurenrug3", cat = "decor", name = "Tauren Rug, third" },        -- display 6942
 }
-local CATEGORIES = { "seating", "tables", "barrels", "crates", "lights", "banners", "tents", "fires", "fences", "nature", "decor" }
+local CATEGORIES = { "seating", "tables", "barrels", "crates", "lights", "banners", "tents", "fires", "fences", "nature", "decor",
+    "structure" }
 
 -- Build points: how heavy a prop is for the realm and for everyone's frame rate. Lights and fires carry
 -- effects, tents and statues are big models; a few huge ones cost more.
 local CAT_COST = { seating = 1, tables = 1, barrels = 1, crates = 1, banners = 1, lights = 2, fires = 2,
-    fences = 2, nature = 2, tents = 3, decor = 3 }
+    fences = 2, nature = 2, tents = 3, decor = 3, structure = 1 }
 local BIG_COST = { [32372] = 6, [175471] = 6, [187591] = 6, [182251] = 6, [19413] = 4, [19416] = 4,
-    [19494] = 4, [181289] = 4, [19583] = 4 }
+    [19494] = 4, [181289] = 4, [19583] = 4, [195000] = 2, [202872] = 2, [187117] = 2,
+    -- rugs are flat: a floor's weight, not a statue's
+    [181396] = 1, [181077] = 1, [188346] = 1, [188347] = 1, [188348] = 1 }
 
 -- Trust tiers: a share of the per-player limits. New characters (under OV_BUILD_NEW_HOURS played) start on
 -- "new"; everyone else on "builder"; a GM sets any tier with .build trust <name> <tier>.
@@ -562,6 +603,8 @@ local function plotPoints() return num("OV_BUILD_PLOT_POINTS", 300, 0, 100000) e
 local function plotsEach()  return num("OV_BUILD_PLOTS_EACH", 1, 0, 10) end
 local function plotsOnly()  return flag("OV_BUILD_PLOTS_ONLY", false) end
 local function newHours()   return num("OV_BUILD_NEW_HOURS", 2, 0, 1000) end
+-- A Den's decor budgets (build points, everyone's props together): inside the room's walls, and the yard.
+
 
 local function say(player, text) player:SendBroadcastMessage(TAG .. text) end
 
@@ -682,6 +725,17 @@ exec("CREATE TABLE IF NOT EXISTS mod_builder_oplog ("
     .. "before_state VARCHAR(120) NOT NULL DEFAULT '', after_state VARCHAR(120) NOT NULL DEFAULT '', "
     .. "at INT UNSIGNED NOT NULL DEFAULT 0, undone TINYINT UNSIGNED NOT NULL DEFAULT 0, "
     .. "KEY guid (guid), KEY op_id (op_id), KEY at (at))")
+-- Decor storage (Midnight's storage chest): props put away, by entry; placing one takes it back out.
+exec("CREATE TABLE IF NOT EXISTS mod_builder_storage ("
+    .. "guid INT UNSIGNED NOT NULL, entry INT UNSIGNED NOT NULL, count SMALLINT UNSIGNED NOT NULL DEFAULT 0, "
+    .. "PRIMARY KEY (guid, entry))")
+-- Groups (Midnight's parenting: the books move with the shelf): a click on one member selects them all.
+exec("CREATE TABLE IF NOT EXISTS mod_builder_groups ("
+    .. "prop INT UNSIGNED NOT NULL PRIMARY KEY, grp INT UNSIGNED NOT NULL, KEY grp (grp))")
+-- Layouts: a whole area's props (a Den's room and yard), relative to the area's centre, with size and tilt.
+exec("CREATE TABLE IF NOT EXISTS mod_builder_layouts ("
+    .. "owner INT UNSIGNED NOT NULL, owner_name VARCHAR(12) NOT NULL, name VARCHAR(24) NOT NULL, data MEDIUMTEXT NOT NULL, "
+    .. "created_at INT UNSIGNED NOT NULL DEFAULT 0, PRIMARY KEY (owner, name))")
 
 ------------------------------------------------------------------------------------------------
 -- catalog lookups
@@ -754,6 +808,15 @@ local prefabs = {}     -- [id] = { id, owner, ownerName, name, code, data (JSON 
 local oplog = {}       -- ops, oldest first: { id, guid, name, op, at, rows = { { id, before, after } } }
 local nextId, nextPlot, nextPrefab, opSeq = 0, 0, 0, 0
 local curOp            -- the op the running command records into
+-- The 2026-10-30 additions (redo, storage, groups, layouts, a Den's budgets) live in one table, X: the main chunk
+-- is close to Lua's limit of 200 local variables.
+--   X.redo     [guid] = { actions } that .build redo does again (cleared by any new change)
+--   X.storage  [guid] = { [entry] = count } put away (.build store), taken out by placing one
+--   X.groupOf  [prop id] = group id (.build group)
+local X = { redo = {}, storage = {}, groupOf = {}, nextGroup = 0, dirty = {} }
+X.SYSTEM = 0   -- the owner of the props a Den's room is made of (ov_den.lua): no character has guid 0
+function X.denInside()  return num("OV_DEN_INSIDE_POINTS", 1000, 0, 100000) end
+function X.denOutside() return num("OV_DEN_OUTSIDE_POINTS", 300, 0, 100000) end
 
 ------------------------------------------------------------------------------------------------
 -- a prop's state as text, for the op log: entry,map,x,y,z,o,scale,owner,ownerName,area
@@ -834,6 +897,21 @@ local function loadState()
             prefabs[id] = { id = id, owner = q:GetUInt32(1), ownerName = q:GetString(2), name = q:GetString(3),
                 code = code ~= "" and code or nil, data = q:GetString(5) }
             if id > nextPrefab then nextPrefab = id end
+        until not q:NextRow()
+    end
+    q = query("SELECT guid, entry, count FROM mod_builder_storage")
+    if q then
+        repeat
+            local g, e, n = q:GetUInt32(0), q:GetUInt32(1), q:GetUInt32(2)
+            if n > 0 then X.storage[g] = X.storage[g] or {}; X.storage[g][e] = n end
+        until not q:NextRow()
+    end
+    q = query("SELECT prop, grp FROM mod_builder_groups")
+    if q then
+        repeat
+            local pid, gid = q:GetUInt32(0), q:GetUInt32(1)
+            if props[pid] then X.groupOf[pid] = gid end
+            if gid > X.nextGroup then X.nextGroup = gid end
         until not q:NextRow()
     end
     q = query("SELECT MAX(op_id) FROM mod_builder_oplog")
@@ -942,7 +1020,10 @@ end
 -- May the player change this prop?
 local function canEdit(player, p)
     if isGM(player) then return true end
+    if p.owner == X.SYSTEM then return false, "That's part of the room: the Den's owner changes it (|cffffff00.den room|r)." end
     local guid = player:GetGUIDLow()
+    -- In a Den everyone the owner made a builder decorates together: any prop in the Den is theirs to change.
+    if DEN and p.area == DEN.key and roles[guid] then return true end
     local pl = plotAt(p.map, p.x, p.y, p.z)
     if pl then
         local r = roleIn(pl, guid)
@@ -958,6 +1039,7 @@ end
 local function canCopy(player, p)
     local ok, why = canEdit(player, p)
     if ok then return true end
+    if p.owner == X.SYSTEM then return false, why end
     local pl = plotAt(p.map, p.x, p.y, p.z)
     if pl and roleIn(pl, player:GetGUIDLow()) == "visitor" then return true end
     if not pl and p.owner ~= player:GetGUIDLow() then return false, "That prop is " .. p.ownerName .. "'s." end
@@ -993,8 +1075,24 @@ local function pointsOwner(guid)
 end
 local function countArea(key)
     local n = 0
-    for _, p in pairs(props) do if p.area == key then n = n + 1 end end
+    for _, p in pairs(props) do if p.area == key and p.owner ~= X.SYSTEM then n = n + 1 end end
     return n
+end
+
+-- A Den: inside the room's walls (a square, half yards each way from the centre), or out in the yard.
+function X.denInsideAt(x, y)
+    return DEN ~= nil and math.abs(x - DEN.x) <= DEN.half and math.abs(y - DEN.y) <= DEN.half
+end
+-- Build points used in the Den by everyone (the room itself is free): inside, outside.
+function X.denUsage()
+    local i, o = 0, 0
+    if not DEN then return 0, 0 end
+    for _, p in pairs(props) do
+        if p.area == DEN.key and p.owner ~= X.SYSTEM then
+            if X.denInsideAt(p.x, p.y) then i = i + costOf(p.entry) else o = o + costOf(p.entry) end
+        end
+    end
+    return i, o
 end
 
 -- items: { { entry, x, y, z, map, new = true for a prop that doesn't exist yet, from = the prop moving } }
@@ -1026,6 +1124,29 @@ local function checkBudget(player, items)
         local n, pts = plotUsage(pl)
         if n + e.n > plotProps() or pts + e.pts > plotPoints() then
             return false, string.format("%s's plot is full (%d props, %d points at most).", pl.ownerName, plotProps(), plotPoints())
+        end
+    end
+    if DEN then
+        -- the Den's two budgets: what lands inside the walls, and in the yard (a move across the walls counts too)
+        local addIn, addOut = 0, 0
+        for _, it in ipairs(items) do
+            if it.map == DEN.map then
+                local c, nowIn = costOf(it.entry), X.denInsideAt(it.x, it.y)
+                if it.new then
+                    if nowIn then addIn = addIn + c else addOut = addOut + c end
+                elseif it.from and nowIn ~= X.denInsideAt(it.from.x, it.from.y) then
+                    if nowIn then addIn, addOut = addIn + c, addOut - c else addIn, addOut = addIn - c, addOut + c end
+                end
+            end
+        end
+        if addIn > 0 or addOut > 0 then
+            local usedIn, usedOut = X.denUsage()
+            if addIn > 0 and usedIn + addIn > X.denInside() then
+                return false, string.format("The room's decor budget is full (%d of %d points). Put something away first.", usedIn, X.denInside())
+            end
+            if addOut > 0 and usedOut + addOut > X.denOutside() then
+                return false, string.format("The yard's decor budget is full (%d of %d points). Put something away first.", usedOut, X.denOutside())
+            end
         end
     end
     return true
@@ -1224,6 +1345,10 @@ local function removeProp(p, player)
     rec(p.id, copyProp(p), nil)
     despawn(p, player, true)
     props[p.id] = nil
+    if X.groupOf[p.id] then
+        X.groupOf[p.id] = nil
+        exec(string.format("DELETE FROM mod_builder_groups WHERE prop = %d", p.id))
+    end
     exec(string.format("DELETE FROM mod_builder_props WHERE id = %d", p.id))
     if p.s then exec(string.format("DELETE FROM mod_builder_prop_scale WHERE id = %d", p.id)) end
     if p.pt or p.rl then exec(string.format("DELETE FROM mod_builder_prop_tilt WHERE id = %d", p.id)) end
@@ -1257,11 +1382,39 @@ local function placeProp(p, x, y, z, o, player, s, pt, rl)
     rec(p.id, before, copyProp(p))
 end
 
-local function pushUndo(guid, action)
+-- keep: true when redo itself puts the action back (anything else is a new change: the redo stack goes).
+local function pushUndo(guid, action, keep)
     local stack = undo[guid] or {}
     undo[guid] = stack
     stack[#stack + 1] = action
     if #stack > K.UNDO_DEPTH then table.remove(stack, 1) end
+    if not keep then X.redo[guid] = nil end
+end
+
+function X.pushRedo(guid, action)
+    local stack = X.redo[guid] or {}
+    X.redo[guid] = stack
+    stack[#stack + 1] = action
+    if #stack > K.UNDO_DEPTH then table.remove(stack, 1) end
+end
+
+-- storage: put away (+n) or taken out (-n), kept in mod_builder_storage
+function X.storeAdd(guid, entry, n)
+    local s = X.storage[guid] or {}
+    X.storage[guid] = s
+    X.dirty[guid] = true   -- the window hears about it after the command (X.sendStorage)
+    local v = math.max(0, math.min(65535, (s[entry] or 0) + n))
+    s[entry] = v > 0 and v or nil
+    if v > 0 then
+        exec(string.format("REPLACE INTO mod_builder_storage (guid, entry, count) VALUES (%d, %d, %d)", guid, entry, v))
+    else
+        exec(string.format("DELETE FROM mod_builder_storage WHERE guid = %d AND entry = %d", guid, entry))
+    end
+end
+function X.storedCount(guid)
+    local n = 0
+    for _, v in pairs(X.storage[guid] or {}) do n = n + v end
+    return n
 end
 
 ------------------------------------------------------------------------------------------------
@@ -1421,6 +1574,15 @@ local function sendState(player)
         #list, pos, pointsOwner(guid), cap.points, cap.tier, plot, clip[guid] and #clip[guid].rel or 0,
         #ids > 0 and table.concat(ids, " ") or "-", rot, #gids > 0 and table.concat(gids, " ") or "-",
         core(player) and 1 or 0)
+    -- undo / redo depth, props in storage, whether the selection is a group; in a Den your role there
+    -- (owner, builder or visitor) and its two budgets: room=<used>/<cap>;yard=<used>/<cap>
+    data = data .. string.format(";undo=%d;redo=%d;stored=%d;grp=%d", #(undo[guid] or {}), #(X.redo[guid] or {}),
+        X.storedCount(guid), (p and X.groupOf[p.id]) and 1 or 0)
+    if DEN then
+        local i, o = X.denUsage()
+        data = data .. string.format(";den=%s;room=%d/%d;yard=%d/%d", isGM(player) and "owner" or (roles[guid] and "builder" or "visitor"),
+            i, X.denInside(), o, X.denOutside())
+    end
     pcall(OVMod.Send, player, MOD, "state", data)
 end
 
@@ -1478,8 +1640,11 @@ local function spawnCommand(player, word, at)
         return say(player, "The realm couldn't place that prop here.")
     end
     selectOne(guid, p.id)
-    pushUndo(guid, { kind = "spawn", id = p.id })
-    say(player, string.format("%s placed (%d/%d). Nudge it with |cffffff00.build move|r and |cffffff00.build turn|r.", c.name, countOwner(guid), cap.props))
+    local took
+    if (X.storage[guid] or {})[c.id] then X.storeAdd(guid, c.id, -1); took = { [c.id] = 1 } end
+    pushUndo(guid, { kind = "spawn", id = p.id, took = took })
+    say(player, string.format("%s placed (%d/%d)%s. Nudge it with |cffffff00.build move|r and |cffffff00.build turn|r.", c.name,
+        countOwner(guid), cap.props, took and ", out of your storage" or ""))
 end
 
 local function nearCommand(player)
@@ -1611,28 +1776,43 @@ local function clearCommand(player)
     say(player, string.format("Cleared %s from %s (|cffffff00.build undo|r puts them back).", plural(#gone, "prop"), areaName(key)))
 end
 
-local function undoCommand(player)
+-- Takes action a back (undo), or does it again (redo: the redo stack holds the inverses undo made). Returns the
+-- message, and the action that takes this back again (nil when nothing changed), and true when the message stands
+-- alone (no "Undone:" in front). took / gave: props placed out of (or put into) storage, by entry, so storage
+-- follows: removing a placed prop puts it back in, bringing a stored prop back takes it out again.
+function X.applyBack(player, a)
     local guid = player:GetGUIDLow()
-    local stack = undo[guid]
-    local a = stack and table.remove(stack)
-    if not a then return say(player, "Nothing to undo.") end
-    if a.kind == "spawn" then
-        local p = props[a.id]
-        if p then removeProp(p, player) end
-        if selected[guid] == a.id then selectOne(guid, nil) end
-        return say(player, "Undone: the prop you placed is gone.")
+    if a.kind == "spawn" or a.kind == "load" then
+        local saved = {}
+        for _, id in ipairs(a.ids or { a.id }) do
+            local p = props[id]
+            if p then saved[#saved + 1] = copyProp(p); removeProp(p, player) end
+        end
+        if not props[selected[guid] or 0] then selectOne(guid, nil) end
+        for e, n in pairs(a.took or {}) do X.storeAdd(guid, e, n) end
+        local back = #saved > 0 and { kind = "restore", list = saved, gave = a.took,
+            what = not a.what and (plural(#saved, "prop") .. " back.") or nil } or nil
+        if a.what then return a.what, back end
+        if a.kind == "spawn" then return "the prop you placed is gone.", back end
+        return "the pasted build (" .. plural(#saved, "prop") .. ") is gone.", back
     elseif a.kind == "places" then
-        local n, last = 0, nil
+        local n, last, now = 0, nil, {}
         for _, b in ipairs(a.list) do
             local p = props[b.id]
-            if p then placeProp(p, b.x, b.y, b.z, b.o, player, b.s or 1, b.pt or 0, b.rl or 0); n = n + 1; last = p end
+            if p then
+                now[#now + 1] = { id = p.id, x = p.x, y = p.y, z = p.z, o = p.o, s = p.s, pt = p.pt, rl = p.rl }
+                placeProp(p, b.x, b.y, b.z, b.o, player, b.s or 1, b.pt or 0, b.rl or 0); n = n + 1; last = p
+            end
         end
-        if n == 0 then return say(player, "That prop is gone already.") end
+        if n == 0 then return "That prop is gone already.", nil, true end
         local ids = {}
         for _, b in ipairs(a.list) do if props[b.id] then ids[#ids + 1] = b.id end end
         selectMany(guid, ids)
-        if #a.list == 1 then return say(player, "Undone: " .. propName(last) .. " is back where it was.") end
-        return say(player, "Undone: " .. plural(n, "prop") .. " back where they were.")
+        local back = { kind = "places", list = now,
+            what = not a.what and (n == 1 and (propName(last) .. " moved again.") or (plural(n, "prop") .. " moved again.")) or nil }
+        if a.what then return a.what, back end
+        if #a.list == 1 then return propName(last) .. " is back where it was.", back end
+        return plural(n, "prop") .. " back where they were.", back
     elseif a.kind == "restore" then
         local room = budgetOf(player).props - countOwner(guid)
         local n, ids = 0, {}
@@ -1644,15 +1824,35 @@ local function undoCommand(player)
             end
         end
         if #ids > 0 then selectMany(guid, ids) end
-        return say(player, "Undone: " .. plural(n, "prop") .. " back.")
-    elseif a.kind == "load" then
-        local n = 0
-        for _, id in ipairs(a.ids) do
-            if props[id] then removeProp(props[id], player); n = n + 1 end
+        local took
+        if a.gave then
+            took = {}
+            for _, id in ipairs(ids) do local e = props[id].entry; if a.gave[e] then took[e] = (took[e] or 0) + 1 end end
+            for e, k in pairs(took) do X.storeAdd(guid, e, -k) end
         end
-        selectOne(guid, nil)
-        return say(player, "Undone: the pasted build (" .. plural(n, "prop") .. ") is gone.")
+        local back = #ids > 0 and { kind = "load", ids = ids, took = took,
+            what = not a.what and (plural(#ids, "prop") .. " gone again.") or nil } or nil
+        return a.what or (plural(n, "prop") .. " back."), back
     end
+    return "nothing.", nil
+end
+
+local function undoCommand(player)
+    local guid = player:GetGUIDLow()
+    local a = undo[guid] and table.remove(undo[guid])
+    if not a then return say(player, "Nothing to undo.") end
+    local msg, back, alone = X.applyBack(player, a)
+    if back then X.pushRedo(guid, back) end
+    say(player, alone and msg or ("Undone: " .. msg))
+end
+
+function X.redoCommand(player)
+    local guid = player:GetGUIDLow()
+    local a = X.redo[guid] and table.remove(X.redo[guid])
+    if not a then return say(player, "Nothing to redo.") end
+    local msg, back, alone = X.applyBack(player, a)
+    if back then pushUndo(guid, back, true) end
+    say(player, alone and msg or ("Redone: " .. msg))
 end
 
 -- builds ---------------------------------------------------------------------------------------
@@ -1909,6 +2109,11 @@ local function pickCommand(player, arg, mode)
     local ok, why = canCopy(player, p)
     if not ok then return say(player, why) end
     if mode ~= "add" then
+        local members = X.groupMembers(player, p)
+        if members then
+            selectMany(guid, members)
+            return say(player, string.format("%s selected with its group (%s).", propName(p), plural(#members, "prop")))
+        end
         selectOne(guid, p.id)
         return say(player, propName(p) .. " selected.")
     end
@@ -2759,6 +2964,243 @@ do
         rollback = rollbackCommand, oplog = oplogCommand }
 end
 
+------------------------------------------------------------------------------------------------
+-- 2026-10-30, toward the newest housing system's decor tools (docs/DEN.md has the feature table):
+--   .build redo                       does again what .build undo took back (until you change something new)
+--   .build store                      puts the selection away into your storage (it leaves the world; undo brings
+--                                     it back). Placing a prop you have in storage takes it out again.
+--   .build storage                    what you have put away
+--   .build group | ungroup            the selection becomes a group: a click on one member selects them all
+--   .build floor                      the selection down onto the floor below it (a Den's floor in its room)
+--   .build layout save|load|list|delete <name> [replace]   a whole area (a Den: everyone's props, the room and
+--                                     yard) relative to its centre, with size and tilt; "replace" (the Den's
+--                                     owner) clears the area first. One undo entry for the clear, one for the load.
+------------------------------------------------------------------------------------------------
+X.CMD = {}
+X.layouts = {}           -- cache: [owner guid] = { [name] = data }
+K.LAYOUT_MAX = 800       -- props in one layout
+
+-- The other members of p's group the player may select (with p), or nil when p is in no group.
+function X.groupMembers(player, p)
+    local gid = X.groupOf[p.id]
+    if not gid then return nil end
+    local ids = { }
+    for id, g in pairs(X.groupOf) do
+        local q = props[id]
+        if g == gid and q and q ~= p and #ids < K.GROUP_MAX - 1 and canCopy(player, q) then ids[#ids + 1] = id end
+    end
+    if #ids == 0 then return nil end
+    table.sort(ids)
+    ids[#ids + 1] = p.id   -- the clicked one last: it carries the handles
+    return ids
+end
+
+function X.CMD.store(player)
+    local list = editList(player, true)
+    if not list then return end
+    local guid = player:GetGUIDLow()
+    local saved, gave = {}, {}
+    for _, p in ipairs(list) do
+        saved[#saved + 1] = copyProp(p)
+        gave[p.entry] = (gave[p.entry] or 0) + 1
+        removeProp(p, player)
+    end
+    for e, n in pairs(gave) do X.storeAdd(guid, e, n) end
+    pushUndo(guid, { kind = "restore", list = saved, gave = gave })
+    selectOne(guid, nil)
+    say(player, string.format("%s put away in your storage (%d there now). Place one from the storage tab to take it out.",
+        #list == 1 and propName(list[1]) or plural(#list, "prop"), X.storedCount(guid)))
+end
+X.CMD.putaway = X.CMD.store
+
+-- storage entry,count;... for the window (wubuild "storage"), and a chat line
+function X.storageText(guid)
+    local out = {}
+    for e, n in pairs(X.storage[guid] or {}) do out[#out + 1] = { e = e, n = n } end
+    table.sort(out, function(a, b) return a.e < b.e end)
+    local wire = {}
+    for _, it in ipairs(out) do wire[#wire + 1] = it.e .. "," .. it.n end
+    return table.concat(wire, ";"), out
+end
+
+function X.sendStorage(player)
+    if OVMod then pcall(OVMod.Send, player, MOD, "storage", (X.storageText(player:GetGUIDLow()))) end
+end
+
+function X.CMD.storage(player)
+    local _, list = X.storageText(player:GetGUIDLow())
+    X.sendStorage(player)
+    if #list == 0 then return say(player, "Your storage is empty. |cffffff00.build store|r puts the selection away.") end
+    local names = {}
+    for i = 1, math.min(#list, 30) do
+        local c = byId[list[i].e]
+        names[#names + 1] = (c and c.name or ("prop " .. list[i].e)) .. " x" .. list[i].n
+    end
+    say(player, "In your storage: " .. table.concat(names, ", ") .. (#list > 30 and ", ..." or "") .. ".")
+end
+
+function X.CMD.group(player)
+    local list = editList(player)
+    if not list then return end
+    if #list < 2 then return say(player, "Select two or more props first (Shift-click adds one).") end
+    if not rateWrite(player) then return end
+    X.nextGroup = X.nextGroup + 1
+    for _, p in ipairs(list) do
+        X.groupOf[p.id] = X.nextGroup
+        exec(string.format("REPLACE INTO mod_builder_groups (prop, grp) VALUES (%d, %d)", p.id, X.nextGroup))
+    end
+    say(player, string.format("%s grouped: a click on one selects them all. |cffffff00.build ungroup|r splits them.", plural(#list, "prop")))
+end
+
+function X.CMD.ungroup(player)
+    local list = editList(player)
+    if not list then return end
+    local gone = {}
+    for _, p in ipairs(list) do if X.groupOf[p.id] then gone[X.groupOf[p.id]] = true end end
+    local n = 0
+    for id, g in pairs(X.groupOf) do
+        if gone[g] then
+            X.groupOf[id] = nil; n = n + 1
+            exec(string.format("DELETE FROM mod_builder_groups WHERE prop = %d", id))
+        end
+    end
+    if n == 0 then return say(player, "None of the selection is in a group.") end
+    say(player, string.format("Ungrouped (%s).", plural(n, "prop")))
+end
+
+-- The floor under a point: a Den's room floor (ov_den.lua sets it), else the ground (Map:GetHeight).
+function X.floorAt(player, x, y, z)
+    if DEN and DEN.floorZ and X.denInsideAt(x, y) then return DEN.floorZ end
+    local map = try(player, "GetMap")
+    local h = map and tonumber(try(map, "GetHeight", x, y))
+    if h and finite(h) and math.abs(h - z) <= 50 then return h end
+    return nil
+end
+
+function X.CMD.floor(player)
+    local list = editList(player)
+    if not list then return end
+    local low = list[1]
+    for _, p in ipairs(list) do if p.z < low.z then low = p end end
+    local h = X.floorAt(player, low.x, low.y, low.z)
+    if not h then return say(player, "No floor found under it.") end
+    local dz = h - low.z
+    if math.abs(dz) < 0.01 then return say(player, "It's on the floor already.") end
+    if not rateMove(player:GetGUIDLow()) then return say(player, "Slow down a little.") end
+    if moveGroup(player, list, function(p) return { x = p.x, y = p.y, z = p.z + dz } end) then
+        say(player, string.format("%s down on the floor (%+.2f).", #list == 1 and propName(list[1]) or plural(#list, "prop"), dz))
+    end
+end
+X.CMD.ground = X.CMD.floor
+
+-- layouts: e,dx,dy,dz,o,s,pt,rl|... (offsets from the area's centre, world directions; o, pt, rl in radians)
+function X.layoutEncode(list, a)
+    local out = {}
+    for _, p in ipairs(list) do
+        out[#out + 1] = string.format("%d,%.2f,%.2f,%.2f,%.3f,%.2f,%.3f,%.3f", p.entry, p.x - a.x, p.y - a.y, p.z - a.z,
+            normO(p.o), p.s or 1, p.pt or 0, p.rl or 0)
+    end
+    return table.concat(out, "|")
+end
+
+function X.layoutDecode(text)
+    local N = "(%-?%d+%.?%d*)"
+    local rel = {}
+    for item in tostring(text or ""):gmatch("[^|]+") do
+        local e, dx, dy, dz, o, sc, pt, rl = item:match("^(%d+)," .. N .. "," .. N .. "," .. N .. "," .. N .. "," .. N .. "," .. N .. "," .. N .. "$")
+        if e and #rel < K.LAYOUT_MAX then
+            sc = tonumber(sc)
+            rel[#rel + 1] = { entry = tonumber(e), dx = tonumber(dx), dy = tonumber(dy), dz = tonumber(dz), o = tonumber(o),
+                s = (sc and sc ~= 1) and clampScale(sc) or nil, pt = normTilt(pt), rl = normTilt(rl) }
+        end
+    end
+    return rel
+end
+
+-- The area the player stands in, if it is one of BUILD_AREAS (layouts are relative to its centre).
+function X.layoutArea(player)
+    local key, why = buildArea(player)
+    if not key then return nil, why end
+    local a = BUILD_AREAS[tonumber(key) or 0]
+    if not a then return nil, "Layouts are for build areas (|cffffff00.build where|r)." end
+    return key, a
+end
+
+function X.layoutProps(player, key)
+    local guid, den = player:GetGUIDLow(), DEN and key == DEN.key
+    local list = {}
+    for _, p in pairs(props) do
+        if p.area == key and p.owner ~= X.SYSTEM and (den or p.owner == guid) then list[#list + 1] = p end
+    end
+    table.sort(list, function(a, b) return a.id < b.id end)
+    return list
+end
+
+function X.getLayout(guid, name)
+    local c = X.layouts[guid] and X.layouts[guid][name]
+    if c then return c end
+    local q = query(string.format("SELECT data FROM mod_builder_layouts WHERE owner = %d AND name = '%s'", guid, name))
+    if q then
+        X.layouts[guid] = X.layouts[guid] or {}
+        X.layouts[guid][name] = q:GetString(0)
+        return X.layouts[guid][name]
+    end
+    return nil
+end
+
+function X.CMD.layout(player, words)
+    local verb, name = (words[2] or "list"):lower(), cleanBuild(words[3])
+    local guid = player:GetGUIDLow()
+    if verb == "list" then
+        local names, seen = {}, {}
+        local q = query(string.format("SELECT name FROM mod_builder_layouts WHERE owner = %d ORDER BY name", guid))
+        if q then repeat local n = q:GetString(0); seen[n] = true; names[#names + 1] = n until not q:NextRow() end
+        for n in pairs(X.layouts[guid] or {}) do if not seen[n] then names[#names + 1] = n end end
+        table.sort(names)
+        if #names == 0 then return say(player, "No layouts yet: |cffffff00.build layout save <name>|r keeps this whole area.") end
+        return say(player, "Your layouts: " .. table.concat(names, ", ") .. ".")
+    end
+    if not name then return say(player, "Usage: |cffffff00.build layout save|load|delete <name> [replace]|r, or |cffffff00.build layout list|r") end
+    if verb == "delete" then
+        if X.layouts[guid] then X.layouts[guid][name] = nil end
+        exec(string.format("DELETE FROM mod_builder_layouts WHERE owner = %d AND name = '%s'", guid, name))
+        return say(player, "Layout '" .. name .. "' deleted.")
+    end
+    local key, a = X.layoutArea(player)
+    if not key then return say(player, a) end
+    if verb == "save" then
+        if not rateWrite(player) then return end
+        local list = X.layoutProps(player, key)
+        if #list == 0 then return say(player, "Nothing here to save yet.") end
+        if #list > K.LAYOUT_MAX then return say(player, "A layout holds up to " .. K.LAYOUT_MAX .. " props.") end
+        local text = X.layoutEncode(list, a)
+        X.layouts[guid] = X.layouts[guid] or {}
+        X.layouts[guid][name] = text
+        exec(string.format("REPLACE INTO mod_builder_layouts (owner, owner_name, name, data, created_at) VALUES (%d, '%s', '%s', '%s', %d)",
+            guid, cleanName(player:GetName()), name, text, os.time()))
+        return say(player, string.format("Layout '%s' saved: %s of %s. |cffffff00.build layout load %s|r puts it back.",
+            name, plural(#list, "prop"), a.name, name))
+    elseif verb == "load" then
+        local replace = (words[4] or ""):lower() == "replace"
+        if replace and not isGM(player) then return say(player, "Only the owner replaces everything here; load it without \"replace\".") end
+        local text = X.getLayout(guid, name)
+        if not text then return say(player, "No layout '" .. name .. "' (|cffffff00.build layout list|r).") end
+        local rel = X.layoutDecode(text)
+        if #rel == 0 then return say(player, "That layout is empty.") end
+        if lastLoad[guid] and os.time() - lastLoad[guid] < K.LOAD_COOLDOWN then
+            return say(player, "One paste every " .. K.LOAD_COOLDOWN .. " seconds.")
+        end
+        if replace then
+            local gone, saved = X.layoutProps(player, key), {}
+            for _, p in ipairs(gone) do saved[#saved + 1] = copyProp(p); removeProp(p, player) end
+            if #saved > 0 then pushUndo(guid, { kind = "restore", list = saved }) end
+        end
+        return placeMany(player, rel, { x = a.x, y = a.y, z = a.z, o = 0 }, "layout " .. name)
+    end
+    say(player, "Usage: |cffffff00.build layout save|load|delete <name> [replace]|r, or |cffffff00.build layout list|r")
+end
+X.CMD.layouts = function(player) return X.CMD.layout(player, { "layout", "list" }) end
+
 local function showHelp(player)
     local cap = budgetOf(player)
     say(player, "Builder: place props in build areas and share builds as codes. /builder opens the window.")
@@ -2769,6 +3211,8 @@ local function showHelp(player)
     say(player, "  |cffffff00.build selall|r  |cffffff00.build copy|r  |cffffff00.build paste|r  |cffffff00.build prefab save <name>|r  |cffffff00.build prefab list|r")
     say(player, "  |cffffff00.build save <name>|r  |cffffff00.build load <name|code>|r  |cffffff00.build share <name>|r  |cffffff00.build saved|r  |cffffff00.build where|r")
     say(player, "  |cffffff00.build plot claim|r  |cffffff00.build plot add <name>|r  |cffffff00.build plot|r: your own plot to build on with friends.")
+    say(player, "  |cffffff00.build redo|r  |cffffff00.build store|r / |cffffff00storage|r  |cffffff00.build group|r / |cffffff00ungroup|r  "
+        .. "|cffffff00.build floor|r  |cffffff00.build layout save|load|list <name>|r")
     say(player, string.format("  Limits: %d props per player, %d per area, one spawn a second.", perPlayer(), perArea()))
     say(player, string.format("  You: %d props and %d build points (%s).", cap.props, cap.points, cap.tier))
     if isGM(player) then
@@ -2812,6 +3256,8 @@ local function dispatch(player, sub, words)
     elseif sub == "scale" then
         if words[3] then ONE.scale(player, words) else setscaleCommand(player, words[2]) end
     elseif sub == "undo" then undoCommand(player)
+    elseif sub == "redo" then X.redoCommand(player)
+    elseif X.CMD[sub] then X.CMD[sub](player, words)
     elseif sub == "delete" or sub == "remove" then deleteCommand(player)
     elseif sub == "clear" then clearCommand(player)
     elseif sub == "save" then saveCommand(player, words[2])
@@ -2857,6 +3303,7 @@ local function onCommand(event, player, command)
     run(player, rest)
     sendState(player)
     if rest:lower():find("^prefab") then sendPrefabs(player) end
+    if X.dirty[player:GetGUIDLow()] then X.dirty[player:GetGUIDLow()] = nil; X.sendStorage(player) end
     return false
 end
 
@@ -2866,11 +3313,13 @@ if OVMod then
         run(player, data)
         sendState(player)
         if data:lower():find("^prefab") then sendPrefabs(player) end
+        if X.dirty[player:GetGUIDLow()] then X.dirty[player:GetGUIDLow()] = nil; X.sendStorage(player) end
     end)
     OVMod.On(MOD, "catalog", function(player)
         OVMod.Send(player, MOD, "catalog", catalogText())
         sendState(player)
         sendPrefabs(player)
+        X.sendStorage(player)
     end)
 end
 
@@ -2882,6 +3331,7 @@ local function onLogout(event, player)
     selected[guid], nearList[guid], undo[guid], lastSpawn[guid], lastLoad[guid], moves[guid], lastSync[guid] =
         nil, nil, nil, nil, nil, nil, nil
     group[guid], clip[guid], lastCode[guid], writes[guid] = nil, nil, nil, nil
+    X.redo[guid], X.dirty[guid], X.layouts[guid] = nil, nil, nil
 end
 
 -- Every 15 s: props near any player who is in or close to a build area (or anywhere, if a prop is near).
@@ -2979,10 +3429,107 @@ function OVBuild.ParsePrefab(data)
     return #rel, skipped
 end
 
+------------------------------------------------------------------------------------------------
+-- OVBuild for a Den (ov_den.lua): the room's own props (owner 0, free of every budget, changed only by GMs), the
+-- builder role the Den's owner hands out, and the .build commands run for a player.
+------------------------------------------------------------------------------------------------
+OVBuild.DEN = DEN
+
+-- OVBuild.Run(player, text): runs ".build <text>" for the player (every check as typed) and updates their window.
+function OVBuild.Run(player, text)
+    if not player then return end
+    run(player, text)
+    sendState(player)
+    if X.dirty[player:GetGUIDLow()] then X.dirty[player:GetGUIDLow()] = nil; X.sendStorage(player) end
+end
+
+-- OVBuild.RoomCount() -> the Den room's props (0 outside a Den)
+function OVBuild.RoomCount()
+    local n = 0
+    if not DEN then return 0 end
+    for _, p in pairs(props) do if p.owner == X.SYSTEM and p.area == DEN.key then n = n + 1 end end
+    return n
+end
+
+-- OVBuild.PlaceRoom(player, list) -> props placed. list: { { entry, x, y, z, o, s }, ... } in world coordinates,
+-- catalog entries only, inside the Den. player: whose grid the props appear in now (nil: they appear at the next sync).
+function OVBuild.PlaceRoom(player, list)
+    if not DEN or type(list) ~= "table" then return 0 end
+    local prevActor, n = actor, 0
+    actor = player
+    for i = 1, math.min(#list, 400) do
+        local e = list[i]
+        if type(e) == "table" and byId[tonumber(e.entry) or 0] and finite(e.x) and finite(e.y) and finite(e.z)
+            and insideArea(DEN.key, DEN.map, e.x, e.y, e.z) then
+            addProp(X.SYSTEM, "Den", DEN.key, tonumber(e.entry), DEN.map, e.x, e.y, e.z, tonumber(e.o) or 0, nil, tonumber(e.s))
+            n = n + 1
+        end
+    end
+    actor = prevActor
+    return n
+end
+
+-- OVBuild.ClearRoom(player) -> props removed: the Den room's own props (everyone's decor stays).
+function OVBuild.ClearRoom(player)
+    if not DEN then return 0 end
+    local n = 0
+    for _, p in pairs(props) do
+        if p.owner == X.SYSTEM and p.area == DEN.key then removeProp(p, player); n = n + 1 end
+    end
+    for g, id in pairs(selected) do if not props[id] then selected[g] = nil end end
+    return n
+end
+
+-- OVBuild.SetFloor(z): the height of the room's floor (.build floor puts props down on it).
+function OVBuild.SetFloor(z) if DEN and finite(tonumber(z)) then DEN.floorZ = tonumber(z) end end
+
+-- OVBuild.SetBuilder(byPlayer, name, on) -> true, text  or  nil, why: the builder role (mod_builder_roles), as
+-- .build grant / revoke. Granting needs the character online (their name is checked against the realm).
+function OVBuild.SetBuilder(by, name, on)
+    name = cleanName(name)
+    if name == "" then return nil, "Which character?" end
+    if on then
+        local target = GetPlayerByName and GetPlayerByName(name)
+        if not target then return nil, name .. " isn't online; ask them to log in first." end
+        local g = target:GetGUIDLow()
+        roles[g] = { name = target:GetName(), lname = target:GetName():lower() }
+        exec(string.format("REPLACE INTO mod_builder_roles (guid, name, granted_by, granted_at) VALUES (%d, '%s', '%s', %d)",
+            g, cleanName(target:GetName()), cleanName(by and by:GetName() or ""), os.time()))
+        say(target, "You can build here now: F7 for edit mode, or /builder for the window.")
+        sendState(target)
+        return true, target:GetName() .. " can build here now."
+    end
+    local l = name:lower()
+    for g, r in pairs(roles) do
+        if r.lname == l then
+            roles[g] = nil
+            exec(string.format("DELETE FROM mod_builder_roles WHERE guid = %d", g))
+            local t = GetPlayerByName and GetPlayerByName(r.name)
+            if t then say(t, "You can look around here, but not build any more."); sendState(t) end
+            return true, r.name .. " can look around, not build (what they built stays)."
+        end
+    end
+    return nil, name .. " isn't a builder here."
+end
+
+-- OVBuild.Builders() -> { names }, sorted
+function OVBuild.Builders()
+    local out = {}
+    for _, r in pairs(roles) do out[#out + 1] = r.name end
+    table.sort(out)
+    return out
+end
+
+-- OVBuild.DenUsage() -> inside used, inside cap, yard used, yard cap
+function OVBuild.DenUsage()
+    local i, o = X.denUsage()
+    return i, X.denInside(), o, X.denOutside()
+end
+
 -- for stream/tests/test_ov_build.lua (read only)
 OV_BUILD_TEST = { props = props, live = live, roles = roles, selected = selected, undo = undo, builds = builds,
     byCode = byCode, CATALOG = function() return CATALOG end, BUILD_AREAS = BUILD_AREAS, run = run, sync = sync,
     syncAll = syncAll, encode = encode, decode = decode, catalogText = catalogText, areaAt = areaAt,
     group = group, clip = clip, plots = plots, prefabs = prefabs, oplog = oplog, trust = trust,
     jsonDecode = jsonDecode, budgetOf = budgetOf, plotAt = plotAt, costOf = costOf, TIERS = TIERS,
-    coreLive = coreLive, stateStr = stateStr, parseStateStr = parseStateStr, quatOf = quatOf }
+    coreLive = coreLive, stateStr = stateStr, parseStateStr = parseStateStr, quatOf = quatOf, X = X, DEN = DEN }
