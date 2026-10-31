@@ -200,3 +200,7 @@ html[data-base="light"] .hs-side { box-shadow: 0 14px 30px rgba(16, 24, 40, .12)
 .hero-slide.has-art .hs-art { inset: 18px 18px auto; width: calc(100% - 36px); height: calc(100% - 210px); object-fit: contain; object-position: center;
   transform: none; filter: drop-shadow(0 18px 30px rgba(0, 0, 0, .5)); }
 .hero-slide.on.has-art .hs-art { transform: scale(1.02); }
+/* the "More below" cue as a clear pill */
+.home-cue { height: 18px; padding: 0 12px; border-radius: 999px; color: var(--t-accent-strong);
+  background: color-mix(in srgb, var(--t-accent) 14%, var(--t-chrome)); font-weight: 700; bottom: -18px; }
+.home-cue:hover { background: color-mix(in srgb, var(--t-accent) 24%, var(--t-chrome)); }
