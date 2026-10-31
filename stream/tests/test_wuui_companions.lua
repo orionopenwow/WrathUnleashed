@@ -238,6 +238,10 @@ check("builds nothing until opened", C.Window() == nil and not _G.WrathUnleashed
 check("/companions and /comp", SLASH_WUCOMPANIONS1 == "/companions" and SLASH_WUCOMPANIONS2 == "/comp" and SlashCmdList.WUCOMPANIONS)
 check("chat filters for bot achievements and whispers", filters.CHAT_MSG_ACHIEVEMENT and filters.CHAT_MSG_GUILD_ACHIEVEMENT
     and filters.CHAT_MSG_WHISPER and filters.CHAT_MSG_WHISPER_INFORM)
+check("the bot module's 'configured with N bots' login line is hidden; its credit line stays", filters.CHAT_MSG_SYSTEM
+    and filters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "|cff00ff00Playerbots:|r The server is configured with 0 bots.") == true
+    and filters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "|cff00ff00This server runs with |cff00ccffmod-playerbots|r |cffcccccchttps://github.com/mod-playerbots/mod-playerbots|r") == false
+    and filters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "You have learned a new spell.") == false)
 
 -- entering the world: a roster ask a moment later; the realm has bots, so the minimap button shows
 C.listener:Fire("OnEvent", "PLAYER_ENTERING_WORLD")

@@ -211,4 +211,36 @@ check("bars word: not yet", WrathUnleashedUI.LeylineRealm == false)
 word("none")
 check("bars word: a Leyline realm", WrathUnleashedUI.LeylineRealm == true and WrathUnleashedUIChar.barsOn == true)
 
+-- screenshot mode: /shot hides the interface; Esc (or Alt+Z) brings it back
+do
+    local shown = true
+    UIParent.IsShown = function() return shown end
+    UIParent.Hide = function() shown = false end
+    UIParent.Show = function() shown = true end
+    WorldFrame = WorldFrame or {}
+    local mt = { __index = function(t, k) return function() end end }
+    local catcher
+    local realCreate = CreateFrame
+    CreateFrame = function(...)
+        local f = realCreate(...)
+        f.Show = function(s) s.shown = true end
+        f.Hide = function(s) s.shown = false end
+        f.CreateFontString = function() return setmetatable({}, mt) end
+        setmetatable(f, mt)
+        catcher = f
+        return f
+    end
+    check("/shot and /hideui", SLASH_WUSHOT1 == "/shot" and SLASH_WUSHOT2 == "/hideui" and SlashCmdList.WUSHOT ~= nil)
+    SlashCmdList.WUSHOT("")
+    check("/shot hides the interface and shows the key catcher", shown == false and catcher and catcher.shown == true)
+    catcher.scripts.OnKeyDown(catcher, "W")
+    check("other keys keep it hidden", shown == false)
+    catcher.scripts.OnKeyDown(catcher, "ESCAPE")
+    check("Esc brings the interface back", shown == true and catcher.shown == false)
+    SlashCmdList.WUSHOT(""); IsAltKeyDown = function() return true end
+    catcher.scripts.OnKeyDown(catcher, "Z")
+    check("Alt+Z brings it back too", shown == true)
+    CreateFrame = realCreate
+end
+
 print(("\n%d/%d passed"):format(pass, pass + fail)); os.exit(fail == 0 and 0 or 1)

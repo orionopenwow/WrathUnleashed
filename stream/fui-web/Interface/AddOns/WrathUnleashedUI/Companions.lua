@@ -653,7 +653,16 @@ listener:SetScript("OnUpdate", function()
 end)
 C.listener = listener
 
+-- The bot module's "configured with N bots" login line counts only its roaming bots, never the ones players bring
+-- (and reads "0 bots" on a realm full of them): hidden. Its credit line (the module's source link) stays, as its
+-- licence asks.
+function C.SystemFilter(_, _, msg)
+    msg = tostring(msg or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    return msg:find("^Playerbots: The server is configured with %d+ bots%.?$") ~= nil
+end
+
 if ChatFrame_AddMessageEventFilter then
+    pcall(ChatFrame_AddMessageEventFilter, "CHAT_MSG_SYSTEM", C.SystemFilter)
     for _, e in ipairs({ "CHAT_MSG_ACHIEVEMENT", "CHAT_MSG_GUILD_ACHIEVEMENT", "CHAT_MSG_WHISPER", "CHAT_MSG_WHISPER_INFORM" }) do
         pcall(ChatFrame_AddMessageEventFilter, e, C.ChatFilter)
     end

@@ -421,3 +421,43 @@ SlashCmdList["WUBARS"] = function()
     barsOn()
     fillBars(false)
 end
+
+-- ---------------------------------------------------------------- screenshot mode
+-- Alt+Z does not reach the browser client, and UIParent:Hide() alone leaves no way back. /shot (or /hideui) hides
+-- the interface; Esc, Alt+Z or a click on the small hint brings it back. Print Screen still takes a screenshot.
+-- The catcher is not a child of UIParent, so it stays when the interface is hidden.
+local shot
+local function shotEnd()
+    if shot then shot:Hide() end
+    if not UIParent:IsShown() then UIParent:Show() end
+end
+function W.ScreenshotMode(on)
+    if on == nil then on = UIParent:IsShown() end
+    if not on then return shotEnd() end
+    if not shot then
+        shot = CreateFrame("Button", "WrathUnleashedShotMode", nil)
+        shot:SetFrameStrata("TOOLTIP")
+        shot:SetWidth(260); shot:SetHeight(18)
+        shot:SetPoint("TOP", WorldFrame, "TOP", 0, -6)
+        local fs = shot:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        fs:SetAllPoints(shot)
+        fs:SetText("Screenshot mode: Esc to bring the interface back")
+        shot.text = fs
+        shot:EnableKeyboard(true)
+        shot:SetScript("OnKeyDown", function(_, key)
+            if key == "ESCAPE" or (key == "Z" and IsAltKeyDown and IsAltKeyDown()) then return shotEnd() end
+            if key == "PRINTSCREEN" and Screenshot then Screenshot() end
+        end)
+        shot:SetScript("OnClick", shotEnd)
+        -- the hint fades after 3 s so the screenshot is clean; the keys keep working
+        shot:SetScript("OnUpdate", function(self, el)
+            self.left = (self.left or 0) - (el or 0)
+            self.text:SetAlpha(self.left > 0 and 1 or 0)
+        end)
+    end
+    shot.left = 3
+    UIParent:Hide()
+    shot:Show()
+end
+SLASH_WUSHOT1, SLASH_WUSHOT2 = "/shot", "/hideui"
+SlashCmdList["WUSHOT"] = function() W.ScreenshotMode() end
