@@ -21,9 +21,10 @@
 #   leyline max-players N        the most players at once: the server's cap and the realm list's (0 = default)
 #
 # Questions can be answered from the environment (no prompts): LEYLINE_NAME, LEYLINE_RULESET
-# (dalaran | main | brawl | progression, or a profile for another client in profiles/: cmangos-1.12.1, cmangos-2.4.3;
-# default dalaran; vanillaplus = the original world only, level 60, made to stay up; WU_CLIENT_DIR = that client's
-# game folder), LEYLINE_VISIBILITY (public | private; default public), LEYLINE_GM (your account name),
+# (dalaran | main | brawl | progression | den, or a profile for another client in profiles/: cmangos-1.12.1, cmangos-2.4.3;
+# default dalaran; vanillaplus = the original world only, level 60, made to stay up; den = My Den, a private room to
+# build in with friends, no bots; WU_CLIENT_DIR = that client's game folder), LEYLINE_VISIBILITY (public | private;
+# default public, private for den), LEYLINE_GM (your account name),
 # LEYLINE_TAGLINE, LEYLINE_RULES_FILE (one rule per line). leyline link: LEYLINE_LINK_NAME, LEYLINE_LINK_AUTH,
 # LEYLINE_LINK_WORLD, LEYLINE_LINK_CLIENT (vanilla | tbc | wrath), LEYLINE_LINK_TAGLINE, LEYLINE_LINK_CORE,
 # LEYLINE_LINK_TAGS, LEYLINE_LINK_STATUS_URL.
@@ -169,8 +170,10 @@ cmd_host() {
   ask LEYLINE_NAME "Realm name" "Dalaran Hangout"
   # the profiles offered now (profiles/host-profile.sh profile_list: 4.3.4 is not offered for now)
   local others; others="$( (. "$KIT/profiles/host-profile.sh" && profile_list) 2>/dev/null | tr '\n' ' ' || true)"
-  ask LEYLINE_RULESET "Ruleset: dalaran (light hangout, boost to 80, no bots), main, brawl, progression, vanillaplus (the original world to 60, always on)${others:+, or for another client: $others}" "dalaran" dalaran main brawl progression vanillaplus $others
-  ask LEYLINE_VISIBILITY "public (listed on the Leyline realm list) or private (only people with your invite link)" "public" public private
+  ask LEYLINE_RULESET "Ruleset: dalaran (light hangout, boost to 80, no bots), main, brawl, progression, vanillaplus (the original world to 60, always on), den (My Den: a private room to build in with friends)${others:+, or for another client: $others}" "dalaran" dalaran main brawl progression vanillaplus den $others
+  # a Den is a room for you and the friends you invite: private unless you say otherwise (no bots: the kit runs none)
+  local vis_def=public; [ "$LEYLINE_RULESET" = den ] && vis_def=private
+  ask LEYLINE_VISIBILITY "public (listed on the Leyline realm list) or private (only people with your invite link)" "$vis_def" public private
   if [ "$first" = 1 ] && [ -z "${LEYLINE_TAGLINE:-}" ] && interactive; then
     read -r -p "One line for the realm list (Enter for the ruleset's default): " LEYLINE_TAGLINE || true
   fi
