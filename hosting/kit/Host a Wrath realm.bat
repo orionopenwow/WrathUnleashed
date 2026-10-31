@@ -173,6 +173,7 @@ exit /b 0
 
 :extract
 set "WOW="
+if defined WU_GAME_DIR set "WU_WOW_DIR=%WU_GAME_DIR%"
 for %%D in ("%WU_WOW_DIR%" "%USERPROFILE%\Downloads\World of Warcraft 3.3.5a" "%USERPROFILE%\Desktop\World of Warcraft 3.3.5a" "C:\World of Warcraft 3.3.5a" "C:\Games\World of Warcraft 3.3.5a" "D:\World of Warcraft 3.3.5a" "C:\Program Files (x86)\World of Warcraft") do (
   if not defined WOW if exist "%%~D\Data\lichking.MPQ" set "WOW=%%~D"
 )

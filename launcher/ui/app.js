@@ -25,9 +25,9 @@ const invoke = window.__TAURI__ && window.__TAURI__.core
 // What's new, shown on Home and on the News page. Newest first.
 const NEWS = [
   { tag: "LEYLINE LAUNCHER 0.3", title: "EVERY CLIENT, EVERY SERVER", items: [
-    "Finds your own 1.12.1, 2.4.3 and 3.3.5a clients, and lists other builds too",
-    "Realms show their server and build; PLAY picks a client that fits",
-    "Updates itself in the background: restart when you are ready, never mid-game",
+    "Finds every game client on your PC",
+    "PLAY picks the client a realm needs",
+    "Updates in the background, never mid-game",
   ] },
   { tag: "LATEST NEWS · CLIENT 20261025F", title: "CHARACTER CREATE IS BACK IN COLOUR", items: [
     "Animated race backgrounds at character select and create",
@@ -306,7 +306,7 @@ async function refreshStatus() {
     const counts = [s.players != null ? `Players: ${s.players}` : "", s.bots != null ? `Bots: ${s.bots}` : ""].filter(Boolean);
     const host = realm.includes(":") ? realm : `${realm}:3724`;
     if (seq === statusSeq) renderSrvBar(s.state === "online" && s.players != null ? s.players : null);
-    if (s.state === "online") set("is-online", ms ? `Online  ${ms}` : "Online", ms ? `ONLINE  (${ms})` : "ONLINE", [...counts, host].join(" · "));
+    if (s.state === "online") set("is-online", ms ? `Online  ${ms}` : "Online", ms ? `ONLINE  (${ms})` : "ONLINE", (counts.length ? counts : [host]).join(" · "));
     else if (s.state === "partial") set("is-partial", "Partly up", "PARTLY UP", "Login answers · world server down");
     else if (s.state === "offline") set("is-offline", "Offline", "OFFLINE", "World server down");
     else set("is-partial", "No answer", "NO ANSWER", `${host} did not answer: check your connection`);
@@ -358,7 +358,7 @@ function renderClientCard() {
   box.replaceChildren();
   const c = currentClient();
   if (!c) return;
-  box.append(el("b", "", c.name), el("span", "", buildLabel(c.build) + " · Installed · your own game folder"));
+  box.append(el("b", "", c.name), el("span", "", buildLabel(c.build)));
 }
 
 // The build the chosen realm needs, when the list says ("3.3.5a" for the official realm).
@@ -389,13 +389,13 @@ function renderPlayBar() {
   let head = "READY TO PLAY", detail = "", warn = false;
   if (mode === "browser" && officialGamedata === false) {
     head = "BROWSER PLAY · NEEDS YOUR GAME FOLDER"; warn = true;
-    detail = "This realm streams no game files: the browser asks for your own 3.3.5a game folder (read on your PC, never uploaded)";
+    detail = "The browser will ask for your game folder (it stays on your PC)";
   } else if (mode === "browser") {
     head = "READY · PLAYS IN YOUR BROWSER";
-    detail = officialName() + " · plays in your web browser, nothing to install";
+    detail = "Nothing to install";
   } else if (!c) {
     head = "SET UP YOUR GAME CLIENT"; warn = true;
-    detail = "PLAY takes you to your game clients: point Leyline at your game folder";
+    detail = "Point Leyline at your game folder";
   } else if (chosenRealmBuild() && c.build !== chosenRealmBuild()) {
     const need = chosenRealmBuild();
     head = `THIS SERVER NEEDS ${need.toUpperCase()}`; warn = true;
@@ -405,7 +405,7 @@ function renderPlayBar() {
     head = "CHOOSE A REALM"; warn = true;
     detail = "Type the realm's address under Realms";
   } else {
-    detail = `${realmLabel()} · Realmlist set automatically`;
+    detail = "";
   }
   $("play-headline").textContent = head;
   bar.classList.toggle("warn", warn);
@@ -1209,7 +1209,7 @@ async function loadRealms(quiet) {
     networkTotals = l.network || null;
     if (l.from_cache) say("rl-status", `Offline: showing the list as it was ${when}.`, "warn");
     else if (l.error) say("rl-status", "The community list is not reachable right now: " + l.error, "warn");
-    else say("rl-status", `${n} community realm${n === 1 ? "" : "s"} on the Leyline network.`, "ok");
+    else say("rl-status", "", "ok");   // the count is already on the network line above
     fillRealmFilters();
   } catch (e) {
     say("rl-status", String(e), "bad");

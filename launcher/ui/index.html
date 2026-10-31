@@ -27,7 +27,7 @@
   <div class="pill" id="tb-status"><span class="dot"></span><span id="tb-status-text">Checking…</span></div>
   <button type="button" class="chip" id="tb-account" title="Your account lives on the website: sign in with Google or your Hero Key">
     <span class="chip-crest"><b>L</b></span>
-    <span class="chip-txt"><span>Your account</span><i>Hero Key · on the web</i></span>
+    <span class="chip-txt"><span>Your account</span></span>
     <span class="chip-go" aria-hidden="true">MANAGE</span>
   </button>
   <div class="winbtns">
@@ -67,7 +67,7 @@
   <section class="page" id="page-play">
     <div class="home">
       <article class="news">
-        <div class="news-top"><span id="news-tag"></span><span>WRATH · ON THE LEYLINE NETWORK</span></div>
+        <div class="news-top"><span id="news-tag"></span></div>
         <h1 id="news-title"></h1>
         <ul id="news-items"></ul>
         <button type="button" class="news-more" data-page-go="news">Read the patch notes ›</button>
@@ -89,6 +89,11 @@
           <div class="client-now" id="client-now"></div>
           <button type="button" class="btn wide" id="client-change" data-page-go="clients">CHANGE GAME FOLDER</button>
         </section>
+
+        <section class="card home-friends" aria-label="Friends">
+          <div class="card-head"><span>FRIENDS</span><button type="button" class="link" id="hf-all">All ›</button></div>
+          <div class="hf-list" id="hf-list" role="list"></div>
+        </section>
       </div>
     </div>
   </section>
@@ -97,9 +102,7 @@
   <section class="page" id="page-clients">
     <div class="panel">
       <h2>Game Clients</h2>
-      <p class="lede">Point Leyline at a game folder you already have. It reads the build from the executable:
-        1.12.1 (5875), 2.4.3 (8606) or 3.3.5a (12340) for now. Any other build is listed as
-        "other": you can play realms with it, but Leyline offers no mods for it. Leyline never downloads a game client.</p>
+      <p class="lede">Point Leyline at a game folder you already have; it reads the build itself. Leyline never downloads a game client.</p>
       <div class="row">
         <button class="btn" id="cl-pick">CHOOSE A FOLDER…</button>
         <input id="cl-path" placeholder="or paste a folder path" autocomplete="off" spellcheck="false">
@@ -137,12 +140,7 @@
         <p class="status" id="mods-status" role="status"></p>
         <ul class="problems" id="mods-problems" hidden></ul>
         <div id="mods-list" class="cards mods-grid"></div>
-        <p class="hint">Every mod is allowed: there is no review and no signing, so only add mods from people you trust.
-          Workshop downloads must match their sha256, and anything holding game data or secrets is refused.
-          Addons go to <code>Interface\AddOns</code>, patches to a free <code>Data\patch-X.MPQ</code> slot, native mods
-          (.dll, .asi) next to the game, after a one-time OK. Leyline never runs what it installs.
-          Removing a mod takes out exactly the files Leyline put in and you have not changed; an addon's saved
-          settings in <code>WTF</code> stay, as the game keeps them.</p>
+        <p class="hint">No review, no signing: only add mods from people you trust. Downloads must match their checksum, and anything holding game data or secrets is refused. Native mods (.dll, .asi) need a one-time OK. Removing a mod takes out exactly what Leyline put in.</p>
       </div>
       <div class="tabpane" id="pane-discover" role="tabpanel" aria-labelledby="tab-mods-discover">
         <div class="toolbar">
@@ -204,8 +202,7 @@
         <div class="row"><button type="button" class="btn" id="rl-host">OPEN HOST</button></div>
       </section>
       <h3>A private realm</h3>
-      <p class="lede">Got an invite link from a friend? Paste it here: Leyline opens the realm for this PC and points your client at it.
-        Make your account on the link's page in your browser first (your password never leaves it).</p>
+      <p class="lede">Got an invite link? Paste it here and Leyline points your client at that realm. Make your account on the link's page first.</p>
       <div class="row"><input id="rl-invite" placeholder="https://relay.openvanilla.app/join/…#…" autocomplete="off" spellcheck="false"><button type="button" class="btn" id="rl-join">JOIN</button></div>
       <h3>Another realm</h3>
       <div class="form">
@@ -227,9 +224,7 @@
   <section class="page" id="page-host">
     <div class="panel wide">
       <h2>Host</h2>
-      <p class="lede">Run your own realm on this PC and let friends, or everyone, play on it. Your PC runs the server in Docker
-        using your own 3.3.5a game files; it talks out to the Leyline relay, and players reach it through the relay.
-        No port forwarding, and nobody sees your home address. We don't host realms for you: it runs only while your PC does.</p>
+      <p class="lede">Run a realm on this PC for friends or everyone. It uses your own game files and reaches players through the Leyline relay: no port forwarding, your address stays hidden. It runs while your PC does.</p>
       <section class="card" id="host-from-game" hidden>
         <div class="card-head"><span id="host-from-game-title">FROM THE GAME</span></div>
         <ul class="hint" id="host-from-game-list"></ul>
@@ -292,17 +287,13 @@
     <div class="panel">
       <h2>Help</h2>
       <h3>Playing</h3>
-      <p class="lede">Add your game folder under CHANGE GAME FOLDER, pick a realm, press PLAY. Leyline writes the realm into
-        realmlist.wtf (your original is kept as realmlist.wtf.leyline-backup) and starts the game.
-        BROWSER plays Wrath in your web browser instead, with nothing to install.</p>
+      <p class="lede">Add your game folder, pick a realm, press PLAY. Leyline sets the realmlist (your original is kept as a backup). BROWSER plays in your web browser instead.</p>
       <h3>Mods</h3>
-      <p class="lede">Mods › Discover lists the Workshop. INSTALL puts a mod into the client you picked; Mods › Installed turns it
-        off and on, updates it and removes it. You can also drop a .zip, an addon folder or a .MPQ patch on Mods › Installed.</p>
+      <p class="lede">Mods › Discover lists the Workshop; INSTALL adds a mod to your picked client. Mods › Installed turns mods off, on, updates and removes them, or takes a dropped .zip, folder or .MPQ.</p>
       <h3>Realms and hosting</h3>
-      <p class="lede">Realms lists the official realm and the community's Beacons. PLAY sets your realmlist and starts the game;
-        BACK TO WRATH points it at the official realm again; MODES lists the minigames and game modes. Host walks you through running your own.</p>
+      <p class="lede">Realms lists the official realm and community Beacons; PLAY joins one. MODES lists minigames. Host runs your own.</p>
       <h3>Community</h3>
-      <p class="lede">Community › Friends: your Leyline friends and messages. Community › Hub: the Discord, the Workshop and the source.</p>
+      <p class="lede">Community › Friends: friends and messages. Community › Hub: Discord, Workshop and source.</p>
       <h3>Guides</h3>
       <div class="row"><button type="button" class="btn" data-link="docs">OPEN THE LEYLINE DOCS</button><button type="button" class="btn" data-link="discord">ASK ON DISCORD</button></div>
     </div>
@@ -331,9 +322,7 @@
       <label class="check"><input type="checkbox" id="set-backdrop"> Background picture: the website's picture behind the pages, under a soft wash
         (fetched from play.openvanilla.app when Leyline starts; the plain colour when it is off or offline)</label>
       <h3>Updates</h3>
-      <p class="lede">Leyline looks for a new version when it starts and every 6 hours. It downloads it in the background,
-        checks its signature, and installs it only when you press <b>Update ready, restart</b> in the title bar, never
-        while a game you started from Leyline is open.</p>
+      <p class="lede">Leyline checks for updates at start and every 6 hours, downloads them in the background, and installs only when you press Update ready, restart.</p>
       <div class="form">
         <label>Channel
           <select id="upd-channel">
@@ -345,9 +334,7 @@
       <div class="row"><button type="button" class="btn" id="upd-check">CHECK NOW</button><button type="button" class="btn" id="upd-restart" hidden>RESTART TO UPDATE</button><button type="button" class="btn" id="upd-open" hidden>OPEN THE RELEASE PAGE</button></div>
       <p class="status" id="upd-status" role="status"></p>
       <h3>Privacy</h3>
-      <p class="lede">No telemetry and no accounts in the launcher. It fetches the Workshop catalog and the mods you install,
-        the mod rankings, the realm list and realm status, and GitHub's release list and Leyline's own updates; it keeps copies of the lists so it works offline, and opens
-        only pages it listed itself in your browser. Each request gives up after 8 seconds.</p>
+      <p class="lede">No telemetry, no accounts. Leyline only fetches the Workshop, realm list and status, and its own updates, and keeps copies so it works offline.</p>
       <label class="check"><input type="checkbox" id="set-count"> Count my installs: after a Workshop install, tell the hub
         "one more install" (the mod, your client's build and a random one-time number; no account, nothing about you or your PC).
         It helps good mods rise in Hot and Most installed.</label>

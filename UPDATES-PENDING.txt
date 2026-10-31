@@ -361,3 +361,7 @@
 1124b signin Always-on realm guide, Vanilla+ ready-made realm on the Host page
 1124c hostkit Host kit: leyline link, Link my server.bat, Vanilla+, --always-on
 1124d ship Save to GitHub: always-on realms and the launcher Home cleanup (GitHub then rebuilds Leyline.exe)
+1125a signin Host page: the new host pack (leyline link, Vanilla+)
+1126a hostkit Host kit: WU_GAME_DIR for the game folder
+1126b signin Always-on guide wording; the new host pack
+1126c ship Save to GitHub: launcher Friends card on Home, shorter text (GitHub then rebuilds Leyline.exe)
