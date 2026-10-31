@@ -174,6 +174,25 @@ check("words inside strings are fine", list and list[1].name == "while true do e
 check("cleanName drops brands and escapes", T.cleanName("|cffff0000World of Warcraft|r Blizzard realm") == "realm"
     and T.cleanName("WoW") == "Unnamed realm" and T.cleanName("Wowza") == "Wowza")
 
+-- an official realm (Vanilla Remastered, leyline-fetch's vr-realm.id): the O flag and "· Official" on its name
+write(datFile, 'return { updated = 1, realms = { { id = "vrvrvrvrvrvrvrvr", name = "Vanilla Remastered", live = true, '
+    .. 'build = 5875, official = true }, { id = "abcdefghijklmnop", name = "Plain", live = true } } }')
+T.cache.at = -1e9
+local ol = T.readFile()
+check("official: read from the data file", ol and ol[1].official == true and ol[2].official == false)
+local po = fakePlayer(11)
+serverEvents[30](30, po, 7, "WULY", "L", po)
+local om, rLine, mLine, plainR = msgs(po, true), nil, nil, nil
+for _, m in ipairs(om) do
+    if m:match("^R:vrvrvrvrvrvrvrvr:") then rLine = m end
+    if m:match("^M:vrvrvrvrvrvrvrvr:") then mLine = m end
+    if m:match("^R:abcdefghijklmnop:") then plainR = m end
+end
+check("official: labelled Official in the list", rLine and rLine:match(":Vanilla Remastered · Official$") ~= nil)
+check("official: the O flag", mLine and mLine:match("^M:vrvrvrvrvrvrvrvr:[A-Z]*O") ~= nil)
+check("official: other realms unchanged", plainR and plainR:match(":Plain$") ~= nil)
+check("official: the label is never doubled", T.officialName({ official = true, name = "X · Official" }) == "X · Official")
+
 -- missing file
 os.remove(datFile)
 T.cache.at = -1e9

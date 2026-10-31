@@ -56,8 +56,8 @@ with open(vrf, "w") as f:
     f.write("qrstuvwxyz234567\n")
 rc, ids = run(OV_LEYLINE_HOME_FILE=idf, OV_LEYLINE_VR_FILE=vrf)
 _dat = open(os.path.join(tmp, "out.dat")).read()
-check("vr: right after the Hangout (offline too), verified", rc == 0 and ids == [HANG, "qrstuvwxyz234567", "abcdefghijklmnop"]
-      and re.search(r'id = "qrstuvwxyz234567"[^}]*verified = true', _dat), ids)
+check("vr: right after the Hangout (offline too), official", rc == 0 and ids == [HANG, "qrstuvwxyz234567", "abcdefghijklmnop"]
+      and re.search(r'id = "qrstuvwxyz234567"[^}]*official = true', _dat) and _dat.count("official = true") == 1, ids)
 rc, ids = run(OV_LEYLINE_HOME_FILE=idf)
 check("vr: without its id file it lists like any realm", rc == 0 and ids[-1] == "qrstuvwxyz234567", ids)
 rc, ids = run(OV_LEYLINE_HOME="../../etc")

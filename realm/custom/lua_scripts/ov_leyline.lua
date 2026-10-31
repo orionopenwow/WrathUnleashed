@@ -16,7 +16,10 @@
 --                      M:<id>:<flags>:<score>:<up|->:<build>:<region|->:<lang|->:<max|->:<tags>
 --                                                                    after its R line: the network fields (older
 --                                                                    windows ignore it). flags: letters F featured,
---                                                                    V verified, N new, S the sample hangout (this
+--                                                                    V verified, N new, O official (Vanilla Remastered:
+--                                                                    leyline-fetch's vr-realm.id; its name also says
+--                                                                    "Official" for windows without the O badge),
+--                                                                    S the sample hangout (this
 --                                                                    realm and its relay record, OV_SAMPLER=1), E region
 --                                                                    estimated, or "-"; up = uptime %; tags a,b,c
 --                      S:<id>:<live 0|1>                             this realm's own relay listing (its Beacon), left
@@ -87,7 +90,7 @@ end
 local DATA_WORDS = { ["return"] = true, ["true"] = true, ["false"] = true, updated = true, realms = true, id = true,
     name = true, ruleset = true, live = true, players = true, bots = true, score = true, up = true, build = true,
     region = true, est = true, lang = true, maxp = true, tags = true, featured = true, verified = true, new = true,
-    sample = true }
+    sample = true, official = true }
 local BUILDS = { [5875] = true, [8606] = true, [12340] = true, [15595] = true, [18414] = true }
 local REGIONS = { ["na-east"] = true, ["na-west"] = true, sa = true, eu = true, africa = true, me = true, asia = true,
     oce = true }
@@ -150,7 +153,8 @@ local function readFile()
                 build = BUILDS[tonumber(r.build) or 0] and tonumber(r.build) or 12340,
                 region = REGIONS[r.region] and r.region or nil, est = r.est == true, lang = cleanLang(r.lang),
                 maxp = inRange(r.maxp, 1, 10000), tags = cleanTags(r.tags), featured = r.featured == true,
-                verified = r.verified == true, new = r.new == true, sample = r.sample == true }
+                verified = r.verified == true, new = r.new == true, sample = r.sample == true,
+                official = r.official == true and r.sample ~= true }
         end
     end
     return list, count(doc.updated)
@@ -194,8 +198,15 @@ local function dash(n) return n and tostring(n) or "-" end
 
 local function flags(r)
     local f = (r.featured and "F" or "") .. (r.verified and "V" or "") .. (r.new and "N" or "")
-        .. (r.sample and "S" or "") .. ((r.region and r.est) and "E" or "")
+        .. (r.sample and "S" or "") .. ((r.region and r.est) and "E" or "") .. (r.official and "O" or "")
     return f ~= "" and f or "-"
+end
+
+-- An official realm's name carries the label, so every window shows it (an older one has no O badge): "<name> · Official".
+local function officialName(r)
+    if not r.official then return r.name end
+    local base = r.name:gsub("%s*·%s*Official$", "")
+    return base .. " · Official"
 end
 
 local function meta(id, r, isSample)
@@ -239,7 +250,7 @@ local function sendList(player)
     local n, p, b = 1, people, bots
     for _, r in ipairs(list) do
         send(player, string.format("R:%s:%d:%s:%s:%s:%s", r.id, r.live and 1 or 0, dash(r.players), dash(r.bots),
-            r.ruleset, r.name))
+            r.ruleset, officialName(r)))
         send(player, meta(r.id, r, isSample))
         if r.live and not (r.sample and isSample) then n, p, b = n + 1, p + (r.players or 0), b + (r.bots or 0) end
     end
@@ -282,5 +293,5 @@ RegisterServerEvent(30, onAddonMessage) -- ADDON_EVENT_ON_MESSAGE
 RegisterPlayerEvent(4, onLogout)        -- PLAYER_EVENT_ON_LOGOUT
 
 -- for tests
-OV_LEYLINE_TEST = { cleanName = cleanName, readFile = readFile, sendList = sendList, onAddonMessage = onAddonMessage,
+OV_LEYLINE_TEST = { officialName = officialName, cleanName = cleanName, readFile = readFile, sendList = sendList, onAddonMessage = onAddonMessage,
     cache = cache, hopTarget = hopTarget, selfId = selfId }
