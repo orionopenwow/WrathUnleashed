@@ -39,3 +39,7 @@
 .titlebar .brand b { font-size: 27px; line-height: 1; letter-spacing: -0.015em; }
 .titlebar .brand i { margin-top: 4px; margin-right: -0.36em; font-size: 11px; letter-spacing: 0.36em; }
 .brand .ly-spin::before, .brand .ly-spin::after { inset: 0; }
+/* owner 2026-10-30 23:37: "nudge this so not so cramped": more room around the logo and the name */
+.titlebar .brand { gap: 15px; padding-left: 22px; }
+.brand .ly-spin { width: 48px; height: 48px; }
+.titlebar .brand b { font-size: 25px; }
