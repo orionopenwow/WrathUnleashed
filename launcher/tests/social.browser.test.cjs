@@ -76,17 +76,18 @@ test('no friends anywhere: no Friends tab, chat, friends list, badge or presence
   await page.close();
 });
 
-test('signed in: the profile row stays where it was, with Manage account and Sign out', async () => {
+test('signed in: the profile sits in the title bar, top right, with Manage account and Sign out', async () => {
   const { page, errors } = await open({ signed: true });
   await page.waitForFunction(() => document.querySelector('#hf-me .hf-me-name') && document.querySelector('#hf-me .hf-me-name').textContent === 'Alice');
   assert.equal(await page.textContent('#hf-me .hf-me-st'), '#4821');
   assert.equal(await page.getAttribute('#hf-me-btn', 'title'), 'Alice#4821');
-  // docked where the friends panel was: top right, beside the window buttons, full height to the play bar
+  // owner 2026-10-30 22:11: the side panel is hidden; the profile is in the title bar beside the window buttons
   const r = await page.evaluate(() => {
-    const b = document.getElementById('home-side').getBoundingClientRect();
-    return { right: Math.round(innerWidth - b.right), top: Math.round(b.top), w: Math.round(b.width), me: Math.round(document.getElementById('hf-me').getBoundingClientRect().top) };
+    const me = document.getElementById('hf-me').getBoundingClientRect();
+    const win = document.querySelector('.titlebar .winbtns').getBoundingClientRect();
+    return { inBar: !!document.getElementById('hf-me').closest('.titlebar'), top: Math.round(me.top), gap: Math.round(win.left - me.right) };
   });
-  assert.equal(r.right, 0); assert.equal(r.top, 0); assert.equal(r.w, 216); assert.ok(r.me < 60, 'the profile row is the top of it');
+  assert.ok(r.inBar, 'in the title bar'); assert.ok(r.top < 30, 'at the top'); assert.ok(r.gap >= 0 && r.gap < 40, 'just left of the window buttons');
   await page.click('#hf-me-btn');
   assert.deepEqual(await page.$$eval('#hf-me [role="menuitem"]', (b) => b.map((x) => x.textContent)), ['Manage account', 'Sign out']);
   await page.click('#hf-me [role="menuitem"]:has-text("Manage account")');
@@ -113,32 +114,22 @@ test('signed out: Sign in shows the code in the panel, then your name', async ()
   await page.close();
 });
 
-test('under the profile: Join the Discord and the latest three threads; a row opens the thread', async () => {
+test('the side panel is hidden: Home uses the full width; a subtle Join the Discord sits right of the search', async () => {
   const { page, errors } = await open({ signed: true, evil: true });
-  await page.waitForFunction(() => document.querySelectorAll('#hf-fm-list .hf-fm-row').length === 3);
-  assert.equal(await page.textContent('#hf-dc-h'), 'Join the Discord');
-  await page.click('.hf-dc-go');
-  assert.ok(await page.evaluate(() => window.__calls.some(([c, a]) => c === 'open_link' && a.name === 'discord')), 'opens the Discord through openLink');
-  assert.ok(await page.evaluate(() => window.__calls.some(([c, a]) => c === 'forum_call' && a.action === 'latest' && a.args.n === 3)));
-  const rows = await page.$$eval('#hf-fm-list .hf-fm-row', (r) => r.map((x) => x.textContent));
-  assert.match(rows[0], /Frost Haven: a cosy realm.*Bramble · 3 replies/);
-  assert.match(rows[1], /<img src=x/, 'a title is text');
   await page.waitForFunction(() => document.querySelector('#hf-me .hf-me-name'));
   assert.equal(await page.textContent('#hf-me .hf-me-name'), '<b>Alice</b>', 'a name is text');
   assert.equal(await page.evaluate(() => window.__xss), undefined);
-  await page.click('#hf-fm-list .hf-fm-row >> nth=0');
-  assert.ok(await page.locator('#page-forum').evaluate((e) => e.classList.contains('on')), 'the Forum page');
-  await page.waitForFunction(() => window.__calls.some(([c, a]) => c === 'forum_call' && a.action === 'thread' && a.args.id === 7));
-  assert.deepEqual(errors, []);
-  await page.close();
-});
-
-test('the forum unreachable: one quiet line, the Discord card still there', async () => {
-  const { page, errors } = await open();
-  await page.addInitScript(() => { window.__threads = null; });
-  await page.reload();
-  await page.waitForFunction(() => /isn't reachable/.test(document.getElementById('hf-fm-list').textContent));
-  assert.ok(await page.isVisible('.hf-dc-go'));
+  assert.ok(await page.isHidden('#home-side'), 'the panel is hidden');
+  const g = await page.evaluate(() => {
+    const s = document.getElementById('search-form').getBoundingClientRect(), d = document.getElementById('tb-discord').getBoundingClientRect();
+    const m = document.querySelector('main').getBoundingClientRect();
+    return { after: Math.round(d.left - s.right), sameRow: Math.abs((d.top + d.bottom) / 2 - (s.top + s.bottom) / 2) < 4, mainRight: Math.round(innerWidth - m.right) };
+  });
+  assert.ok(g.after >= 0 && g.after < 60, 'right of the search'); assert.ok(g.sameRow, 'on the same row');
+  assert.equal(g.mainRight, 0, 'Home reaches the window edge again');
+  assert.match(await page.textContent('#tb-discord'), /Join the Discord/);
+  await page.click('#tb-discord');
+  assert.ok(await page.evaluate(() => window.__calls.some(([c, a]) => c === 'open_link' && a.name === 'discord')), 'opens the Discord through openLink');
   assert.deepEqual(errors, []);
   await page.close();
 });

@@ -23,6 +23,11 @@
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
     <input id="search" type="search" placeholder="Search mods and realms" aria-label="Search mods and realms" autocomplete="off" spellcheck="false">
   </form>
+  <!-- owner 2026-10-30: "a subtle join the discord thing at the top, to the right of the search bar" -->
+  <button type="button" class="tb-discord" id="tb-discord" data-link="discord" title="Find a group, voice chat and hear about new realms first">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 7.5c-1.3.2-2.5.6-3.6 1.2C3.2 11.3 2.8 13.8 3 16.3c1.3 1 2.6 1.6 4 2l.9-1.4M15.5 7.5c1.3.2 2.5.6 3.6 1.2 1.7 2.6 2.1 5.1 1.9 7.6-1.3 1-2.6 1.6-4 2l-.9-1.4M7.5 16.5c2.9 1.3 6.1 1.3 9 0M8.5 7.5l.5-1M15.5 7.5l-.5-1"/><circle cx="9.5" cy="12.5" r="1.1"/><circle cx="14.5" cy="12.5" r="1.1"/></svg>
+    <span>Join the Discord</span>
+  </button>
   <div class="tb-fill" data-tauri-drag-region></div>
   <button type="button" class="pill upd" id="tb-modupd" hidden title="Workshop mods with a newer version: open Mods › Installed">Mod updates</button>
   <button type="button" class="pill upd" id="tb-update" hidden title="A new Leyline is downloaded: restart to use it">Update ready, restart</button>
@@ -32,6 +37,11 @@
     <span class="chip-txt"><span>Your account</span></span>
     <span class="chip-go" aria-hidden="true">MANAGE</span>
   </button>
+  <!-- your profile (social.js): owner 2026-10-30 "hide this sidebar area for now"; the profile stays at the top right -->
+  <div class="tb-me">
+    <div class="hf-me" id="hf-me"></div>
+    <div class="hf-code" id="hf-code" role="status" hidden></div>
+  </div>
   <div class="winbtns">
     <button type="button" id="win-min" aria-label="Minimise"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
     <button type="button" id="win-max" aria-label="Maximise"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1.5"/></svg></button>
@@ -80,9 +90,8 @@
 
       <!-- the right column: your profile at the top (social.js; owner 2026-10-30: "keep the profile thing up there where it
            is now"), then the Discord and the forum's latest threads. The realm and the client are on the play bar. -->
-      <section class="cards-col card home-side" id="home-side" aria-label="You and the community">
-        <div class="hf-me" id="hf-me"></div>
-        <div class="hf-code" id="hf-code" role="status" hidden></div>
+      <!-- hidden for now (owner 2026-10-30: "hide this sidebar area for now"); the profile moved to the title bar -->
+      <section class="cards-col card home-side" id="home-side" aria-label="You and the community" hidden>
         <div class="hf-body" id="hf-body"></div>
       </section>
       <button type="button" class="home-cue" id="home-cue" hidden>More below<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
